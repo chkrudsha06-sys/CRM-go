@@ -9,12 +9,16 @@ import {
   CheckCircle2,
   ClipboardCopy,
   Clock3,
+  Coffee,
   Eye,
   FileCheck2,
   Flag,
+  PlusCircle,
   RefreshCw,
   Save,
+  Sparkles,
   Target,
+  Trash2,
   TrendingUp,
   UserCheck,
   Users,
@@ -44,11 +48,47 @@ const ACTIVITY_FIELDS = [
   { key: "new_tm", label: "신규 TM", unit: "개" },
   { key: "manage_tm", label: "관리 TM", unit: "개" },
   { key: "coldtalk", label: "콜드톡 발송", unit: "개" },
+  { key: "media_mix", label: "미디어믹스 전달", unit: "건" },
 ] as const;
 
 type ActivityKey = (typeof ACTIVITY_FIELDS)[number]["key"];
 
 type FormValues = Record<ActivityKey | "meeting_confirmed", number>;
+
+type WorkItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+function createEmptyWorkItems(): WorkItem[] {
+  return [1, 2, 3].map((index) => ({
+    id: `task-${Date.now()}-${index}`,
+    text: "",
+    done: false,
+  }));
+}
+
+function normalizeWorkItems(value: unknown): WorkItem[] {
+  if (!Array.isArray(value)) return createEmptyWorkItems();
+  const items = value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const data = item as Partial<WorkItem>;
+      return {
+        id: String(data.id || `task-${Date.now()}-${index}`),
+        text: String(data.text || ""),
+        done: Boolean(data.done),
+      };
+    })
+    .filter(Boolean) as WorkItem[];
+  return items.length > 0 ? items : createEmptyWorkItems();
+}
+
+function activeWorkItems(items: WorkItem[]) {
+  return items.filter((item) => item.text.trim().length > 0);
+}
+
 
 type DailyActivityRow = {
   id: number;
@@ -62,12 +102,15 @@ type DailyActivityRow = {
   goal_new_tm: number;
   goal_manage_tm: number;
   goal_coldtalk: number;
+  goal_media_mix: number;
   goal_meeting_confirmed: number;
+  goal_work_items: WorkItem[] | null;
   result_consultant_db: number;
   result_second_touch: number;
   result_new_tm: number;
   result_manage_tm: number;
   result_coldtalk: number;
+  result_media_mix: number;
   result_meeting_confirmed: number;
   created_at: string;
   updated_at: string;
@@ -79,6 +122,7 @@ const EMPTY_VALUES: FormValues = {
   new_tm: 0,
   manage_tm: 0,
   coldtalk: 0,
+  media_mix: 0,
   meeting_confirmed: 0,
 };
 
@@ -161,7 +205,8 @@ function isGoalEntered(row: DailyActivityRow | undefined) {
   if (row.is_outside_meeting) return true;
   return (
     ACTIVITY_FIELDS.some((field) => goalValue(row, field.key) > 0) ||
-    goalValue(row, "meeting_confirmed") > 0
+    goalValue(row, "meeting_confirmed") > 0 ||
+    activeWorkItems(normalizeWorkItems(row.goal_work_items)).length > 0
   );
 }
 
@@ -170,7 +215,8 @@ function isResultEntered(row: DailyActivityRow | undefined) {
   if (row.is_outside_meeting) return true;
   return (
     ACTIVITY_FIELDS.some((field) => resultValue(row, field.key) > 0) ||
-    resultValue(row, "meeting_confirmed") > 0
+    resultValue(row, "meeting_confirmed") > 0 ||
+    activeWorkItems(normalizeWorkItems(row.goal_work_items)).some((item) => item.done)
   );
 }
 
@@ -186,7 +232,7 @@ function roleAccess(user: CRMUser | null) {
     isOps,
     isAdmin,
     canViewAll: isOps || isAdmin,
-    canCopy: isAdmin || isOps,
+    canCopy: isAdmin,
   };
 }
 
@@ -231,6 +277,16 @@ function buildGoalReport(dateText: string, rows: DailyActivityRow[]) {
   lines.push(`▶ 총 TM 목표 : ${totalTm}개`);
   lines.push(`▶ 미팅 확정 목표 : ${totalMeeting}건`);
 
+  EXEC_MEMBERS.forEach((member) => {
+    const row = rowForMember(rows, member.name);
+    const tasks = activeWorkItems(normalizeWorkItems(row?.goal_work_items));
+    if (tasks.length > 0) {
+      lines.push("");
+      lines.push(`@${member.name} 당일활동목표`);
+      tasks.forEach((task, index) => lines.push(`${index + 1}. ${task.text}`));
+    }
+  });
+
   return lines.join("\n");
 }
 
@@ -263,6 +319,13 @@ function buildResultReport(dateText: string, rows: DailyActivityRow[]) {
       `▶ 총 TM : ${totalTmResult(row)}개 / 달성율 ${percent(totalTmResult(row), totalTmGoal(row))}%`,
     );
     lines.push(`▶ 미팅 확정 : ${resultValue(row, "meeting_confirmed")}건`);
+    const tasks = activeWorkItems(normalizeWorkItems(row?.goal_work_items));
+    if (tasks.length > 0) {
+      lines.push("▶ 당일활동목표 체크");
+      tasks.forEach((task, taskIndex) =>
+        lines.push(`${taskIndex + 1}. ${task.done ? "완료" : "미완료"} - ${task.text}`),
+      );
+    }
     if (index < EXEC_MEMBERS.length - 1) lines.push("");
   });
 
@@ -582,6 +645,297 @@ function GuideBox({ children }: { children: ReactNode }) {
   );
 }
 
+function WorkItemsEditor({
+  items,
+  disabled,
+  onTextChange,
+  onAdd,
+  onRemove,
+}: {
+  items: WorkItem[];
+  disabled?: boolean;
+  onTextChange: (id: string, text: string) => void;
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div
+      className="rounded-[16px] border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="crm-section-title">당일활동목표</p>
+          <p className="crm-tiny mt-1">오늘 처리해야 할 업무를 텍스트로 정리합니다.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={disabled}
+          className="btn-premium btn-secondary"
+        >
+          <PlusCircle size={14} /> 칸추가
+        </button>
+      </div>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={item.id} className="flex items-center gap-2">
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-[850]"
+              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
+            >
+              {index + 1}
+            </span>
+            <input
+              value={item.text}
+              disabled={disabled}
+              onChange={(event) => onTextChange(item.id, event.target.value)}
+              placeholder={`${index + 1}. 오늘 처리할 업무를 입력하세요`}
+              className="h-[42px] min-w-0 flex-1 rounded-[13px] border px-3 text-[14px] font-[700] outline-none disabled:opacity-50"
+              style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              disabled={disabled || items.length <= 1}
+              className="flex h-[42px] w-[42px] items-center justify-center rounded-[13px] border disabled:opacity-40"
+              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WorkItemsResultChecklist({
+  items,
+  disabled,
+  onToggle,
+}: {
+  items: WorkItem[];
+  disabled?: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const visibleItems = items.length > 0 ? items : createEmptyWorkItems();
+  return (
+    <div
+      className="rounded-[16px] border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+    >
+      <div className="mb-3">
+        <p className="crm-section-title">당일활동목표 완료체크</p>
+        <p className="crm-tiny mt-1">완료한 업무를 체크하면 중간선으로 완료 표시됩니다.</p>
+      </div>
+      <div className="space-y-2">
+        {visibleItems.map((item, index) => {
+          const hasText = item.text.trim().length > 0;
+          return (
+            <label
+              key={item.id}
+              className="flex cursor-pointer items-center gap-3 rounded-[13px] border px-3 py-3"
+              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            >
+              <input
+                type="checkbox"
+                checked={item.done}
+                disabled={disabled || !hasText}
+                onChange={() => onToggle(item.id)}
+              />
+              <span
+                className={`min-w-0 flex-1 text-[14px] font-[760] ${item.done ? "line-through" : ""}`}
+                style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
+              >
+                {hasText ? item.text : `${index + 1}. 입력된 업무가 없습니다`}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DailyActivityPrompt({
+  mode,
+  intro,
+  goal,
+  result,
+  workItems,
+  saving,
+  disabled,
+  onGoalChange,
+  onResultChange,
+  onTaskTextChange,
+  onTaskAdd,
+  onTaskRemove,
+  onTaskToggle,
+  onSaveGoal,
+  onSaveResult,
+  onClose,
+}: {
+  mode: "goal" | "mid" | "result";
+  intro: boolean;
+  goal: FormValues;
+  result: FormValues;
+  workItems: WorkItem[];
+  saving: boolean;
+  disabled?: boolean;
+  onGoalChange: (key: ActivityKey | "meeting_confirmed", value: number) => void;
+  onResultChange: (key: ActivityKey | "meeting_confirmed", value: number) => void;
+  onTaskTextChange: (id: string, text: string) => void;
+  onTaskAdd: () => void;
+  onTaskRemove: (id: string) => void;
+  onTaskToggle: (id: string) => void;
+  onSaveGoal: () => void;
+  onSaveResult: () => void;
+  onClose: () => void;
+}) {
+  const isGoal = mode === "goal";
+  const isMid = mode === "mid";
+  const title = isGoal
+    ? "오늘의 목표를 세워볼까요?"
+    : isMid
+      ? "오후 중간 체크 시간입니다"
+      : "결과값을 입력할 시간입니다!";
+  const message = isGoal
+    ? "금일의 목표를 정하고, 시간을 잘 분배하여 하루를 알차게 운영해보세요. 오늘의 일과가 끝나면 활동 결과 입력하는 것도 잊지 마시구요!"
+    : isMid
+      ? "금일 계획한 목표를 잘 이루고 계시나요? 결과 입력시간은 17시30분 입니다. 꼭 잊지 말고 다시한번 체크해보세요!"
+      : "금일 계획한 업무를 모두 처리했는지 확인하시고 기록해주세요!";
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+      <div
+        className="max-h-[92vh] w-full max-w-[980px] overflow-hidden rounded-[28px] border shadow-2xl"
+        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      >
+        {intro ? (
+          <div className="flex min-h-[430px] flex-col items-center justify-center px-8 py-10 text-center">
+            <div
+              className="mb-5 flex h-28 w-28 items-center justify-center rounded-[36px] text-[54px] shadow-lg"
+              style={{ background: "linear-gradient(135deg,#fef3c7,#f0abfc,#93c5fd)" }}
+            >
+              {isGoal ? "🦊" : isMid ? "🐥" : "🦝"}
+            </div>
+            <p className="text-[28px] font-[900] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+              {title}
+            </p>
+            <p className="mt-3 max-w-[560px] text-[15px] font-[700] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+              잠깐 웃고 시작해요. 오늘도 무리하지 말고, 해야 할 일을 하나씩 정리해봅시다.
+            </p>
+          </div>
+        ) : (
+          <div className="max-h-[92vh] overflow-y-auto p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-4">
+                <div
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] text-[28px]"
+                  style={{ background: "var(--accent-subtle)" }}
+                >
+                  {isGoal ? "🦊" : isMid ? "🐥" : "🦝"}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[24px] font-[900] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+                    {title}
+                  </p>
+                  <p className="mt-2 max-w-[760px] text-[14px] font-[700] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    {message}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
+                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+              >
+                ×
+              </button>
+            </div>
+
+            {isMid ? (
+              <div
+                className="rounded-[20px] border p-5 text-[15px] font-[760] leading-relaxed"
+                style={{ borderColor: "var(--accent-border)", background: "var(--accent-subtle)", color: "var(--accent-text)" }}
+              >
+                지금까지의 진행 상황을 잠깐 점검하고, 남은 시간을 어디에 집중할지 다시 정리해보세요.
+              </div>
+            ) : (
+              <div className="grid gap-5 xl:grid-cols-2">
+                <div>
+                  <div className="mb-3 flex items-center gap-2">
+                    {isGoal ? <Sparkles size={17} /> : <Coffee size={17} />}
+                    <p className="crm-section-title">{isGoal ? "당일 활동목표 입력" : "퇴근 전 활동결과 입력"}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {ACTIVITY_FIELDS.map((field) => (
+                      <NumberInput
+                        key={field.key}
+                        label={field.label}
+                        value={isGoal ? goal[field.key] : result[field.key]}
+                        unit={field.unit}
+                        disabled={disabled}
+                        onChange={(value) =>
+                          isGoal ? onGoalChange(field.key, value) : onResultChange(field.key, value)
+                        }
+                      />
+                    ))}
+                    <NumberInput
+                      label={isGoal ? "미팅 확정 목표" : "미팅 확정 결과"}
+                      value={isGoal ? goal.meeting_confirmed : result.meeting_confirmed}
+                      unit="건"
+                      disabled={disabled}
+                      onChange={(value) =>
+                        isGoal ? onGoalChange("meeting_confirmed", value) : onResultChange("meeting_confirmed", value)
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  {isGoal ? (
+                    <WorkItemsEditor
+                      items={workItems}
+                      disabled={disabled}
+                      onTextChange={onTaskTextChange}
+                      onAdd={onTaskAdd}
+                      onRemove={onTaskRemove}
+                    />
+                  ) : (
+                    <WorkItemsResultChecklist
+                      items={workItems}
+                      disabled={disabled}
+                      onToggle={onTaskToggle}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className="btn-premium btn-secondary">
+                나중에
+              </button>
+              {isGoal && (
+                <button type="button" onClick={onSaveGoal} disabled={saving} className="btn-premium btn-primary">
+                  <Save size={14} /> {saving ? "저장 중..." : "목표 저장"}
+                </button>
+              )}
+              {mode === "result" && (
+                <button type="button" onClick={onSaveResult} disabled={saving} className="btn-premium btn-primary">
+                  <Save size={14} /> {saving ? "저장 중..." : "결과 저장"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DailyActivityPage() {
   const [user, setUser] = useState<CRMUser | null>(null);
   const [date, setDate] = useState(todayString());
@@ -593,6 +947,9 @@ export default function DailyActivityPage() {
   const [isOutsideMeeting, setIsOutsideMeeting] = useState(false);
   const [goal, setGoal] = useState<FormValues>({ ...EMPTY_VALUES });
   const [result, setResult] = useState<FormValues>({ ...EMPTY_VALUES });
+  const [workItems, setWorkItems] = useState<WorkItem[]>(createEmptyWorkItems());
+  const [promptMode, setPromptMode] = useState<"goal" | "mid" | "result" | null>(null);
+  const [promptIntro, setPromptIntro] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(EXEC_MEMBERS[0].name);
 
   const access = useMemo(() => roleAccess(user), [user]);
@@ -658,6 +1015,7 @@ export default function DailyActivityPage() {
         new_tm: row.goal_new_tm || 0,
         manage_tm: row.goal_manage_tm || 0,
         coldtalk: row.goal_coldtalk || 0,
+        media_mix: row.goal_media_mix || 0,
         meeting_confirmed: row.goal_meeting_confirmed || 0,
       });
       setResult({
@@ -666,12 +1024,15 @@ export default function DailyActivityPage() {
         new_tm: row.result_new_tm || 0,
         manage_tm: row.result_manage_tm || 0,
         coldtalk: row.result_coldtalk || 0,
+        media_mix: row.result_media_mix || 0,
         meeting_confirmed: row.result_meeting_confirmed || 0,
       });
+      setWorkItems(normalizeWorkItems(row.goal_work_items));
     } else {
       setIsOutsideMeeting(false);
       setGoal({ ...EMPTY_VALUES });
       setResult({ ...EMPTY_VALUES });
+      setWorkItems(createEmptyWorkItems());
     }
 
     setLoading(false);
@@ -690,9 +1051,100 @@ export default function DailyActivityPage() {
     if (currentMember) setSelectedOwner(currentMember.name);
   }, [access.canViewAll, currentMember, user]);
 
+  useEffect(() => {
+    if (!promptMode) return;
+    setPromptIntro(true);
+    const timer = window.setTimeout(() => setPromptIntro(false), 1250);
+    return () => window.clearTimeout(timer);
+  }, [promptMode]);
+
+  useEffect(() => {
+    if (!currentMember || loading || date !== todayString()) return;
+
+    const checkPrompt = () => {
+      if (promptMode) return;
+      const now = new Date();
+      const minutes = now.getHours() * 60 + now.getMinutes();
+      const baseKey = `daily-activity-prompt-${currentMember.name}-${date}`;
+
+      if (
+        minutes >= 17 * 60 + 30 &&
+        !isResultEntered(myRow) &&
+        !localStorage.getItem(`${baseKey}-result`)
+      ) {
+        setPromptMode("result");
+        return;
+      }
+
+      if (
+        minutes >= 15 * 60 &&
+        minutes < 17 * 60 + 30 &&
+        !localStorage.getItem(`${baseKey}-mid`)
+      ) {
+        setPromptMode("mid");
+        return;
+      }
+
+      if (
+        minutes >= 8 * 60 &&
+        minutes < 15 * 60 &&
+        !isGoalEntered(myRow) &&
+        !localStorage.getItem(`${baseKey}-goal`)
+      ) {
+        setPromptMode("goal");
+      }
+    };
+
+    checkPrompt();
+    const interval = window.setInterval(checkPrompt, 60_000);
+    return () => window.clearInterval(interval);
+  }, [currentMember, date, loading, myRow, promptMode]);
+
+  const closePrompt = (mode: "goal" | "mid" | "result") => {
+    if (currentMember) {
+      localStorage.setItem(
+        `daily-activity-prompt-${currentMember.name}-${date}-${mode}`,
+        "1",
+      );
+    }
+    setPromptMode(null);
+  };
+
+  const saveFromPrompt = async (mode: "goal" | "result") => {
+    await handleSave();
+    closePrompt(mode);
+  };
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
+  };
+
+  const updateWorkItemText = (id: string, text: string) => {
+    setWorkItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, text } : item)),
+    );
+  };
+
+  const toggleWorkItemDone = (id: string) => {
+    setWorkItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, done: !item.done } : item,
+      ),
+    );
+  };
+
+  const addWorkItem = () => {
+    setWorkItems((prev) => [
+      ...prev,
+      { id: `task-${Date.now()}-${prev.length + 1}`, text: "", done: false },
+    ]);
+  };
+
+  const removeWorkItem = (id: string) => {
+    setWorkItems((prev) =>
+      prev.length <= 1 ? createEmptyWorkItems() : prev.filter((item) => item.id !== id),
+    );
   };
 
   const handleSave = async () => {
@@ -713,12 +1165,15 @@ export default function DailyActivityPage() {
       goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
       goal_manage_tm: isOutsideMeeting ? 0 : goal.manage_tm,
       goal_coldtalk: isOutsideMeeting ? 0 : goal.coldtalk,
+      goal_media_mix: isOutsideMeeting ? 0 : goal.media_mix,
       goal_meeting_confirmed: isOutsideMeeting ? 0 : goal.meeting_confirmed,
+      goal_work_items: isOutsideMeeting ? [] : workItems,
       result_consultant_db: isOutsideMeeting ? 0 : result.consultant_db,
       result_second_touch: isOutsideMeeting ? 0 : result.second_touch,
       result_new_tm: isOutsideMeeting ? 0 : result.new_tm,
       result_manage_tm: isOutsideMeeting ? 0 : result.manage_tm,
       result_coldtalk: isOutsideMeeting ? 0 : result.coldtalk,
+      result_media_mix: isOutsideMeeting ? 0 : result.media_mix,
       result_meeting_confirmed: isOutsideMeeting ? 0 : result.meeting_confirmed,
     };
 
@@ -876,7 +1331,7 @@ export default function DailyActivityPage() {
                 <button
                   type="button"
                   onClick={copyGoalReport}
-                  className="btn-premium btn-primary"
+                  className="btn-premium btn-secondary"
                 >
                   <ClipboardCopy size={14} /> 목표복사
                 </button>
@@ -896,28 +1351,28 @@ export default function DailyActivityPage() {
           <StatCard
             icon={Users}
             label="목표 입력"
-            value={`4/${enteredGoals}`}
+            value={`${enteredGoals}/4`}
             sub="실행파트 기준"
             tone="info"
           />
           <StatCard
             icon={CheckCircle2}
             label="결과 입력"
-            value={`4/${enteredResults}`}
+            value={`${enteredResults}/4`}
             sub="퇴근 전 입력 기준"
             tone="success"
           />
           <StatCard
             icon={Clock3}
             label="총 TM"
-            value={`${totalGoalTm}/${totalResultTm}`}
+            value={`${totalResultTm}/${totalGoalTm}`}
             sub={`달성율 ${percent(totalResultTm, totalGoalTm)}%`}
             tone="warning"
           />
           <StatCard
             icon={CalendarDays}
             label="미팅 확정"
-            value={`${totalGoalMeeting}/${totalResultMeeting}`}
+            value={`${totalResultMeeting}/${totalGoalMeeting}`}
             sub="목표 대비 결과"
             tone="purple"
           />
@@ -926,7 +1381,7 @@ export default function DailyActivityPage() {
         {access.canCopy && (
           <div className="mb-5 grid gap-3 xl:grid-cols-2">
             <GuideBox>
-              운영파트와 관리자 기준에서 카카오워크 목표복사와 결과보고 복사 버튼이
+              관리자 기준에서만 카카오워크 목표복사와 결과보고 복사 버튼이
               노출됩니다. 미입력 인원은 자동으로 0개 기준으로 양식에 포함됩니다.
             </GuideBox>
             <GuideBox>
@@ -1031,6 +1486,15 @@ export default function DailyActivityPage() {
                         }
                       />
                     </div>
+                    <div className="mt-4">
+                      <WorkItemsEditor
+                        items={workItems}
+                        disabled={isOutsideMeeting}
+                        onTextChange={updateWorkItemText}
+                        onAdd={addWorkItem}
+                        onRemove={removeWorkItem}
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1068,6 +1532,13 @@ export default function DailyActivityPage() {
                             meeting_confirmed: value,
                           }))
                         }
+                      />
+                    </div>
+                    <div className="mt-4">
+                      <WorkItemsResultChecklist
+                        items={workItems}
+                        disabled={isOutsideMeeting}
+                        onToggle={toggleWorkItemDone}
                       />
                     </div>
                   </div>
@@ -1261,6 +1732,31 @@ export default function DailyActivityPage() {
           </div>
         )}
       </div>
+
+      {promptMode && currentMember && (
+        <DailyActivityPrompt
+          mode={promptMode}
+          intro={promptIntro}
+          goal={goal}
+          result={result}
+          workItems={workItems}
+          saving={saving}
+          disabled={isOutsideMeeting}
+          onGoalChange={(key, value) =>
+            setGoal((prev) => ({ ...prev, [key]: value }))
+          }
+          onResultChange={(key, value) =>
+            setResult((prev) => ({ ...prev, [key]: value }))
+          }
+          onTaskTextChange={updateWorkItemText}
+          onTaskAdd={addWorkItem}
+          onTaskRemove={removeWorkItem}
+          onTaskToggle={toggleWorkItemDone}
+          onSaveGoal={() => saveFromPrompt("goal")}
+          onSaveResult={() => saveFromPrompt("result")}
+          onClose={() => closePrompt(promptMode)}
+        />
+      )}
 
       {toast && (
         <div
