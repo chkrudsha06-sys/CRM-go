@@ -1,4 +1,3 @@
-
 "use client";
 
 import { supabase } from "@/lib/supabase";
@@ -251,7 +250,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
   useEffect(() => {
     if (!mode) return;
     setIntro(true);
-    const timer = window.setTimeout(() => setIntro(false), 1250);
+    const timer = window.setTimeout(() => setIntro(false), 2500);
     return () => window.clearTimeout(timer);
   }, [mode]);
 
