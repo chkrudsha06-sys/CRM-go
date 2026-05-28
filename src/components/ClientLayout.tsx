@@ -196,7 +196,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   );
 
   useEffect(() => {
-    if (!user || pathname === "/login") return;
+    if (!user) return;
 
     let failCount = 0;
     let intervalId: NodeJS.Timeout | null = null;
@@ -228,10 +228,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       clearTimeout(timeoutId);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [user, pathname, router]);
+  }, [user, router]);
 
   useEffect(() => {
-    if (!user || pathname === "/login") return;
+    if (!user) return;
 
     fetchNotifications(user.name, false);
 
@@ -299,7 +299,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       supabase.removeChannel(taskChannel);
       clearInterval(pollTimer);
     };
-  }, [user, pathname, fetchNotifications]);
+  }, [user, fetchNotifications]);
 
   const markAllRead = async () => {
     if (!user) return;

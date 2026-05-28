@@ -114,6 +114,14 @@ const ADMIN_MENUS: MenuItem[] = [
   { href: "/account-manage", label: "계정관리", icon: Shield },
 ];
 
+const PREFETCH_MENUS = [
+  ...EXEC_MENUS,
+  ...OPS_MENUS,
+  ...INFO_MENUS,
+  { href: "/ai-assistant", label: "AI assistant", icon: Bot },
+  ...ADMIN_MENUS,
+];
+
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
   exec: "실행파트",
@@ -252,6 +260,17 @@ export default function Sidebar({
     const savedCollapsed = localStorage.getItem("crm_sidebar_collapsed");
     if (savedCollapsed === "true") setSidebarCollapsed(true);
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const uniqueHrefs = Array.from(
+        new Set(PREFETCH_MENUS.map((menu) => menu.href)),
+      );
+      uniqueHrefs.forEach((href) => router.prefetch(href));
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [router]);
 
   const loadSlogan = useCallback(async () => {
     if (!user?.name) return;
@@ -484,6 +503,7 @@ export default function Sidebar({
           color: active ? "var(--text)" : "var(--text-subtle)",
         }}
         onMouseEnter={(event) => {
+          router.prefetch(href);
           if (!active)
             event.currentTarget.style.background = "var(--surface-hover)";
         }}
