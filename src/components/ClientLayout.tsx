@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
+import DailyActivityReminderPopup from "@/components/DailyActivityReminderPopup";
 import { logout, validateSession, getCurrentUser, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Bell, Menu, Send, Truck, X } from "lucide-react";
@@ -196,7 +197,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   );
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || pathname === "/login") return;
 
     let failCount = 0;
     let intervalId: NodeJS.Timeout | null = null;
@@ -228,10 +229,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       clearTimeout(timeoutId);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [user, router]);
+  }, [user, pathname, router]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || pathname === "/login") return;
 
     fetchNotifications(user.name, false);
 
@@ -299,7 +300,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       supabase.removeChannel(taskChannel);
       clearInterval(pollTimer);
     };
-  }, [user, fetchNotifications]);
+  }, [user, pathname, fetchNotifications]);
 
   const markAllRead = async () => {
     if (!user) return;
@@ -418,6 +419,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       <main className="min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">
         {children}
       </main>
+
+      <DailyActivityReminderPopup user={user} />
 
       <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col gap-3">
         {toastQueue.slice(0, 3).map((notification) => (
