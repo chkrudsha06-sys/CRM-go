@@ -684,7 +684,7 @@ function RecentActivityNote({
   };
 
   return (
-    <section className="premium-card p-4">
+    <section className="premium-card p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <PremiumIcon icon={MessageSquare} tone="purple" />
@@ -751,7 +751,7 @@ function RecentActivityNote({
             )}
           </div>
           <p
-            className="line-clamp-3 whitespace-pre-wrap text-[13px] font-medium leading-relaxed"
+            className="line-clamp-4 whitespace-pre-wrap text-[14px] font-medium leading-relaxed"
             style={{ color: "var(--text-muted)" }}
           >
             {note.content}
@@ -1021,7 +1021,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
 
   return (
     <div className="space-y-5">
-      <section className="premium-card p-4">
+      <section className="premium-card p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <PremiumIcon icon={MapPin} tone="info" />
@@ -1042,7 +1042,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
 
         {latest ? (
           <div
-            className="grid gap-3 rounded-[14px] p-4 sm:grid-cols-2"
+            className="grid gap-3 rounded-[14px] p-4 md:grid-cols-2 xl:grid-cols-3"
             style={{
               background: "var(--surface-2)",
               border: "1px solid var(--border-subtle)",
@@ -1074,7 +1074,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
       </section>
 
       {adding && (
-        <section className="premium-card p-4">
+        <section className="premium-card p-5">
           <div className="mb-4 flex items-center gap-2">
             <PremiumIcon icon={Plus} tone="success" />
             <div>
@@ -1098,7 +1098,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
                   )}
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <MiniInput label={latest?.site_name ? "현장명 변경 시 입력" : "현장명"} value={form.site_name} onChange={(v) => patchForm("site_name", v)} placeholder={latest?.site_name ? `비워두면 ${latest.site_name} 기준` : "예: 대전 문화공원 수자인"} />
                 <MiniInput label="지역" value={form.area} onChange={(v) => patchForm("area", v)} placeholder={latest?.area ? `비워두면 ${latest.area} 기준` : "예: 대전"} />
                 <MiniSelect label="현장컨디션" value={form.site_condition} onChange={(v) => patchForm("site_condition", v)} options={SITE_CONDITIONS} />
@@ -1110,7 +1110,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
               <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
                 조직정보
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <MiniSelect label="조직수" value={form.organization_size} onChange={(v) => patchForm("organization_size", v)} options={ORGANIZATION_SIZES} />
                 <MiniInput label="현장조직도" value={form.organization_chart} onChange={(v) => patchForm("organization_chart", v)} placeholder="예: 1총괄 3본부" />
                 <MiniInput label="R/T(수수료)" value={form.rt_fee} onChange={(v) => patchForm("rt_fee", v)} placeholder="예: 팀 600만" />
@@ -1122,7 +1122,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
               <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
                 현장이동예정정보 / 예상매출
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <MiniInput label="이동예정현장명" value={form.next_site_name} onChange={(v) => patchForm("next_site_name", v)} placeholder="예: 대전 문화공원 수자인" />
                 <MiniSelect label="현장이동예정월" value={form.next_move_month} onChange={(v) => patchForm("next_move_month", v)} options={MOVE_MONTHS} />
                 {siteOptions.length > 0 ? (
@@ -1174,7 +1174,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
         </section>
       )}
 
-      <section className="premium-card p-4">
+      <section className="premium-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <PremiumIcon icon={Clock} tone="purple" />
           <div>
@@ -1225,7 +1225,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
                   )}
                 </div>
 
-                <div className="grid gap-2 text-[12px] sm:grid-cols-2">
+                <div className="grid gap-2 text-[12px] md:grid-cols-2 xl:grid-cols-3">
                   <Field label="현장컨디션">{item.site_condition || "-"}</Field>
                   <Field label="분양률">{item.sale_rate || "-"}</Field>
                   <Field label="조직수">{item.organization_size || "-"}</Field>
@@ -1337,20 +1337,24 @@ function DetailSlidePanel({
   return (
     <>
       <div className="slide-panel-overlay" onClick={onClose} />
-      <aside className="slide-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="slide-panel-header">
+      <aside
+        className="slide-panel"
+        style={{ width: "min(1120px, calc(100vw - 48px))", maxWidth: "calc(100vw - 48px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="slide-panel-header" style={{ padding: "clamp(20px, 2vw, 28px)" }}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <div
                 className="crm-avatar-lg crm-avatar"
-                style={{ background: avatarBg(contact.name) }}
+                style={{ background: avatarBg(contact.name), width: 64, height: 64, fontSize: 24 }}
               >
                 {contact.name?.[0] || "고"}
               </div>
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <h2
-                    className="truncate text-[22px] font-[780] tracking-[-0.05em]"
+                    className="truncate text-[30px] font-[780] tracking-[-0.035em]"
                     style={{ color: "var(--text-strong)" }}
                   >
                     {contact.name}
@@ -1358,7 +1362,7 @@ function DetailSlidePanel({
                   <Badge tone={stageTone(stage)}>{stage}</Badge>
                 </div>
                 <p
-                  className="mt-1 text-[13px] font-semibold"
+                  className="mt-1.5 text-[14px] font-semibold"
                   style={{ color: "var(--text-subtle)" }}
                 >
                   ID {contact.id} · {contact.title || "직급 없음"} · 담당{" "}
@@ -1386,7 +1390,7 @@ function DetailSlidePanel({
             </button>
           </div>
 
-          <div className="mt-5 flex gap-1.5">
+          <div className="mt-6 flex flex-wrap gap-2">
             {[
               { key: "summary", label: "Summary" },
               { key: "field", label: "Field History" },
@@ -1400,7 +1404,7 @@ function DetailSlidePanel({
                   key={item.key}
                   type="button"
                   onClick={() => onTab(item.key as DetailTab)}
-                  className="h-9 rounded-[9px] px-3 text-[12px] font-bold transition-all"
+                  className="h-10 rounded-[10px] px-4 text-[13px] font-bold transition-all"
                   style={{
                     background: active ? "var(--accent-subtle)" : "transparent",
                     color: active ? "var(--accent-text)" : "var(--text-subtle)",
@@ -1416,10 +1420,10 @@ function DetailSlidePanel({
           </div>
         </div>
 
-        <div className="slide-panel-body">
+        <div className="slide-panel-body" style={{ padding: "clamp(20px, 2vw, 28px)" }}>
           {tab === "summary" && (
-            <div className="space-y-6">
-              <section className="premium-card p-4">
+            <div className="grid gap-5 xl:grid-cols-2">
+              <section className="premium-card p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <PremiumIcon icon={Phone} tone="info" />
                   <div>
@@ -1462,7 +1466,7 @@ function DetailSlidePanel({
                 </Field>
               </section>
 
-              <section className="premium-card p-4">
+              <section className="premium-card p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <PremiumIcon icon={Target} tone="success" />
                   <div>
@@ -1480,7 +1484,7 @@ function DetailSlidePanel({
                 </Field>
               </section>
 
-              <section className="premium-card p-4">
+              <section className="premium-card p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <PremiumIcon icon={MessageSquare} tone="cyan" />
                   <div>
@@ -1489,7 +1493,7 @@ function DetailSlidePanel({
                   </div>
                 </div>
                 <div
-                  className="min-h-[120px] whitespace-pre-wrap rounded-[12px] p-4 text-[13px] font-medium leading-relaxed"
+                  className="min-h-[150px] whitespace-pre-wrap rounded-[14px] p-5 text-[14px] font-medium leading-[1.75]"
                   style={{
                     background: "var(--surface-2)",
                     color: contact.memo
@@ -1512,7 +1516,7 @@ function DetailSlidePanel({
           {tab === "field" && <FieldHistoryPanel contactId={contact.id} />}
 
           {tab === "notes" && (
-            <section className="premium-card p-4">
+            <section className="premium-card p-5">
               <div className="mb-4 flex items-center gap-2">
                 <PremiumIcon icon={MessageSquare} tone="purple" />
                 <div>
@@ -1525,7 +1529,7 @@ function DetailSlidePanel({
           )}
 
           {tab === "ads" && (
-            <section className="premium-card p-4">
+            <section className="premium-card p-5">
               <div className="mb-4 flex items-center gap-2">
                 <PremiumIcon icon={Target} tone="info" />
                 <div>
@@ -1548,7 +1552,7 @@ function DetailSlidePanel({
 
           {tab === "action" && (
             <div className="space-y-6">
-              <section className="premium-card p-4">
+              <section className="premium-card p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <PremiumIcon icon={Clock} tone="info" />
                   <div>
@@ -1568,7 +1572,7 @@ function DetailSlidePanel({
                 </div>
               </section>
 
-              <section className="premium-card p-4">
+              <section className="premium-card p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <PremiumIcon icon={Zap} tone="warning" />
                   <div>
@@ -1771,8 +1775,8 @@ function DetailSlidePanel({
           )}
         </div>
 
-        <div className="slide-panel-footer">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="slide-panel-footer" style={{ padding: "clamp(16px, 1.6vw, 22px) clamp(20px, 2vw, 28px)" }}>
+          <div className="grid grid-cols-3 gap-3">
             <a
               href={`/customer-register?edit=${contact.id}`}
               className="btn-premium btn-primary"
