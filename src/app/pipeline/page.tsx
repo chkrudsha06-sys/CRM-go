@@ -42,6 +42,10 @@ type Contact = {
   contract_date: string | null;
   reservation_date: string | null;
   intake_route: string | null;
+  operating_site?: string | null;
+  total_org_count?: string | null;
+  team_org_count?: string | null;
+  rt?: string | null;
   created_at: string;
 };
 
@@ -54,6 +58,54 @@ type Note = {
 };
 
 type DetailTab = "summary" | "notes" | "action" | "ads";
+
+type EditFormState = {
+  name: string;
+  title: string;
+  phone: string;
+  customer_type: string;
+  management_stage: string;
+  assigned_to: string;
+  consultant: string;
+  intake_route: string;
+  prospect_type: string;
+  meeting_date: string;
+  meeting_date_text: string;
+  meeting_address: string;
+  meeting_result: string;
+  memo: string;
+  tm_sensitivity: string;
+  contract_date: string;
+  reservation_date: string;
+  operating_site: string;
+  total_org_count: string;
+  team_org_count: string;
+  rt: string;
+};
+
+const EMPTY_EDIT_FORM: EditFormState = {
+  name: "",
+  title: "",
+  phone: "",
+  customer_type: "",
+  management_stage: "",
+  assigned_to: "",
+  consultant: "",
+  intake_route: "",
+  prospect_type: "",
+  meeting_date: "",
+  meeting_date_text: "",
+  meeting_address: "",
+  meeting_result: "",
+  memo: "",
+  tm_sensitivity: "",
+  contract_date: "",
+  reservation_date: "",
+  operating_site: "",
+  total_org_count: "",
+  team_org_count: "",
+  rt: "",
+};
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -764,6 +816,7 @@ function DetailSlidePanel({
   onClose,
   onStageChange,
   onMeetingSave,
+  onEdit,
 }: {
   contact: Contact;
   tab: DetailTab;
@@ -776,6 +829,7 @@ function DetailSlidePanel({
     meetingAddress: string,
     meetingText: string,
   ) => Promise<void>;
+  onEdit: (contact: Contact) => void;
 }) {
   const stage = getStageKey(contact);
   const [retentionOpen, setRetentionOpen] = useState(false);
@@ -1246,13 +1300,14 @@ function DetailSlidePanel({
                   )}
 
 
-                  <a
-                    href={`/customer-register?edit=${contact.id}`}
+                  <button
+                    type="button"
+                    onClick={() => onEdit(contact)}
                     className="btn-premium btn-secondary w-full"
                   >
                     <User size={14} />
                     고객정보수정
-                  </a>
+                  </button>
                   <button
                     type="button"
                     onClick={() => onTab("notes")}
@@ -1269,13 +1324,14 @@ function DetailSlidePanel({
 
         <div className="slide-panel-footer">
           <div className="grid grid-cols-3 gap-2">
-            <a
-              href={`/customer-register?edit=${contact.id}`}
+            <button
+              type="button"
+              onClick={() => onEdit(contact)}
               className="btn-premium btn-primary"
             >
               <User size={14} />
               고객정보수정
-            </a>
+            </button>
             <button
               type="button"
               onClick={() => onTab("notes")}
@@ -1304,6 +1360,9 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("summary");
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState>(EMPTY_EDIT_FORM);
+  const [editSaving, setEditSaving] = useState(false);
 
   const [search, setSearch] = useState("");
   const [fAssigned, setFAssigned] = useState("");
@@ -1326,7 +1385,7 @@ export default function PipelinePage() {
     let q = supabase
       .from("contacts")
       .select(
-        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,created_at",
+        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,operating_site,total_org_count,team_org_count,rt,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(700);
@@ -1487,6 +1546,83 @@ export default function PipelinePage() {
     setSelectedContact((prev) =>
       prev && prev.id === contact.id ? { ...prev, ...patch } : prev,
     );
+  };
+
+  const openEditModal = (contact: Contact) => {
+    setEditingContact(contact);
+    setEditForm({
+      name: contact.name || "",
+      title: contact.title || "",
+      phone: contact.phone || "",
+      customer_type: contact.customer_type || "",
+      management_stage: contact.management_stage || "",
+      assigned_to: contact.assigned_to || "",
+      consultant: contact.consultant || "",
+      intake_route: contact.intake_route || "",
+      prospect_type: contact.prospect_type || "",
+      meeting_date: contact.meeting_date || "",
+      meeting_date_text: contact.meeting_date_text || "",
+      meeting_address: contact.meeting_address || "",
+      meeting_result: contact.meeting_result || "",
+      memo: contact.memo || "",
+      tm_sensitivity: contact.tm_sensitivity || "",
+      contract_date: contact.contract_date || "",
+      reservation_date: contact.reservation_date || "",
+      operating_site: contact.operating_site || "",
+      total_org_count: contact.total_org_count || "",
+      team_org_count: contact.team_org_count || "",
+      rt: contact.rt || "",
+    });
+  };
+
+  const closeEditModal = () => {
+    if (editSaving) return;
+    setEditingContact(null);
+    setEditForm(EMPTY_EDIT_FORM);
+  };
+
+  const setEditField = (key: keyof EditFormState, value: string) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleEditSave = async () => {
+    if (!editingContact) return;
+    if (!editForm.name.trim()) {
+      alert("고객명을 입력해주세요.");
+      return;
+    }
+
+    setEditSaving(true);
+    const payload: Record<string, string | null> = {};
+    Object.entries(editForm).forEach(([key, value]) => {
+      payload[key] = value.trim() || null;
+    });
+
+    const { data, error } = await supabase
+      .from("contacts")
+      .update(payload)
+      .eq("id", editingContact.id)
+      .select(
+        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,operating_site,total_org_count,team_org_count,rt,created_at",
+      )
+      .single();
+
+    setEditSaving(false);
+
+    if (error) {
+      alert("고객정보 수정 실패: " + error.message);
+      return;
+    }
+
+    const updated = data as Contact;
+    setContacts((prev) =>
+      prev.map((item) => (item.id === updated.id ? updated : item)),
+    );
+    setSelectedContact((prev) =>
+      prev && prev.id === updated.id ? updated : prev,
+    );
+    setEditingContact(null);
+    setEditForm(EMPTY_EDIT_FORM);
   };
 
   const selectContact = (contact: Contact) => {
@@ -1793,7 +1929,404 @@ export default function PipelinePage() {
           onClose={() => setSelectedContact(null)}
           onStageChange={handleStageChange}
           onMeetingSave={handleMeetingSave}
+          onEdit={openEditModal}
         />
+      )}
+
+      {editingContact && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 w-full"
+            style={{
+              background: "var(--overlay)",
+              backdropFilter: "blur(5px)",
+            }}
+            onClick={closeEditModal}
+            aria-label="close edit modal"
+          />
+
+          <section
+            className="relative flex max-h-[88vh] w-full max-w-[760px] flex-col overflow-hidden rounded-[18px]"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border-2)",
+              boxShadow: "var(--shadow-xl)",
+            }}
+          >
+            <div
+              className="flex items-center justify-between gap-3 px-5 py-4"
+              style={{ borderBottom: "1px solid var(--border-subtle)" }}
+            >
+              <div className="min-w-0">
+                <p
+                  className="text-[16px] font-[820] tracking-[-0.035em]"
+                  style={{ color: "var(--text-strong)" }}
+                >
+                  고객정보수정
+                </p>
+                <p className="crm-tiny mt-1">
+                  파이프라인에서 수정해도 고객등록 데이터와 동일하게 반영됩니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="btn-premium btn-secondary h-9 w-9 p-0"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">고객명</span>
+                  <input
+                    value={editForm.name}
+                    onChange={(e) => setEditField("name", e.target.value)}
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">직급/메모명</span>
+                  <input
+                    value={editForm.title}
+                    onChange={(e) => setEditField("title", e.target.value)}
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">연락처</span>
+                  <input
+                    value={editForm.phone}
+                    onChange={(e) => setEditField("phone", e.target.value)}
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">유입경로</span>
+                  <input
+                    value={editForm.intake_route}
+                    onChange={(e) =>
+                      setEditField("intake_route", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">담당자</span>
+                  <select
+                    value={editForm.assigned_to}
+                    onChange={(e) =>
+                      setEditField("assigned_to", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  >
+                    <option value="">선택 없음</option>
+                    {TEAM.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">컨설턴트</span>
+                  <input
+                    value={editForm.consultant}
+                    onChange={(e) => setEditField("consultant", e.target.value)}
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">관리단계</span>
+                  <select
+                    value={editForm.management_stage}
+                    onChange={(e) =>
+                      setEditField("management_stage", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  >
+                    <option value="">선택 없음</option>
+                    {STAGES.map((stage) => (
+                      <option key={stage.key} value={stage.key}>
+                        {stage.key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">가망유형</span>
+                  <select
+                    value={editForm.prospect_type}
+                    onChange={(e) =>
+                      setEditField("prospect_type", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  >
+                    <option value="">선택 없음</option>
+                    {PROSPECTS.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">미팅일정</span>
+                  <input
+                    type="date"
+                    value={editForm.meeting_date}
+                    onChange={(e) =>
+                      setEditField("meeting_date", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">미팅장소</span>
+                  <input
+                    value={editForm.meeting_address}
+                    onChange={(e) =>
+                      setEditField("meeting_address", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">미팅결과</span>
+                  <select
+                    value={editForm.meeting_result}
+                    onChange={(e) =>
+                      setEditField("meeting_result", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  >
+                    <option value="">선택 없음</option>
+                    {RESULTS.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">TM감도</span>
+                  <input
+                    value={editForm.tm_sensitivity}
+                    onChange={(e) =>
+                      setEditField("tm_sensitivity", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">계약일</span>
+                  <input
+                    type="date"
+                    value={editForm.contract_date}
+                    onChange={(e) =>
+                      setEditField("contract_date", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">예약일</span>
+                  <input
+                    type="date"
+                    value={editForm.reservation_date}
+                    onChange={(e) =>
+                      setEditField("reservation_date", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">운영현장</span>
+                  <input
+                    value={editForm.operating_site}
+                    onChange={(e) =>
+                      setEditField("operating_site", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">RT</span>
+                  <input
+                    value={editForm.rt}
+                    onChange={(e) => setEditField("rt", e.target.value)}
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">총 조직수</span>
+                  <input
+                    value={editForm.total_org_count}
+                    onChange={(e) =>
+                      setEditField("total_org_count", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="crm-tiny">팀 조직수</span>
+                  <input
+                    value={editForm.team_org_count}
+                    onChange={(e) =>
+                      setEditField("team_org_count", e.target.value)
+                    }
+                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border-subtle)",
+                      color: "var(--text-strong)",
+                    }}
+                  />
+                </label>
+              </div>
+
+              <label className="mt-4 block space-y-1.5">
+                <span className="crm-tiny">미팅/일정 메모</span>
+                <textarea
+                  value={editForm.meeting_date_text}
+                  onChange={(e) =>
+                    setEditField("meeting_date_text", e.target.value)
+                  }
+                  rows={2}
+                  className="w-full resize-none rounded-[10px] border px-3 py-2 text-[13px] font-semibold leading-relaxed outline-none"
+                  style={{
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border-subtle)",
+                    color: "var(--text-strong)",
+                  }}
+                />
+              </label>
+              <label className="mt-4 block space-y-1.5">
+                <span className="crm-tiny">메모</span>
+                <textarea
+                  value={editForm.memo}
+                  onChange={(e) => setEditField("memo", e.target.value)}
+                  rows={5}
+                  className="w-full resize-none rounded-[10px] border px-3 py-2 text-[13px] font-semibold leading-relaxed outline-none"
+                  style={{
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border-subtle)",
+                    color: "var(--text-strong)",
+                  }}
+                />
+              </label>
+            </div>
+
+            <div
+              className="grid grid-cols-2 gap-2 px-5 py-4"
+              style={{ borderTop: "1px solid var(--border-subtle)" }}
+            >
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="btn-premium btn-secondary h-10"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleEditSave}
+                disabled={editSaving}
+                className="btn-premium btn-primary h-10 disabled:opacity-50"
+              >
+                {editSaving ? "저장 중" : "수정 저장"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
