@@ -42,10 +42,6 @@ type Contact = {
   contract_date: string | null;
   reservation_date: string | null;
   intake_route: string | null;
-  operating_site?: string | null;
-  total_org_count?: string | null;
-  team_org_count?: string | null;
-  rt?: string | null;
   created_at: string;
 };
 
@@ -57,55 +53,7 @@ type Note = {
   author: string | null;
 };
 
-type DetailTab = "summary" | "notes" | "action" | "ads";
-
-type EditFormState = {
-  name: string;
-  title: string;
-  phone: string;
-  customer_type: string;
-  management_stage: string;
-  assigned_to: string;
-  consultant: string;
-  intake_route: string;
-  prospect_type: string;
-  meeting_date: string;
-  meeting_date_text: string;
-  meeting_address: string;
-  meeting_result: string;
-  memo: string;
-  tm_sensitivity: string;
-  contract_date: string;
-  reservation_date: string;
-  operating_site: string;
-  total_org_count: string;
-  team_org_count: string;
-  rt: string;
-};
-
-const EMPTY_EDIT_FORM: EditFormState = {
-  name: "",
-  title: "",
-  phone: "",
-  customer_type: "",
-  management_stage: "",
-  assigned_to: "",
-  consultant: "",
-  intake_route: "",
-  prospect_type: "",
-  meeting_date: "",
-  meeting_date_text: "",
-  meeting_address: "",
-  meeting_result: "",
-  memo: "",
-  tm_sensitivity: "",
-  contract_date: "",
-  reservation_date: "",
-  operating_site: "",
-  total_org_count: "",
-  team_org_count: "",
-  rt: "",
-};
+type DetailTab = "summary" | "field" | "notes" | "action" | "ads";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -167,6 +115,76 @@ const RESULTS = [
   "계약거부",
   "미팅불발",
 ];
+
+
+const SITE_CONDITIONS = ["그랜드오픈", "첫조직투입", "정체기", "설거지"];
+const SALE_RATES = ["5%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%"];
+const ORGANIZATION_SIZES = [
+  "50명 미만",
+  "50~100명",
+  "100~150명",
+  "150~200명",
+  "200~250명",
+  "250~300명",
+  "300명 이상",
+];
+const MOVE_MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+const INFO_SOURCES = ["본인통화", "카톡", "소개", "상담사 공유", "현장소식", "기타"];
+
+type FieldHistory = {
+  id: number;
+  contact_id: number;
+  site_name: string | null;
+  area: string | null;
+  site_condition: string | null;
+  sale_rate: string | null;
+  organization_size: string | null;
+  organization_chart: string | null;
+  rt_fee: string | null;
+  next_site_name: string | null;
+  next_move_month: string | null;
+  expected_revenue_site: string | null;
+  expected_revenue: string | null;
+  info_date: string | null;
+  info_source: string | null;
+  field_memo: string | null;
+  author: string | null;
+  created_at: string;
+};
+
+type FieldHistoryForm = {
+  site_name: string;
+  area: string;
+  site_condition: string;
+  sale_rate: string;
+  organization_size: string;
+  organization_chart: string;
+  rt_fee: string;
+  next_site_name: string;
+  next_move_month: string;
+  expected_revenue_site: string;
+  expected_revenue: string;
+  info_date: string;
+  info_source: string;
+  field_memo: string;
+};
+
+const emptyFieldHistoryForm = (): FieldHistoryForm => ({
+  site_name: "",
+  area: "",
+  site_condition: "",
+  sale_rate: "",
+  organization_size: "",
+  organization_chart: "",
+  rt_fee: "",
+  next_site_name: "",
+  next_move_month: "",
+  expected_revenue_site: "",
+  expected_revenue: "",
+  info_date: TODAY,
+  info_source: "",
+  field_memo: "",
+});
 
 function formatFullDate(value?: string | null) {
   if (!value) return "-";
@@ -809,6 +827,395 @@ function RecentActivityNote({
   );
 }
 
+
+function MiniInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="space-y-1.5">
+      <span className="crm-tiny">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--border)",
+          color: "var(--text)",
+        }}
+      />
+    </label>
+  );
+}
+
+function MiniSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "선택",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <label className="space-y-1.5">
+      <span className="crm-tiny">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--border)",
+          color: "var(--text)",
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FieldHistoryPanel({ contactId }: { contactId: number }) {
+  const [items, setItems] = useState<FieldHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<FieldHistoryForm>(() => emptyFieldHistoryForm());
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("contact_field_histories")
+      .select(
+        "id,contact_id,site_name,area,site_condition,sale_rate,organization_size,organization_chart,rt_fee,next_site_name,next_move_month,expected_revenue_site,expected_revenue,info_date,info_source,field_memo,author,created_at",
+      )
+      .eq("contact_id", contactId)
+      .order("info_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("현장 히스토리 조회 실패:", error.message);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setItems((data || []) as FieldHistory[]);
+    setLoading(false);
+  }, [contactId]);
+
+  useEffect(() => {
+    fetchItems();
+    setAdding(false);
+    setForm(emptyFieldHistoryForm());
+  }, [fetchItems]);
+
+  const currentUserName = () => {
+    try {
+      const raw = localStorage.getItem("crm_user");
+      if (raw) return JSON.parse(raw).name || "";
+    } catch {}
+    return "";
+  };
+
+  const patchForm = (key: keyof FieldHistoryForm, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const saveHistory = async () => {
+    if (!form.site_name.trim()) {
+      alert("현장명을 입력해줘.");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("contact_field_histories").insert({
+      contact_id: contactId,
+      site_name: form.site_name.trim(),
+      area: form.area.trim() || null,
+      site_condition: form.site_condition || null,
+      sale_rate: form.sale_rate || null,
+      organization_size: form.organization_size || null,
+      organization_chart: form.organization_chart.trim() || null,
+      rt_fee: form.rt_fee.trim() || null,
+      next_site_name: form.next_site_name.trim() || null,
+      next_move_month: form.next_move_month || null,
+      expected_revenue_site:
+        form.expected_revenue_site.trim() || form.site_name.trim() || null,
+      expected_revenue: form.expected_revenue.trim() || null,
+      info_date: form.info_date || TODAY,
+      info_source: form.info_source || null,
+      field_memo: form.field_memo.trim() || null,
+      author: currentUserName() || null,
+    });
+    setSaving(false);
+
+    if (error) {
+      alert("현장 히스토리 저장 실패: " + error.message);
+      return;
+    }
+
+    setAdding(false);
+    setForm(emptyFieldHistoryForm());
+    await fetchItems();
+  };
+
+  const siteOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(items.map((item) => item.site_name).filter(Boolean) as string[]),
+      ),
+    [items],
+  );
+
+  const latest = items[0];
+
+  return (
+    <div className="space-y-5">
+      <section className="premium-card p-4">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <PremiumIcon icon={MapPin} tone="info" />
+            <div className="min-w-0">
+              <p className="crm-section-title">현장 히스토리</p>
+              <p className="crm-tiny">고객의 현재 현장, 이동 예정, 예상매출 누적 기록</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAdding((value) => !value)}
+            className="btn-premium btn-primary h-9 flex-shrink-0 px-3 text-[12px]"
+          >
+            <Plus size={14} />
+            현장정보 추가
+          </button>
+        </div>
+
+        {latest ? (
+          <div
+            className="grid gap-3 rounded-[14px] p-4 sm:grid-cols-2"
+            style={{
+              background: "var(--surface-2)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <Field label="최근 현장명">{latest.site_name || "-"}</Field>
+            <Field label="지역">{latest.area || "-"}</Field>
+            <Field label="현장컨디션">
+              <Badge tone="warning">{latest.site_condition || "-"}</Badge>
+            </Field>
+            <Field label="분양률">
+              <Badge tone="info">{latest.sale_rate || "-"}</Badge>
+            </Field>
+            <Field label="조직수">{latest.organization_size || "-"}</Field>
+            <Field label="예상매출">
+              <span className="font-extrabold" style={{ color: "var(--danger-text)" }}>
+                {latest.expected_revenue || "-"}
+              </span>
+            </Field>
+          </div>
+        ) : (
+          <div
+            className="rounded-[14px] border border-dashed p-5 text-center text-[13px] font-bold"
+            style={{ color: "var(--text-faint)", borderColor: "var(--border)" }}
+          >
+            아직 등록된 현장 히스토리가 없습니다.
+          </div>
+        )}
+      </section>
+
+      {adding && (
+        <section className="premium-card p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <PremiumIcon icon={Plus} tone="success" />
+            <div>
+              <p className="crm-section-title">현장정보 입력</p>
+              <p className="crm-tiny">새 기록으로 누적 저장됩니다.</p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div>
+              <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
+                현장정보 현재 기준
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MiniInput label="현장명" value={form.site_name} onChange={(v) => patchForm("site_name", v)} placeholder="예: 대전 문화공원 수자인" />
+                <MiniInput label="지역" value={form.area} onChange={(v) => patchForm("area", v)} placeholder="예: 대전" />
+                <MiniSelect label="현장컨디션" value={form.site_condition} onChange={(v) => patchForm("site_condition", v)} options={SITE_CONDITIONS} />
+                <MiniSelect label="분양률" value={form.sale_rate} onChange={(v) => patchForm("sale_rate", v)} options={SALE_RATES} />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
+                조직정보
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MiniSelect label="조직수" value={form.organization_size} onChange={(v) => patchForm("organization_size", v)} options={ORGANIZATION_SIZES} />
+                <MiniInput label="현장조직도" value={form.organization_chart} onChange={(v) => patchForm("organization_chart", v)} placeholder="예: 1총괄 3본부" />
+                <MiniInput label="R/T(수수료)" value={form.rt_fee} onChange={(v) => patchForm("rt_fee", v)} placeholder="예: 팀 600만" />
+                <MiniSelect label="정보출처" value={form.info_source} onChange={(v) => patchForm("info_source", v)} options={INFO_SOURCES} />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
+                현장이동예정정보 / 예상매출
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MiniInput label="이동예정현장명" value={form.next_site_name} onChange={(v) => patchForm("next_site_name", v)} placeholder="예: 대전 문화공원 수자인" />
+                <MiniSelect label="현장이동예정월" value={form.next_move_month} onChange={(v) => patchForm("next_move_month", v)} options={MOVE_MONTHS} />
+                {siteOptions.length > 0 ? (
+                  <MiniSelect label="예상매출 기준 현장" value={form.expected_revenue_site} onChange={(v) => patchForm("expected_revenue_site", v)} options={[form.site_name, ...siteOptions].filter(Boolean)} placeholder="현장 선택" />
+                ) : (
+                  <MiniInput label="예상매출 기준 현장" value={form.expected_revenue_site} onChange={(v) => patchForm("expected_revenue_site", v)} placeholder="예: 현재 입력 현장" />
+                )}
+                <MiniInput label="예상매출" value={form.expected_revenue} onChange={(v) => patchForm("expected_revenue", v)} placeholder="예: 500만원" />
+                <MiniInput label="정보 기준일" value={form.info_date} onChange={(v) => patchForm("info_date", v)} placeholder="YYYY-MM-DD" />
+              </div>
+              <label className="mt-3 block space-y-1.5">
+                <span className="crm-tiny">현장 메모</span>
+                <textarea
+                  value={form.field_memo}
+                  onChange={(e) => patchForm("field_memo", e.target.value)}
+                  rows={3}
+                  placeholder="예: 6월 말 이동 가능성 높음. 하이타겟 제안 가능성 있음."
+                  className="w-full resize-none rounded-[12px] border px-3 py-2 text-[13px] font-medium outline-none"
+                  style={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    color: "var(--text)",
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setForm(emptyFieldHistoryForm());
+                }}
+                className="btn-premium btn-secondary h-10"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={saveHistory}
+                disabled={saving}
+                className="btn-premium btn-primary h-10 disabled:opacity-50"
+              >
+                {saving ? "저장 중" : "현장정보 저장"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="premium-card p-4">
+        <div className="mb-4 flex items-center gap-2">
+          <PremiumIcon icon={Clock} tone="purple" />
+          <div>
+            <p className="crm-section-title">누적 기록</p>
+            <p className="crm-tiny">최신 기록이 가장 위에 표시됩니다.</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex h-32 items-center justify-center">
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+            />
+          </div>
+        ) : items.length === 0 ? (
+          <div
+            className="rounded-[14px] border border-dashed p-5 text-center text-[13px] font-bold"
+            style={{ color: "var(--text-faint)", borderColor: "var(--border)" }}
+          >
+            누적된 현장 기록이 없습니다.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <article
+                key={item.id}
+                className="rounded-[16px] p-4"
+                style={{
+                  background: index === 0 ? "var(--surface-2)" : "var(--surface)",
+                  border: "1px solid var(--border-subtle)",
+                }}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[15px] font-black" style={{ color: "var(--text-strong)" }}>
+                        {item.site_name || "현장명 없음"}
+                      </p>
+                      {index === 0 && <Badge tone="success">현재 기준</Badge>}
+                    </div>
+                    <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>
+                      {item.area || "지역 없음"} · 기준일 {formatFullDate(item.info_date)} · 작성 {item.author || "-"}
+                    </p>
+                  </div>
+                  {item.expected_revenue && (
+                    <Badge tone="danger">예상매출 {item.expected_revenue}</Badge>
+                  )}
+                </div>
+
+                <div className="grid gap-2 text-[12px] sm:grid-cols-2">
+                  <Field label="현장컨디션">{item.site_condition || "-"}</Field>
+                  <Field label="분양률">{item.sale_rate || "-"}</Field>
+                  <Field label="조직수">{item.organization_size || "-"}</Field>
+                  <Field label="현장조직도">{item.organization_chart || "-"}</Field>
+                  <Field label="R/T">{item.rt_fee || "-"}</Field>
+                  <Field label="정보출처">{item.info_source || "-"}</Field>
+                  <Field label="이동예정현장">{item.next_site_name || "-"}</Field>
+                  <Field label="이동예정월">{item.next_move_month || "-"}</Field>
+                  <Field label="예상매출 기준">{item.expected_revenue_site || item.site_name || "-"}</Field>
+                </div>
+
+                {item.field_memo && (
+                  <div
+                    className="mt-3 whitespace-pre-wrap rounded-[12px] p-3 text-[12px] font-medium leading-relaxed"
+                    style={{
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border-subtle)",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {item.field_memo}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function DetailSlidePanel({
   contact,
   tab,
@@ -816,7 +1223,6 @@ function DetailSlidePanel({
   onClose,
   onStageChange,
   onMeetingSave,
-  onEdit,
 }: {
   contact: Contact;
   tab: DetailTab;
@@ -829,7 +1235,6 @@ function DetailSlidePanel({
     meetingAddress: string,
     meetingText: string,
   ) => Promise<void>;
-  onEdit: (contact: Contact) => void;
 }) {
   const stage = getStageKey(contact);
   const [retentionOpen, setRetentionOpen] = useState(false);
@@ -942,6 +1347,7 @@ function DetailSlidePanel({
           <div className="mt-5 flex gap-1.5">
             {[
               { key: "summary", label: "Summary" },
+              { key: "field", label: "Field History" },
               { key: "notes", label: "Notes" },
               { key: "action", label: "Next action" },
               { key: "ads", label: "Ads >" },
@@ -1060,6 +1466,8 @@ function DetailSlidePanel({
               />
             </div>
           )}
+
+          {tab === "field" && <FieldHistoryPanel contactId={contact.id} />}
 
           {tab === "notes" && (
             <section className="premium-card p-4">
@@ -1300,14 +1708,13 @@ function DetailSlidePanel({
                   )}
 
 
-                  <button
-                    type="button"
-                    onClick={() => onEdit(contact)}
+                  <a
+                    href={`/customer-register?edit=${contact.id}`}
                     className="btn-premium btn-secondary w-full"
                   >
                     <User size={14} />
                     고객정보수정
-                  </button>
+                  </a>
                   <button
                     type="button"
                     onClick={() => onTab("notes")}
@@ -1324,14 +1731,13 @@ function DetailSlidePanel({
 
         <div className="slide-panel-footer">
           <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => onEdit(contact)}
+            <a
+              href={`/customer-register?edit=${contact.id}`}
               className="btn-premium btn-primary"
             >
               <User size={14} />
               고객정보수정
-            </button>
+            </a>
             <button
               type="button"
               onClick={() => onTab("notes")}
@@ -1360,9 +1766,6 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("summary");
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState>(EMPTY_EDIT_FORM);
-  const [editSaving, setEditSaving] = useState(false);
 
   const [search, setSearch] = useState("");
   const [fAssigned, setFAssigned] = useState("");
@@ -1385,7 +1788,7 @@ export default function PipelinePage() {
     let q = supabase
       .from("contacts")
       .select(
-        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,operating_site,total_org_count,team_org_count,rt,created_at",
+        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(700);
@@ -1546,83 +1949,6 @@ export default function PipelinePage() {
     setSelectedContact((prev) =>
       prev && prev.id === contact.id ? { ...prev, ...patch } : prev,
     );
-  };
-
-  const openEditModal = (contact: Contact) => {
-    setEditingContact(contact);
-    setEditForm({
-      name: contact.name || "",
-      title: contact.title || "",
-      phone: contact.phone || "",
-      customer_type: contact.customer_type || "",
-      management_stage: contact.management_stage || "",
-      assigned_to: contact.assigned_to || "",
-      consultant: contact.consultant || "",
-      intake_route: contact.intake_route || "",
-      prospect_type: contact.prospect_type || "",
-      meeting_date: contact.meeting_date || "",
-      meeting_date_text: contact.meeting_date_text || "",
-      meeting_address: contact.meeting_address || "",
-      meeting_result: contact.meeting_result || "",
-      memo: contact.memo || "",
-      tm_sensitivity: contact.tm_sensitivity || "",
-      contract_date: contact.contract_date || "",
-      reservation_date: contact.reservation_date || "",
-      operating_site: contact.operating_site || "",
-      total_org_count: contact.total_org_count || "",
-      team_org_count: contact.team_org_count || "",
-      rt: contact.rt || "",
-    });
-  };
-
-  const closeEditModal = () => {
-    if (editSaving) return;
-    setEditingContact(null);
-    setEditForm(EMPTY_EDIT_FORM);
-  };
-
-  const setEditField = (key: keyof EditFormState, value: string) => {
-    setEditForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleEditSave = async () => {
-    if (!editingContact) return;
-    if (!editForm.name.trim()) {
-      alert("고객명을 입력해주세요.");
-      return;
-    }
-
-    setEditSaving(true);
-    const payload: Record<string, string | null> = {};
-    Object.entries(editForm).forEach(([key, value]) => {
-      payload[key] = value.trim() || null;
-    });
-
-    const { data, error } = await supabase
-      .from("contacts")
-      .update(payload)
-      .eq("id", editingContact.id)
-      .select(
-        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,operating_site,total_org_count,team_org_count,rt,created_at",
-      )
-      .single();
-
-    setEditSaving(false);
-
-    if (error) {
-      alert("고객정보 수정 실패: " + error.message);
-      return;
-    }
-
-    const updated = data as Contact;
-    setContacts((prev) =>
-      prev.map((item) => (item.id === updated.id ? updated : item)),
-    );
-    setSelectedContact((prev) =>
-      prev && prev.id === updated.id ? updated : prev,
-    );
-    setEditingContact(null);
-    setEditForm(EMPTY_EDIT_FORM);
   };
 
   const selectContact = (contact: Contact) => {
@@ -1929,404 +2255,7 @@ export default function PipelinePage() {
           onClose={() => setSelectedContact(null)}
           onStageChange={handleStageChange}
           onMeetingSave={handleMeetingSave}
-          onEdit={openEditModal}
         />
-      )}
-
-      {editingContact && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="absolute inset-0 w-full"
-            style={{
-              background: "var(--overlay)",
-              backdropFilter: "blur(5px)",
-            }}
-            onClick={closeEditModal}
-            aria-label="close edit modal"
-          />
-
-          <section
-            className="relative flex max-h-[88vh] w-full max-w-[760px] flex-col overflow-hidden rounded-[18px]"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border-2)",
-              boxShadow: "var(--shadow-xl)",
-            }}
-          >
-            <div
-              className="flex items-center justify-between gap-3 px-5 py-4"
-              style={{ borderBottom: "1px solid var(--border-subtle)" }}
-            >
-              <div className="min-w-0">
-                <p
-                  className="text-[16px] font-[820] tracking-[-0.035em]"
-                  style={{ color: "var(--text-strong)" }}
-                >
-                  고객정보수정
-                </p>
-                <p className="crm-tiny mt-1">
-                  파이프라인에서 수정해도 고객등록 데이터와 동일하게 반영됩니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="btn-premium btn-secondary h-9 w-9 p-0"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">고객명</span>
-                  <input
-                    value={editForm.name}
-                    onChange={(e) => setEditField("name", e.target.value)}
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">직급/메모명</span>
-                  <input
-                    value={editForm.title}
-                    onChange={(e) => setEditField("title", e.target.value)}
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">연락처</span>
-                  <input
-                    value={editForm.phone}
-                    onChange={(e) => setEditField("phone", e.target.value)}
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">유입경로</span>
-                  <input
-                    value={editForm.intake_route}
-                    onChange={(e) =>
-                      setEditField("intake_route", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">담당자</span>
-                  <select
-                    value={editForm.assigned_to}
-                    onChange={(e) =>
-                      setEditField("assigned_to", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  >
-                    <option value="">선택 없음</option>
-                    {TEAM.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">컨설턴트</span>
-                  <input
-                    value={editForm.consultant}
-                    onChange={(e) => setEditField("consultant", e.target.value)}
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">관리단계</span>
-                  <select
-                    value={editForm.management_stage}
-                    onChange={(e) =>
-                      setEditField("management_stage", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  >
-                    <option value="">선택 없음</option>
-                    {STAGES.map((stage) => (
-                      <option key={stage.key} value={stage.key}>
-                        {stage.key}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">가망유형</span>
-                  <select
-                    value={editForm.prospect_type}
-                    onChange={(e) =>
-                      setEditField("prospect_type", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  >
-                    <option value="">선택 없음</option>
-                    {PROSPECTS.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">미팅일정</span>
-                  <input
-                    type="date"
-                    value={editForm.meeting_date}
-                    onChange={(e) =>
-                      setEditField("meeting_date", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">미팅장소</span>
-                  <input
-                    value={editForm.meeting_address}
-                    onChange={(e) =>
-                      setEditField("meeting_address", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">미팅결과</span>
-                  <select
-                    value={editForm.meeting_result}
-                    onChange={(e) =>
-                      setEditField("meeting_result", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  >
-                    <option value="">선택 없음</option>
-                    {RESULTS.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">TM감도</span>
-                  <input
-                    value={editForm.tm_sensitivity}
-                    onChange={(e) =>
-                      setEditField("tm_sensitivity", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">계약일</span>
-                  <input
-                    type="date"
-                    value={editForm.contract_date}
-                    onChange={(e) =>
-                      setEditField("contract_date", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">예약일</span>
-                  <input
-                    type="date"
-                    value={editForm.reservation_date}
-                    onChange={(e) =>
-                      setEditField("reservation_date", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">운영현장</span>
-                  <input
-                    value={editForm.operating_site}
-                    onChange={(e) =>
-                      setEditField("operating_site", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">RT</span>
-                  <input
-                    value={editForm.rt}
-                    onChange={(e) => setEditField("rt", e.target.value)}
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">총 조직수</span>
-                  <input
-                    value={editForm.total_org_count}
-                    onChange={(e) =>
-                      setEditField("total_org_count", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="crm-tiny">팀 조직수</span>
-                  <input
-                    value={editForm.team_org_count}
-                    onChange={(e) =>
-                      setEditField("team_org_count", e.target.value)
-                    }
-                    className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border-subtle)",
-                      color: "var(--text-strong)",
-                    }}
-                  />
-                </label>
-              </div>
-
-              <label className="mt-4 block space-y-1.5">
-                <span className="crm-tiny">미팅/일정 메모</span>
-                <textarea
-                  value={editForm.meeting_date_text}
-                  onChange={(e) =>
-                    setEditField("meeting_date_text", e.target.value)
-                  }
-                  rows={2}
-                  className="w-full resize-none rounded-[10px] border px-3 py-2 text-[13px] font-semibold leading-relaxed outline-none"
-                  style={{
-                    background: "var(--surface-2)",
-                    borderColor: "var(--border-subtle)",
-                    color: "var(--text-strong)",
-                  }}
-                />
-              </label>
-              <label className="mt-4 block space-y-1.5">
-                <span className="crm-tiny">메모</span>
-                <textarea
-                  value={editForm.memo}
-                  onChange={(e) => setEditField("memo", e.target.value)}
-                  rows={5}
-                  className="w-full resize-none rounded-[10px] border px-3 py-2 text-[13px] font-semibold leading-relaxed outline-none"
-                  style={{
-                    background: "var(--surface-2)",
-                    borderColor: "var(--border-subtle)",
-                    color: "var(--text-strong)",
-                  }}
-                />
-              </label>
-            </div>
-
-            <div
-              className="grid grid-cols-2 gap-2 px-5 py-4"
-              style={{ borderTop: "1px solid var(--border-subtle)" }}
-            >
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="btn-premium btn-secondary h-10"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleEditSave}
-                disabled={editSaving}
-                className="btn-premium btn-primary h-10 disabled:opacity-50"
-              >
-                {editSaving ? "저장 중" : "수정 저장"}
-              </button>
-            </div>
-          </section>
-        </div>
       )}
     </div>
   );
