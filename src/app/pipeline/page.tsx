@@ -941,24 +941,52 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
   };
 
   const saveHistory = async () => {
-    if (!form.site_name.trim()) {
-      alert("현장명을 입력해줘.");
+    const latestSiteName = latest?.site_name?.trim() || "";
+    const resolvedSiteName = form.site_name.trim() || latestSiteName;
+
+    if (!resolvedSiteName) {
+      alert("최초 현장정보는 현장명을 입력해줘.");
       return;
     }
+
+    const hasInput = Boolean(
+      form.site_name.trim() ||
+        form.area.trim() ||
+        form.site_condition ||
+        form.sale_rate ||
+        form.organization_size ||
+        form.organization_chart.trim() ||
+        form.rt_fee.trim() ||
+        form.next_site_name.trim() ||
+        form.next_move_month ||
+        form.expected_revenue_site.trim() ||
+        form.expected_revenue.trim() ||
+        form.info_source ||
+        form.field_memo.trim(),
+    );
+
+    if (!hasInput) {
+      alert("추가할 현장 변경 내용 또는 이동예정 정보를 입력해줘.");
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase.from("contact_field_histories").insert({
       contact_id: contactId,
-      site_name: form.site_name.trim(),
-      area: form.area.trim() || null,
-      site_condition: form.site_condition || null,
-      sale_rate: form.sale_rate || null,
-      organization_size: form.organization_size || null,
-      organization_chart: form.organization_chart.trim() || null,
-      rt_fee: form.rt_fee.trim() || null,
+      site_name: resolvedSiteName,
+      area: form.area.trim() || latest?.area || null,
+      site_condition: form.site_condition || latest?.site_condition || null,
+      sale_rate: form.sale_rate || latest?.sale_rate || null,
+      organization_size: form.organization_size || latest?.organization_size || null,
+      organization_chart: form.organization_chart.trim() || latest?.organization_chart || null,
+      rt_fee: form.rt_fee.trim() || latest?.rt_fee || null,
       next_site_name: form.next_site_name.trim() || null,
       next_move_month: form.next_move_month || null,
       expected_revenue_site:
-        form.expected_revenue_site.trim() || form.site_name.trim() || null,
+        form.expected_revenue_site.trim() ||
+        form.next_site_name.trim() ||
+        resolvedSiteName ||
+        null,
       expected_revenue: form.expected_revenue.trim() || null,
       info_date: form.info_date || TODAY,
       info_source: form.info_source || null,
@@ -980,7 +1008,11 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
   const siteOptions = useMemo(
     () =>
       Array.from(
-        new Set(items.map((item) => item.site_name).filter(Boolean) as string[]),
+        new Set(
+          items
+            .flatMap((item) => [item.site_name, item.next_site_name])
+            .filter(Boolean) as string[],
+        ),
       ),
     [items],
   );
@@ -1053,12 +1085,22 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
 
           <div className="space-y-5">
             <div>
-              <p className="mb-3 text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
-                현장정보 현재 기준
-              </p>
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-[12px] font-black" style={{ color: "var(--text-strong)" }}>
+                    현장정보 현재 기준
+                  </p>
+                  {latest?.site_name && (
+                    <p className="crm-tiny mt-1">
+                      기존 현장: <b style={{ color: "var(--text-strong)" }}>{latest.site_name}</b> ·
+                      현장명이 비어 있으면 기존 현장 기준으로 누적 저장됩니다.
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <MiniInput label="현장명" value={form.site_name} onChange={(v) => patchForm("site_name", v)} placeholder="예: 대전 문화공원 수자인" />
-                <MiniInput label="지역" value={form.area} onChange={(v) => patchForm("area", v)} placeholder="예: 대전" />
+                <MiniInput label={latest?.site_name ? "현장명 변경 시 입력" : "현장명"} value={form.site_name} onChange={(v) => patchForm("site_name", v)} placeholder={latest?.site_name ? `비워두면 ${latest.site_name} 기준` : "예: 대전 문화공원 수자인"} />
+                <MiniInput label="지역" value={form.area} onChange={(v) => patchForm("area", v)} placeholder={latest?.area ? `비워두면 ${latest.area} 기준` : "예: 대전"} />
                 <MiniSelect label="현장컨디션" value={form.site_condition} onChange={(v) => patchForm("site_condition", v)} options={SITE_CONDITIONS} />
                 <MiniSelect label="분양률" value={form.sale_rate} onChange={(v) => patchForm("sale_rate", v)} options={SALE_RATES} />
               </div>
@@ -1084,7 +1126,7 @@ function FieldHistoryPanel({ contactId }: { contactId: number }) {
                 <MiniInput label="이동예정현장명" value={form.next_site_name} onChange={(v) => patchForm("next_site_name", v)} placeholder="예: 대전 문화공원 수자인" />
                 <MiniSelect label="현장이동예정월" value={form.next_move_month} onChange={(v) => patchForm("next_move_month", v)} options={MOVE_MONTHS} />
                 {siteOptions.length > 0 ? (
-                  <MiniSelect label="예상매출 기준 현장" value={form.expected_revenue_site} onChange={(v) => patchForm("expected_revenue_site", v)} options={[form.site_name, ...siteOptions].filter(Boolean)} placeholder="현장 선택" />
+                  <MiniSelect label="예상매출 기준 현장" value={form.expected_revenue_site} onChange={(v) => patchForm("expected_revenue_site", v)} options={Array.from(new Set([form.site_name, form.next_site_name, latest?.site_name || "", ...siteOptions].filter(Boolean)))} placeholder="현장 선택" />
                 ) : (
                   <MiniInput label="예상매출 기준 현장" value={form.expected_revenue_site} onChange={(v) => patchForm("expected_revenue_site", v)} placeholder="예: 현재 입력 현장" />
                 )}
