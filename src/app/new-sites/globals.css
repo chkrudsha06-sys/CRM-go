@@ -1,0 +1,521 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F1F5F9;
+  --bg-2: #E8EDF4;
+  --surface: #FFFFFF;
+  --surface-2: #F8FAFC;
+  --surface-3: #F1F5F9;
+  --border: #E2E8F0;
+  --border-2: #CBD5E1;
+  --text: #0F172A;
+  --text-2: #334155;
+  --text-muted: #64748B;
+  --text-subtle: #94A3B8;
+  --navy: #1E3A8A;
+  --navy-2: #3B5FC0;
+  --gold: #C9A84C;
+  --gold-light: #E8C97A;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --info: #3B82F6;
+  --cyan: #06B6D4;
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: #E2E8F0;
+  --sidebar-hover: #F8FAFC;
+  --sidebar-active-bg: #EFF6FF;
+  --sidebar-active-text: #1E3A8A;
+  --sidebar-text: #64748B;
+  --sidebar-text-2: #334155;
+  --sidebar-section: #94A3B8;
+  --header-bg: #FFFFFF;
+  --card-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --table-header: #F8FAFC;
+  --table-hover: #F8FAFC;
+  --table-border: #F1F5F9;
+  --input-bg: #F8FAFC;
+  --input-border: #E2E8F0;
+  --modal-overlay: rgba(0,0,0,0.4);
+  --glow: none;
+}
+
+[data-theme="dark"] {
+  --bg: #0B1437;
+  --bg-2: #0F1A42;
+  --surface: rgba(255,255,255,0.04);
+  --surface-2: rgba(255,255,255,0.06);
+  --surface-3: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.15);
+  --border-2: rgba(255,255,255,0.2);
+  --text: #FFFFFF;
+  --text-2: rgba(255,255,255,0.85);
+  --text-muted: rgba(255,255,255,0.75);
+  --text-subtle: rgba(255,255,255,0.5);
+  --navy: #4A7BF7;
+  --navy-2: #6C9AFF;
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --danger: #F87171;
+  --info: #60A5FA;
+  --cyan: #22D3EE;
+  --sidebar-bg: linear-gradient(180deg, #0B1A3E 0%, #091230 100%);
+  --sidebar-border: rgba(255,255,255,0.06);
+  --sidebar-hover: rgba(255,255,255,0.06);
+  --sidebar-active-bg: linear-gradient(135deg, rgba(74,123,247,0.2) 0%, rgba(74,123,247,0.08) 100%);
+  --sidebar-active-text: #FFFFFF;
+  --sidebar-text: rgba(255,255,255,0.7);
+  --sidebar-text-2: rgba(255,255,255,0.85);
+  --sidebar-section: rgba(255,255,255,0.5);
+  --header-bg: rgba(11,20,55,0.8);
+  --card-shadow: 0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+  --table-header: rgba(255,255,255,0.04);
+  --table-hover: rgba(255,255,255,0.04);
+  --table-border: rgba(255,255,255,0.12);
+  --input-bg: rgba(255,255,255,0.06);
+  --input-border: rgba(255,255,255,0.1);
+  --modal-overlay: rgba(0,0,0,0.7);
+  --glow: 0 0 20px rgba(74,123,247,0.15);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-subtle); }
+
+/* 입력 필드 */
+input, select, textarea {
+  background-color: var(--input-bg) !important;
+  color: var(--text) !important;
+  border-color: var(--input-border) !important;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+input::placeholder, textarea::placeholder { color: var(--text-subtle); }
+
+/* 테이블 행 호버 */
+.table-row-hover:hover { background-color: var(--table-hover); }
+
+/* 카드 */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--card-shadow);
+}
+
+[data-theme="dark"] .card {
+  backdrop-filter: blur(12px);
+}
+
+/* 배지 */
+.badge-emerald { background: #D1FAE5; color: #065F46; }
+.badge-blue { background: #DBEAFE; color: #1E40AF; }
+.badge-amber { background: #FEF3C7; color: #92400E; }
+.badge-red { background: #FEE2E2; color: #991B1B; }
+.badge-gray { background: #F1F5F9; color: #475569; }
+.badge-purple { background: #EDE9FE; color: #5B21B6; }
+
+[data-theme="dark"] .badge-emerald { background: rgba(16,185,129,0.15); color: #4ADE80; }
+[data-theme="dark"] .badge-blue { background: rgba(59,130,246,0.15); color: #60A5FA; }
+[data-theme="dark"] .badge-amber { background: rgba(245,158,11,0.15); color: #FBBF24; }
+[data-theme="dark"] .badge-red { background: rgba(239,68,68,0.15); color: #F87171; }
+[data-theme="dark"] .badge-gray { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); }
+[data-theme="dark"] .badge-purple { background: rgba(139,92,246,0.15); color: #A78BFA; }
+
+/* 애니메이션 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeIn 0.3s ease; }
+
+/* 페이지 헤더 */
+.page-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
+  position: sticky; top: 0; z-index: 10;
+}
+[data-theme="dark"] .page-header {
+  backdrop-filter: blur(16px);
+}
+
+/* 다크 모드 Tailwind 오버라이드 */
+[data-theme="dark"] .bg-white { background: var(--surface) !important; }
+[data-theme="dark"] .bg-slate-50, [data-theme="dark"] .bg-\[#F1F5F9\] { background: var(--bg) !important; }
+[data-theme="dark"] .border-slate-200, [data-theme="dark"] .border-slate-100 { border-color: var(--border) !important; }
+[data-theme="dark"] .text-slate-800, [data-theme="dark"] .text-slate-900 { color: var(--text) !important; }
+[data-theme="dark"] .text-slate-700 { color: var(--text-2) !important; }
+[data-theme="dark"] .text-slate-600 { color: var(--text-muted) !important; }
+[data-theme="dark"] .text-slate-500 { color: var(--text-muted) !important; }
+[data-theme="dark"] .text-slate-400 { color: var(--text-subtle) !important; }
+[data-theme="dark"] .text-slate-300 { color: var(--text-subtle) !important; }
+[data-theme="dark"] .hover\:bg-slate-50:hover { background: var(--surface-2) !important; }
+[data-theme="dark"] .bg-slate-100 { background: var(--surface-2) !important; }
+[data-theme="dark"] .shadow-sm { box-shadow: var(--card-shadow) !important; }
+[data-theme="dark"] .border-b { border-color: var(--border) !important; }
+[data-theme="dark"] .border-r { border-color: var(--border) !important; }
+[data-theme="dark"] .border-t { border-color: var(--border) !important; }
+
+/* 모달 */
+[data-theme="dark"] [class*="bg-black/"] { background: var(--modal-overlay) !important; }
+
+/* ═══ 2단계: 전체 컴포넌트 다크 오버라이드 ═══ */
+
+/* 전체 페이지 배경 */
+[data-theme="dark"] .bg-\[\#F1F5F9\] { background: var(--bg) !important; }
+
+/* 헤더 */
+[data-theme="dark"] [class*="sticky"][class*="top-0"] {
+  background: #0B1437 !important;
+  border-color: var(--border) !important;
+}
+
+/* 카드 - 글래스모피즘 */
+[data-theme="dark"] .rounded-2xl[class*="border"][class*="shadow"] {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .rounded-xl[class*="border"][class*="shadow"] {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* 테이블 헤더 */
+[data-theme="dark"] thead { background: #0F1A42 !important; }
+[data-theme="dark"] thead.sticky { background: #0F1A42 !important; z-index: 20; }
+[data-theme="dark"] .sticky.top-0 { background: #0F1A42 !important; }
+[data-theme="dark"] thead th { color: rgba(255,255,255,0.5) !important; border-color: var(--border) !important; }
+[data-theme="dark"] tbody td { border-color: rgba(255,255,255,0.03) !important; }
+[data-theme="dark"] tbody tr:hover { background: rgba(255,255,255,0.03) !important; }
+
+/* select / input 다크 */
+[data-theme="dark"] select {
+  background-color: rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.8) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+[data-theme="dark"] select option {
+  background: #1a2550;
+  color: #fff;
+}
+
+/* 버튼 */
+[data-theme="dark"] .bg-blue-600 { background: #4A7BF7 !important; box-shadow: 0 0 20px rgba(74,123,247,0.3); }
+[data-theme="dark"] .bg-blue-600:hover { background: #5A8BFF !important; }
+[data-theme="dark"] .hover\:bg-blue-800:hover { background: #3A6BE7 !important; }
+[data-theme="dark"] .bg-\[\#1E3A8A\] { background: linear-gradient(135deg, #4A7BF7, #3B5FC0) !important; box-shadow: 0 0 20px rgba(74,123,247,0.25); }
+
+/* 서브 배경들 */
+[data-theme="dark"] .bg-blue-50 { background: rgba(74,123,247,0.1) !important; }
+[data-theme="dark"] .bg-amber-50 { background: rgba(245,158,11,0.1) !important; }
+[data-theme="dark"] .bg-emerald-50 { background: rgba(16,185,129,0.1) !important; }
+[data-theme="dark"] .bg-violet-50 { background: rgba(139,92,246,0.1) !important; }
+[data-theme="dark"] .bg-red-50 { background: rgba(239,68,68,0.1) !important; }
+[data-theme="dark"] .bg-orange-50 { background: rgba(249,115,22,0.1) !important; }
+[data-theme="dark"] .bg-indigo-50 { background: rgba(99,102,241,0.1) !important; }
+[data-theme="dark"] .bg-pink-50 { background: rgba(236,72,153,0.1) !important; }
+[data-theme="dark"] .bg-teal-50 { background: rgba(20,184,166,0.1) !important; }
+[data-theme="dark"] .bg-cyan-50 { background: rgba(6,182,212,0.1) !important; }
+
+/* 보더 색상들 */
+[data-theme="dark"] .border-blue-100 { border-color: rgba(74,123,247,0.2) !important; }
+[data-theme="dark"] .border-amber-100 { border-color: rgba(245,158,11,0.2) !important; }
+[data-theme="dark"] .border-emerald-100 { border-color: rgba(16,185,129,0.2) !important; }
+[data-theme="dark"] .border-violet-100 { border-color: rgba(139,92,246,0.2) !important; }
+[data-theme="dark"] .border-red-100,.border-red-200 { border-color: rgba(239,68,68,0.2) !important; }
+
+/* 텍스트 색상 정밀 제어 */
+[data-theme="dark"] .text-blue-600 { color: #60A5FA !important; }
+[data-theme="dark"] .text-blue-700 { color: #93C5FD !important; }
+[data-theme="dark"] .text-emerald-600 { color: #4ADE80 !important; }
+[data-theme="dark"] .text-emerald-700 { color: #6EE7B7 !important; }
+[data-theme="dark"] .text-amber-600 { color: #FBBF24 !important; }
+[data-theme="dark"] .text-amber-700 { color: #FCD34D !important; }
+[data-theme="dark"] .text-violet-600,.text-violet-700 { color: #A78BFA !important; }
+[data-theme="dark"] .text-red-500,.text-red-600 { color: #F87171 !important; }
+[data-theme="dark"] .text-indigo-600 { color: #818CF8 !important; }
+[data-theme="dark"] .text-pink-600 { color: #F472B6 !important; }
+
+/* 그래디언트 배경 */
+[data-theme="dark"] [class*="bg-gradient-to-r"][class*="from-amber"] {
+  background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(249,115,22,0.08)) !important;
+}
+[data-theme="dark"] [class*="bg-gradient-to-r"][class*="from-blue"] {
+  background: linear-gradient(135deg, rgba(74,123,247,0.12), rgba(99,102,241,0.08)) !important;
+}
+[data-theme="dark"] [class*="bg-gradient-to-r"][class*="from-emerald"] {
+  background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(20,184,166,0.08)) !important;
+}
+
+/* 프로그레스 바 배경 */
+[data-theme="dark"] .bg-white.rounded-full { background: rgba(255,255,255,0.08) !important; }
+
+/* 파이프라인 칸반 */
+[data-theme="dark"] .bg-blue-50\/30 { background: rgba(74,123,247,0.03) !important; }
+[data-theme="dark"] .bg-slate-50\/30 { background: rgba(255,255,255,0.02) !important; }
+
+/* 캘린더 */
+[data-theme="dark"] .bg-blue-600.text-white { background: #4A7BF7 !important; }
+
+/* 스크롤바 다크 */
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+
+/* ═══ 3단계: 모달/폼/세부 다크 오버라이드 ═══ */
+
+/* 모달 배경 */
+[data-theme="dark"] .bg-white.rounded-2xl.shadow-2xl,
+[data-theme="dark"] .bg-white.rounded-2xl.shadow-xl {
+  background: rgba(15,26,66,0.95) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  backdrop-filter: blur(24px);
+}
+
+/* 모달 오버레이 */
+[data-theme="dark"] [class*="bg-black"][class*="/"] {
+  background: rgba(0,0,0,0.7) !important;
+}
+
+/* 폼 내부 배경 */
+[data-theme="dark"] .bg-white.border.rounded-lg {
+  background: rgba(255,255,255,0.04) !important;
+}
+
+/* 검색 인풋 */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="file"],
+[data-theme="dark"] textarea {
+  background: rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.85) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+
+/* 파이프라인 카드 */
+[data-theme="dark"] .bg-white.rounded-xl.border.border-slate-100 {
+  background: rgba(255,255,255,0.04) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+[data-theme="dark"] .hover\:border-blue-200:hover {
+  border-color: rgba(74,123,247,0.3) !important;
+}
+[data-theme="dark"] .hover\:shadow-md:hover {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 12px rgba(74,123,247,0.1) !important;
+}
+
+/* 파이프라인 칸반 컬럼 */
+[data-theme="dark"] [class*="rounded-2xl"][class*="border"][class*="overflow-hidden"] {
+  background: rgba(255,255,255,0.02) !important;
+}
+
+/* KPI 프로그레스 바 트랙 */
+[data-theme="dark"] .rounded-full.overflow-hidden[class*="border"] {
+  background: rgba(255,255,255,0.06) !important;
+}
+
+/* 토글 버튼 (KPI 월간/주간) */
+[data-theme="dark"] .bg-slate-50.border-slate-200 {
+  background: rgba(255,255,255,0.04) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* 완판트럭 배지 */
+[data-theme="dark"] .bg-amber-100 { background: rgba(245,158,11,0.15) !important; }
+[data-theme="dark"] .bg-violet-100 { background: rgba(139,92,246,0.15) !important; }
+[data-theme="dark"] .bg-emerald-100 { background: rgba(16,185,129,0.15) !important; }
+[data-theme="dark"] .bg-blue-100 { background: rgba(74,123,247,0.15) !important; }
+[data-theme="dark"] .bg-red-100 { background: rgba(239,68,68,0.15) !important; }
+[data-theme="dark"] .bg-orange-100 { background: rgba(249,115,22,0.15) !important; }
+[data-theme="dark"] .bg-slate-100 { background: rgba(255,255,255,0.06) !important; }
+
+/* 캘린더 셀 */
+[data-theme="dark"] [class*="min-h-\[140px\]"] {
+  border-color: rgba(255,255,255,0.03) !important;
+}
+[data-theme="dark"] [class*="min-h-\[140px\]"]:hover {
+  background: rgba(74,123,247,0.05) !important;
+}
+
+/* 캘린더 선택된 날짜 */
+[data-theme="dark"] .bg-blue-50 { background: rgba(74,123,247,0.08) !important; }
+[data-theme="dark"] .bg-blue-50\/30 { background: rgba(74,123,247,0.04) !important; }
+
+/* 리워드 테이블 특수 배경 */
+[data-theme="dark"] .bg-blue-50\/40 { background: rgba(74,123,247,0.06) !important; }
+
+/* 매출일보 팝업 */
+[data-theme="dark"] .bg-white.rounded-3xl {
+  background: rgba(15,26,66,0.95) !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* 견적서 */
+[data-theme="dark"] .bg-white.shadow-lg {
+  background: rgba(15,26,66,0.95) !important;
+}
+
+/* 인센티브 관리 테이블 */
+[data-theme="dark"] .bg-slate-800 { background: rgba(255,255,255,0.06) !important; }
+[data-theme="dark"] .bg-slate-900 { background: rgba(255,255,255,0.03) !important; }
+[data-theme="dark"] .text-white { color: #FFFFFF !important; }
+
+/* 로딩 스피너 */
+[data-theme="dark"] .border-blue-600 { border-color: #4A7BF7 !important; }
+[data-theme="dark"] .border-blue-400 { border-color: #60A5FA !important; }
+
+/* 초기화 버튼 활성 */
+[data-theme="dark"] .bg-red-500 { background: rgba(239,68,68,0.8) !important; }
+
+/* 로그인 페이지 제외 */
+[data-theme="dark"] .login-page { background: transparent !important; }
+
+/* 리워드 마일리지 컬럼 가독성 */
+[data-theme="dark"] .text-blue-500 { color: #60A5FA !important; }
+[data-theme="dark"] .text-cyan-600 { color: #22D3EE !important; }
+[data-theme="dark"] .text-sky-600 { color: #38BDF8 !important; }
+[data-theme="dark"] .font-black { color: var(--text) !important; }
+[data-theme="dark"] td .font-bold { color: rgba(255,255,255,0.9) !important; }
+[data-theme="dark"] .text-blue-600.font-bold, [data-theme="dark"] .text-blue-600.font-semibold { color: #93C5FD !important; }
+
+/* 리워드 마일리지 헤더 */
+[data-theme="dark"] .bg-blue-50\/40 { background: rgba(74,123,247,0.12) !important; }
+[data-theme="dark"] th.text-blue-600 { color: #93C5FD !important; }
+
+/* sticky thead 배경 확실히 불투명 */
+[data-theme="dark"] [class*="overflow-auto"] thead,
+[data-theme="dark"] [class*="overflow-x-auto"] thead {
+  background: #0F1A42 !important;
+}
+[data-theme="dark"] [class*="overflow-auto"] thead th,
+[data-theme="dark"] [class*="overflow-x-auto"] thead th {
+  background: #0F1A42 !important;
+}
+
+/* 리워드 마일리지 셀 배경 + 텍스트 강화 */
+[data-theme="dark"] .bg-blue-50\/20 { background: rgba(74,123,247,0.08) !important; }
+[data-theme="dark"] .bg-blue-50\/20 .text-blue-600 { color: #93C5FD !important; }
+[data-theme="dark"] .bg-blue-50\/20 .font-bold { color: #93C5FD !important; }
+[data-theme="dark"] .bg-blue-50\/20 .text-slate-300 { color: rgba(255,255,255,0.2) !important; }
+[data-theme="dark"] .bg-blue-50\/20 .text-slate-400 { color: rgba(255,255,255,0.3) !important; }
+[data-theme="dark"] .bg-blue-50\/20 .text-slate-600 { color: rgba(255,255,255,0.6) !important; }
+
+/* 리워드 마일리지 셀 */
+.mile-cell { background: rgba(219,234,254,0.2); }
+[data-theme="dark"] .mile-cell { background: rgba(74,123,247,0.08) !important; }
+[data-theme="dark"] .mile-cell span { color: #93C5FD !important; }
+[data-theme="dark"] .mile-cell .text-red-500 { color: #F87171 !important; }
+[data-theme="dark"] .mile-cell button { background: rgba(74,123,247,0.15) !important; color: #93C5FD !important; border-color: rgba(74,123,247,0.25) !important; }
+
+/* ═══ 다크모드 캘린더 테두리 강화 ═══ */
+[data-theme="dark"] table td, [data-theme="dark"] table th {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+[data-theme="dark"] .border-slate-200 {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+[data-theme="dark"] .border-slate-100 {
+  border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* ═══ 다크모드 텍스트 밝기 강화 ═══ */
+[data-theme="dark"] .text-slate-500 { color: rgba(255,255,255,0.7) !important; }
+[data-theme="dark"] .text-slate-400 { color: rgba(255,255,255,0.55) !important; }
+[data-theme="dark"] .text-slate-300 { color: rgba(255,255,255,0.5) !important; }
+[data-theme="dark"] .text-slate-600 { color: rgba(255,255,255,0.75) !important; }
+
+/* ═══ 다크모드 인센티브 구간 카드 ═══ */
+[data-theme="dark"] .bg-gradient-to-br {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+[data-theme="dark"] .from-orange-100 { background: rgba(249,115,22,0.1) !important; }
+[data-theme="dark"] .from-slate-100 { background: rgba(148,163,184,0.08) !important; }
+[data-theme="dark"] .from-amber-100 { background: rgba(253,181,42,0.1) !important; }
+[data-theme="dark"] .bg-gradient-to-br.from-orange-100,
+[data-theme="dark"] .bg-gradient-to-br.from-slate-100,
+[data-theme="dark"] .bg-gradient-to-br.from-amber-100 {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+
+/* 구간 뱃지 텍스트 */
+[data-theme="dark"] .bg-orange-400 { background: #F97316 !important; color: #fff !important; }
+[data-theme="dark"] .bg-slate-400 { background: #94A3B8 !important; color: #fff !important; }
+[data-theme="dark"] .bg-amber-400 { background: #FBBF24 !important; color: #000 !important; }
+
+/* 구간 금액 텍스트 */
+[data-theme="dark"] .text-2xl.font-black { color: #FFFFFF !important; }
+[data-theme="dark"] .text-sm.font-semibold.text-slate-700 { color: rgba(255,255,255,0.8) !important; }
+
+/* ═══ 다크모드 시계/시간 텍스트 ═══ */
+[data-theme="dark"] time, [data-theme="dark"] .text-xs.text-slate-500 {
+  color: rgba(255,255,255,0.7) !important;
+}
+
+/* ═══ 다크모드 input/select 밝기 ═══ */
+[data-theme="dark"] select option {
+  background: #0F1A42;
+  color: #fff;
+}
+
+/* ═══ 다크모드 divide 색상 통일 ═══ */
+[data-theme="dark"] .divide-slate-200 > * + * {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+[data-theme="dark"] .divide-x > * + * {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+[data-theme="dark"] .divide-y > * + * {
+  border-color: rgba(255,255,255,0.15) !important;
+}
+
+/* ═══ 벨 알림 애니메이션 ═══ */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(12deg); }
+  30% { transform: rotate(-10deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+}
+.animate-wiggle {
+  animation: wiggle 0.8s ease-in-out;
+  animation-iteration-count: 1;
+}
+
+/* ═══ 알림 드롭다운 다크모드 ═══ */
+[data-theme="dark"] .bg-violet-100 { background: rgba(139,92,246,0.2) !important; }
+[data-theme="dark"] .bg-violet-50 { background: rgba(139,92,246,0.15) !important; }
+[data-theme="dark"] .text-violet-600 { color: #a78bfa !important; }
+[data-theme="dark"] .bg-amber-100 { background: rgba(245,158,11,0.2) !important; }
+[data-theme="dark"] .bg-amber-50 { background: rgba(245,158,11,0.15) !important; }
+[data-theme="dark"] .text-amber-600 { color: #fbbf24 !important; }
+[data-theme="dark"] .bg-blue-100 { background: rgba(59,130,246,0.2) !important; }
+[data-theme="dark"] .bg-blue-50 { background: rgba(59,130,246,0.15) !important; }
+[data-theme="dark"] .text-blue-600 { color: #60a5fa !important; }
+
+/* line-clamp 유틸리티 */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
