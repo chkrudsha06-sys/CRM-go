@@ -1733,30 +1733,7 @@ export default function DailyActivityPage() {
         )}
       </div>
 
-      {promptMode && currentMember && (
-        <DailyActivityPrompt
-          mode={promptMode}
-          intro={promptIntro}
-          goal={goal}
-          result={result}
-          workItems={workItems}
-          saving={saving}
-          disabled={isOutsideMeeting}
-          onGoalChange={(key, value) =>
-            setGoal((prev) => ({ ...prev, [key]: value }))
-          }
-          onResultChange={(key, value) =>
-            setResult((prev) => ({ ...prev, [key]: value }))
-          }
-          onTaskTextChange={updateWorkItemText}
-          onTaskAdd={addWorkItem}
-          onTaskRemove={removeWorkItem}
-          onTaskToggle={toggleWorkItemDone}
-          onSaveGoal={() => saveFromPrompt("goal")}
-          onSaveResult={() => saveFromPrompt("result")}
-          onClose={() => closePrompt(promptMode)}
-        />
-      )}
+
 
       {toast && (
         <div
