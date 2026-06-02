@@ -47,7 +47,6 @@ const ACTIVITY_FIELDS = [
   { key: "second_touch", label: "2차 접점", unit: "개" },
   { key: "new_tm", label: "신규 TM", unit: "개" },
   { key: "manage_tm", label: "관리 TM", unit: "개" },
-  { key: "coldtalk", label: "콜드톡 발송", unit: "개" },
   { key: "media_mix", label: "미디어믹스 전달", unit: "건" },
 ] as const;
 
@@ -121,7 +120,6 @@ const EMPTY_VALUES: FormValues = {
   second_touch: 0,
   new_tm: 0,
   manage_tm: 0,
-  coldtalk: 0,
   media_mix: 0,
   meeting_confirmed: 0,
 };
@@ -690,14 +688,14 @@ function WorkItemsEditor({
               value={item.text}
               disabled={disabled}
               onChange={(event) => onTextChange(item.id, event.target.value)}
-              placeholder={`${index + 1}. 오늘 처리할 업무를 입력하세요`}
+              placeholder="오늘 처리할 과업을 입력하세요"
               className="h-[42px] min-w-0 flex-1 rounded-[13px] border px-3 text-[14px] font-[700] outline-none disabled:opacity-50"
               style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
             />
             <button
               type="button"
               onClick={() => onRemove(item.id)}
-              disabled={disabled || items.length <= 1}
+              disabled={disabled || items.length <= 3}
               className="flex h-[42px] w-[42px] items-center justify-center rounded-[13px] border disabled:opacity-40"
               style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
             >
@@ -1014,7 +1012,6 @@ export default function DailyActivityPage() {
         second_touch: row.goal_second_touch || 0,
         new_tm: row.goal_new_tm || 0,
         manage_tm: row.goal_manage_tm || 0,
-        coldtalk: row.goal_coldtalk || 0,
         media_mix: row.goal_media_mix || 0,
         meeting_confirmed: row.goal_meeting_confirmed || 0,
       });
@@ -1023,7 +1020,6 @@ export default function DailyActivityPage() {
         second_touch: row.result_second_touch || 0,
         new_tm: row.result_new_tm || 0,
         manage_tm: row.result_manage_tm || 0,
-        coldtalk: row.result_coldtalk || 0,
         media_mix: row.result_media_mix || 0,
         meeting_confirmed: row.result_meeting_confirmed || 0,
       });
@@ -1143,7 +1139,7 @@ export default function DailyActivityPage() {
 
   const removeWorkItem = (id: string) => {
     setWorkItems((prev) =>
-      prev.length <= 1 ? createEmptyWorkItems() : prev.filter((item) => item.id !== id),
+      prev.length <= 3 ? createEmptyWorkItems() : prev.filter((item) => item.id !== id),
     );
   };
 
@@ -1164,7 +1160,7 @@ export default function DailyActivityPage() {
       goal_second_touch: isOutsideMeeting ? 0 : goal.second_touch,
       goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
       goal_manage_tm: isOutsideMeeting ? 0 : goal.manage_tm,
-      goal_coldtalk: isOutsideMeeting ? 0 : goal.coldtalk,
+      goal_coldtalk: 0,
       goal_media_mix: isOutsideMeeting ? 0 : goal.media_mix,
       goal_meeting_confirmed: isOutsideMeeting ? 0 : goal.meeting_confirmed,
       goal_work_items: isOutsideMeeting ? [] : workItems,
@@ -1172,7 +1168,7 @@ export default function DailyActivityPage() {
       result_second_touch: isOutsideMeeting ? 0 : result.second_touch,
       result_new_tm: isOutsideMeeting ? 0 : result.new_tm,
       result_manage_tm: isOutsideMeeting ? 0 : result.manage_tm,
-      result_coldtalk: isOutsideMeeting ? 0 : result.coldtalk,
+      result_coldtalk: 0,
       result_media_mix: isOutsideMeeting ? 0 : result.media_mix,
       result_meeting_confirmed: isOutsideMeeting ? 0 : result.meeting_confirmed,
     };

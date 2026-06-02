@@ -12,7 +12,6 @@ const ACTIVITY_FIELDS = [
   { key: "second_touch", label: "2차 접점", unit: "건" },
   { key: "new_tm", label: "신규 TM", unit: "건" },
   { key: "manage_tm", label: "관리 TM", unit: "건" },
-  { key: "coldtalk", label: "콜드톡 발송", unit: "건" },
   { key: "media_mix", label: "미디어믹스 전달", unit: "건" },
 ] as const;
 
@@ -57,7 +56,6 @@ const EMPTY_VALUES: FormValues = {
   second_touch: 0,
   new_tm: 0,
   manage_tm: 0,
-  coldtalk: 0,
   media_mix: 0,
   meeting_confirmed: 0,
 };
@@ -108,7 +106,6 @@ function isGoalEntered(row: DailyActivityRow | null) {
     Number(row.goal_second_touch || 0) > 0 ||
     Number(row.goal_new_tm || 0) > 0 ||
     Number(row.goal_manage_tm || 0) > 0 ||
-    Number(row.goal_coldtalk || 0) > 0 ||
     Number(row.goal_media_mix || 0) > 0 ||
     Number(row.goal_meeting_confirmed || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).length > 0
@@ -123,7 +120,6 @@ function isResultEntered(row: DailyActivityRow | null) {
     Number(row.result_second_touch || 0) > 0 ||
     Number(row.result_new_tm || 0) > 0 ||
     Number(row.result_manage_tm || 0) > 0 ||
-    Number(row.result_coldtalk || 0) > 0 ||
     Number(row.result_media_mix || 0) > 0 ||
     Number(row.result_meeting_confirmed || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).some((item) => item.done)
@@ -137,7 +133,6 @@ function goalFromRow(row: DailyActivityRow | null): FormValues {
     second_touch: Number(row.goal_second_touch || 0),
     new_tm: Number(row.goal_new_tm || 0),
     manage_tm: Number(row.goal_manage_tm || 0),
-    coldtalk: Number(row.goal_coldtalk || 0),
     media_mix: Number(row.goal_media_mix || 0),
     meeting_confirmed: Number(row.goal_meeting_confirmed || 0),
   };
@@ -150,7 +145,6 @@ function resultFromRow(row: DailyActivityRow | null): FormValues {
     second_touch: Number(row.result_second_touch || 0),
     new_tm: Number(row.result_new_tm || 0),
     manage_tm: Number(row.result_manage_tm || 0),
-    coldtalk: Number(row.result_coldtalk || 0),
     media_mix: Number(row.result_media_mix || 0),
     meeting_confirmed: Number(row.result_meeting_confirmed || 0),
   };
@@ -318,7 +312,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
       goal_second_touch: outside ? 0 : goal.second_touch,
       goal_new_tm: outside ? 0 : goal.new_tm,
       goal_manage_tm: outside ? 0 : goal.manage_tm,
-      goal_coldtalk: outside ? 0 : goal.coldtalk,
+      goal_coldtalk: 0,
       goal_media_mix: outside ? 0 : goal.media_mix,
       goal_meeting_confirmed: outside ? 0 : goal.meeting_confirmed,
       goal_work_items: outside ? [] : workItems,
@@ -326,7 +320,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
       result_second_touch: outside ? 0 : result.second_touch,
       result_new_tm: outside ? 0 : result.new_tm,
       result_manage_tm: outside ? 0 : result.manage_tm,
-      result_coldtalk: outside ? 0 : result.coldtalk,
+      result_coldtalk: 0,
       result_media_mix: outside ? 0 : result.media_mix,
       result_meeting_confirmed: outside ? 0 : result.meeting_confirmed,
     };
@@ -370,7 +364,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
   };
 
   const removeWorkItem = (id: string) => {
-    setWorkItems((prev) => (prev.length <= 1 ? createEmptyWorkItems() : prev.filter((item) => item.id !== id)));
+    setWorkItems((prev) => (prev.length <= 3 ? createEmptyWorkItems() : prev.filter((item) => item.id !== id)));
   };
 
   if (!isExec || !mode) return null;
@@ -536,7 +530,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                         {isGoalMode ? "당일활동목표" : "당일활동목표 완료체크"}
                       </p>
                       <p className="mt-1 text-[12px] font-[700]" style={{ color: "var(--text-muted)" }}>
-                        {isGoalMode ? "처리해야 할 업무를 텍스트로 작성하세요." : "완료 체크 시 텍스트 중간에 선이 표시됩니다."}
+                        {isGoalMode ? "수치화되지 않는 과업을 텍스트로 작성하세요." : "완료 체크 시 텍스트 중간에 선이 표시됩니다."}
                       </p>
                     </div>
                     {isGoalMode && (
@@ -557,7 +551,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                               value={item.text}
                               disabled={outside}
                               onChange={(event) => updateWorkItemText(item.id, event.target.value)}
-                              placeholder="오늘 처리할 업무를 입력하세요"
+                              placeholder="오늘 처리할 과업을 입력하세요"
                               className="min-w-0 flex-1 bg-transparent text-[14px] font-[740] outline-none disabled:opacity-45"
                               style={{ color: "var(--text)" }}
                             />
@@ -570,7 +564,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                             </label>
                           )}
                           {isGoalMode && (
-                            <button type="button" onClick={() => removeWorkItem(item.id)} disabled={outside || workItems.length <= 1} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border disabled:opacity-35" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                            <button type="button" onClick={() => removeWorkItem(item.id)} disabled={outside || workItems.length <= 3} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border disabled:opacity-35" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                               <Trash2 size={14} />
                             </button>
                           )}
