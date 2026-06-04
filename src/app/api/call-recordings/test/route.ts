@@ -54,6 +54,22 @@ function getManagerFolders(): ManagerFolder[] {
   ];
 }
 
+function normalizeGeminiMimeType(mimeType: string) {
+  if (mimeType === "audio/x-m4a") return "audio/mp4";
+  if (mimeType === "audio/m4a") return "audio/mp4";
+  return mimeType || "audio/mp4";
+}
+
+function extractPhoneFromFileName(fileName: string) {
+  const onlyNumberCandidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
+
+  if (!onlyNumberCandidates || onlyNumberCandidates.length === 0) {
+    return null;
+  }
+
+  return onlyNumberCandidates[0].replace(/\D/g, "");
+}
+
 async function getGoogleAccessToken() {
   const clientId = getRequiredEnv("GOOGLE_CLIENT_ID");
   const clientSecret = getRequiredEnv("GOOGLE_CLIENT_SECRET");
@@ -118,8 +134,75 @@ async function listDriveFiles(accessToken: string, folderId: string) {
   return (data.files || []) as DriveFile[];
 }
 
-async function testGemini() {
+async function downloadDriveFileAsBase64(accessToken: string, fileId: string) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Google Drive file download failed: ${errorText}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  return {
+    base64: buffer.toString("base64"),
+    byteLength: buffer.byteLength,
+  };
+}
+
+async function summarizeAudioWithGemini(params: {
+  base64Audio: string;
+  mimeType: string;
+  fileName: string;
+  managerName: string;
+  extractedPhone: string | null;
+}) {
   const apiKey = getRequiredEnv("GEMINI_API_KEY");
+
+  const prompt = `
+너는 분양 CRM의 통화내용 정리 담당자다.
+아래 녹음파일을 듣고 CRM 고객 파이프라인의 활동노트에 바로 넣을 수 있도록 한국어로 정리해라.
+
+반드시 아래 형식으로만 작성해라.
+
+[AI 통화 요약]
+
+담당자:
+${params.managerName}
+
+파일명:
+${params.fileName}
+
+추출 연락처:
+${params.extractedPhone || "파일명에서 연락처 추출 실패"}
+
+통화 요약:
+- 
+
+고객 니즈:
+- 
+
+후속 액션:
+- 
+
+AI 판단:
+관심도: 높음 / 보통 / 낮음 중 하나
+다음 조치 필요 여부: 필요 / 불필요 중 하나
+
+주의사항:
+- 녹음에서 확실히 들리지 않는 내용은 추정하지 말고 "확인 필요"라고 적어라.
+- 개인정보나 금액, 일정은 들리는 내용만 적어라.
+- 너무 길게 쓰지 말고 CRM 활동노트용으로 간결하게 정리해라.
+`;
 
   const res = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
@@ -134,8 +217,13 @@ async function testGemini() {
           {
             parts: [
               {
-                text:
-                  "아래 통화 메모를 CRM 활동노트 형식으로 짧게 요약해줘. 통화 메모: 고객은 분양회 가입 기준과 광고비 지원 가능 여부를 문의했고, 다음 주 추가 상담을 희망했다.",
+                text: prompt,
+              },
+              {
+                inlineData: {
+                  mimeType: normalizeGeminiMimeType(params.mimeType),
+                  data: params.base64Audio,
+                },
               },
             ],
           },
@@ -149,11 +237,11 @@ async function testGemini() {
 
   if (!res.ok) {
     throw new Error(
-      `Gemini API test failed: ${JSON.stringify(data, null, 2)}`
+      `Gemini audio summary failed: ${JSON.stringify(data, null, 2)}`
     );
   }
 
-  const text =
+  const summary =
     data?.candidates?.[0]?.content?.parts
       ?.map((part: { text?: string }) => part.text || "")
       .join("")
@@ -162,7 +250,7 @@ async function testGemini() {
   return {
     ok: true,
     model: "gemini-2.5-flash",
-    sampleSummary: text,
+    summary,
   };
 }
 
@@ -208,6 +296,7 @@ export async function GET() {
         return {
           manager: folder.manager,
           envKey: folder.envKey,
+          folderId: folder.folderId,
           ok: true,
           fileCount: files.length,
           files: files.map((file) => ({
@@ -218,25 +307,69 @@ export async function GET() {
             modifiedTime: file.modifiedTime,
             webViewLink: file.webViewLink,
             size: file.size,
+            extractedPhone: extractPhoneFromFileName(file.name),
           })),
         };
       })
     );
 
-    const gemini = await testGemini();
+    const allAudioFiles = driveResults
+      .flatMap((result) =>
+        result.files.map((file) => ({
+          ...file,
+          manager: result.manager,
+        }))
+      )
+      .filter((file) => file.mimeType?.startsWith("audio/"));
+
+    if (allAudioFiles.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        message:
+          "Google Drive connected, but no audio file was found in manager folders.",
+        envStatus,
+        driveResults,
+        audioSummaryTest: null,
+      });
+    }
+
+    const pickedFile = allAudioFiles[0];
+
+    const downloaded = await downloadDriveFileAsBase64(
+      accessToken,
+      pickedFile.id
+    );
+
+    const audioSummary = await summarizeAudioWithGemini({
+      base64Audio: downloaded.base64,
+      mimeType: pickedFile.mimeType,
+      fileName: pickedFile.name,
+      managerName: pickedFile.manager,
+      extractedPhone: pickedFile.extractedPhone,
+    });
 
     return NextResponse.json({
       ok: true,
-      message: "Google Drive OAuth + Gemini API test completed.",
+      message: "Google Drive audio file + Gemini summary test completed.",
       envStatus,
+      pickedFile: {
+        manager: pickedFile.manager,
+        id: pickedFile.id,
+        name: pickedFile.name,
+        mimeType: pickedFile.mimeType,
+        size: pickedFile.size,
+        downloadedBytes: downloaded.byteLength,
+        extractedPhone: pickedFile.extractedPhone,
+        webViewLink: pickedFile.webViewLink,
+      },
+      audioSummaryTest: audioSummary,
       driveResults,
-      gemini,
     });
   } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Call recording test failed.",
+        message: "Call recording audio summary test failed.",
         error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
