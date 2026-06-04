@@ -89,11 +89,11 @@ function dateLabel(value: string) {
 }
 
 function badgeClass(value?: string | null) {
-  if (value === "마스터") return "badge-purple";
-  if (value === "챌린저") return "badge-info";
-  if (value === "브론즈") return "badge-success";
-  if (value === "추가 심사 후보") return "badge-warning";
-  if (value === "판정 보류") return "badge-muted";
+  if (value === "마스터") return "grade-master";
+  if (value === "챌린저") return "grade-challenger";
+  if (value === "브론즈") return "grade-bronze";
+  if (value === "추가 심사 후보") return "grade-review";
+  if (value === "판정 보류") return "grade-hold";
   if (value === "분양의신DB") return "badge-purple";
   if (value === "완판트럭") return "badge-warning";
   if (value === "분양라인") return "badge-cyan";
@@ -136,7 +136,8 @@ function SelectBox({
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
         style={{ color: "var(--text-faint)" }}
       />
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -382,7 +383,68 @@ export default function ContactsPage() {
   };
 
   return (
-    <div
+    <>
+      <style jsx global>{`
+        .grade-master {
+          color: #c4b5fd !important;
+          background: rgba(124, 58, 237, 0.16) !important;
+          border-color: rgba(167, 139, 250, 0.42) !important;
+        }
+
+        [data-theme="light"] .grade-master,
+        .light .grade-master {
+          color: #5b21b6 !important;
+          background: rgba(124, 58, 237, 0.1) !important;
+          border-color: rgba(124, 58, 237, 0.28) !important;
+        }
+
+        .grade-challenger {
+          color: #93c5fd !important;
+          background: rgba(37, 99, 235, 0.15) !important;
+          border-color: rgba(96, 165, 250, 0.38) !important;
+        }
+
+        [data-theme="light"] .grade-challenger,
+        .light .grade-challenger {
+          color: #1d4ed8 !important;
+          background: rgba(37, 99, 235, 0.09) !important;
+          border-color: rgba(37, 99, 235, 0.24) !important;
+        }
+
+        .grade-bronze {
+          color: #d97706 !important;
+          background: rgba(180, 83, 9, 0.14) !important;
+          border-color: rgba(217, 119, 6, 0.34) !important;
+        }
+
+        [data-theme="dark"] .grade-bronze,
+        .dark .grade-bronze {
+          color: #fbbf24 !important;
+          background: rgba(146, 64, 14, 0.26) !important;
+          border-color: rgba(251, 191, 36, 0.38) !important;
+        }
+
+        .grade-review {
+          color: #f59e0b !important;
+          background: rgba(245, 158, 11, 0.13) !important;
+          border-color: rgba(245, 158, 11, 0.34) !important;
+        }
+
+        [data-theme="dark"] .grade-review,
+        .dark .grade-review {
+          color: #fcd34d !important;
+          background: rgba(245, 158, 11, 0.18) !important;
+          border-color: rgba(252, 211, 77, 0.35) !important;
+        }
+
+        .grade-hold {
+          color: var(--text-faint) !important;
+          background: var(--surface-3) !important;
+          border-color: var(--border) !important;
+        }
+      `}</style>
+
+      <div
       className="premium-page min-h-full w-full overflow-x-hidden"
       style={{
         background:
