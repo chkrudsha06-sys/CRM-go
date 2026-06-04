@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,8 +19,6 @@ type ManagerFolder = {
   folderId: string | undefined;
 };
 
-type ContactRow = Record<string, unknown>;
-
 function getRequiredEnv(name: string) {
   const value = process.env[name];
 
@@ -30,23 +27,6 @@ function getRequiredEnv(name: string) {
   }
 
   return value;
-}
-
-function getStringField(row: ContactRow, key: string) {
-  const value = row[key];
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return String(value);
-  return "";
-}
-
-function getNumberField(row: ContactRow, key: string) {
-  const value = row[key];
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
 
 function getManagerFolders(): ManagerFolder[] {
@@ -72,72 +52,6 @@ function getManagerFolders(): ManagerFolder[] {
       folderId: process.env.GOOGLE_DRIVE_FOLDER_CHO_YEON_JEON,
     },
   ];
-}
-
-function normalizePhone(value: string | null | undefined) {
-  return String(value || "").replace(/\D/g, "");
-}
-
-function normalizeGeminiMimeType(mimeType: string) {
-  if (mimeType === "audio/x-m4a") return "audio/mp4";
-  if (mimeType === "audio/m4a") return "audio/mp4";
-  return mimeType || "audio/mp4";
-}
-
-function extractPhoneFromFileName(fileName: string) {
-  const candidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
-
-  if (!candidates || candidates.length === 0) {
-    return null;
-  }
-
-  return normalizePhone(candidates[0]);
-}
-
-function extractDateFromFileName(fileName: string) {
-  const match = fileName.match(/20\d{6}/);
-
-  if (!match) {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  const raw = match[0];
-
-  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-}
-
-function getContactPhone(contact: ContactRow) {
-  return (
-    getStringField(contact, "phone") ||
-    getStringField(contact, "mobile") ||
-    getStringField(contact, "contact_phone") ||
-    getStringField(contact, "customer_phone") ||
-    getStringField(contact, "tel") ||
-    ""
-  );
-}
-
-function simplifyContact(contact: ContactRow) {
-  return {
-    id: getNumberField(contact, "id"),
-    name:
-      getStringField(contact, "name") ||
-      getStringField(contact, "customer_name") ||
-      null,
-    title:
-      getStringField(contact, "title") ||
-      getStringField(contact, "position") ||
-      null,
-    phone: getContactPhone(contact),
-    assigned_to:
-      getStringField(contact, "assigned_to") ||
-      getStringField(contact, "manager") ||
-      null,
-    consultant: getStringField(contact, "consultant") || null,
-    management_stage: getStringField(contact, "management_stage") || null,
-    prospect_type: getStringField(contact, "prospect_type") || null,
-    meeting_result: getStringField(contact, "meeting_result") || null,
-  };
 }
 
 async function getGoogleAccessToken() {
@@ -175,7 +89,7 @@ async function getGoogleAccessToken() {
 async function listDriveFiles(accessToken: string, folderId: string) {
   const params = new URLSearchParams({
     q: `'${folderId}' in parents and trashed = false`,
-    pageSize: "10",
+    pageSize: "5",
     orderBy: "createdTime desc",
     fields:
       "files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",
@@ -204,75 +118,8 @@ async function listDriveFiles(accessToken: string, folderId: string) {
   return (data.files || []) as DriveFile[];
 }
 
-async function downloadDriveFileAsBase64(accessToken: string, fileId: string) {
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
-    }
-  );
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Google Drive file download failed: ${errorText}`);
-  }
-
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  return {
-    base64: buffer.toString("base64"),
-    byteLength: buffer.byteLength,
-  };
-}
-
-async function summarizeAudioWithGemini(params: {
-  base64Audio: string;
-  mimeType: string;
-  fileName: string;
-  managerName: string;
-  extractedPhone: string | null;
-}) {
+async function testGemini() {
   const apiKey = getRequiredEnv("GEMINI_API_KEY");
-
-  const prompt = `
-너는 분양 CRM의 통화내용 정리 담당자다.
-아래 녹음파일을 듣고 CRM 고객 파이프라인의 활동노트에 바로 넣을 수 있도록 한국어로 정리해라.
-
-반드시 아래 형식으로만 작성해라.
-
-[AI 통화 요약]
-
-담당자:
-${params.managerName}
-
-파일명:
-${params.fileName}
-
-추출 연락처:
-${params.extractedPhone || "파일명에서 연락처 추출 실패"}
-
-통화 요약:
-- 
-
-고객 니즈:
-- 
-
-후속 액션:
-- 
-
-AI 판단:
-관심도: 높음 / 보통 / 낮음 중 하나
-다음 조치 필요 여부: 필요 / 불필요 중 하나
-
-주의사항:
-- 녹음에서 확실히 들리지 않는 내용은 추정하지 말고 "확인 필요"라고 적어라.
-- 개인정보나 금액, 일정은 들리는 내용만 적어라.
-- 너무 길게 쓰지 말고 CRM 활동노트용으로 간결하게 정리해라.
-`;
 
   const res = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
@@ -287,13 +134,8 @@ AI 판단:
           {
             parts: [
               {
-                text: prompt,
-              },
-              {
-                inlineData: {
-                  mimeType: normalizeGeminiMimeType(params.mimeType),
-                  data: params.base64Audio,
-                },
+                text:
+                  "CRM 통화요약 연결 테스트입니다. 'Gemini 연결 정상'이라고 짧게 답변해줘.",
               },
             ],
           },
@@ -307,11 +149,11 @@ AI 판단:
 
   if (!res.ok) {
     throw new Error(
-      `Gemini audio summary failed: ${JSON.stringify(data, null, 2)}`
+      `Gemini API test failed: ${JSON.stringify(data, null, 2)}`
     );
   }
 
-  const summary =
+  const text =
     data?.candidates?.[0]?.content?.parts
       ?.map((part: { text?: string }) => part.text || "")
       .join("")
@@ -320,142 +162,7 @@ AI 판단:
   return {
     ok: true,
     model: "gemini-2.5-flash",
-    summary,
-  };
-}
-
-async function findContactsByPhone(phone: string | null) {
-  if (!phone) {
-    return {
-      status: "no_phone",
-      message: "파일명에서 연락처를 추출하지 못했습니다.",
-      normalizedPhone: null,
-      matchedCount: 0,
-      contacts: [],
-    };
-  }
-
-  const normalizedPhone = normalizePhone(phone);
-
-  const { data, error } = await supabase
-    .from("contacts")
-    .select("*")
-    .order("id", { ascending: false })
-    .limit(10000);
-
-  if (error) {
-    throw new Error(`Supabase contacts query failed: ${error.message}`);
-  }
-
-  const contacts = ((data || []) as ContactRow[])
-    .filter((contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone)
-    .map(simplifyContact);
-
-  if (contacts.length === 1) {
-    return {
-      status: "matched",
-      message: "CRM 고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
-      normalizedPhone,
-      matchedCount: contacts.length,
-      contacts,
-    };
-  }
-
-  if (contacts.length > 1) {
-    return {
-      status: "duplicate",
-      message:
-        "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
-      normalizedPhone,
-      matchedCount: contacts.length,
-      contacts,
-    };
-  }
-
-  return {
-    status: "not_found",
-    message: "CRM 고객DB에서 일치하는 연락처를 찾지 못했습니다.",
-    normalizedPhone,
-    matchedCount: 0,
-    contacts: [],
-  };
-}
-
-async function saveAiSummaryToContactNote(params: {
-  contactId: number | null;
-  noteDate: string;
-  summary: string;
-  driveFileId: string;
-  driveFileName: string;
-  driveFileUrl?: string;
-  managerName: string;
-  extractedPhone: string | null;
-}) {
-  if (!params.contactId) {
-    return {
-      ok: false,
-      status: "no_contact_id",
-      message: "저장할 고객 ID가 없습니다.",
-      inserted: false,
-      note: null,
-    };
-  }
-
-  const duplicateMarker = `[Drive File ID: ${params.driveFileId}]`;
-
-  const { data: existingNotes, error: existingError } = await supabase
-    .from("contact_notes")
-    .select("id,contact_id,note_date,content,author")
-    .eq("contact_id", params.contactId)
-    .ilike("content", `%${params.driveFileId}%`)
-    .limit(1);
-
-  if (existingError) {
-    throw new Error(`Supabase duplicate note query failed: ${existingError.message}`);
-  }
-
-  if (existingNotes && existingNotes.length > 0) {
-    return {
-      ok: true,
-      status: "already_exists",
-      message: "이미 같은 Drive 파일 ID로 저장된 활동노트가 있어 중복 저장하지 않았습니다.",
-      inserted: false,
-      note: existingNotes[0],
-    };
-  }
-
-  const content = `${params.summary}
-
----
-
-[AI 처리 정보]
-담당자: ${params.managerName}
-추출 연락처: ${params.extractedPhone || "없음"}
-녹음파일명: ${params.driveFileName}
-녹음파일 링크: ${params.driveFileUrl || "없음"}
-${duplicateMarker}`;
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("contact_notes")
-    .insert({
-      contact_id: params.contactId,
-      note_date: params.noteDate,
-      content,
-      author: "AI 통화요약",
-    })
-    .select("id,contact_id,note_date,content,author")
-    .single();
-
-  if (insertError) {
-    throw new Error(`Supabase contact_notes insert failed: ${insertError.message}`);
-  }
-
-  return {
-    ok: true,
-    status: "inserted",
-    message: "AI 통화요약이 고객 활동노트에 저장되었습니다.",
-    inserted: true,
-    note: inserted,
+    response: text,
   };
 }
 
@@ -490,11 +197,10 @@ export async function GET() {
           return {
             manager: folder.manager,
             envKey: folder.envKey,
-            folderId: null,
             ok: false,
-            error: "Folder ID environment variable is missing.",
             fileCount: 0,
             files: [],
+            error: "Folder ID environment variable is missing.",
           };
         }
 
@@ -503,7 +209,6 @@ export async function GET() {
         return {
           manager: folder.manager,
           envKey: folder.envKey,
-          folderId: folder.folderId,
           ok: true,
           fileCount: files.length,
           files: files.map((file) => ({
@@ -514,104 +219,26 @@ export async function GET() {
             modifiedTime: file.modifiedTime,
             webViewLink: file.webViewLink,
             size: file.size,
-            extractedPhone: extractPhoneFromFileName(file.name),
           })),
         };
       })
     );
 
-    const allAudioFiles = driveResults
-      .flatMap((result) =>
-        result.files.map((file) => ({
-          ...file,
-          manager: result.manager,
-        }))
-      )
-      .filter((file) => file.mimeType?.startsWith("audio/"));
-
-    if (allAudioFiles.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        message:
-          "Google Drive connected, but no audio file was found in manager folders.",
-        envStatus,
-        driveResults,
-        pickedFile: null,
-        customerMatch: null,
-        audioSummaryTest: null,
-        activityNoteSave: null,
-      });
-    }
-
-    const pickedFile = allAudioFiles[0];
-
-    const downloaded = await downloadDriveFileAsBase64(
-      accessToken,
-      pickedFile.id
-    );
-
-    const audioSummary = await summarizeAudioWithGemini({
-      base64Audio: downloaded.base64,
-      mimeType: pickedFile.mimeType,
-      fileName: pickedFile.name,
-      managerName: pickedFile.manager,
-      extractedPhone: pickedFile.extractedPhone,
-    });
-
-    const customerMatch = await findContactsByPhone(pickedFile.extractedPhone);
-
-    let activityNoteSave = {
-      ok: false,
-      status: "not_saved",
-      message:
-        "고객이 정확히 1명 매칭되지 않아 활동노트 저장을 진행하지 않았습니다.",
-      inserted: false,
-      note: null as unknown,
-    };
-
-    if (
-      customerMatch.status === "matched" &&
-      customerMatch.contacts.length === 1
-    ) {
-      const matchedContact = customerMatch.contacts[0];
-
-      activityNoteSave = await saveAiSummaryToContactNote({
-        contactId: matchedContact.id,
-        noteDate: extractDateFromFileName(pickedFile.name),
-        summary: audioSummary.summary,
-        driveFileId: pickedFile.id,
-        driveFileName: pickedFile.name,
-        driveFileUrl: pickedFile.webViewLink,
-        managerName: pickedFile.manager,
-        extractedPhone: pickedFile.extractedPhone,
-      });
-    }
+    const gemini = await testGemini();
 
     return NextResponse.json({
       ok: true,
       message:
-        "Google Drive audio file + Gemini summary + CRM customer match + activity note save test completed.",
+        "Call recording integration health check completed. This endpoint does not save activity notes.",
       envStatus,
-      pickedFile: {
-        manager: pickedFile.manager,
-        id: pickedFile.id,
-        name: pickedFile.name,
-        mimeType: pickedFile.mimeType,
-        size: pickedFile.size,
-        downloadedBytes: downloaded.byteLength,
-        extractedPhone: pickedFile.extractedPhone,
-        webViewLink: pickedFile.webViewLink,
-      },
-      customerMatch,
-      audioSummaryTest: audioSummary,
-      activityNoteSave,
       driveResults,
+      gemini,
     });
   } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Call recording activity note save test failed.",
+        message: "Call recording integration health check failed.",
         error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
