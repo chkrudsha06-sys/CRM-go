@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import {
   Bell,
   Bot,
-  Building2,
   CalendarDays,
   Check,
   ChevronRight,
@@ -13,7 +12,6 @@ import {
   ChevronsRight,
   CircleDollarSign,
   FileText,
-  Gauge,
   Kanban,
   LayoutDashboard,
   LogOut,
@@ -21,7 +19,6 @@ import {
   Pencil,
   Moon,
   NotebookText,
-  RadioTower,
   ReceiptText,
   Settings2,
   Shield,
@@ -31,7 +28,6 @@ import {
   Trophy,
   Truck,
   UserCheck,
-  Users,
   WalletCards,
   X,
 } from "lucide-react";
@@ -83,7 +79,6 @@ const EXEC_MENUS: MenuItem[] = [
   { href: "/customer-register", label: "고객등록", icon: FileText },
   { href: "/customer-journey", label: "고객여정", icon: Sparkles },
   { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
-  { href: "/contacts", label: "고객 DB", icon: Users },
   { href: "/pipeline", label: "파이프라인", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
   { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
@@ -92,19 +87,11 @@ const EXEC_MENUS: MenuItem[] = [
 ];
 
 const OPS_MENUS: MenuItem[] = [
-  { href: "/member-manage", label: "분양회 회원관리", icon: Shield },
-  { href: "/content-manage", label: "회원 컨텐츠 관리", icon: Sparkles },
   { href: "/member-timeline", label: "회원 타임라인", icon: CalendarDays },
   { href: "/sales", label: "통합매출관리", icon: CircleDollarSign },
   { href: "/rewards", label: "리워드 관리", icon: WalletCards },
   { href: "/customer-incentives", label: "인센티브 관리", icon: Trophy },
   { href: "/quotes", label: "견적서", icon: ReceiptText },
-];
-
-const INFO_MENUS: MenuItem[] = [
-  { href: "/new-sites", label: "신규현장", icon: Building2 },
-  { href: "/ad-sites", label: "광고 현운예지", icon: RadioTower },
-  { href: "/ad-history", label: "광고내역기록", icon: Gauge },
 ];
 
 const ADMIN_MENUS: MenuItem[] = [
@@ -117,7 +104,6 @@ const ADMIN_MENUS: MenuItem[] = [
 const PREFETCH_MENUS = [
   ...EXEC_MENUS,
   ...OPS_MENUS,
-  ...INFO_MENUS,
   { href: "/ai-assistant", label: "AI assistant", icon: Bot },
   ...ADMIN_MENUS,
 ];
@@ -1012,17 +998,6 @@ export default function Sidebar({
         <SectionTitle>Operation</SectionTitle>
         <div className="space-y-0.5">
           {OPS_MENUS.map((menu) => (
-            <NavItem key={menu.href} {...menu} />
-          ))}
-        </div>
-
-        <div
-          className="my-3"
-          style={{ borderTop: "1px solid var(--border-subtle)" }}
-        />
-        <SectionTitle>Information</SectionTitle>
-        <div className="space-y-0.5">
-          {INFO_MENUS.map((menu) => (
             <NavItem key={menu.href} {...menu} />
           ))}
         </div>
