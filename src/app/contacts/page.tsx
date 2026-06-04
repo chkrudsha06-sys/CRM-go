@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart3,
   ChevronDown,
@@ -13,11 +13,20 @@ import {
   RefreshCcw,
   Save,
   Search,
-  Sparkles,
   Trash2,
   UserRound,
   X,
 } from "lucide-react";
+import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
+import {
+  appendGradeAssessmentBlock,
+  calculateCustomerGrade,
+  CUSTOMER_GRADE_OPTIONS,
+  EMPTY_GRADE_ASSESSMENT,
+  parseGradeAssessmentBlock,
+  stripGradeAssessmentBlock,
+  type GradeAssessmentForm,
+} from "@/lib/customerGrade";
 
 type CustomerDbRecord = {
   id: number;
@@ -38,15 +47,13 @@ type FormState = {
   phone: string;
   intake_route: string;
   management_stage: string;
-  customer_grade: string;
   memo: string;
 };
 
-const STORAGE_KEY = "crm_go_customer_db_local_v1";
+const STORAGE_KEY = "crm_go_customer_db_local_v2";
 
 const INTAKE_ROUTES = ["분양의신DB", "완판트럭", "분양라인", "분양회MGM", "대협팀활동"];
 const MANAGEMENT_STAGES = ["리드", "프로스펙팅", "딜크로징", "리텐션"];
-const CUSTOMER_GRADES = ["마스터", "챌린저", "브론즈"];
 
 const EMPTY_FORM: FormState = {
   name: "",
@@ -54,51 +61,18 @@ const EMPTY_FORM: FormState = {
   phone: "",
   intake_route: "",
   management_stage: "",
-  customer_grade: "",
   memo: "",
 };
 
-const routeMeta: Record<string, { color: string; bg: string; border: string }> = {
-  분양의신DB: { color: "var(--accent-text)", bg: "var(--accent-bg)", border: "var(--accent-border)" },
-  완판트럭: { color: "var(--warning-text)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
-  분양라인: { color: "var(--cyan-text)", bg: "var(--cyan-bg)", border: "var(--cyan-border)" },
-  분양회MGM: { color: "var(--success-text)", bg: "var(--success-bg)", border: "var(--success-border)" },
-  대협팀활동: { color: "var(--purple-text)", bg: "var(--purple-bg)", border: "var(--purple-border)" },
-};
-
-const gradeMeta: Record<string, { color: string; bg: string; border: string }> = {
-  마스터: { color: "var(--text-strong)", bg: "var(--surface-4)", border: "var(--border-strong)" },
-  챌린저: { color: "var(--info-text)", bg: "var(--info-bg)", border: "var(--info-border)" },
-  브론즈: { color: "var(--warning-text)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
-};
-
-const stageMeta: Record<string, { color: string; bg: string; border: string }> = {
-  리드: { color: "var(--cyan-text)", bg: "var(--cyan-bg)", border: "var(--cyan-border)" },
-  프로스펙팅: { color: "var(--warning-text)", bg: "var(--warning-bg)", border: "var(--warning-border)" },
-  딜크로징: { color: "var(--danger-text)", bg: "var(--danger-bg)", border: "var(--danger-border)" },
-  리텐션: { color: "var(--success-text)", bg: "var(--success-bg)", border: "var(--success-border)" },
-};
-
-const panelStyle: CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--border)",
-  boxShadow: "var(--shadow-xs)",
-};
-
-const subtlePanelStyle: CSSProperties = {
-  background: "var(--surface-2)",
-  border: "1px solid var(--border-subtle)",
-};
+function fmt(value?: string | null) {
+  return value && value.trim() ? value : "-";
+}
 
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
   if (digits.length <= 3) return digits;
   if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-}
-
-function fmt(value?: string | null) {
-  return value && value.trim() ? value : "-";
 }
 
 function dateLabel(value: string) {
@@ -114,36 +88,25 @@ function dateLabel(value: string) {
   }).format(date);
 }
 
-function Badge({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone?: { color: string; bg: string; border: string };
-}) {
-  return (
-    <span
-      className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-[800]"
-      style={{
-        color: tone?.color || "var(--text-muted)",
-        background: tone?.bg || "var(--surface-3)",
-        border: `1px solid ${tone?.border || "var(--border)"}`,
-      }}
-    >
-      {children}
-    </span>
-  );
+function badgeClass(value?: string | null) {
+  if (value === "마스터") return "badge-purple";
+  if (value === "챌린저") return "badge-info";
+  if (value === "브론즈") return "badge-success";
+  if (value === "추가 심사 후보") return "badge-warning";
+  if (value === "판정 보류") return "badge-muted";
+  if (value === "분양의신DB") return "badge-purple";
+  if (value === "완판트럭") return "badge-warning";
+  if (value === "분양라인") return "badge-cyan";
+  if (value === "분양회MGM") return "badge-success";
+  if (value === "대협팀활동") return "badge-info";
+  if (value === "리드") return "badge-info";
+  if (value === "프로스펙팅") return "badge-warning";
+  if (value === "딜크로징") return "badge-danger";
+  if (value === "리텐션") return "badge-success";
+  return "badge-muted";
 }
 
-function FieldLabel({ children }: { children: ReactNode }) {
-  return (
-    <span className="text-sm font-[780]" style={{ color: "var(--text)" }}>
-      {children}
-    </span>
-  );
-}
-
-function SelectField({
+function SelectBox({
   value,
   onChange,
   options,
@@ -159,12 +122,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full min-w-0 appearance-none rounded-[16px] border px-4 pr-10 text-sm font-[740] outline-none transition"
-        style={{
-          background: "var(--surface-2)",
-          borderColor: "var(--border)",
-          color: "var(--text)",
-        }}
+        className="crm-search h-12 w-full appearance-none px-3 pr-9"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -174,7 +132,8 @@ function SelectField({
         ))}
       </select>
       <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2"
+        size={15}
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
         style={{ color: "var(--text-faint)" }}
       />
     </div>
@@ -186,37 +145,27 @@ function TextInput({
   onChange,
   placeholder,
   icon,
-  type = "text",
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   icon?: ReactNode;
-  type?: string;
 }) {
   return (
     <label className="relative block min-w-0">
       {icon ? (
         <span
-          className="absolute left-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center"
+          className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center"
           style={{ color: "var(--text-faint)" }}
         >
           {icon}
         </span>
       ) : null}
       <input
-        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`h-12 w-full min-w-0 rounded-[16px] border px-4 text-sm font-[720] outline-none transition placeholder:font-[620] ${
-          icon ? "pl-11" : ""
-        }`}
-        style={{
-          background: "var(--surface-2)",
-          borderColor: "var(--border)",
-          color: "var(--text)",
-        }}
+        className={`crm-search h-12 w-full ${icon ? "pl-9" : "pl-3"} pr-3`}
       />
     </label>
   );
@@ -228,6 +177,9 @@ export default function ContactsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM });
+  const [gradeAssessment, setGradeAssessment] = useState<GradeAssessmentForm>({
+    ...EMPTY_GRADE_ASSESSMENT,
+  });
   const [toast, setToast] = useState("");
 
   const [search, setSearch] = useState("");
@@ -256,7 +208,7 @@ export default function ContactsPage() {
 
   const showToast = (message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(""), 2200);
+    window.setTimeout(() => setToast(""), 2400);
   };
 
   const routeStats = useMemo(() => {
@@ -269,7 +221,7 @@ export default function ContactsPage() {
   }, [records]);
 
   const gradeStats = useMemo(() => {
-    return CUSTOMER_GRADES.map((grade) => ({
+    return CUSTOMER_GRADE_OPTIONS.map((grade) => ({
       grade,
       count: records.filter((record) => record.customer_grade === grade).length,
     }));
@@ -278,9 +230,18 @@ export default function ContactsPage() {
   const filteredRecords = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
+      const cleanMemo = stripGradeAssessmentBlock(record.memo);
       const matchesKeyword = !keyword
         ? true
-        : [record.name, record.title, record.phone, record.intake_route, record.management_stage, record.customer_grade, record.memo]
+        : [
+            record.name,
+            record.title,
+            record.phone,
+            record.intake_route,
+            record.management_stage,
+            record.customer_grade,
+            cleanMemo,
+          ]
             .join(" ")
             .toLowerCase()
             .includes(keyword);
@@ -296,12 +257,14 @@ export default function ContactsPage() {
 
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
+    setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
     setEditId(null);
     setShowForm(false);
   };
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM });
+    setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
     setEditId(null);
     setShowForm(true);
   };
@@ -313,9 +276,9 @@ export default function ContactsPage() {
       phone: record.phone,
       intake_route: record.intake_route,
       management_stage: record.management_stage,
-      customer_grade: record.customer_grade,
-      memo: record.memo,
+      memo: stripGradeAssessmentBlock(record.memo),
     });
+    setGradeAssessment(parseGradeAssessmentBlock(record.memo));
     setEditId(record.id);
     setShowForm(true);
   };
@@ -331,6 +294,12 @@ export default function ContactsPage() {
     }
 
     const now = new Date().toISOString();
+    const gradeResult = calculateCustomerGrade(gradeAssessment, form.title);
+    const memoWithGrade = appendGradeAssessmentBlock(
+      form.memo,
+      gradeAssessment,
+      gradeResult,
+    );
 
     if (editId) {
       setRecords((prev) =>
@@ -338,11 +307,13 @@ export default function ContactsPage() {
           record.id === editId
             ? {
                 ...record,
-                ...form,
                 name: form.name.trim(),
                 title: form.title.trim(),
                 phone: form.phone.trim(),
-                memo: form.memo.trim(),
+                intake_route: form.intake_route,
+                management_stage: form.management_stage,
+                customer_grade: gradeResult.customerGrade,
+                memo: memoWithGrade,
                 updated_at: now,
               }
             : record,
@@ -360,8 +331,8 @@ export default function ContactsPage() {
       phone: form.phone.trim(),
       intake_route: form.intake_route,
       management_stage: form.management_stage,
-      customer_grade: form.customer_grade,
-      memo: form.memo.trim(),
+      customer_grade: gradeResult.customerGrade,
+      memo: memoWithGrade,
       created_at: now,
       updated_at: now,
     };
@@ -396,7 +367,7 @@ export default function ContactsPage() {
     >
       {toast && (
         <div
-          className="fixed right-5 top-5 z-50 rounded-[18px] px-5 py-3 text-sm font-[820]"
+          className="fixed right-5 top-5 z-50 rounded-[18px] px-5 py-3 text-sm font-[850]"
           style={{
             background: "var(--surface)",
             color: "var(--text)",
@@ -409,36 +380,34 @@ export default function ContactsPage() {
       )}
 
       <div className="w-full space-y-5 px-4 py-5 sm:px-5 md:px-6 lg:px-7 2xl:px-9">
-        <header className="premium-hero relative overflow-hidden rounded-[26px]" style={panelStyle}>
-          <div className="absolute right-0 top-0 h-56 w-56 rounded-full blur-3xl" style={{ background: "var(--accent-bg)" }} />
-          <div className="absolute bottom-0 right-40 h-40 w-40 rounded-full blur-3xl" style={{ background: "var(--cyan-bg)" }} />
+        <header className="premium-card relative overflow-hidden rounded-[26px] p-5 sm:p-6 xl:p-7">
+          <div
+            className="absolute right-0 top-0 h-56 w-56 rounded-full blur-3xl"
+            style={{ background: "var(--accent-bg)" }}
+          />
+          <div
+            className="absolute bottom-0 right-40 h-40 w-40 rounded-full blur-3xl"
+            style={{ background: "var(--cyan-bg)" }}
+          />
 
-          <div className="relative z-10 flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between xl:p-7">
+          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <div
-                className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[820] sm:text-sm"
-                style={{
-                  color: "var(--accent-text)",
-                  background: "var(--accent-bg)",
-                  border: "1px solid var(--accent-border)",
-                }}
-              >
+              <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-purple sm:text-sm">
                 <Database className="h-4 w-4 flex-none" />
-                <span className="truncate">고객DB · Supabase 미연동 임시 작업영역</span>
+                <span className="truncate">고객DB · 자동등급 판정 적용 · Supabase 미연동 임시 작업영역</span>
               </div>
-              <h1 className="crm-title text-[34px] font-[900] leading-tight tracking-[-0.06em] sm:text-[42px]" style={{ color: "var(--text-strong)" }}>
+              <h1 className="crm-title text-[34px] font-[930] leading-tight tracking-[-0.06em] sm:text-[42px]">
                 고객DB
               </h1>
-              <p className="crm-subtitle mt-3 max-w-3xl text-sm font-[620] leading-7 sm:text-base" style={{ color: "var(--text-muted)" }}>
-                고객등록 메뉴 구조를 기반으로, 유입경로별 DB 수취 현황을 확인하고 신규 고객 DB를 입력하는 화면입니다.
+              <p className="crm-subtitle mt-3 max-w-3xl text-sm font-[620] leading-7 sm:text-base">
+                고객등록 메뉴 구조를 기반으로, 유입경로별 DB 수취 현황과 자동 고객등급 판정 결과를 함께 관리합니다.
               </p>
             </div>
 
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-[16px] px-5 text-sm font-[850] text-white shadow-lg transition hover:-translate-y-0.5 sm:h-13"
-              style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
+              className="btn-premium btn-primary h-12 shrink-0"
             >
               <Plus className="h-4 w-4" />
               신규고객등록
@@ -447,31 +416,37 @@ export default function ContactsPage() {
         </header>
 
         <section className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(320px,0.95fr)_minmax(0,2.2fr)]">
-          <div className="rounded-[24px] p-5 sm:p-6" style={panelStyle}>
+          <div className="premium-card rounded-[24px] p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-[820]" style={{ color: "var(--text-muted)" }}>
-                  전체 수취 DB
-                </p>
-                <p className="mt-2 text-[42px] font-[920] leading-none tracking-[-0.07em] sm:text-5xl" style={{ color: "var(--text-strong)" }}>
+                <p className="crm-meta">전체 수취 DB</p>
+                <p
+                  className="mt-2 text-[42px] font-[930] leading-none tracking-[-0.07em] sm:text-5xl"
+                  style={{ color: "var(--text-strong)" }}
+                >
                   {records.length.toLocaleString()}건
                 </p>
               </div>
-              <div
-                className="flex h-13 w-13 items-center justify-center rounded-[18px] text-white sm:h-14 sm:w-14"
-                style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
-              >
+              <div className="premium-icon-lg">
                 <ClipboardList className="h-6 w-6" />
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {gradeStats.map((item) => (
-                <div key={item.grade} className="rounded-[18px] p-3 text-center sm:p-4" style={subtlePanelStyle}>
-                  <p className="text-[11px] font-[850] sm:text-xs" style={{ color: "var(--text-faint)" }}>
-                    {item.grade}
-                  </p>
-                  <p className="mt-2 text-2xl font-[920]" style={{ color: "var(--text-strong)" }}>
+                <div
+                  key={item.grade}
+                  className="rounded-[18px] p-3 text-center sm:p-4"
+                  style={{
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <p className="crm-tiny truncate">{item.grade}</p>
+                  <p
+                    className="mt-2 text-2xl font-[920]"
+                    style={{ color: "var(--text-strong)" }}
+                  >
                     {item.count}
                   </p>
                 </div>
@@ -480,62 +455,57 @@ export default function ContactsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {routeStats.map((item) => {
-              const tone = routeMeta[item.route];
-              return (
-                <div key={item.route} className="min-w-0 rounded-[24px] p-5" style={panelStyle}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-[850]" style={{ color: "var(--text-muted)" }}>
-                        {item.route}
-                      </p>
-                      <p className="mt-3 text-3xl font-[920] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
-                        {item.count}건
-                      </p>
-                    </div>
-                    <span
-                      className="shrink-0 rounded-full px-2.5 py-1 text-xs font-[850]"
-                      style={{ color: tone.color, background: tone.bg, border: `1px solid ${tone.border}` }}
+            {routeStats.map((item) => (
+              <div key={item.route} className="premium-card min-w-0 rounded-[24px] p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="crm-meta truncate">{item.route}</p>
+                    <p
+                      className="mt-3 text-3xl font-[930] tracking-[-0.06em]"
+                      style={{ color: "var(--text-strong)" }}
                     >
-                      {item.percent}%
-                    </span>
+                      {item.count}건
+                    </p>
                   </div>
-                  <div className="mt-5 h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${item.percent}%`,
-                        background: item.percent ? tone.color : "transparent",
-                      }}
-                    />
-                  </div>
+                  <span className={`badge-premium ${badgeClass(item.route)}`}>
+                    {item.percent}%
+                  </span>
                 </div>
-              );
-            })}
+                <div
+                  className="mt-5 h-2 overflow-hidden rounded-full"
+                  style={{ background: "var(--surface-3)" }}
+                >
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${item.percent}%`,
+                      background: item.percent
+                        ? "linear-gradient(90deg,var(--accent),var(--accent-3))"
+                        : "transparent",
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        <section className="rounded-[24px] p-4 sm:p-5" style={panelStyle}>
+        <section className="premium-filterbar rounded-[24px] p-4 sm:p-5">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(320px,1.5fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto]">
             <TextInput
               value={search}
               onChange={setSearch}
-              placeholder="고객명, 직급, 연락처, 유입경로, 메모 검색"
+              placeholder="고객명, 직급, 연락처, 유입경로, 관리구간, 고객등급, 메모 검색"
               icon={<Search className="h-4 w-4" />}
             />
-            <SelectField value={filterRoute} onChange={setFilterRoute} options={INTAKE_ROUTES} placeholder="전체 유입경로" />
-            <SelectField value={filterStage} onChange={setFilterStage} options={MANAGEMENT_STAGES} placeholder="전체 관리구간" />
-            <SelectField value={filterGrade} onChange={setFilterGrade} options={CUSTOMER_GRADES} placeholder="전체 고객등급" />
+            <SelectBox value={filterRoute} onChange={setFilterRoute} options={INTAKE_ROUTES} placeholder="전체 유입경로" />
+            <SelectBox value={filterStage} onChange={setFilterStage} options={MANAGEMENT_STAGES} placeholder="전체 관리구간" />
+            <SelectBox value={filterGrade} onChange={setFilterGrade} options={CUSTOMER_GRADE_OPTIONS} placeholder="전체 고객등급" />
 
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-[16px] border px-4 text-sm font-[850] transition hover:-translate-y-0.5 xl:w-auto"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--text-muted)",
-                borderColor: "var(--border)",
-              }}
+              className="btn-premium btn-secondary h-12 xl:w-auto"
             >
               <RefreshCcw className="h-4 w-4" />
               초기화
@@ -543,35 +513,25 @@ export default function ContactsPage() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-[24px]" style={panelStyle}>
+        <section className="premium-card overflow-hidden rounded-[24px]">
           <div
             className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between"
             style={{ borderBottom: "1px solid var(--border-subtle)" }}
           >
             <div className="flex min-w-0 items-center gap-3">
-              <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px]"
-                style={{
-                  color: "var(--accent-text)",
-                  background: "var(--accent-bg)",
-                  border: "1px solid var(--accent-border)",
-                }}
-              >
+              <div className="premium-icon">
                 <BarChart3 className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <h2 className="truncate text-lg font-[900]" style={{ color: "var(--text-strong)" }}>
+                <h2 className="crm-card-title truncate text-lg font-[900]">
                   고객 DB 리스트
                 </h2>
-                <p className="text-sm font-[700]" style={{ color: "var(--text-faint)" }}>
+                <p className="crm-tiny mt-1">
                   검색 결과 {filteredRecords.length.toLocaleString()}건 / 전체 {records.length.toLocaleString()}건
                 </p>
               </div>
             </div>
-            <div
-              className="inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[800] sm:text-sm"
-              style={{ color: "var(--text-muted)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}
-            >
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted sm:text-sm">
               <Filter className="h-4 w-4 flex-none" />
               <span className="truncate">고객명 · 직급 · 연락처 · 유입경로 · 관리구간 · 고객등급 기준</span>
             </div>
@@ -593,7 +553,7 @@ export default function ContactsPage() {
                   <th className="px-5 py-4">연락처</th>
                   <th className="px-5 py-4">유입경로</th>
                   <th className="px-5 py-4">관리구간</th>
-                  <th className="px-5 py-4">고객등급</th>
+                  <th className="px-5 py-4">자동등급</th>
                   <th className="px-5 py-4">메모</th>
                   <th className="px-5 py-4">등록일</th>
                   <th className="px-5 py-4 text-center">관리</th>
@@ -610,7 +570,7 @@ export default function ContactsPage() {
                   filteredRecords.map((record) => (
                     <tr
                       key={record.id}
-                      className="text-sm font-[680] transition"
+                      className="text-sm font-[680] transition hover:bg-black/[0.02] dark:hover:bg-white/[0.04]"
                       style={{
                         color: "var(--text-muted)",
                         borderBottom: "1px solid var(--border-subtle)",
@@ -619,7 +579,7 @@ export default function ContactsPage() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div
-                            className="flex h-10 w-10 items-center justify-center rounded-[15px] text-sm font-[900] text-white"
+                            className="flex h-10 w-10 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
                             style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
                           >
                             {record.name.slice(0, 1)}
@@ -628,9 +588,7 @@ export default function ContactsPage() {
                             <p className="font-[900]" style={{ color: "var(--text-strong)" }}>
                               {fmt(record.name)}
                             </p>
-                            <p className="text-xs font-[650]" style={{ color: "var(--text-faint)" }}>
-                              ID {record.id}
-                            </p>
+                            <p className="crm-tiny">ID {record.id}</p>
                           </div>
                         </div>
                       </td>
@@ -638,24 +596,33 @@ export default function ContactsPage() {
                       <td className="px-5 py-4">
                         <div
                           className="inline-flex items-center gap-2 rounded-full px-3 py-1.5"
-                          style={{ color: "var(--text-muted)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}
+                          style={{
+                            background: "var(--surface-2)",
+                            border: "1px solid var(--border-subtle)",
+                          }}
                         >
                           <Phone className="h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
                           {fmt(record.phone)}
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <Badge tone={routeMeta[record.intake_route]}>{fmt(record.intake_route)}</Badge>
+                        <span className={`badge-premium ${badgeClass(record.intake_route)}`}>
+                          {fmt(record.intake_route)}
+                        </span>
                       </td>
                       <td className="px-5 py-4">
-                        <Badge tone={stageMeta[record.management_stage]}>{fmt(record.management_stage)}</Badge>
+                        <span className={`badge-premium ${badgeClass(record.management_stage)}`}>
+                          {fmt(record.management_stage)}
+                        </span>
                       </td>
                       <td className="px-5 py-4">
-                        <Badge tone={gradeMeta[record.customer_grade]}>{fmt(record.customer_grade)}</Badge>
+                        <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
+                          {fmt(record.customer_grade)}
+                        </span>
                       </td>
                       <td className="max-w-[260px] px-5 py-4">
                         <p className="truncate" style={{ color: "var(--text-subtle)" }}>
-                          {fmt(record.memo)}
+                          {fmt(stripGradeAssessmentBlock(record.memo))}
                         </p>
                       </td>
                       <td className="px-5 py-4" style={{ color: "var(--text-subtle)" }}>
@@ -678,11 +645,11 @@ export default function ContactsPage() {
               </div>
             ) : (
               filteredRecords.map((record) => (
-                <article key={record.id} className="rounded-[20px] p-4" style={subtlePanelStyle}>
+                <article key={record.id} className="premium-card p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] text-sm font-[900] text-white"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
                         style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
                       >
                         {record.name.slice(0, 1)}
@@ -691,7 +658,7 @@ export default function ContactsPage() {
                         <p className="truncate text-base font-[900]" style={{ color: "var(--text-strong)" }}>
                           {fmt(record.name)}
                         </p>
-                        <p className="mt-1 truncate text-xs font-[700]" style={{ color: "var(--text-faint)" }}>
+                        <p className="crm-tiny mt-1 truncate">
                           {fmt(record.title)} · {fmt(record.phone)}
                         </p>
                       </div>
@@ -700,17 +667,21 @@ export default function ContactsPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <Badge tone={routeMeta[record.intake_route]}>{fmt(record.intake_route)}</Badge>
-                    <Badge tone={stageMeta[record.management_stage]}>{fmt(record.management_stage)}</Badge>
-                    <Badge tone={gradeMeta[record.customer_grade]}>{fmt(record.customer_grade)}</Badge>
+                    <span className={`badge-premium ${badgeClass(record.intake_route)}`}>
+                      {fmt(record.intake_route)}
+                    </span>
+                    <span className={`badge-premium ${badgeClass(record.management_stage)}`}>
+                      {fmt(record.management_stage)}
+                    </span>
+                    <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
+                      {fmt(record.customer_grade)}
+                    </span>
                   </div>
 
                   <p className="mt-4 text-sm font-[620] leading-6" style={{ color: "var(--text-subtle)" }}>
-                    {fmt(record.memo)}
+                    {fmt(stripGradeAssessmentBlock(record.memo))}
                   </p>
-                  <p className="mt-3 text-xs font-[720]" style={{ color: "var(--text-faint)" }}>
-                    등록일 {dateLabel(record.created_at)}
-                  </p>
+                  <p className="crm-tiny mt-3">등록일 {dateLabel(record.created_at)}</p>
                 </article>
               ))
             )}
@@ -719,147 +690,83 @@ export default function ContactsPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center px-4 py-6 backdrop-blur-sm" style={{ background: "var(--overlay)" }}>
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[28px]" style={panelStyle}>
-            <div className="flex items-center justify-between px-5 py-5 sm:px-6" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal flex max-h-[94vh] w-[min(1180px,calc(100vw-32px))] max-w-none flex-col">
+            <div className="slide-panel-header flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-[900]" style={{ color: "var(--accent)" }}>
-                  CUSTOMER DB
-                </p>
-                <h3 className="mt-1 text-2xl font-[920] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+                <p className="crm-title text-[22px]">
                   {editId ? "고객 DB 수정" : "신규고객등록"}
-                </h3>
+                </p>
+                <p className="crm-subtitle mt-1">
+                  고객 기본정보와 등급판정 항목을 입력합니다.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="flex h-11 w-11 items-center justify-center rounded-[16px] transition"
-                style={{ background: "var(--surface-2)", color: "var(--text-muted)" }}
-              >
-                <X className="h-5 w-5" />
+              <button type="button" onClick={resetForm} className="btn-premium btn-secondary h-10 w-10 p-0">
+                <X size={17} />
               </button>
             </div>
 
-            <div className="max-h-[calc(92vh-92px)] overflow-y-auto p-5 sm:p-6">
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <label className="block">
-                  <FieldLabel>고객명</FieldLabel>
-                  <div className="mt-2">
-                    <TextInput
-                      value={form.name}
-                      onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
-                      placeholder="고객명을 입력하세요"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <FieldLabel>직급</FieldLabel>
-                  <div className="mt-2">
-                    <TextInput
-                      value={form.title}
-                      onChange={(value) => setForm((prev) => ({ ...prev, title: value }))}
-                      placeholder="직급을 입력하세요"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <FieldLabel>연락처</FieldLabel>
-                  <div className="mt-2">
-                    <TextInput
-                      value={form.phone}
-                      onChange={(value) => setForm((prev) => ({ ...prev, phone: formatPhoneInput(value) }))}
-                      placeholder="010-0000-0000"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <FieldLabel>유입경로</FieldLabel>
-                  <div className="mt-2">
-                    <SelectField
-                      value={form.intake_route}
-                      onChange={(value) => setForm((prev) => ({ ...prev, intake_route: value }))}
-                      options={INTAKE_ROUTES}
-                      placeholder="유입경로 선택"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <FieldLabel>관리구간</FieldLabel>
-                  <div className="mt-2">
-                    <SelectField
-                      value={form.management_stage}
-                      onChange={(value) => setForm((prev) => ({ ...prev, management_stage: value }))}
-                      options={MANAGEMENT_STAGES}
-                      placeholder="관리구간 선택"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <FieldLabel>고객등급</FieldLabel>
-                  <div className="mt-2">
-                    <SelectField
-                      value={form.customer_grade}
-                      onChange={(value) => setForm((prev) => ({ ...prev, customer_grade: value }))}
-                      options={CUSTOMER_GRADES}
-                      placeholder="고객등급 선택"
-                    />
-                  </div>
-                </label>
-
-                <label className="block md:col-span-2">
-                  <FieldLabel>메모</FieldLabel>
-                  <textarea
-                    value={form.memo}
-                    onChange={(event) => setForm((prev) => ({ ...prev, memo: event.target.value }))}
-                    placeholder="고객 특이사항, 상담 내용, 후속 액션을 입력하세요"
-                    rows={5}
-                    className="mt-2 w-full resize-none rounded-[16px] border px-4 py-3 text-sm font-[700] leading-6 outline-none transition"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border)",
-                      color: "var(--text)",
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="inline-flex h-12 items-center justify-center rounded-[16px] border px-6 text-sm font-[850] transition"
-                  style={{
-                    background: "var(--surface-2)",
-                    color: "var(--text-muted)",
-                    borderColor: "var(--border)",
-                  }}
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 lg:p-6">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <FormInput label="고객명 *" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} placeholder="홍길동" />
+                <FormInput label="직급" value={form.title} onChange={(value) => setForm((prev) => ({ ...prev, title: value }))} placeholder="본부장 / 팀장 / 대표 등" />
+                <FormInput label="연락처 *" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: formatPhoneInput(value) }))} placeholder="010-1234-5678" />
+                <FormSelect label="유입경로" value={form.intake_route} onChange={(value) => setForm((prev) => ({ ...prev, intake_route: value }))} options={INTAKE_ROUTES} />
+                <FormSelect label="관리구간" value={form.management_stage} onChange={(value) => setForm((prev) => ({ ...prev, management_stage: value }))} options={MANAGEMENT_STAGES} />
+                <div
+                  className="rounded-[15px] border px-4 py-3"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
                 >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={saveRecord}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-[16px] px-6 text-sm font-[900] text-white shadow-lg transition hover:-translate-y-0.5"
-                  style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
-                >
-                  <Save className="h-4 w-4" />
-                  {editId ? "수정 저장" : "등록 저장"}
-                </button>
-              </div>
-
-              <div className="mt-6 rounded-[20px] px-4 py-4" style={subtlePanelStyle}>
-                <div className="flex gap-3">
-                  <Sparkles className="mt-0.5 h-4 w-4 flex-none" style={{ color: "var(--accent)" }} />
-                  <p className="text-sm font-[650] leading-6" style={{ color: "var(--text-subtle)" }}>
-                    현재 고객DB 메뉴는 Supabase와 연결하지 않은 임시 화면입니다. 메뉴 구조와 UI 확인 후, 필요 시 동일한 항목 기준으로 실제 테이블 연동을 진행할 수 있습니다.
+                  <p className="crm-meta">고객등급</p>
+                  <p className="mt-2 text-xl font-[930]" style={{ color: "var(--text-strong)" }}>
+                    {calculateCustomerGrade(gradeAssessment, form.title).customerGrade}
                   </p>
+                  <p className="crm-tiny mt-1">등급판정 항목 기준 자동 설정</p>
                 </div>
               </div>
+
+              <div className="mt-5">
+                <CustomerGradeAssessment
+                  value={gradeAssessment}
+                  title={form.title}
+                  onChange={setGradeAssessment}
+                />
+              </div>
+
+              <div className="mt-4">
+                <label className="crm-meta mb-2 block">메모</label>
+                <textarea
+                  value={form.memo}
+                  onChange={(event) => setForm((prev) => ({ ...prev, memo: event.target.value }))}
+                  rows={4}
+                  placeholder="고객 특이사항, 상담 메모, 다음 액션 등을 입력하세요."
+                  className="w-full resize-none rounded-[14px] border px-4 py-3 text-[13px] font-[640] outline-none"
+                  style={{
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border)",
+                    color: "var(--text)",
+                  }}
+                />
+              </div>
+
+              <div
+                className="mt-5 rounded-[18px] border px-4 py-4"
+                style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+              >
+                <p className="text-sm font-[720] leading-6" style={{ color: "var(--text-subtle)" }}>
+                  현재 고객DB 메뉴는 Supabase와 연결하지 않은 임시 화면입니다. 등록 데이터는 브라우저 localStorage에만 저장되며, 기존 CRM 데이터에는 영향을 주지 않습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="slide-panel-footer flex items-center justify-end gap-2">
+              <button type="button" onClick={resetForm} className="btn-premium btn-secondary">
+                취소
+              </button>
+              <button type="button" onClick={saveRecord} className="btn-premium btn-primary">
+                <Save size={15} />
+                {editId ? "수정 저장" : "등록 저장"}
+              </button>
             </div>
           </div>
         </div>
@@ -868,31 +775,81 @@ export default function ContactsPage() {
   );
 }
 
+function FormInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className="crm-meta mb-2 block">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-[42px] w-full rounded-[13px] border px-3 text-[13px] font-[680] outline-none"
+        style={{
+          background: "var(--surface-2)",
+          borderColor: "var(--border)",
+          color: "var(--text)",
+        }}
+      />
+    </label>
+  );
+}
+
+function FormSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="block min-w-0">
+      <span className="crm-meta mb-2 block">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-[42px] w-full rounded-[13px] border px-3 text-[13px] font-[680] outline-none"
+        style={{
+          background: "var(--surface-2)",
+          borderColor: "var(--border)",
+          color: "var(--text)",
+        }}
+      >
+        <option value="">선택</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function EmptyList({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center">
-      <div
-        className="flex h-16 w-16 items-center justify-center rounded-[22px]"
-        style={{
-          color: "var(--text-faint)",
-          background: "var(--surface-2)",
-          border: "1px solid var(--border-subtle)",
-        }}
-      >
+      <div className="premium-icon-lg mb-4">
         <UserRound className="h-7 w-7" />
       </div>
-      <p className="mt-5 text-lg font-[900]" style={{ color: "var(--text-strong)" }}>
-        등록된 고객 DB가 없습니다.
+      <p className="crm-card-title">등록된 고객 DB가 없습니다.</p>
+      <p className="crm-subtitle mt-2 text-center">
+        신규고객등록을 눌러 고객명, 직급, 연락처, 유입경로, 관리구간, 등급판정 항목을 입력하세요.
       </p>
-      <p className="mt-2 text-sm font-[620] leading-6" style={{ color: "var(--text-muted)" }}>
-        신규고객등록을 눌러 고객명, 직급, 연락처, 유입경로, 관리구간, 고객등급을 입력하세요.
-      </p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-6 inline-flex items-center gap-2 rounded-[16px] px-5 py-3 text-sm font-[900] text-white transition hover:-translate-y-0.5"
-        style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
-      >
+      <button type="button" onClick={onCreate} className="btn-premium btn-primary mt-6">
         <Plus className="h-4 w-4" />
         신규고객등록
       </button>
@@ -918,9 +875,9 @@ function RowActions({
         onClick={onEdit}
         className={`inline-flex items-center justify-center border transition hover:-translate-y-0.5 ${size}`}
         style={{
-          background: "var(--surface)",
-          color: "var(--text-muted)",
-          borderColor: "var(--border)",
+          background: "var(--info-bg)",
+          color: "var(--info-text)",
+          borderColor: "var(--info-border)",
         }}
         aria-label="수정"
       >
