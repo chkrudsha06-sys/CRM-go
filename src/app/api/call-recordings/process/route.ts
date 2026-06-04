@@ -556,6 +556,17 @@ async function processAudioFile(params: {
     };
   }
 
+  if (existingLog?.status === "duplicate") {
+    return {
+      driveFileId: file.id,
+      fileName: file.name,
+      manager: file.manager,
+      status: "skipped_duplicate",
+      message: "이미 중복 처리된 녹음파일입니다.",
+      log: existingLog,
+    };
+  }
+
   await upsertLog({
     driveFileId: file.id,
     driveFileName: file.name,
@@ -657,6 +668,19 @@ async function processAudioFile(params: {
 }
 
 export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get("authorization");
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Unauthorized call recording process request.",
+      },
+      { status: 401 }
+    );
+  }
+
   try {
     const url = new URL(request.url);
     const limit = Math.max(
@@ -705,7 +729,10 @@ export async function GET(request: NextRequest) {
     for (const file of audioFiles) {
       const existingLog = await getExistingLog(file.id);
 
-      if (existingLog?.status === "processed") {
+      if (
+        existingLog?.status === "processed" ||
+        existingLog?.status === "duplicate"
+      ) {
         continue;
       }
 
