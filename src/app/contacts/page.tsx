@@ -184,6 +184,7 @@ export default function ContactsPage() {
   const [toast, setToast] = useState("");
   const [formError, setFormError] = useState("");
   const [lastSavedRecord, setLastSavedRecord] = useState<CustomerDbRecord | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<CustomerDbRecord | null>(null);
 
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
@@ -372,6 +373,7 @@ export default function ContactsPage() {
     const ok = window.confirm("선택한 고객 DB를 삭제할까요? 현재 화면의 임시 데이터에서만 삭제됩니다.");
     if (!ok) return;
     setRecords((prev) => prev.filter((record) => record.id !== id));
+    if (selectedRecord?.id === id) setSelectedRecord(null);
     showToast("고객 DB가 삭제되었습니다.");
   };
 
@@ -683,7 +685,8 @@ export default function ContactsPage() {
                   filteredRecords.map((record) => (
                     <tr
                       key={record.id}
-                      className="text-sm font-[680] transition hover:bg-black/[0.02] dark:hover:bg-white/[0.04]"
+                      onClick={() => setSelectedRecord(record)}
+                      className="cursor-pointer text-sm font-[680] transition hover:bg-black/[0.02] dark:hover:bg-white/[0.04]"
                       style={{
                         color: "var(--text-muted)",
                         borderBottom: "1px solid var(--border-subtle)",
@@ -741,7 +744,7 @@ export default function ContactsPage() {
                       <td className="px-5 py-4" style={{ color: "var(--text-subtle)" }}>
                         {dateLabel(record.created_at)}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4" onClick={(event) => event.stopPropagation()}>
                         <RowActions onEdit={() => openEdit(record)} onDelete={() => deleteRecord(record.id)} />
                       </td>
                     </tr>
@@ -758,7 +761,11 @@ export default function ContactsPage() {
               </div>
             ) : (
               filteredRecords.map((record) => (
-                <article key={record.id} className="premium-card p-4">
+                <article
+                  key={record.id}
+                  onClick={() => setSelectedRecord(record)}
+                  className="premium-card cursor-pointer p-4 transition hover:-translate-y-0.5"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <div
@@ -776,7 +783,9 @@ export default function ContactsPage() {
                         </p>
                       </div>
                     </div>
-                    <RowActions onEdit={() => openEdit(record)} onDelete={() => deleteRecord(record.id)} compact />
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <RowActions onEdit={() => openEdit(record)} onDelete={() => deleteRecord(record.id)} compact />
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -925,6 +934,18 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+
+      {selectedRecord && (
+        <CustomerDetailPanel
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+          onEdit={() => {
+            openEdit(selectedRecord);
+            setSelectedRecord(null);
+          }}
+          onDelete={() => deleteRecord(selectedRecord.id)}
+        />
+      )}
     </div>
   );
 }
@@ -993,6 +1014,257 @@ function FormSelect({
   );
 }
 
+
+
+function CustomerDetailPanel({
+  record,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  record: CustomerDbRecord;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const cleanMemo = stripGradeAssessmentBlock(record.memo);
+  const assessment = parseGradeAssessmentBlock(record.memo);
+  const result = calculateCustomerGrade(assessment, record.title);
+
+  return (
+    <div className="fixed inset-0 z-40">
+      <button
+        type="button"
+        aria-label="고객 상세 닫기"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default backdrop-blur-[2px]"
+        style={{ background: "var(--overlay)" }}
+      />
+
+      <aside
+        className="absolute right-0 top-0 flex h-full w-full max-w-[720px] animate-[crmSlideIn_220ms_ease-out] flex-col border-l"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--border)",
+          boxShadow: "var(--shadow-lg)",
+        }}
+      >
+        <style jsx global>{`
+          @keyframes crmSlideIn {
+            from {
+              transform: translateX(100%);
+              opacity: 0.72;
+            }
+            to {
+              transform: translateX(0);
+              opacity: 1;
+            }
+          }
+        `}</style>
+
+        <div className="slide-panel-header flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
+                {fmt(record.customer_grade)}
+              </span>
+              <span className={`badge-premium ${badgeClass(record.intake_route)}`}>
+                {fmt(record.intake_route)}
+              </span>
+              <span className={`badge-premium ${badgeClass(record.management_stage)}`}>
+                {fmt(record.management_stage)}
+              </span>
+            </div>
+            <h2
+              className="truncate text-[30px] font-[930] tracking-[-0.06em]"
+              style={{ color: "var(--text-strong)" }}
+            >
+              {fmt(record.name)}
+            </h2>
+            <p className="mt-2 text-sm font-[720]" style={{ color: "var(--text-muted)" }}>
+              {fmt(record.title)} · {fmt(record.phone)}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-premium btn-secondary h-10 w-10 shrink-0 p-0"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <section className="premium-card p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="crm-card-title">고객 기본정보</p>
+                <p className="crm-tiny mt-1">리스트에서 선택한 고객의 전체 저장값입니다.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={onEdit} className="btn-premium btn-secondary">
+                  <Pencil size={14} />
+                  수정
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="btn-premium"
+                  style={{
+                    color: "var(--danger-text)",
+                    background: "var(--danger-bg)",
+                    border: "1px solid var(--danger-border)",
+                  }}
+                >
+                  <Trash2 size={14} />
+                  삭제
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <DetailItem label="고객명" value={record.name} />
+              <DetailItem label="직급" value={record.title} />
+              <DetailItem label="연락처" value={record.phone} />
+              <DetailItem label="유입경로" value={record.intake_route} badge />
+              <DetailItem label="관리구간" value={record.management_stage} badge />
+              <DetailItem label="자동등급" value={record.customer_grade} badge />
+              <DetailItem label="등록일" value={dateLabel(record.created_at)} />
+              <DetailItem label="수정일" value={dateLabel(record.updated_at)} />
+              <DetailItem label="저장위치" value="브라우저 localStorage" />
+              <DetailItem label="등록 ID" value={`#${record.id}`} />
+            </div>
+          </section>
+
+          <section className="premium-card mt-4 p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="crm-card-title">자동등급 판정 결과</p>
+                <p className="crm-tiny mt-1">저장 당시 입력된 판정 항목을 기준으로 다시 계산한 결과입니다.</p>
+              </div>
+              <span className={`badge-premium ${badgeClass(result.customerGrade)}`}>
+                {result.customerGrade} · {result.totalScore}/120점
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <ScoreBox label="현장운영력" value={result.categoryScores.siteOperation} max={30} />
+              <ScoreBox label="조직운영력" value={result.categoryScores.organization} max={40} />
+              <ScoreBox label="브랜딩/네트워킹" value={result.categoryScores.branding} max={20} />
+              <ScoreBox label="광고 집행력" value={result.categoryScores.advertising} max={30} />
+            </div>
+
+            <div
+              className="mt-4 rounded-[16px] border px-4 py-3 text-sm font-[720] leading-6"
+              style={{
+                color: "var(--text-subtle)",
+                background: "var(--surface-2)",
+                borderColor: "var(--border)",
+              }}
+            >
+              {result.decisionMessage}
+            </div>
+          </section>
+
+          <section className="premium-card mt-4 p-5">
+            <p className="crm-card-title">등급 판정 입력값</p>
+            <p className="crm-tiny mt-1">고객등급 자동 설정에 사용된 세부 항목입니다.</p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <DetailItem label="1년간 진행 현장 수" value={assessment.annual_site_count ? `${assessment.annual_site_count}개` : "-"} />
+              <DetailItem label="주 운영 물건 종류" value={assessment.property_type} />
+              <DetailItem label="직접 양성 상담사 수" value={assessment.trained_consultants ? `${assessment.trained_consultants}명` : "-"} />
+              <DetailItem label="현장 셋팅 가능 인원수" value={assessment.setup_people ? `${assessment.setup_people}명` : "-"} />
+              <DetailItem label="지속 운영 팀원수" value={assessment.steady_team_members ? `${assessment.steady_team_members}명` : "-"} />
+              <DetailItem label="소속회사 규모" value={assessment.company_scale} />
+              <DetailItem label="본인 PR 플랫폼" value={assessment.pr_platform} />
+              <DetailItem label="네트워킹 활동" value={assessment.networking} />
+              <DetailItem label="월 평균 광고비" value={assessment.monthly_ad_budget ? `${assessment.monthly_ad_budget}만원` : "-"} />
+              <DetailItem label="광고 셋팅 운영" value={assessment.ad_operation} />
+              <DetailItem label="광고비 지원 가능 여부" value={assessment.ad_budget_support} />
+              <DetailItem label="판정 기준" value={`${result.roleBasis} 기준`} />
+            </div>
+          </section>
+
+          <section className="premium-card mt-4 p-5">
+            <p className="crm-card-title">메모</p>
+            <div
+              className="mt-4 min-h-[120px] whitespace-pre-wrap rounded-[16px] border px-4 py-4 text-sm font-[650] leading-7"
+              style={{
+                color: "var(--text-subtle)",
+                background: "var(--surface-2)",
+                borderColor: "var(--border)",
+              }}
+            >
+              {cleanMemo || "등록된 메모가 없습니다."}
+            </div>
+          </section>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+  badge = false,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  badge?: boolean;
+}) {
+  const displayValue = fmt(String(value ?? ""));
+
+  return (
+    <div
+      className="rounded-[15px] border px-4 py-3"
+      style={{
+        background: "var(--surface-2)",
+        borderColor: "var(--border)",
+      }}
+    >
+      <p className="crm-meta">{label}</p>
+      <div className="mt-2">
+        {badge ? (
+          <span className={`badge-premium ${badgeClass(displayValue)}`}>{displayValue}</span>
+        ) : (
+          <p className="text-sm font-[780] leading-6" style={{ color: "var(--text-strong)" }}>
+            {displayValue}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScoreBox({ label, value, max }: { label: string; value: number; max: number }) {
+  const percent = max ? Math.round((value / max) * 100) : 0;
+
+  return (
+    <div
+      className="rounded-[16px] border px-4 py-4"
+      style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="crm-meta truncate">{label}</p>
+        <p className="text-sm font-[930]" style={{ color: "var(--text-strong)" }}>
+          {value}/{max}
+        </p>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${percent}%`,
+            background: "linear-gradient(90deg,var(--accent),var(--accent-3))",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function PreviewItem({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
