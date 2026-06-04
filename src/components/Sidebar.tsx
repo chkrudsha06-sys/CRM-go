@@ -28,6 +28,7 @@ import {
   Trophy,
   Truck,
   UserCheck,
+  Users,
   WalletCards,
   X,
 } from "lucide-react";
@@ -77,6 +78,7 @@ const EXEC_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
   { href: "/customer-register", label: "고객등록", icon: FileText },
+  { href: "/contacts", label: "고객DB", icon: Users },
   { href: "/customer-journey", label: "고객여정", icon: Sparkles },
   { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
   { href: "/pipeline", label: "파이프라인", icon: Kanban },
