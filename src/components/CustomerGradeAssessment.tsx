@@ -137,12 +137,21 @@ function ScorePill({
   );
 }
 
+function hasAssessmentInput(value: GradeAssessmentForm) {
+  return Object.values(value).some(
+    (item) => String(item || "").trim().length > 0,
+  );
+}
+
 export default function CustomerGradeAssessment({
   value,
   title,
   onChange,
 }: Props) {
   const result = calculateCustomerGrade(value, title);
+  const hasInput = hasAssessmentInput(value);
+  const displayGrade = hasInput ? result.customerGrade : "입력 대기";
+  const displayBasis = title ? `${result.roleBasis} 기준` : "직급 선택 전";
 
   return (
     <section
@@ -198,7 +207,7 @@ export default function CustomerGradeAssessment({
                 border: "1px solid var(--accent-border)",
               }}
             >
-              {result.roleBasis} 기준
+              {displayBasis}
             </span>
           </div>
 
@@ -206,13 +215,15 @@ export default function CustomerGradeAssessment({
             className="mt-3 text-[28px] font-[950] tracking-[-0.06em]"
             style={{ color: "var(--text-strong)" }}
           >
-            {result.customerGrade}
+            {displayGrade}
           </p>
           <p
             className="mt-1 text-[13px] font-[850]"
             style={{ color: "var(--text-subtle)" }}
           >
-            총점 {result.totalScore}/120점
+            {hasInput
+              ? `총점 ${result.totalScore}/120점`
+              : "하단 판정 항목 입력 후 자동 계산"}
           </p>
         </div>
       </div>
