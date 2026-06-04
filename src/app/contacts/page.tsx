@@ -181,6 +181,8 @@ export default function ContactsPage() {
     ...EMPTY_GRADE_ASSESSMENT,
   });
   const [toast, setToast] = useState("");
+  const [formError, setFormError] = useState("");
+  const [lastSavedRecord, setLastSavedRecord] = useState<CustomerDbRecord | null>(null);
 
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
@@ -258,6 +260,7 @@ export default function ContactsPage() {
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
     setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+    setFormError("");
     setEditId(null);
     setShowForm(false);
   };
@@ -265,6 +268,7 @@ export default function ContactsPage() {
   const openCreate = () => {
     setForm({ ...EMPTY_FORM });
     setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+    setFormError("");
     setEditId(null);
     setShowForm(true);
   };
@@ -279,17 +283,24 @@ export default function ContactsPage() {
       memo: stripGradeAssessmentBlock(record.memo),
     });
     setGradeAssessment(parseGradeAssessmentBlock(record.memo));
+    setFormError("");
     setEditId(record.id);
     setShowForm(true);
   };
 
   const saveRecord = () => {
+    setFormError("");
+
     if (!form.name.trim()) {
-      showToast("고객명을 입력해주세요.");
+      const message = "고객명을 입력해주세요.";
+      setFormError(message);
+      showToast(message);
       return;
     }
     if (!form.phone.trim()) {
-      showToast("연락처를 입력해주세요.");
+      const message = "연락처를 입력해주세요.";
+      setFormError(message);
+      showToast(message);
       return;
     }
 
@@ -302,22 +313,34 @@ export default function ContactsPage() {
     );
 
     if (editId) {
+      const updatedRecord = records.find((record) => record.id === editId);
+      const nextUpdatedRecord: CustomerDbRecord = {
+        ...(updatedRecord || {
+          id: editId,
+          created_at: now,
+          updated_at: now,
+          name: "",
+          title: "",
+          phone: "",
+          intake_route: "",
+          management_stage: "",
+          customer_grade: "",
+          memo: "",
+        }),
+        name: form.name.trim(),
+        title: form.title.trim(),
+        phone: form.phone.trim(),
+        intake_route: form.intake_route,
+        management_stage: form.management_stage,
+        customer_grade: gradeResult.customerGrade,
+        memo: memoWithGrade,
+        updated_at: now,
+      };
+
+      console.log("[고객DB 수정 저장값]", nextUpdatedRecord);
+      setLastSavedRecord(nextUpdatedRecord);
       setRecords((prev) =>
-        prev.map((record) =>
-          record.id === editId
-            ? {
-                ...record,
-                name: form.name.trim(),
-                title: form.title.trim(),
-                phone: form.phone.trim(),
-                intake_route: form.intake_route,
-                management_stage: form.management_stage,
-                customer_grade: gradeResult.customerGrade,
-                memo: memoWithGrade,
-                updated_at: now,
-              }
-            : record,
-        ),
+        prev.map((record) => (record.id === editId ? nextUpdatedRecord : record)),
       );
       showToast("고객 DB가 수정되었습니다.");
       resetForm();
@@ -337,6 +360,8 @@ export default function ContactsPage() {
       updated_at: now,
     };
 
+    console.log("[고객DB 신규 저장값]", nextRecord);
+    setLastSavedRecord(nextRecord);
     setRecords((prev) => [nextRecord, ...prev]);
     showToast("신규 고객 DB가 등록되었습니다.");
     resetForm();
@@ -512,6 +537,32 @@ export default function ContactsPage() {
             </button>
           </div>
         </section>
+
+        {lastSavedRecord && (
+          <section className="premium-card rounded-[22px] p-4 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="crm-card-title">최근 저장 확인</p>
+                <p className="crm-tiny mt-1">
+                  등록저장 또는 수정저장을 누르면 실제로 들어간 값이 아래에 표시됩니다.
+                </p>
+              </div>
+              <span className={`badge-premium ${badgeClass(lastSavedRecord.customer_grade)}`}>
+                {lastSavedRecord.customer_grade}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <PreviewItem label="고객명" value={lastSavedRecord.name} />
+              <PreviewItem label="직급" value={lastSavedRecord.title} />
+              <PreviewItem label="연락처" value={lastSavedRecord.phone} />
+              <PreviewItem label="유입경로" value={lastSavedRecord.intake_route} />
+              <PreviewItem label="관리구간" value={lastSavedRecord.management_stage} />
+              <PreviewItem label="자동등급" value={lastSavedRecord.customer_grade} />
+              <PreviewItem label="등록일" value={dateLabel(lastSavedRecord.created_at)} />
+              <PreviewItem label="저장위치" value="브라우저 localStorage" />
+            </div>
+          </section>
+        )}
 
         <section className="premium-card overflow-hidden rounded-[24px]">
           <div
@@ -749,13 +800,54 @@ export default function ContactsPage() {
                 />
               </div>
 
-              <div
-                className="mt-5 rounded-[18px] border px-4 py-4"
-                style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-              >
-                <p className="text-sm font-[720] leading-6" style={{ color: "var(--text-subtle)" }}>
-                  현재 고객DB 메뉴는 Supabase와 연결하지 않은 임시 화면입니다. 등록 데이터는 브라우저 localStorage에만 저장되며, 기존 CRM 데이터에는 영향을 주지 않습니다.
-                </p>
+              {formError && (
+                <div
+                  className="mt-5 rounded-[18px] border px-4 py-3 text-sm font-[850]"
+                  style={{
+                    background: "var(--danger-bg)",
+                    color: "var(--danger-text)",
+                    borderColor: "var(--danger-border)",
+                  }}
+                >
+                  {formError}
+                </div>
+              )}
+
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                <div
+                  className="rounded-[18px] border px-4 py-4"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+                >
+                  <p className="crm-card-title text-[15px]">현재 입력값 미리보기</p>
+                  <div className="mt-3 grid gap-2">
+                    <PreviewItem label="고객명" value={form.name} />
+                    <PreviewItem label="직급" value={form.title} />
+                    <PreviewItem label="연락처" value={form.phone} />
+                    <PreviewItem label="유입경로" value={form.intake_route} />
+                    <PreviewItem label="관리구간" value={form.management_stage} />
+                    <PreviewItem
+                      label="자동등급"
+                      value={calculateCustomerGrade(gradeAssessment, form.title).customerGrade}
+                    />
+                    <PreviewItem
+                      label="총점"
+                      value={`${calculateCustomerGrade(gradeAssessment, form.title).totalScore}/120점`}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-[18px] border px-4 py-4"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+                >
+                  <p className="crm-card-title text-[15px]">저장 방식</p>
+                  <p className="mt-3 text-sm font-[720] leading-6" style={{ color: "var(--text-subtle)" }}>
+                    현재 고객DB 메뉴는 Supabase와 연결하지 않은 임시 화면입니다. 등록 데이터는 브라우저 localStorage에만 저장되며, 기존 CRM 데이터에는 영향을 주지 않습니다.
+                  </p>
+                  <p className="mt-3 text-xs font-[800]" style={{ color: "var(--text-faint)" }}>
+                    개발자도구 Console에는 [고객DB 신규 저장값] 또는 [고객DB 수정 저장값]으로 전체 저장 객체가 표시됩니다.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -836,6 +928,26 @@ function FormSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+
+function PreviewItem({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2"
+      style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}
+    >
+      <span className="text-xs font-[850]" style={{ color: "var(--text-faint)" }}>
+        {label}
+      </span>
+      <span
+        className="max-w-[65%] truncate text-right text-xs font-[900]"
+        style={{ color: "var(--text-strong)" }}
+      >
+        {fmt(String(value ?? ""))}
+      </span>
+    </div>
   );
 }
 
