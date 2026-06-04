@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,6 +18,18 @@ type ManagerFolder = {
   manager: string;
   envKey: string;
   folderId: string | undefined;
+};
+
+type ContactRow = {
+  id: number;
+  name: string | null;
+  title: string | null;
+  phone: string | null;
+  assigned_to: string | null;
+  consultant: string | null;
+  management_stage: string | null;
+  prospect_type: string | null;
+  meeting_result: string | null;
 };
 
 function getRequiredEnv(name: string) {
@@ -54,6 +67,10 @@ function getManagerFolders(): ManagerFolder[] {
   ];
 }
 
+function normalizePhone(value: string | null | undefined) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 function normalizeGeminiMimeType(mimeType: string) {
   if (mimeType === "audio/x-m4a") return "audio/mp4";
   if (mimeType === "audio/m4a") return "audio/mp4";
@@ -61,13 +78,13 @@ function normalizeGeminiMimeType(mimeType: string) {
 }
 
 function extractPhoneFromFileName(fileName: string) {
-  const onlyNumberCandidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
+  const candidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
 
-  if (!onlyNumberCandidates || onlyNumberCandidates.length === 0) {
+  if (!candidates || candidates.length === 0) {
     return null;
   }
 
-  return onlyNumberCandidates[0].replace(/\D/g, "");
+  return normalizePhone(candidates[0]);
 }
 
 async function getGoogleAccessToken() {
@@ -254,6 +271,68 @@ AI 판단:
   };
 }
 
+async function findContactsByPhone(phone: string | null) {
+  if (!phone) {
+    return {
+      status: "no_phone",
+      message: "파일명에서 연락처를 추출하지 못했습니다.",
+      normalizedPhone: null,
+      matchedCount: 0,
+      contacts: [],
+    };
+  }
+
+  const normalizedPhone = normalizePhone(phone);
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select(
+      "id,name,title,phone,assigned_to,consultant,management_stage,prospect_type,meeting_result"
+    )
+    .order("id", { ascending: false })
+    .limit(5000);
+
+  if (error) {
+    throw new Error(`Supabase contacts query failed: ${error.message}`);
+  }
+
+  const contacts = ((data || []) as ContactRow[]).filter((contact) => {
+    return normalizePhone(contact.phone) === normalizedPhone;
+  });
+
+  let status = "not_found";
+  let message = "CRM 고객DB에서 일치하는 연락처를 찾지 못했습니다.";
+
+  if (contacts.length === 1) {
+    status = "matched";
+    message = "CRM 고객DB에서 정확히 1명의 고객이 매칭되었습니다.";
+  }
+
+  if (contacts.length > 1) {
+    status = "duplicate";
+    message =
+      "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.";
+  }
+
+  return {
+    status,
+    message,
+    normalizedPhone,
+    matchedCount: contacts.length,
+    contacts: contacts.map((contact) => ({
+      id: contact.id,
+      name: contact.name,
+      title: contact.title,
+      phone: contact.phone,
+      assigned_to: contact.assigned_to,
+      consultant: contact.consultant,
+      management_stage: contact.management_stage,
+      prospect_type: contact.prospect_type,
+      meeting_result: contact.meeting_result,
+    })),
+  };
+}
+
 export async function GET() {
   try {
     const envStatus = {
@@ -285,8 +364,10 @@ export async function GET() {
           return {
             manager: folder.manager,
             envKey: folder.envKey,
+            folderId: null,
             ok: false,
             error: "Folder ID environment variable is missing.",
+            fileCount: 0,
             files: [],
           };
         }
@@ -329,6 +410,8 @@ export async function GET() {
           "Google Drive connected, but no audio file was found in manager folders.",
         envStatus,
         driveResults,
+        pickedFile: null,
+        customerMatch: null,
         audioSummaryTest: null,
       });
     }
@@ -348,9 +431,12 @@ export async function GET() {
       extractedPhone: pickedFile.extractedPhone,
     });
 
+    const customerMatch = await findContactsByPhone(pickedFile.extractedPhone);
+
     return NextResponse.json({
       ok: true,
-      message: "Google Drive audio file + Gemini summary test completed.",
+      message:
+        "Google Drive audio file + Gemini summary + CRM customer match test completed.",
       envStatus,
       pickedFile: {
         manager: pickedFile.manager,
@@ -362,6 +448,7 @@ export async function GET() {
         extractedPhone: pickedFile.extractedPhone,
         webViewLink: pickedFile.webViewLink,
       },
+      customerMatch,
       audioSummaryTest: audioSummary,
       driveResults,
     });
@@ -369,7 +456,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        message: "Call recording audio summary test failed.",
+        message: "Call recording customer match test failed.",
         error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
