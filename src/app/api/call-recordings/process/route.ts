@@ -580,7 +580,10 @@ async function processAudioFile(params: {
 
   const customerMatch = await findContactsByPhone(file.extractedPhone);
 
-  if (customerMatch.status !== "matched" || customerMatch.contacts.length !== 1) {
+  if (
+    customerMatch.status !== "matched" ||
+    customerMatch.contacts.length !== 1
+  ) {
     const log = await upsertLog({
       driveFileId: file.id,
       driveFileName: file.name,
@@ -671,7 +674,17 @@ export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "CRON_SECRET is not configured.",
+      },
+      { status: 500 }
+    );
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json(
       {
         ok: false,
