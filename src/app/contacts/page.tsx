@@ -136,8 +136,7 @@ function SelectBox({
         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
         style={{ color: "var(--text-faint)" }}
       />
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -947,6 +946,7 @@ export default function ContactsPage() {
         />
       )}
     </div>
+    </>
   );
 }
 
