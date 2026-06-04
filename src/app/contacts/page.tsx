@@ -34,6 +34,7 @@ type CustomerDbRecord = {
   title: string;
   phone: string;
   intake_route: string;
+  company: string;
   management_stage: string;
   customer_grade: string;
   memo: string;
@@ -47,12 +48,14 @@ type FormState = {
   phone: string;
   intake_route: string;
   management_stage: string;
+  company: string;
   memo: string;
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
 
 const INTAKE_ROUTES = ["분양의신DB", "완판트럭", "분양라인", "분양회MGM", "대협팀활동"];
+const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const MANAGEMENT_STAGES = ["리드", "프로스펙팅", "딜크로징", "리텐션"];
 
 const EMPTY_FORM: FormState = {
@@ -61,6 +64,7 @@ const EMPTY_FORM: FormState = {
   phone: "",
   intake_route: "",
   management_stage: "",
+  company: "",
   memo: "",
 };
 
@@ -242,6 +246,7 @@ export default function ContactsPage() {
             record.phone,
             record.intake_route,
             record.management_stage,
+            record.company,
             record.customer_grade,
             cleanMemo,
           ]
@@ -281,6 +286,7 @@ export default function ContactsPage() {
       phone: record.phone,
       intake_route: record.intake_route,
       management_stage: record.management_stage,
+      company: record.company || "",
       memo: stripGradeAssessmentBlock(record.memo),
     });
     setGradeAssessment(parseGradeAssessmentBlock(record.memo));
@@ -325,6 +331,7 @@ export default function ContactsPage() {
           phone: "",
           intake_route: "",
           management_stage: "",
+          company: "",
           customer_grade: "",
           memo: "",
         }),
@@ -333,6 +340,7 @@ export default function ContactsPage() {
         phone: form.phone.trim(),
         intake_route: form.intake_route,
         management_stage: form.management_stage,
+        company: form.company.trim(),
         customer_grade: gradeResult.customerGrade,
         memo: memoWithGrade,
         updated_at: now,
@@ -355,6 +363,7 @@ export default function ContactsPage() {
       phone: form.phone.trim(),
       intake_route: form.intake_route,
       management_stage: form.management_stage,
+      company: form.company.trim(),
       customer_grade: gradeResult.customerGrade,
       memo: memoWithGrade,
       created_at: now,
@@ -830,20 +839,11 @@ export default function ContactsPage() {
             <div className="min-h-0 flex-1 overflow-y-auto p-5 lg:p-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <FormInput label="고객명 *" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} placeholder="홍길동" />
-                <FormInput label="직급" value={form.title} onChange={(value) => setForm((prev) => ({ ...prev, title: value }))} placeholder="본부장 / 팀장 / 대표 등" />
+                <FormSelect label="직급" value={form.title} onChange={(value) => setForm((prev) => ({ ...prev, title: value }))} options={TITLE_OPTIONS} />
                 <FormInput label="연락처 *" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: formatPhoneInput(value) }))} placeholder="010-1234-5678" />
                 <FormSelect label="유입경로" value={form.intake_route} onChange={(value) => setForm((prev) => ({ ...prev, intake_route: value }))} options={INTAKE_ROUTES} />
                 <FormSelect label="관리구간" value={form.management_stage} onChange={(value) => setForm((prev) => ({ ...prev, management_stage: value }))} options={MANAGEMENT_STAGES} />
-                <div
-                  className="rounded-[15px] border px-4 py-3"
-                  style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-                >
-                  <p className="crm-meta">고객등급</p>
-                  <p className="mt-2 text-xl font-[930]" style={{ color: "var(--text-strong)" }}>
-                    {calculateCustomerGrade(gradeAssessment, form.title).customerGrade}
-                  </p>
-                  <p className="crm-tiny mt-1">등급판정 항목 기준 자동 설정</p>
-                </div>
+                <FormInput label="소속회사" value={form.company} onChange={(value) => setForm((prev) => ({ ...prev, company: value }))} placeholder="소속회사명을 입력하세요" />
               </div>
 
               <div className="mt-5">
@@ -895,6 +895,7 @@ export default function ContactsPage() {
                     <PreviewItem label="연락처" value={form.phone} />
                     <PreviewItem label="유입경로" value={form.intake_route} />
                     <PreviewItem label="관리구간" value={form.management_stage} />
+                    <PreviewItem label="소속회사" value={form.company} />
                     <PreviewItem
                       label="자동등급"
                       value={calculateCustomerGrade(gradeAssessment, form.title).customerGrade}
@@ -1129,6 +1130,7 @@ function CustomerDetailPanel({
               <DetailItem label="연락처" value={record.phone} />
               <DetailItem label="유입경로" value={record.intake_route} badge />
               <DetailItem label="관리구간" value={record.management_stage} badge />
+              <DetailItem label="소속회사" value={record.company} />
               <DetailItem label="자동등급" value={record.customer_grade} badge />
               <DetailItem label="등록일" value={dateLabel(record.created_at)} />
               <DetailItem label="수정일" value={dateLabel(record.updated_at)} />
