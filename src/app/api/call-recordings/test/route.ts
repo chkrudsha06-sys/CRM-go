@@ -20,17 +20,7 @@ type ManagerFolder = {
   folderId: string | undefined;
 };
 
-type ContactRow = {
-  id: number;
-  name: string | null;
-  title: string | null;
-  phone: string | null;
-  assigned_to: string | null;
-  consultant: string | null;
-  management_stage: string | null;
-  prospect_type: string | null;
-  meeting_result: string | null;
-};
+type ContactRow = Record<string, any>;
 
 function getRequiredEnv(name: string) {
   const value = process.env[name];
@@ -85,6 +75,31 @@ function extractPhoneFromFileName(fileName: string) {
   }
 
   return normalizePhone(candidates[0]);
+}
+
+function getContactPhone(contact: ContactRow) {
+  return (
+    contact.phone ||
+    contact.mobile ||
+    contact.contact_phone ||
+    contact.customer_phone ||
+    contact.tel ||
+    ""
+  );
+}
+
+function simplifyContact(contact: ContactRow) {
+  return {
+    id: contact.id,
+    name: contact.name || contact.customer_name || null,
+    title: contact.title || contact.position || null,
+    phone: getContactPhone(contact),
+    assigned_to: contact.assigned_to || contact.manager || null,
+    consultant: contact.consultant || null,
+    management_stage: contact.management_stage || null,
+    prospect_type: contact.prospect_type || null,
+    meeting_result: contact.meeting_result || null,
+  };
 }
 
 async function getGoogleAccessToken() {
@@ -286,50 +301,45 @@ async function findContactsByPhone(phone: string | null) {
 
   const { data, error } = await supabase
     .from("contacts")
-    .select(
-      "id,name,title,phone,assigned_to,consultant,management_stage,prospect_type,meeting_result"
-    )
+    .select("*")
     .order("id", { ascending: false })
-    .limit(5000);
+    .limit(10000);
 
   if (error) {
     throw new Error(`Supabase contacts query failed: ${error.message}`);
   }
 
-  const contacts = ((data || []) as ContactRow[]).filter((contact) => {
-    return normalizePhone(contact.phone) === normalizedPhone;
-  });
-
-  let status = "not_found";
-  let message = "CRM 고객DB에서 일치하는 연락처를 찾지 못했습니다.";
+  const contacts = ((data || []) as ContactRow[])
+    .filter((contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone)
+    .map(simplifyContact);
 
   if (contacts.length === 1) {
-    status = "matched";
-    message = "CRM 고객DB에서 정확히 1명의 고객이 매칭되었습니다.";
+    return {
+      status: "matched",
+      message: "CRM 고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
+      normalizedPhone,
+      matchedCount: contacts.length,
+      contacts,
+    };
   }
 
   if (contacts.length > 1) {
-    status = "duplicate";
-    message =
-      "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.";
+    return {
+      status: "duplicate",
+      message:
+        "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      normalizedPhone,
+      matchedCount: contacts.length,
+      contacts,
+    };
   }
 
   return {
-    status,
-    message,
+    status: "not_found",
+    message: "CRM 고객DB에서 일치하는 연락처를 찾지 못했습니다.",
     normalizedPhone,
-    matchedCount: contacts.length,
-    contacts: contacts.map((contact) => ({
-      id: contact.id,
-      name: contact.name,
-      title: contact.title,
-      phone: contact.phone,
-      assigned_to: contact.assigned_to,
-      consultant: contact.consultant,
-      management_stage: contact.management_stage,
-      prospect_type: contact.prospect_type,
-      meeting_result: contact.meeting_result,
-    })),
+    matchedCount: 0,
+    contacts: [],
   };
 }
 
