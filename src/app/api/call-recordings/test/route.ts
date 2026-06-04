@@ -20,7 +20,7 @@ type ManagerFolder = {
   folderId: string | undefined;
 };
 
-type ContactRow = Record<string, any>;
+type ContactRow = Record<string, unknown>;
 
 function getRequiredEnv(name: string) {
   const value = process.env[name];
@@ -30,6 +30,23 @@ function getRequiredEnv(name: string) {
   }
 
   return value;
+}
+
+function getStringField(row: ContactRow, key: string) {
+  const value = row[key];
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+function getNumberField(row: ContactRow, key: string) {
+  const value = row[key];
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function getManagerFolders(): ManagerFolder[] {
@@ -77,28 +94,49 @@ function extractPhoneFromFileName(fileName: string) {
   return normalizePhone(candidates[0]);
 }
 
+function extractDateFromFileName(fileName: string) {
+  const match = fileName.match(/20\d{6}/);
+
+  if (!match) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  const raw = match[0];
+
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
 function getContactPhone(contact: ContactRow) {
   return (
-    contact.phone ||
-    contact.mobile ||
-    contact.contact_phone ||
-    contact.customer_phone ||
-    contact.tel ||
+    getStringField(contact, "phone") ||
+    getStringField(contact, "mobile") ||
+    getStringField(contact, "contact_phone") ||
+    getStringField(contact, "customer_phone") ||
+    getStringField(contact, "tel") ||
     ""
   );
 }
 
 function simplifyContact(contact: ContactRow) {
   return {
-    id: contact.id,
-    name: contact.name || contact.customer_name || null,
-    title: contact.title || contact.position || null,
+    id: getNumberField(contact, "id"),
+    name:
+      getStringField(contact, "name") ||
+      getStringField(contact, "customer_name") ||
+      null,
+    title:
+      getStringField(contact, "title") ||
+      getStringField(contact, "position") ||
+      null,
     phone: getContactPhone(contact),
-    assigned_to: contact.assigned_to || contact.manager || null,
-    consultant: contact.consultant || null,
-    management_stage: contact.management_stage || null,
-    prospect_type: contact.prospect_type || null,
-    meeting_result: contact.meeting_result || null,
+    assigned_to:
+      getStringField(contact, "assigned_to") ||
+      getStringField(contact, "manager") ||
+      null,
+    consultant: getStringField(contact, "consultant") || null,
+    management_stage: getStringField(contact, "management_stage") || null,
+    prospect_type: getStringField(contact, "prospect_type") || null,
+    meeting_result: getStringField(contact, "meeting_result") || null,
   };
 }
 
@@ -343,6 +381,84 @@ async function findContactsByPhone(phone: string | null) {
   };
 }
 
+async function saveAiSummaryToContactNote(params: {
+  contactId: number | null;
+  noteDate: string;
+  summary: string;
+  driveFileId: string;
+  driveFileName: string;
+  driveFileUrl?: string;
+  managerName: string;
+  extractedPhone: string | null;
+}) {
+  if (!params.contactId) {
+    return {
+      ok: false,
+      status: "no_contact_id",
+      message: "저장할 고객 ID가 없습니다.",
+      inserted: false,
+      note: null,
+    };
+  }
+
+  const duplicateMarker = `[Drive File ID: ${params.driveFileId}]`;
+
+  const { data: existingNotes, error: existingError } = await supabase
+    .from("contact_notes")
+    .select("id,contact_id,note_date,content,author")
+    .eq("contact_id", params.contactId)
+    .ilike("content", `%${params.driveFileId}%`)
+    .limit(1);
+
+  if (existingError) {
+    throw new Error(`Supabase duplicate note query failed: ${existingError.message}`);
+  }
+
+  if (existingNotes && existingNotes.length > 0) {
+    return {
+      ok: true,
+      status: "already_exists",
+      message: "이미 같은 Drive 파일 ID로 저장된 활동노트가 있어 중복 저장하지 않았습니다.",
+      inserted: false,
+      note: existingNotes[0],
+    };
+  }
+
+  const content = `${params.summary}
+
+---
+
+[AI 처리 정보]
+담당자: ${params.managerName}
+추출 연락처: ${params.extractedPhone || "없음"}
+녹음파일명: ${params.driveFileName}
+녹음파일 링크: ${params.driveFileUrl || "없음"}
+${duplicateMarker}`;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("contact_notes")
+    .insert({
+      contact_id: params.contactId,
+      note_date: params.noteDate,
+      content,
+      author: "AI 통화요약",
+    })
+    .select("id,contact_id,note_date,content,author")
+    .single();
+
+  if (insertError) {
+    throw new Error(`Supabase contact_notes insert failed: ${insertError.message}`);
+  }
+
+  return {
+    ok: true,
+    status: "inserted",
+    message: "AI 통화요약이 고객 활동노트에 저장되었습니다.",
+    inserted: true,
+    note: inserted,
+  };
+}
+
 export async function GET() {
   try {
     const envStatus = {
@@ -423,6 +539,7 @@ export async function GET() {
         pickedFile: null,
         customerMatch: null,
         audioSummaryTest: null,
+        activityNoteSave: null,
       });
     }
 
@@ -443,10 +560,37 @@ export async function GET() {
 
     const customerMatch = await findContactsByPhone(pickedFile.extractedPhone);
 
+    let activityNoteSave = {
+      ok: false,
+      status: "not_saved",
+      message:
+        "고객이 정확히 1명 매칭되지 않아 활동노트 저장을 진행하지 않았습니다.",
+      inserted: false,
+      note: null as unknown,
+    };
+
+    if (
+      customerMatch.status === "matched" &&
+      customerMatch.contacts.length === 1
+    ) {
+      const matchedContact = customerMatch.contacts[0];
+
+      activityNoteSave = await saveAiSummaryToContactNote({
+        contactId: matchedContact.id,
+        noteDate: extractDateFromFileName(pickedFile.name),
+        summary: audioSummary.summary,
+        driveFileId: pickedFile.id,
+        driveFileName: pickedFile.name,
+        driveFileUrl: pickedFile.webViewLink,
+        managerName: pickedFile.manager,
+        extractedPhone: pickedFile.extractedPhone,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
       message:
-        "Google Drive audio file + Gemini summary + CRM customer match test completed.",
+        "Google Drive audio file + Gemini summary + CRM customer match + activity note save test completed.",
       envStatus,
       pickedFile: {
         manager: pickedFile.manager,
@@ -460,13 +604,14 @@ export async function GET() {
       },
       customerMatch,
       audioSummaryTest: audioSummary,
+      activityNoteSave,
       driveResults,
     });
   } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Call recording customer match test failed.",
+        message: "Call recording activity note save test failed.",
         error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
