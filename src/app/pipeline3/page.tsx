@@ -109,8 +109,7 @@ const INTAKE_ROUTES = [
   "분양라인",
   "분양회MGM",
   "대협팀활동",
-  "컨설턴트 고객DB",
-  "컨설턴트 VIP DB",
+  "컨설턴트VIP DB",
 ];
 const MANAGEMENT_STAGES: StageKey[] = [
   "리드",
@@ -126,11 +125,6 @@ const CUSTOMER_GRADES = [
   "브론즈",
   "추가 심사 후보",
   "판정 보류",
-  "리드",
-  "프로스펙팅",
-  "딜크로징",
-  "리텐션",
-  "보류",
 ];
 const TASK_ASSIGNEES = [
   "조계현",
@@ -263,7 +257,11 @@ function stripGradeAssessmentBlock(value?: string | null) {
   if (!value) return "";
   return value
     .replace(
-      /\n?\[\[CRM_GRADE_ASSESSMENT\]\][\s\S]*?\[\[\/CRM_GRADE_ASSESSMENT\]\]\n?/g,
+      /\n?\[\[CRM_GRADE_ASSESSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)\n?/g,
+      "",
+    )
+    .replace(
+      /\n?\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)\n?/g,
       "",
     )
     .trim();
@@ -285,6 +283,48 @@ function mergeMemoWithExistingGradeBlock(
   const existingBlock = getGradeAssessmentBlock(originalMemo);
   if (!existingBlock) return cleanMemo;
   return `${cleanMemo}${cleanMemo ? "\n\n" : ""}${existingBlock}`;
+}
+
+function displayCustomerGrade(record: CustomerDbRecord) {
+  const storedGrade = String(record.customer_grade || "").trim();
+
+  if (storedGrade && storedGrade !== UNREVIEWED_GRADE) {
+    return storedGrade;
+  }
+
+  const assessment = parseGradeAssessmentBlock(record.memo);
+
+  if (hasGradeAssessmentInput(assessment)) {
+    return calculateCustomerGrade(assessment, record.title).customerGrade;
+  }
+
+  return UNREVIEWED_GRADE;
+}
+
+function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
+  const cleanMemo = stripGradeAssessmentBlock(record.memo);
+  const assessment = parseGradeAssessmentBlock(record.memo);
+  const hasAssessment = hasGradeAssessmentInput(assessment);
+
+  if (!hasAssessment) {
+    const storedGrade = String(record.customer_grade || "").trim();
+    return {
+      ...record,
+      customer_grade: storedGrade && storedGrade !== "-" ? storedGrade : UNREVIEWED_GRADE,
+      memo: cleanMemo,
+    };
+  }
+
+  const calculatedGrade = calculateCustomerGrade(assessment, record.title).customerGrade;
+  const storedGrade = String(record.customer_grade || "").trim();
+
+  return {
+    ...record,
+    customer_grade:
+      storedGrade && storedGrade !== UNREVIEWED_GRADE && storedGrade !== "-"
+        ? storedGrade
+        : calculatedGrade,
+  };
 }
 
 function formatPhoneInput(value: string) {
@@ -404,7 +444,7 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     phone: fmt(record.phone),
     intakeRoute: fmt(record.intake_route),
     company: fmt(record.company),
-    grade: fmt(record.customer_grade || UNREVIEWED_GRADE),
+    grade: displayCustomerGrade(record),
     stage,
     lastActivity: formatShortDate(record.updated_at || record.created_at),
     registeredAt: formatShortDate(record.created_at),
@@ -1198,10 +1238,7 @@ function EditCustomerModal({
 
   const reviewResult = calculateCustomerGrade(reviewAssessment, form.title);
   const hasReviewInput = hasGradeAssessmentInput(reviewAssessment);
-  const fixedGrade =
-    customer.grade && customer.grade !== "-"
-      ? customer.grade
-      : UNREVIEWED_GRADE;
+  const fixedGrade = displayCustomerGrade(customer.raw);
   const previewGrade =
     reviewOpen && hasReviewInput ? reviewResult.customerGrade : fixedGrade;
 
@@ -1612,7 +1649,9 @@ export default function Pipeline3Page() {
       if (saved) {
         const parsed = JSON.parse(saved) as CustomerDbRecord[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setRecords(parsed);
+          const normalized = parsed.map(normalizeRecordGrade);
+          setRecords(normalized);
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
           setLoadedFromDb(true);
         }
       }
