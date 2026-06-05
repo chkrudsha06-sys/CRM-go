@@ -22,14 +22,11 @@ import {
   ReceiptText,
   Settings2,
   Shield,
-  Sparkles,
   Sun,
   Target,
-  Trophy,
   Truck,
   UserCheck,
   Users,
-  WalletCards,
   X,
 } from "lucide-react";
 import RealtimeChatPopup from "@/components/RealtimeChatPopup";
@@ -79,9 +76,7 @@ const EXEC_MENUS: MenuItem[] = [
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
   { href: "/customer-register", label: "고객등록", icon: FileText },
   { href: "/contacts", label: "고객DB", icon: Users },
-  { href: "/customer-journey", label: "고객여정", icon: Sparkles },
   { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
-  { href: "/pipeline", label: "파이프라인", icon: Kanban },
   { href: "/pipeline3", label: "파이프라인3", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
   { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
@@ -92,15 +87,12 @@ const EXEC_MENUS: MenuItem[] = [
 const OPS_MENUS: MenuItem[] = [
   { href: "/member-timeline", label: "회원 타임라인", icon: CalendarDays },
   { href: "/sales", label: "통합매출관리", icon: CircleDollarSign },
-  { href: "/rewards", label: "리워드 관리", icon: WalletCards },
-  { href: "/customer-incentives", label: "인센티브 관리", icon: Trophy },
   { href: "/quotes", label: "견적서", icon: ReceiptText },
 ];
 
 const ADMIN_MENUS: MenuItem[] = [
   { href: "/reports", label: "팀 성과 분석", icon: Target },
   { href: "/kpi-settings", label: "KPI 설정", icon: Settings2 },
-  { href: "/incentives", label: "인센티브 관리", icon: Trophy },
   { href: "/account-manage", label: "계정관리", icon: Shield },
 ];
 
