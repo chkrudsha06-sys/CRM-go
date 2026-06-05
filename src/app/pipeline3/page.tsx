@@ -30,7 +30,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 type StageKey = "리드" | "프로스펙팅" | "딜크로징" | "리텐션" | "보류/이탈";
 
@@ -492,6 +492,51 @@ function badgeClass(value: string) {
   return "badge-muted";
 }
 
+
+function badgeStyle(value: string): CSSProperties {
+  if (value === "마스터") {
+    return {
+      color: "#5b21b6",
+      background: "rgba(124, 58, 237, 0.10)",
+      borderColor: "rgba(124, 58, 237, 0.28)",
+    };
+  }
+
+  if (value === "챌린저") {
+    return {
+      color: "#1d4ed8",
+      background: "rgba(37, 99, 235, 0.09)",
+      borderColor: "rgba(37, 99, 235, 0.24)",
+    };
+  }
+
+  if (value === "브론즈") {
+    return {
+      color: "#d97706",
+      background: "rgba(180, 83, 9, 0.14)",
+      borderColor: "rgba(217, 119, 6, 0.34)",
+    };
+  }
+
+  if (value === "추가 심사 후보") {
+    return {
+      color: "#f59e0b",
+      background: "rgba(245, 158, 11, 0.13)",
+      borderColor: "rgba(245, 158, 11, 0.34)",
+    };
+  }
+
+  if (value === UNREVIEWED_GRADE || value === "판정 보류") {
+    return {
+      color: "var(--text-faint)",
+      background: "var(--surface-3)",
+      borderColor: "var(--border)",
+    };
+  }
+
+  return {};
+}
+
 function toneClass(tone: Stage["tone"]) {
   if (tone === "danger") return "badge-danger";
   if (tone === "warning") return "badge-warning";
@@ -592,6 +637,7 @@ function PipelineCard({
         </div>
         <span
           className={`badge-premium shrink-0 px-2 py-1 text-[11px] ${badgeClass(customer.grade)}`}
+          style={badgeStyle(customer.grade)}
         >
           {customer.grade}
         </span>
@@ -664,7 +710,10 @@ function DetailPanel({
         <div className="slide-panel-header flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap gap-2">
-              <span className={`badge-premium ${badgeClass(customer.grade)}`}>
+              <span
+                className={`badge-premium ${badgeClass(customer.grade)}`}
+                style={badgeStyle(customer.grade)}
+              >
                 {customer.grade}
               </span>
               <span
@@ -1218,7 +1267,9 @@ function InfoItem({
       <p className="crm-meta">{label}</p>
       <div className="mt-2">
         {badge ? (
-          <span className={`badge-premium ${badgeClass(value)}`}>{value}</span>
+          <span className={`badge-premium ${badgeClass(value)}`} style={badgeStyle(value)}>
+            {value}
+          </span>
         ) : (
           <p
             className="text-sm font-[820] leading-6"
@@ -1465,7 +1516,8 @@ function EditCustomerModal({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`badge-premium px-3 py-2 text-[13px] ${badgeClass(previewGrade)}`}
-                >
+                    style={badgeStyle(previewGrade)}
+                  >
                   {previewGrade}
                 </span>
                 <button
