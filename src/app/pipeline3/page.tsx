@@ -1537,6 +1537,18 @@ function EditCustomerModal({
   );
 }
 
+
+function InputLabel({ children }: { children: ReactNode }) {
+  return (
+    <label
+      className="mb-1.5 block text-[12px] font-[850]"
+      style={{ color: "var(--text-subtle)" }}
+    >
+      {children}
+    </label>
+  );
+}
+
 function AdRequestModal({
   customer,
   onClose,
