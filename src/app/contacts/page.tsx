@@ -674,17 +674,17 @@ export default function ContactsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {routeStats.map((item) => (
                 <div
                   key={item.route}
-                  className="premium-card min-w-0 rounded-[18px] p-3.5"
+                  className="premium-card min-w-0 rounded-[16px] p-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="crm-meta truncate">{item.route}</p>
                       <p
-                        className="mt-2 text-2xl font-[930] tracking-[-0.06em]"
+                        className="mt-1.5 text-xl font-[930] tracking-[-0.06em]"
                         style={{ color: "var(--text-strong)" }}
                       >
                         {item.count.toLocaleString()}건
@@ -698,7 +698,7 @@ export default function ContactsPage() {
                     </span>
                   </div>
                   <div
-                    className="mt-3 h-1.5 overflow-hidden rounded-full"
+                    className="mt-2 h-1.5 overflow-hidden rounded-full"
                     style={{ background: "var(--surface-3)" }}
                   >
                     <div
@@ -1219,8 +1219,9 @@ function CustomerDetailPanel({
   const cleanMemo = stripGradeAssessmentBlock(record.memo);
   const assessment = parseGradeAssessmentBlock(record.memo);
   const result = calculateCustomerGrade(assessment, record.title);
-  const isUnreviewed = !hasGradeAssessmentInput(assessment);
-  const visibleGrade = isUnreviewed ? UNREVIEWED_GRADE : result.customerGrade;
+  const hasAssessment = hasGradeAssessmentInput(assessment);
+  const visibleGrade = displayCustomerGrade(record);
+  const isUnreviewed = visibleGrade === UNREVIEWED_GRADE;
 
   return (
     <div className="fixed inset-0 z-40">
@@ -1356,7 +1357,9 @@ function CustomerDetailPanel({
               <span className={`badge-premium ${badgeClass(visibleGrade)}`}>
                 {isUnreviewed
                   ? visibleGrade
-                  : `${visibleGrade} · ${result.totalScore}/120점`}
+                  : hasAssessment
+                    ? `${visibleGrade} · ${result.totalScore}/120점`
+                    : visibleGrade}
               </span>
             </div>
 
@@ -1393,7 +1396,9 @@ function CustomerDetailPanel({
             >
               {isUnreviewed
                 ? "등급 판정 항목이 아직 입력되지 않았습니다."
-                : result.decisionMessage}
+                : hasAssessment
+                  ? result.decisionMessage
+                  : "저장된 자동등급을 기준으로 표시 중입니다. 세부 판정 입력값이 필요한 경우 고객정보 수정에서 재심사해 주세요."}
             </div>
           </section>
 
