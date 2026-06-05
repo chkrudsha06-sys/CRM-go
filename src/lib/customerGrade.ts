@@ -81,6 +81,22 @@ export const GRADE_SELECT_OPTIONS = {
 const START = "[[CRM_GRADE_ASSESSMENT]]";
 const END = "[[/CRM_GRADE_ASSESSMENT]]";
 
+const LEGACY_START_MARKERS = [
+  "[[CRM_GRADE_ASSESSMENT]]",
+  "[[CRM_GRADE_ASSESSMEN]]",
+  "[[CRM_GRADE_ASSENSSMENT]]",
+  "[[CRM_GRADE_ASSENSSMEN]]",
+  "[[CRM_GRADE_ASSESMENT]]",
+];
+
+const LEGACY_END_MARKERS = [
+  "[[/CRM_GRADE_ASSESSMENT]]",
+  "[[/CRM_GRADE_ASSESSMEN]]",
+  "[[/CRM_GRADE_ASSENSSMENT]]",
+  "[[/CRM_GRADE_ASSENSSMEN]]",
+  "[[/CRM_GRADE_ASSESMENT]]",
+];
+
 type StoredAssessment = {
   assessment: GradeAssessmentForm;
   result: GradeResult;
@@ -295,16 +311,61 @@ export function hasGradeAssessmentInput(assessment: GradeAssessmentForm) {
   );
 }
 
-export function stripGradeAssessmentBlock(memo: string | null | undefined) {
-  const raw = String(memo ?? "");
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  return raw
-    .replace(new RegExp(`${START}[\\s\\S]*?${END}`, "g"), "")
-    .replace(/\[\[CRM_GRADE_ASSESSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)/g, "")
-    .replace(/\[\[CRM_GRADE_ASSENSSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSENSSMENT\]\]|$)/g, "")
-    .replace(/\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)/g, "")
-    .replace(/\[\[CRM_GRADE_ASSENSSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSENSSMEN[^\]]*\]\]|$)/g, "")
-    .trim();
+function findStoredAssessmentJson(memo: string) {
+  for (const startMarker of LEGACY_START_MARKERS) {
+    const startIndex = memo.indexOf(startMarker);
+    if (startIndex < 0) continue;
+
+    const contentStart = startIndex + startMarker.length;
+
+    let nearestEndIndex = -1;
+    for (const endMarker of LEGACY_END_MARKERS) {
+      const endIndex = memo.indexOf(endMarker, contentStart);
+      if (endIndex >= 0 && (nearestEndIndex < 0 || endIndex < nearestEndIndex)) {
+        nearestEndIndex = endIndex;
+      }
+    }
+
+    if (nearestEndIndex >= 0) {
+      return memo.slice(contentStart, nearestEndIndex).trim();
+    }
+
+    const afterStart = memo.slice(contentStart).trim();
+    const firstBrace = afterStart.indexOf("{");
+    const lastBrace = afterStart.lastIndexOf("}");
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return afterStart.slice(firstBrace, lastBrace + 1).trim();
+    }
+  }
+
+  return "";
+}
+
+export function stripGradeAssessmentBlock(memo: string | null | undefined) {
+  let cleaned = String(memo ?? "");
+
+  for (const startMarker of LEGACY_START_MARKERS) {
+    for (const endMarker of LEGACY_END_MARKERS) {
+      cleaned = cleaned.replace(
+        new RegExp(`${escapeRegExp(startMarker)}[\\s\\S]*?${escapeRegExp(endMarker)}`, "g"),
+        "",
+      );
+    }
+  }
+
+  for (const marker of [...LEGACY_START_MARKERS, ...LEGACY_END_MARKERS]) {
+    cleaned = cleaned.replace(new RegExp(escapeRegExp(marker), "g"), "");
+  }
+
+  cleaned = cleaned.replace(/\[\[CRM_GRADE_[^\]]*\]\]/g, "");
+  cleaned = cleaned.replace(/\[\[\/CRM_GRADE_[^\]]*\]\]/g, "");
+
+  return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function appendGradeAssessmentBlock(
@@ -329,65 +390,21 @@ export function appendGradeAssessmentBlock(
   )}${END}`;
 }
 
-function safeAssessmentFromParsed(value: unknown): GradeAssessmentForm {
-  if (!value || typeof value !== "object") {
-    return { ...EMPTY_GRADE_ASSESSMENT };
-  }
-
-  const objectValue = value as Record<string, unknown>;
-  const possibleAssessment =
-    objectValue.assessment && typeof objectValue.assessment === "object"
-      ? (objectValue.assessment as Record<string, unknown>)
-      : objectValue;
-
-  return {
-    ...EMPTY_GRADE_ASSESSMENT,
-    annual_site_count: String(possibleAssessment.annual_site_count ?? ""),
-    property_type: String(possibleAssessment.property_type ?? ""),
-    trained_consultants: String(possibleAssessment.trained_consultants ?? ""),
-    setup_people: String(possibleAssessment.setup_people ?? ""),
-    steady_team_members: String(possibleAssessment.steady_team_members ?? ""),
-    company_scale: String(possibleAssessment.company_scale ?? ""),
-    pr_platform: String(possibleAssessment.pr_platform ?? ""),
-    networking: String(possibleAssessment.networking ?? ""),
-    monthly_ad_budget: String(possibleAssessment.monthly_ad_budget ?? ""),
-    ad_operation: String(possibleAssessment.ad_operation ?? ""),
-    ad_budget_support: String(possibleAssessment.ad_budget_support ?? ""),
-  };
-}
-
 export function parseGradeAssessmentBlock(
   memo: string | null | undefined,
 ): GradeAssessmentForm {
   const raw = String(memo ?? "");
+  const jsonText = findStoredAssessmentJson(raw);
 
-  const exactMatched = raw.match(new RegExp(`${START}([\\s\\S]*?)${END}`));
-  const legacyMatched =
-    exactMatched ||
-    raw.match(/\[\[CRM_GRADE_ASSESSMENT\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)/) ||
-    raw.match(/\[\[CRM_GRADE_ASSENSSMENT\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSENSSMENT\]\]|$)/) ||
-    raw.match(/\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)/) ||
-    raw.match(/\[\[CRM_GRADE_ASSENSSMEN[^\]]*\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSENSSMEN[^\]]*\]\]|$)/);
-
-  const jsonText = legacyMatched?.[1]?.trim();
-
-  if (!jsonText) {
-    return { ...EMPTY_GRADE_ASSESSMENT };
-  }
+  if (!jsonText) return { ...EMPTY_GRADE_ASSESSMENT };
 
   try {
-    return safeAssessmentFromParsed(JSON.parse(jsonText));
+    const parsed = JSON.parse(jsonText) as Partial<StoredAssessment>;
+    return {
+      ...EMPTY_GRADE_ASSESSMENT,
+      ...(parsed.assessment || {}),
+    };
   } catch {
-    const objectMatch = jsonText.match(/\{[\s\S]*\}/);
-
-    if (!objectMatch?.[0]) {
-      return { ...EMPTY_GRADE_ASSESSMENT };
-    }
-
-    try {
-      return safeAssessmentFromParsed(JSON.parse(objectMatch[0]));
-    } catch {
-      return { ...EMPTY_GRADE_ASSESSMENT };
-    }
+    return { ...EMPTY_GRADE_ASSESSMENT };
   }
 }
