@@ -13,6 +13,7 @@ const MOBILE_TITLES: Record<string, string> = {
   "/tasks": "결제&업무요청",
   "/contacts": "고객 DB",
   "/pipeline": "파이프라인",
+  "/pipeline2": "파이프라인2",
   "/vip-members": "분양회 입회자",
   "/wanpan-truck": "완판트럭",
   "/calendar": "운영캘린더",
