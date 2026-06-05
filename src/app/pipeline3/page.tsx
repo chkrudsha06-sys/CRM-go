@@ -17,10 +17,12 @@ import {
   Flame,
   Megaphone,
   MessageSquare,
+  Paperclip,
   Phone,
   Plus,
   Save,
   Search,
+  Send,
   Target,
   User,
   UserCheck,
@@ -90,12 +92,23 @@ type EditForm = {
 
 type AdRequestForm = {
   category: string;
-  assignee: string;
-  priority: string;
-  siteName: string;
-  adProduct: string;
-  hopeDate: string;
   content: string;
+  priority: string;
+  assignee: string;
+  tagged: string[];
+  member_name: string;
+  member_number: string;
+  member_title: string;
+  platform: string;
+  age_range: string;
+  site_name: string;
+  ad_amount: string;
+  send_count: string;
+  hope_date: string;
+  hope_time: string;
+  region1: string;
+  region2: string;
+  region3: string;
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
@@ -126,16 +139,63 @@ const CUSTOMER_GRADES = [
   "추가 심사 후보",
   "판정 보류",
 ];
-const TASK_ASSIGNEES = [
-  "조계현",
-  "이세호",
-  "기여운",
-  "최연전",
-  "최웅",
-  "김창완",
-  "김정후",
+const TEAM = [
+  { name: "김정후", title: "본부장", group: "관리자" },
+  { name: "김창완", title: "팀장", group: "관리자" },
+  { name: "최웅", title: "파트장", group: "실행파트" },
+  { name: "조계현", title: "메인", group: "실행파트" },
+  { name: "이세호", title: "어쏘", group: "실행파트" },
+  { name: "기여운", title: "어쏘", group: "실행파트" },
+  { name: "최연전", title: "CX", group: "실행파트" },
+  { name: "김재영", title: "어시", group: "운영파트" },
+  { name: "최은정", title: "어시", group: "운영파트" },
+];
+const TEAM_GROUPS = ["관리자", "실행파트", "운영파트"];
+const CATEGORIES = [
+  "LMS부킹요청",
+  "호갱노노 부킹요청",
+  "호갱노노 광고요청",
+  "일반 업무요청",
 ];
 const PRIORITIES = ["긴급", "높음", "보통", "낮음"];
+const LMS_PLATFORMS = [
+  "전체플랫폼",
+  "국민카드",
+  "BC카드",
+  "삼성카드",
+  "신한카드",
+  "롯데카드",
+  "하나카드",
+  "SKT",
+  "KT",
+  "롯데멤버스",
+  "스마트스코어",
+  "티맵",
+  "신세계포인트",
+  "OK캐시백",
+];
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
+  category: "호갱노노 광고요청",
+  content: "",
+  priority: "보통",
+  assignee: "",
+  tagged: [],
+  member_name: "",
+  member_number: "",
+  member_title: "",
+  platform: "",
+  age_range: "",
+  site_name: "",
+  ad_amount: "",
+  send_count: "",
+  hope_date: "",
+  hope_time: "",
+  region1: "",
+  region2: "",
+  region3: "",
+};
 
 const STAGES: Stage[] = [
   {
@@ -310,12 +370,16 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
     const storedGrade = String(record.customer_grade || "").trim();
     return {
       ...record,
-      customer_grade: storedGrade && storedGrade !== "-" ? storedGrade : UNREVIEWED_GRADE,
+      customer_grade:
+        storedGrade && storedGrade !== "-" ? storedGrade : UNREVIEWED_GRADE,
       memo: cleanMemo,
     };
   }
 
-  const calculatedGrade = calculateCustomerGrade(assessment, record.title).customerGrade;
+  const calculatedGrade = calculateCustomerGrade(
+    assessment,
+    record.title,
+  ).customerGrade;
   const storedGrade = String(record.customer_grade || "").trim();
 
   return {
@@ -367,6 +431,43 @@ function stageLabel(value: StageKey) {
   if (value === "딜크로징") return "딜클로징";
   if (value === "리텐션") return "리텐션";
   return value;
+}
+
+function getWeekday(date: string) {
+  if (!date) return "";
+  return WEEKDAYS[new Date(`${date}T00:00:00`).getDay()];
+}
+
+function formatAmount(value: string) {
+  const n = value.replace(/[^0-9]/g, "");
+  return n ? Number(n).toLocaleString() : "";
+}
+
+function buildTaskContent(form: AdRequestForm) {
+  if (form.category === "LMS부킹요청") {
+    return `■ 분양회원: ${form.member_number} ${form.member_name} ${form.member_title}
+■ 플랫폼: ${form.platform}
+■ 연령대: ${form.age_range}
+■ 타겟팅: 부동산 관심자
+■ 현장명: ${form.site_name}
+■ 집행방식: LMS
+■ 광고금액: ${formatAmount(form.ad_amount)}원
+■ 발송건수: ${formatAmount(form.send_count)}건
+■ 희망날짜: ${form.hope_date}${form.hope_date ? ` (${getWeekday(form.hope_date)})` : ""} ${form.hope_time ? `${form.hope_time}시` : ""}
+■ 지역타겟팅: ①${form.region1} ②${form.region2} ③${form.region3}`;
+  }
+
+  if (form.category === "호갱노노 부킹요청") {
+    return `■ 분양회원: ${form.member_number} ${form.member_name} ${form.member_title}
+■ 현장명: ${form.site_name}
+■ 플랫폼: 호갱노노 채널톡
+■ 발송건수: ${formatAmount(form.send_count)}건
+■ 발송일시: ${form.hope_date}${form.hope_date ? ` (${getWeekday(form.hope_date)})` : ""} ${form.hope_time ? `${form.hope_time}시` : ""}
+■ 지역타겟팅: ①${form.region1} ②${form.region2} ③${form.region3}
+■ 타겟연령: ${form.age_range}`;
+  }
+
+  return form.content;
 }
 
 function badgeClass(value: string) {
@@ -1446,18 +1547,63 @@ function AdRequestModal({
   onCreated: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<AdRequestForm>({
-    category: "호갱노노 광고요청",
-    assignee: "",
-    priority: "보통",
-    siteName: "",
-    adProduct: "",
-    hopeDate: TODAY,
-    content: `${customer.name} ${customer.title} 고객 광고요청\n연락처: ${customer.phone}\n유입경로: ${customer.intakeRoute}\n관리단계: ${stageLabel(customer.stage)}\n\n요청내용:\n`,
-  });
+  const [files, setFiles] = useState<File[]>([]);
+  const [me, setMe] = useState("파이프라인3");
+  const [form, setForm] = useState<AdRequestForm>(() => ({
+    ...EMPTY_AD_REQUEST_FORM,
+    content: `[파이프라인3 광고요청]
+고객명: ${customer.name} ${customer.title}
+연락처: ${customer.phone}
+유입경로: ${customer.intakeRoute}
+관리단계: ${stageLabel(customer.stage)}
 
-  const setValue = (key: keyof AdRequestForm, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+요청내용:
+`,
+  }));
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("crm_user");
+      if (raw) {
+        const current = JSON.parse(raw);
+        setMe(current.name || "파이프라인3");
+      }
+    } catch {}
+  }, []);
+
+  const inputClass =
+    "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
+  const textareaClass =
+    "min-h-[96px] w-full resize-none rounded-[8px] border px-3 py-2 text-[13px] font-semibold outline-none";
+
+  const toggleTag = (name: string) => {
+    setForm((prev) => ({
+      ...prev,
+      tagged: prev.tagged.includes(name)
+        ? prev.tagged.filter((item) => item !== name)
+        : [...prev.tagged, name],
+    }));
+  };
+
+  const resetCategory = (category: string) => {
+    setForm((prev) => ({
+      ...EMPTY_AD_REQUEST_FORM,
+      category,
+      priority: prev.priority || "보통",
+      assignee: prev.assignee,
+      tagged: prev.tagged,
+      content:
+        category === "호갱노노 광고요청" || category === "일반 업무요청"
+          ? `[파이프라인3 광고요청]
+고객명: ${customer.name} ${customer.title}
+연락처: ${customer.phone}
+유입경로: ${customer.intakeRoute}
+관리단계: ${stageLabel(customer.stage)}
+
+요청내용:
+`
+          : "",
+    }));
   };
 
   const handleCreate = async () => {
@@ -1465,153 +1611,470 @@ function AdRequestModal({
       alert("수신자를 선택하세요.");
       return;
     }
-    if (!form.content.trim()) {
+
+    const content = buildTaskContent(form);
+
+    if (!content.trim()) {
       alert("요청 내용을 입력하세요.");
       return;
     }
 
-    let requester = "";
-    try {
-      const raw = localStorage.getItem("crm_user");
-      requester = raw ? JSON.parse(raw)?.name || "" : "";
-    } catch {}
-
-    const content = [
-      `[파이프라인3 광고요청]`,
-      `고객명: ${customer.name} ${customer.title}`,
-      `연락처: ${customer.phone}`,
-      `유입경로: ${customer.intakeRoute}`,
-      `관리단계: ${stageLabel(customer.stage)}`,
-      form.siteName ? `현장명: ${form.siteName}` : "",
-      form.adProduct ? `광고상품: ${form.adProduct}` : "",
-      form.hopeDate ? `희망일자: ${form.hopeDate}` : "",
-      "",
-      form.content.trim(),
-    ]
-      .filter(Boolean)
-      .join("\n");
-
     setSaving(true);
+
+    const fileUrls: string[] = [];
+
+    for (const file of files) {
+      const fileName = `${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage
+        .from("task-files")
+        .upload(fileName, file);
+      if (!error) fileUrls.push(fileName);
+    }
+
     const { error } = await supabase.from("tasks").insert({
       category: form.category,
       content,
       priority: form.priority,
       assignee: form.assignee,
-      requester: requester || "파이프라인3",
+      requester: me,
       status: "요청",
-      tagged: null,
-      file_urls: null,
+      tagged: form.tagged.length > 0 ? form.tagged : null,
+      file_urls: fileUrls.length > 0 ? fileUrls : null,
     });
+
     setSaving(false);
 
     if (error) {
-      alert(`광고요청 생성 실패: ${error.message}`);
+      alert(`생성 실패: ${error.message}`);
       return;
     }
 
-    alert("광고요청이 결제&업무요청에 생성되었습니다.");
+    alert("업무요청이 결제&업무요청에 생성되었습니다.");
     onCreated();
   };
 
   return (
-    <ModalShell
-      title="광고요청 생성"
-      subtitle="결제&업무요청의 업무요청으로 저장됩니다."
-      onClose={onClose}
-    >
-      <div className="grid gap-3 md:grid-cols-2">
-        <FormField label="수신자">
-          <select
-            className="crm-search h-11 w-full px-3"
-            value={form.assignee}
-            onChange={(event) => setValue("assignee", event.target.value)}
+    <div className="crm-modal-overlay" onClick={onClose}>
+      <div
+        className="crm-modal flex max-w-3xl flex-col"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="flex items-start justify-between gap-4 px-6 py-5"
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
+        >
+          <div>
+            <h2 className="crm-section-title">업무 요청</h2>
+            <p className="crm-subtitle mt-1">
+              수신자, 카테고리, 우선순위, 요청 내용을 입력합니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-premium btn-secondary h-9 w-9 p-0"
           >
-            <option value="">선택</option>
-            {TASK_ASSIGNEES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="카테고리">
-          <select
-            className="crm-search h-11 w-full px-3"
-            value={form.category}
-            onChange={(event) => setValue("category", event.target.value)}
-          >
-            <option value="호갱노노 광고요청">호갱노노 광고요청</option>
-            <option value="일반 업무요청">일반 업무요청</option>
-          </select>
-        </FormField>
-        <FormField label="우선순위">
-          <select
-            className="crm-search h-11 w-full px-3"
-            value={form.priority}
-            onChange={(event) => setValue("priority", event.target.value)}
-          >
-            {PRIORITIES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </FormField>
-        <FormField label="희망일자">
-          <input
-            type="date"
-            className="crm-search h-11 w-full px-3"
-            value={form.hopeDate}
-            onChange={(event) => setValue("hopeDate", event.target.value)}
-          />
-        </FormField>
-        <FormField label="현장명">
-          <input
-            className="crm-search h-11 w-full px-3"
-            value={form.siteName}
-            onChange={(event) => setValue("siteName", event.target.value)}
-            placeholder="예: 대우엘크루 일산"
-          />
-        </FormField>
-        <FormField label="광고상품">
-          <input
-            className="crm-search h-11 w-full px-3"
-            value={form.adProduct}
-            onChange={(event) => setValue("adProduct", event.target.value)}
-            placeholder="예: 호갱노노 / LMS / 배너"
-          />
-        </FormField>
-        <div className="md:col-span-2">
-          <FormField label="상세 요청 내용">
-            <textarea
-              rows={8}
-              className="crm-search w-full resize-none px-3 py-3"
-              value={form.content}
-              onChange={(event) => setValue("content", event.target.value)}
-              placeholder="업무 요청 내용을 상세히 입력하세요."
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <InputLabel>수신자</InputLabel>
+              <select
+                value={form.assignee}
+                onChange={(event) =>
+                  setForm({ ...form, assignee: event.target.value })
+                }
+                className={inputClass}
+              >
+                <option value="">선택</option>
+                {TEAM_GROUPS.map((group) => (
+                  <optgroup key={group} label={`■ ${group}`}>
+                    {TEAM.filter(
+                      (member) => member.group === group && member.name !== me,
+                    ).map((member) => (
+                      <option key={member.name} value={member.name}>
+                        {member.name} {member.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <InputLabel>카테고리</InputLabel>
+              <select
+                value={form.category}
+                onChange={(event) => resetCategory(event.target.value)}
+                className={inputClass}
+              >
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <InputLabel>우선순위</InputLabel>
+              <div className="grid grid-cols-4 gap-2">
+                {PRIORITIES.map((priority) => {
+                  const active = form.priority === priority;
+                  return (
+                    <button
+                      key={priority}
+                      type="button"
+                      onClick={() => setForm({ ...form, priority })}
+                      className="h-9 rounded-[8px] border text-[13px] font-bold"
+                      style={{
+                        background: active
+                          ? "var(--accent-bg)"
+                          : "var(--surface-2)",
+                        borderColor: active
+                          ? "var(--accent-border)"
+                          : "var(--border)",
+                        color: active
+                          ? "var(--accent-text)"
+                          : "var(--text-muted)",
+                      }}
+                    >
+                      {priority}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <InputLabel>태그자</InputLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {TEAM.filter(
+                  (member) =>
+                    member.name !== me && member.name !== form.assignee,
+                ).map((member) => {
+                  const active = form.tagged.includes(member.name);
+                  return (
+                    <button
+                      key={member.name}
+                      type="button"
+                      onClick={() => toggleTag(member.name)}
+                      className="rounded-[8px] border px-2.5 py-1.5 text-[12px] font-bold"
+                      style={{
+                        background: active
+                          ? "var(--purple-bg)"
+                          : "var(--surface-2)",
+                        borderColor: active
+                          ? "var(--purple-border)"
+                          : "var(--border)",
+                        color: active
+                          ? "var(--purple-text)"
+                          : "var(--text-muted)",
+                      }}
+                    >
+                      @{member.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {form.category === "LMS부킹요청" && (
+            <div className="premium-card grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+              <div>
+                <InputLabel>플랫폼</InputLabel>
+                <select
+                  className={inputClass}
+                  value={form.platform}
+                  onChange={(event) =>
+                    setForm({ ...form, platform: event.target.value })
+                  }
+                >
+                  <option value="">선택</option>
+                  {LMS_PLATFORMS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <InputLabel>연령대</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.age_range}
+                  onChange={(event) =>
+                    setForm({ ...form, age_range: event.target.value })
+                  }
+                  placeholder="예: 30~60대"
+                />
+              </div>
+              <div>
+                <InputLabel>현장명</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.site_name}
+                  onChange={(event) =>
+                    setForm({ ...form, site_name: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>광고금액</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.ad_amount}
+                  onChange={(event) =>
+                    setForm({ ...form, ad_amount: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>발송건수</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.send_count}
+                  onChange={(event) =>
+                    setForm({ ...form, send_count: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>희망일시</InputLabel>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={form.hope_date}
+                    onChange={(event) =>
+                      setForm({ ...form, hope_date: event.target.value })
+                    }
+                  />
+                  <select
+                    className="h-9 w-24 rounded-[8px] border px-3 text-[13px] font-semibold outline-none"
+                    value={form.hope_time}
+                    onChange={(event) =>
+                      setForm({ ...form, hope_time: event.target.value })
+                    }
+                  >
+                    <option value="">시간</option>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={String(i).padStart(2, "0")}>
+                        {String(i).padStart(2, "0")}시
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <InputLabel>지역 타겟팅</InputLabel>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <input
+                    className={inputClass}
+                    value={form.region1}
+                    onChange={(event) =>
+                      setForm({ ...form, region1: event.target.value })
+                    }
+                    placeholder="① 지역"
+                  />
+                  <input
+                    className={inputClass}
+                    value={form.region2}
+                    onChange={(event) =>
+                      setForm({ ...form, region2: event.target.value })
+                    }
+                    placeholder="② 지역"
+                  />
+                  <input
+                    className={inputClass}
+                    value={form.region3}
+                    onChange={(event) =>
+                      setForm({ ...form, region3: event.target.value })
+                    }
+                    placeholder="③ 지역"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {form.category === "호갱노노 부킹요청" && (
+            <div className="premium-card grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+              <div>
+                <InputLabel>현장명</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.site_name}
+                  onChange={(event) =>
+                    setForm({ ...form, site_name: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>발송건수</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.send_count}
+                  onChange={(event) =>
+                    setForm({ ...form, send_count: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>타겟연령</InputLabel>
+                <input
+                  className={inputClass}
+                  value={form.age_range}
+                  onChange={(event) =>
+                    setForm({ ...form, age_range: event.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <InputLabel>발송일시</InputLabel>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    className={inputClass}
+                    value={form.hope_date}
+                    onChange={(event) =>
+                      setForm({ ...form, hope_date: event.target.value })
+                    }
+                  />
+                  <select
+                    className="h-9 w-24 rounded-[8px] border px-3 text-[13px] font-semibold outline-none"
+                    value={form.hope_time}
+                    onChange={(event) =>
+                      setForm({ ...form, hope_time: event.target.value })
+                    }
+                  >
+                    <option value="">시간</option>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={String(i).padStart(2, "0")}>
+                        {String(i).padStart(2, "0")}시
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <InputLabel>지역 타겟팅</InputLabel>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  <input
+                    className={inputClass}
+                    value={form.region1}
+                    onChange={(event) =>
+                      setForm({ ...form, region1: event.target.value })
+                    }
+                    placeholder="① 지역"
+                  />
+                  <input
+                    className={inputClass}
+                    value={form.region2}
+                    onChange={(event) =>
+                      setForm({ ...form, region2: event.target.value })
+                    }
+                    placeholder="② 지역"
+                  />
+                  <input
+                    className={inputClass}
+                    value={form.region3}
+                    onChange={(event) =>
+                      setForm({ ...form, region3: event.target.value })
+                    }
+                    placeholder="③ 지역"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(form.category === "일반 업무요청" ||
+            form.category === "호갱노노 광고요청") && (
+            <div>
+              <InputLabel>상세 요청 내용</InputLabel>
+              <textarea
+                className={textareaClass}
+                value={form.content}
+                onChange={(event) =>
+                  setForm({ ...form, content: event.target.value })
+                }
+                placeholder="업무 요청 내용을 상세히 입력하세요."
+              />
+            </div>
+          )}
+
+          <div>
+            <InputLabel>파일첨부</InputLabel>
+            <input
+              type="file"
+              multiple
+              onChange={(event) =>
+                setFiles(Array.from(event.target.files || []))
+              }
+              className="hidden"
+              id="pipeline3-task-file-input"
             />
-          </FormField>
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById("pipeline3-task-file-input")?.click()
+              }
+              className="flex w-full items-center gap-2 rounded-[12px] border border-dashed px-4 py-3 text-[13px] font-bold"
+              style={{
+                borderColor: "var(--border-2)",
+                color: "var(--text-muted)",
+                background: "var(--surface-2)",
+              }}
+            >
+              <Paperclip size={14} />
+              {files.length > 0
+                ? `${files.length}개 파일 선택됨`
+                : "파일을 선택하세요"}
+            </button>
+            {files.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {files.map((file, index) => (
+                  <p
+                    key={`${file.name}-${index}`}
+                    className="truncate text-[12px] font-semibold"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    📎 {file.name}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          className="flex justify-end gap-2 px-6 py-4"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-premium btn-secondary"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={saving}
+            className="btn-premium btn-primary"
+          >
+            <Send size={14} />
+            {saving ? "전송 중..." : "요청 전송"}
+          </button>
         </div>
       </div>
-      <div className="mt-5 flex gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="btn-premium btn-secondary h-10 flex-1"
-        >
-          취소
-        </button>
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={saving}
-          className="btn-premium btn-primary h-10 flex-1"
-        >
-          <Plus size={14} />
-          {saving ? "생성 중..." : "업무요청 생성"}
-        </button>
-      </div>
-    </ModalShell>
+    </div>
   );
 }
 
