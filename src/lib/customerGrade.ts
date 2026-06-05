@@ -296,10 +296,14 @@ export function hasGradeAssessmentInput(assessment: GradeAssessmentForm) {
 }
 
 export function stripGradeAssessmentBlock(memo: string | null | undefined) {
-  return String(memo ?? "")
+  const raw = String(memo ?? "");
+
+  return raw
     .replace(new RegExp(`${START}[\\s\\S]*?${END}`, "g"), "")
     .replace(/\[\[CRM_GRADE_ASSESSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)/g, "")
+    .replace(/\[\[CRM_GRADE_ASSENSSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSENSSMENT\]\]|$)/g, "")
     .replace(/\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)/g, "")
+    .replace(/\[\[CRM_GRADE_ASSENSSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSENSSMEN[^\]]*\]\]|$)/g, "")
     .trim();
 }
 
@@ -325,21 +329,65 @@ export function appendGradeAssessmentBlock(
   )}${END}`;
 }
 
+function safeAssessmentFromParsed(value: unknown): GradeAssessmentForm {
+  if (!value || typeof value !== "object") {
+    return { ...EMPTY_GRADE_ASSESSMENT };
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  const possibleAssessment =
+    objectValue.assessment && typeof objectValue.assessment === "object"
+      ? (objectValue.assessment as Record<string, unknown>)
+      : objectValue;
+
+  return {
+    ...EMPTY_GRADE_ASSESSMENT,
+    annual_site_count: String(possibleAssessment.annual_site_count ?? ""),
+    property_type: String(possibleAssessment.property_type ?? ""),
+    trained_consultants: String(possibleAssessment.trained_consultants ?? ""),
+    setup_people: String(possibleAssessment.setup_people ?? ""),
+    steady_team_members: String(possibleAssessment.steady_team_members ?? ""),
+    company_scale: String(possibleAssessment.company_scale ?? ""),
+    pr_platform: String(possibleAssessment.pr_platform ?? ""),
+    networking: String(possibleAssessment.networking ?? ""),
+    monthly_ad_budget: String(possibleAssessment.monthly_ad_budget ?? ""),
+    ad_operation: String(possibleAssessment.ad_operation ?? ""),
+    ad_budget_support: String(possibleAssessment.ad_budget_support ?? ""),
+  };
+}
+
 export function parseGradeAssessmentBlock(
   memo: string | null | undefined,
 ): GradeAssessmentForm {
   const raw = String(memo ?? "");
-  const matched = raw.match(new RegExp(`${START}([\\s\\S]*?)${END}`));
 
-  if (!matched?.[1]) return { ...EMPTY_GRADE_ASSESSMENT };
+  const exactMatched = raw.match(new RegExp(`${START}([\\s\\S]*?)${END}`));
+  const legacyMatched =
+    exactMatched ||
+    raw.match(/\[\[CRM_GRADE_ASSESSMENT\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)/) ||
+    raw.match(/\[\[CRM_GRADE_ASSENSSMENT\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSENSSMENT\]\]|$)/) ||
+    raw.match(/\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)/) ||
+    raw.match(/\[\[CRM_GRADE_ASSENSSMEN[^\]]*\]\]([\s\S]*?)(?:\[\[\/CRM_GRADE_ASSENSSMEN[^\]]*\]\]|$)/);
+
+  const jsonText = legacyMatched?.[1]?.trim();
+
+  if (!jsonText) {
+    return { ...EMPTY_GRADE_ASSESSMENT };
+  }
 
   try {
-    const parsed = JSON.parse(matched[1]) as Partial<StoredAssessment>;
-    return {
-      ...EMPTY_GRADE_ASSESSMENT,
-      ...(parsed.assessment || {}),
-    };
+    return safeAssessmentFromParsed(JSON.parse(jsonText));
   } catch {
-    return { ...EMPTY_GRADE_ASSESSMENT };
+    const objectMatch = jsonText.match(/\{[\s\S]*\}/);
+
+    if (!objectMatch?.[0]) {
+      return { ...EMPTY_GRADE_ASSESSMENT };
+    }
+
+    try {
+      return safeAssessmentFromParsed(JSON.parse(objectMatch[0]));
+    } catch {
+      return { ...EMPTY_GRADE_ASSESSMENT };
+    }
   }
 }
