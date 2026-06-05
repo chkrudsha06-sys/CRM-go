@@ -113,50 +113,6 @@ function isSameMonth(date: Date | null, baseDate: Date) {
   );
 }
 
-function getMonthWeekRanges(baseDate: Date) {
-  const year = baseDate.getFullYear();
-  const month = baseDate.getMonth();
-  const lastDate = new Date(year, month + 1, 0).getDate();
-  const ranges: {
-    week: number;
-    startDay: number;
-    endDay: number;
-    label: string;
-  }[] = [];
-
-  let startDay = 1;
-  let week = 1;
-
-  while (startDay <= lastDate) {
-    const current = new Date(year, month, startDay);
-    const day = current.getDay();
-    const daysUntilSunday = day === 0 ? 0 : 7 - day;
-    const endDay = Math.min(lastDate, startDay + daysUntilSunday);
-
-    ranges.push({
-      week,
-      startDay,
-      endDay,
-      label: `${week}주차 ${month + 1}/${startDay}~${month + 1}/${endDay}`,
-    });
-
-    startDay = endDay + 1;
-    week += 1;
-  }
-
-  return ranges;
-}
-
-function getMonthWeekIndex(date: Date | null, baseDate: Date) {
-  if (!isSameMonth(date, baseDate) || !date) return null;
-  const dayOfMonth = date.getDate();
-  const range = getMonthWeekRanges(baseDate).find(
-    (item) => dayOfMonth >= item.startDay && dayOfMonth <= item.endDay,
-  );
-
-  return range?.week ?? null;
-}
-
 function monthLabel(baseDate: Date) {
   return `${baseDate.getFullYear()}년 ${baseDate.getMonth() + 1}월`;
 }
@@ -308,10 +264,6 @@ export default function ContactsPage() {
     () => monthLabel(dashboardBaseDate),
     [dashboardBaseDate],
   );
-  const weekRanges = useMemo(
-    () => getMonthWeekRanges(dashboardBaseDate),
-    [dashboardBaseDate],
-  );
 
   const monthRecords = useMemo(() => {
     return records.filter((record) =>
@@ -322,61 +274,30 @@ export default function ContactsPage() {
   const routeStats = useMemo(() => {
     const monthlyTotal = monthRecords.length;
     return INTAKE_ROUTES.map((route) => {
-      const monthlyCount = monthRecords.filter(
+      const count = monthRecords.filter(
         (record) => record.intake_route === route,
       ).length;
-      const cumulativeCount = records.filter(
-        (record) => record.intake_route === route,
-      ).length;
-      const percent = monthlyTotal
-        ? Math.round((monthlyCount / monthlyTotal) * 100)
-        : 0;
-      const weeklyCounts = weekRanges.map((range) => ({
-        ...range,
-        count: monthRecords.filter(
-          (record) =>
-            record.intake_route === route &&
-            getMonthWeekIndex(
-              getRecordDate(record.created_at),
-              dashboardBaseDate,
-            ) === range.week,
-        ).length,
-      }));
+      const percent = monthlyTotal ? Math.round((count / monthlyTotal) * 100) : 0;
 
       return {
         route,
-        monthlyCount,
-        cumulativeCount,
+        count,
         percent,
-        weeklyCounts,
       };
     });
-  }, [records, monthRecords, weekRanges, dashboardBaseDate]);
-
-  const overallWeeklyStats = useMemo(() => {
-    return weekRanges.map((range) => ({
-      ...range,
-      count: monthRecords.filter(
-        (record) =>
-          getMonthWeekIndex(
-            getRecordDate(record.created_at),
-            dashboardBaseDate,
-          ) === range.week,
-      ).length,
-    }));
-  }, [monthRecords, weekRanges, dashboardBaseDate]);
+  }, [monthRecords]);
 
   const gradeStats = useMemo(() => {
     return CUSTOMER_GRADE_OPTIONS.map((grade) => ({
       grade,
-      count: records.filter((record) => displayCustomerGrade(record) === grade)
+      count: monthRecords.filter((record) => displayCustomerGrade(record) === grade)
         .length,
     }));
-  }, [records]);
+  }, [monthRecords]);
 
   const unreviewedCount = useMemo(
-    () => records.filter(isRecordUnreviewed).length,
-    [records],
+    () => monthRecords.filter(isRecordUnreviewed).length,
+    [monthRecords],
   );
 
   const filteredRecords = useMemo(() => {
@@ -671,7 +592,7 @@ export default function ContactsPage() {
             <div className="premium-card rounded-[20px] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="crm-meta">전체 수취 DB · {currentMonthLabel}</p>
+                  <p className="crm-meta">당월 수취 DB · {currentMonthLabel}</p>
                   <p
                     className="mt-1.5 text-[34px] font-[930] leading-none tracking-[-0.07em] sm:text-[38px]"
                     style={{ color: "var(--text-strong)" }}
@@ -679,43 +600,15 @@ export default function ContactsPage() {
                     {monthRecords.length.toLocaleString()}건
                   </p>
                   <div
-                    className="mt-2 flex flex-wrap gap-2 text-[11px] font-[850]"
+                    className="mt-2 text-[11px] font-[850]"
                     style={{ color: "var(--text-subtle)" }}
                   >
-                    <span>총누적 {records.length.toLocaleString()}건</span>
-                    <span>·</span>
-                    <span>미심사 {unreviewedCount.toLocaleString()}건</span>
+                    미심사 {unreviewedCount.toLocaleString()}건
                   </div>
                 </div>
                 <div className="premium-icon-lg h-10 w-10">
                   <ClipboardList className="h-5 w-5" />
                 </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                {overallWeeklyStats.map((item) => (
-                  <div
-                    key={item.week}
-                    className="rounded-[12px] px-2 py-2 text-center"
-                    style={{
-                      background: "var(--surface-2)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <p
-                      className="text-[10px] font-[850] leading-none"
-                      style={{ color: "var(--text-faint)" }}
-                    >
-                      {item.week}주차
-                    </p>
-                    <p
-                      className="mt-1 text-base font-[920]"
-                      style={{ color: "var(--text-strong)" }}
-                    >
-                      {item.count}
-                    </p>
-                  </div>
-                ))}
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
@@ -753,7 +646,7 @@ export default function ContactsPage() {
                         className="mt-2 text-2xl font-[930] tracking-[-0.06em]"
                         style={{ color: "var(--text-strong)" }}
                       >
-                        {item.monthlyCount.toLocaleString()}건
+                        {item.count.toLocaleString()}건
                       </p>
                       <p className="crm-tiny mt-1">당월 수취</p>
                     </div>
@@ -776,46 +669,6 @@ export default function ContactsPage() {
                           : "transparent",
                       }}
                     />
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-1.5">
-                    {item.weeklyCounts.map((week) => (
-                      <div
-                        key={week.week}
-                        className="rounded-[10px] px-2 py-1.5"
-                        style={{
-                          background: "var(--surface-2)",
-                          border: "1px solid var(--border-subtle)",
-                        }}
-                        title={week.label}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span
-                            className="text-[10px] font-[850]"
-                            style={{ color: "var(--text-faint)" }}
-                          >
-                            {week.week}주차
-                          </span>
-                          <span
-                            className="text-[12px] font-[920]"
-                            style={{ color: "var(--text-strong)" }}
-                          >
-                            {week.count}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className="mt-3 flex items-center justify-between border-t pt-2"
-                    style={{ borderColor: "var(--border-subtle)" }}
-                  >
-                    <span className="crm-tiny">총누적</span>
-                    <span
-                      className="text-sm font-[920]"
-                      style={{ color: "var(--text-strong)" }}
-                    >
-                      {item.cumulativeCount.toLocaleString()}건
-                    </span>
                   </div>
                 </div>
               ))}
