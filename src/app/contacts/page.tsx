@@ -896,14 +896,6 @@ export default function ContactsPage() {
                     <PreviewItem label="유입경로" value={form.intake_route} />
                     <PreviewItem label="관리구간" value={form.management_stage} />
                     <PreviewItem label="소속회사" value={form.company} />
-                    <PreviewItem
-                      label="자동등급"
-                      value={calculateCustomerGrade(gradeAssessment, form.title).customerGrade}
-                    />
-                    <PreviewItem
-                      label="총점"
-                      value={`${calculateCustomerGrade(gradeAssessment, form.title).totalScore}/120점`}
-                    />
                   </div>
                 </div>
 
