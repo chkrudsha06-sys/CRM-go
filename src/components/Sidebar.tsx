@@ -82,7 +82,7 @@ const EXEC_MENUS: MenuItem[] = [
   { href: "/customer-journey", label: "고객여정", icon: Sparkles },
   { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
   { href: "/pipeline", label: "파이프라인", icon: Kanban },
-  { href: "/pipeline2", label: "파이프라인2", icon: Kanban },
+  { href: "/pipeline3", label: "파이프라인3", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
   { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
   { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
