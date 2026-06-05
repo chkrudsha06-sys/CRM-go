@@ -540,85 +540,156 @@ function HyosungUploadModal({
   onClose: () => void;
 }) {
   const importableCount = rows.filter((row) => !row.isDuplicate).length;
+  const paidAmount = rows
+    .filter((row) => row.isPaid && !row.isDuplicate)
+    .reduce((sum, row) => sum + row.paidAmount, 0);
+  const failedAmount = rows
+    .filter((row) => !row.isPaid)
+    .reduce((sum, row) => sum + row.unpaidAmount, 0);
+
+  const statItems = [
+    { label: "전체 행", value: summary.total, sub: "업로드 파일 기준", icon: FileText, tone: "info" as const },
+    { label: "결제완료", value: summary.paid, sub: money(paidAmount), icon: BadgeCheck, tone: "success" as const },
+    { label: "실패/미납", value: summary.failed, sub: money(failedAmount), icon: ArrowDownRight, tone: "danger" as const },
+    { label: "중복 제외", value: summary.duplicate, sub: "재업로드 방지", icon: RefreshCw, tone: "warning" as const },
+    { label: "수집 로그", value: summary.importedLogs, sub: "원본 저장", icon: ReceiptText, tone: "purple" as const },
+    { label: "매출 생성", value: summary.createdSales, sub: "통합매출 반영", icon: TrendingUp, tone: "success" as const },
+  ];
 
   return (
     <div className="crm-modal-overlay" onClick={onClose}>
-      <div className="crm-modal flex max-w-5xl flex-col" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+      <div
+        className="crm-modal flex h-[calc(100vh-56px)] w-[min(1360px,calc(100vw-48px))] max-w-none flex-col overflow-hidden rounded-[22px]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="flex flex-shrink-0 items-start justify-between gap-4 px-7 py-5"
+          style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface)" }}
+        >
           <div>
-            <h2 className="crm-section-title">효성CMS 수납내역 업로드</h2>
-            <p className="crm-subtitle mt-1">효성CMS에서 다운로드한 수납내역 엑셀을 통합매출관리로 반영합니다.</p>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-[900]" style={{ color: "var(--accent-text)", background: "var(--accent-bg)", border: "1px solid var(--accent-border)" }}>
+              <UploadCloud size={13} /> 효성CMS 자동반영
+            </div>
+            <h2 className="text-[22px] font-[950] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>효성CMS 수납내역 업로드</h2>
+            <p className="mt-1 text-[13px] font-[700]" style={{ color: "var(--text-muted)" }}>
+              효성CMS에서 다운로드한 수납내역 엑셀을 결제완료·실패·중복으로 분류해 통합매출관리로 반영합니다.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="btn-premium btn-secondary h-10 w-10 flex-shrink-0 p-0">
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <section className="premium-card p-4">
-            <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onFile(file);
-              }}
-              className="block w-full rounded-[10px] border px-3 py-2 text-[13px] font-semibold"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
-            />
-            <p className="crm-tiny mt-2">수납상태가 완납이고 결제상태가 결제완료이며 수납금액이 0원보다 큰 건만 매출로 생성됩니다.</p>
+        <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
+          <section
+            className="rounded-[18px] border p-4"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+          >
+            <div className="grid gap-4 xl:grid-cols-[1fr_360px] xl:items-center">
+              <div>
+                <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onFile(file);
+                  }}
+                  className="block h-12 w-full rounded-[14px] border px-4 text-[14px] font-[800]"
+                  style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+                <p className="mt-2 text-[12.5px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  수납상태가 <b>완납</b>이고 결제상태가 <b>결제완료</b>이며 수납금액이 0원보다 큰 건만 매출로 생성됩니다.
+                  결제실패·미납 건은 매출로 잡지 않고 수집 로그에만 보관합니다.
+                </p>
+              </div>
+
+              <div className="rounded-[16px] border px-4 py-3" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+                <p className="text-[12px] font-[900]" style={{ color: "var(--text-subtle)" }}>반영 기준</p>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[900]">완납</p>
+                  </div>
+                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[900]">결제완료</p>
+                  </div>
+                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[900]">수납금액 0원 초과</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
-            <StatCard label="전체 행" value={summary.total} icon={FileText} tone="info" />
-            <StatCard label="결제완료" value={summary.paid} icon={BadgeCheck} tone="success" />
-            <StatCard label="결제실패/미납" value={summary.failed} icon={ArrowDownRight} tone="danger" />
-            <StatCard label="중복 제외" value={summary.duplicate} icon={RefreshCw} tone="warning" />
-            <StatCard label="수집 로그" value={summary.importedLogs} icon={ReceiptText} tone="purple" />
-            <StatCard label="매출 생성" value={summary.createdSales} icon={TrendingUp} tone="success" />
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {statItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="rounded-[16px] border px-4 py-3" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <PremiumIcon icon={Icon} tone={item.tone} />
+                    <p className="text-[22px] font-[950] leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
+                  </div>
+                  <div className="mt-3 min-w-0">
+                    <p className="truncate text-[12px] font-[900]" style={{ color: "var(--text-muted)" }}>{item.label}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-[750]" style={{ color: "var(--text-faint)" }}>{item.sub}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <section className="premium-card mt-4 overflow-hidden p-0">
-            <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+          <section className="mt-4 overflow-hidden rounded-[18px] border" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
               <div>
-                <p className="crm-section-title">업로드 미리보기</p>
-                <p className="crm-tiny">최대 80건까지 화면에 표시됩니다.</p>
+                <p className="text-[17px] font-[950] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>업로드 미리보기</p>
+                <p className="mt-1 text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>최대 80건까지 표시됩니다. 좌우 스크롤로 모든 항목을 확인할 수 있습니다.</p>
               </div>
               <Badge tone={importableCount > 0 ? "success" : "muted"}>{importableCount.toLocaleString()}건 반영 가능</Badge>
             </div>
-            <div className="max-h-[360px] overflow-auto">
+
+            <div className="max-h-[470px] overflow-auto">
               {rows.length === 0 ? (
-                <div className="p-8 text-center crm-tiny">엑셀 파일을 선택하면 미리보기가 표시됩니다.</div>
+                <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[16px]" style={{ background: "var(--surface-2)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}>
+                    <FileText size={22} />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-[900]" style={{ color: "var(--text-muted)" }}>엑셀 파일을 선택하면 미리보기가 표시됩니다.</p>
+                    <p className="mt-1 text-[12px] font-[700]" style={{ color: "var(--text-faint)" }}>효성CMS 수납내역 엑셀 파일을 그대로 업로드해주세요.</p>
+                  </div>
+                </div>
               ) : (
-                <table className="crm-table min-w-[1120px]">
-                  <thead>
+                <table className="w-full min-w-[1180px] border-collapse text-left text-[13px]">
+                  <thead className="sticky top-0 z-10" style={{ background: "var(--surface-2)", color: "var(--text-subtle)" }}>
                     <tr>
-                      <th className="w-[80px]">상태</th>
-                      <th className="w-[120px]">회원번호</th>
-                      <th className="w-[130px]">회원명</th>
-                      <th className="w-[150px]">연락처</th>
-                      <th className="w-[100px]">청구월</th>
-                      <th className="w-[120px]">결제일</th>
-                      <th className="w-[120px]">수납상태</th>
-                      <th className="w-[120px]">결제상태</th>
-                      <th className="w-[130px]">수납금액</th>
-                      <th className="w-[160px]">결제결과</th>
+                      <th className="w-[92px] px-4 py-3 font-[900]">상태</th>
+                      <th className="w-[130px] px-4 py-3 font-[900]">회원번호</th>
+                      <th className="w-[140px] px-4 py-3 font-[900]">회원명</th>
+                      <th className="w-[150px] px-4 py-3 font-[900]">연락처</th>
+                      <th className="w-[100px] px-4 py-3 font-[900]">청구월</th>
+                      <th className="w-[130px] px-4 py-3 font-[900]">결제일</th>
+                      <th className="w-[120px] px-4 py-3 font-[900]">수납상태</th>
+                      <th className="w-[120px] px-4 py-3 font-[900]">결제상태</th>
+                      <th className="w-[130px] px-4 py-3 text-right font-[900]">수납금액</th>
+                      <th className="w-[180px] px-4 py-3 font-[900]">결제결과</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice(0, 80).map((row) => (
-                      <tr key={`${row.externalPaymentId}-${row.rowIndex}`}>
-                        <td>
+                      <tr key={`${row.externalPaymentId}-${row.rowIndex}`} style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                        <td className="px-4 py-3">
                           {row.isDuplicate ? <Badge tone="warning">중복</Badge> : row.isPaid ? <Badge tone="success">매출</Badge> : <Badge tone="danger">실패</Badge>}
                         </td>
-                        <td><span className="crm-meta">{row.memberNumber || "-"}</span></td>
-                        <td><span className="crm-row-main">{row.memberName || "-"}</span></td>
-                        <td><span className="crm-meta">{row.memberPhone || "-"}</span></td>
-                        <td><span className="crm-meta">{row.billingMonth || "-"}</span></td>
-                        <td><span className="crm-meta">{formatFullDate(row.paidAt)}</span></td>
-                        <td><Badge tone={row.collectionStatus === "완납" ? "success" : "danger"}>{row.collectionStatus || "-"}</Badge></td>
-                        <td><Badge tone={row.paymentStatus === "결제완료" ? "success" : "danger"}>{row.paymentStatus || "-"}</Badge></td>
-                        <td><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.paidAmount)}</span></td>
-                        <td><span className="crm-meta">{row.resultMessage || "-"}</span></td>
+                        <td className="px-4 py-3"><span className="font-[850]" style={{ color: "var(--text-muted)" }}>{row.memberNumber || "-"}</span></td>
+                        <td className="px-4 py-3"><span className="font-[900]" style={{ color: "var(--text-strong)" }}>{row.memberName || "-"}</span></td>
+                        <td className="px-4 py-3"><span className="font-[750]" style={{ color: "var(--text-muted)" }}>{row.memberPhone || "-"}</span></td>
+                        <td className="px-4 py-3"><span className="font-[750]" style={{ color: "var(--text-muted)" }}>{row.billingMonth || "-"}</span></td>
+                        <td className="px-4 py-3"><span className="font-[750]" style={{ color: "var(--text-muted)" }}>{formatFullDate(row.paidAt)}</span></td>
+                        <td className="px-4 py-3"><Badge tone={row.collectionStatus === "완납" ? "success" : "danger"}>{row.collectionStatus || "-"}</Badge></td>
+                        <td className="px-4 py-3"><Badge tone={row.paymentStatus === "결제완료" ? "success" : "danger"}>{row.paymentStatus || "-"}</Badge></td>
+                        <td className="px-4 py-3 text-right"><span className="font-[950]" style={{ color: "var(--text-strong)" }}>{money(row.paidAmount)}</span></td>
+                        <td className="px-4 py-3"><span className="font-[750]" style={{ color: "var(--text-muted)" }}>{row.resultMessage || "-"}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -628,16 +699,22 @@ function HyosungUploadModal({
           </section>
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4" style={{ borderTop: "1px solid var(--border-subtle)" }}>
-          <button type="button" onClick={onClose} className="btn-premium btn-secondary">닫기</button>
-          <button type="button" onClick={onImport} disabled={saving || importableCount === 0} className="btn-premium btn-primary disabled:opacity-50">
-            <UploadCloud size={14} />{saving ? "반영 중..." : "통합매출 반영"}
-          </button>
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 px-7 py-4" style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--surface)" }}>
+          <p className="text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>
+            같은 파일을 다시 업로드해도 중복건은 자동 제외됩니다.
+          </p>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} className="btn-premium btn-secondary">닫기</button>
+            <button type="button" onClick={onImport} disabled={saving || importableCount === 0} className="btn-premium btn-primary disabled:opacity-50">
+              <UploadCloud size={14} />{saving ? "반영 중..." : "통합매출 반영"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 export default function SalesPage() {
   const [rows, setRows] = useState<AdExecution[]>([]);
