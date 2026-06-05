@@ -1,6 +1,7 @@
 "use client";
 
 import EmptyState from "@/components/EmptyState";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import type { ElementType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,6 +22,7 @@ import {
   RefreshCw,
   Search,
   TrendingUp,
+  UploadCloud,
   User,
   Wallet,
   X,
@@ -54,6 +56,46 @@ type FormState = {
   memo: string;
 };
 
+type HyosungCmsPreviewRow = {
+  rowIndex: number;
+  externalPaymentId: string;
+  memberNumber: string;
+  contractNumber: string;
+  memberName: string;
+  memberPhone: string;
+  billingMonth: string;
+  productName: string;
+  collectionStatus: string;
+  paymentStatus: string;
+  paymentType: string;
+  paymentMethod: string;
+  promisedAt: string | null;
+  paidAt: string | null;
+  completedAt: string | null;
+  billingAmount: number;
+  supplyAmount: number;
+  vatAmount: number;
+  paidAmount: number;
+  unpaidAmount: number;
+  canceledAmount: number;
+  refundAmount: number;
+  resultMessage: string;
+  memberType: string;
+  managerName: string;
+  isPaid: boolean;
+  isDuplicate: boolean;
+  rawData: Record<string, unknown>;
+};
+
+type HyosungImportSummary = {
+  total: number;
+  paid: number;
+  failed: number;
+  duplicate: number;
+  importedLogs: number;
+  createdSales: number;
+};
+
 type DetailTab = "overview" | "amount" | "memo";
 
 const EMPTY_FORM: FormState = {
@@ -73,6 +115,7 @@ const CHANNELS = ["LMS", "호갱노노", "네이버", "카카오", "구글", "�
 const CONTRACT_ROUTES = ["분양회", "연계매출", "광고매출", "기타"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
+const HYOSUNG_PROVIDER = "HYOSUNG_CMS";
 
 function formatFullDate(value?: string | null) {
   if (!value) return "-";
@@ -110,6 +153,126 @@ function parseNumber(value: string) {
 function formatInputAmount(value: string) {
   const clean = numberInput(value);
   return clean ? Number(clean).toLocaleString() : "";
+}
+
+function cellText(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function cellNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const clean = cellText(value).replace(/[^0-9.-]/g, "");
+  if (!clean) return 0;
+  const parsed = Number(clean);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeCmsDate(value: unknown) {
+  const text = cellText(value);
+  if (!text || text === "-" || text === "66") return null;
+  const normalized = text.replace(/[./]/g, "-");
+  const match = normalized.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function normalizeBillingMonth(value: unknown) {
+  const text = cellText(value);
+  const match = text.match(/^(20\d{2})[./-]?(\d{1,2})/);
+  if (!match) return text;
+  return `${match[1]}/${match[2].padStart(2, "0")}`;
+}
+
+function makeHyosungExternalId(row: {
+  memberNumber: string;
+  contractNumber: string;
+  billingMonth: string;
+  paidAt: string | null;
+  paidAmount: number;
+  paymentStatus: string;
+}) {
+  return [
+    HYOSUNG_PROVIDER,
+    row.memberNumber || "NO_MEMBER",
+    row.contractNumber || "NO_CONTRACT",
+    row.billingMonth || "NO_BILLING_MONTH",
+    row.paidAt || "NO_PAID_DATE",
+    row.paidAmount || 0,
+    row.paymentStatus || "NO_STATUS",
+  ]
+    .join("_")
+    .replace(/\s+/g, "");
+}
+
+function buildSalesMemoFromHyosung(row: HyosungCmsPreviewRow) {
+  return [
+    "[효성CMS 수납내역 자동반영]",
+    `회원번호: ${row.memberNumber || "-"}`,
+    `계약번호: ${row.contractNumber || "-"}`,
+    `청구월: ${row.billingMonth || "-"}`,
+    `상품: ${row.productName || "-"}`,
+    `수납상태: ${row.collectionStatus || "-"}`,
+    `결제상태: ${row.paymentStatus || "-"}`,
+    `결제방식: ${row.paymentType || "-"}`,
+    `결제수단: ${row.paymentMethod || "-"}`,
+    `결제결과: ${row.resultMessage || "-"}`,
+    `효성CMS 고유키: ${row.externalPaymentId}`,
+  ].join("\n");
+}
+
+function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
+  return rows
+    .map((raw, index): HyosungCmsPreviewRow => {
+      const memberNumber = cellText(raw["회원번호"]);
+      const contractNumber = cellText(raw["계약번호"]);
+      const billingMonth = normalizeBillingMonth(raw["청구월"]);
+      const paidAt = normalizeCmsDate(raw["결제일(납부기간)"]);
+      const paidAmount = cellNumber(raw["수납금액"]);
+      const collectionStatus = cellText(raw["수납상태"]);
+      const paymentStatus = cellText(raw["결제상태"]);
+      const rowForId = {
+        memberNumber,
+        contractNumber,
+        billingMonth,
+        paidAt,
+        paidAmount,
+        paymentStatus,
+      };
+
+      return {
+        rowIndex: index + 2,
+        externalPaymentId: makeHyosungExternalId(rowForId),
+        memberNumber,
+        contractNumber,
+        memberName: cellText(raw["회원명"]),
+        memberPhone: cellText(raw["납부자 휴대전화"]),
+        billingMonth,
+        productName: cellText(raw["상품"]),
+        collectionStatus,
+        paymentStatus,
+        paymentType: cellText(raw["결제방식"]),
+        paymentMethod: cellText(raw["결제수단"]),
+        promisedAt: normalizeCmsDate(raw["약정일"]),
+        paidAt,
+        completedAt: normalizeCmsDate(raw["청구완납일자"]),
+        billingAmount: cellNumber(raw["청구금액"]),
+        supplyAmount: cellNumber(raw["공급가액"]),
+        vatAmount: cellNumber(raw["부가세"]),
+        paidAmount,
+        unpaidAmount: cellNumber(raw["미납금액"]),
+        canceledAmount: cellNumber(raw["취소금액"]),
+        refundAmount: cellNumber(raw["환불금액"]),
+        resultMessage: cellText(raw["결제결과"]),
+        memberType: cellText(raw["회원구분"]),
+        managerName: cellText(raw["담당관리자"]),
+        isPaid: collectionStatus === "완납" && paymentStatus === "결제완료" && paidAmount > 0,
+        isDuplicate: false,
+        rawData: raw,
+      };
+    })
+    .filter((row) => row.memberName || row.memberPhone || row.memberNumber || row.paidAmount > 0);
 }
 
 function effectiveSales(row: AdExecution) {
@@ -333,12 +496,132 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit }: { item: AdExecu
   );
 }
 
+
+function HyosungUploadModal({
+  rows,
+  summary,
+  saving,
+  onFile,
+  onImport,
+  onClose,
+}: {
+  rows: HyosungCmsPreviewRow[];
+  summary: HyosungImportSummary;
+  saving: boolean;
+  onFile: (file: File) => void;
+  onImport: () => void;
+  onClose: () => void;
+}) {
+  const importableCount = rows.filter((row) => !row.isDuplicate).length;
+
+  return (
+    <div className="crm-modal-overlay" onClick={onClose}>
+      <div className="crm-modal flex max-w-5xl flex-col" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+          <div>
+            <h2 className="crm-section-title">효성CMS 수납내역 업로드</h2>
+            <p className="crm-subtitle mt-1">효성CMS에서 다운로드한 수납내역 엑셀을 통합매출관리로 반영합니다.</p>
+          </div>
+          <button type="button" onClick={onClose} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <section className="premium-card p-4">
+            <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) onFile(file);
+              }}
+              className="block w-full rounded-[10px] border px-3 py-2 text-[13px] font-semibold"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
+            <p className="crm-tiny mt-2">수납상태가 완납이고 결제상태가 결제완료이며 수납금액이 0원보다 큰 건만 매출로 생성됩니다.</p>
+          </section>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <StatCard label="전체 행" value={summary.total} icon={FileText} tone="info" />
+            <StatCard label="결제완료" value={summary.paid} icon={BadgeCheck} tone="success" />
+            <StatCard label="결제실패/미납" value={summary.failed} icon={ArrowDownRight} tone="danger" />
+            <StatCard label="중복 제외" value={summary.duplicate} icon={RefreshCw} tone="warning" />
+            <StatCard label="수집 로그" value={summary.importedLogs} icon={ReceiptText} tone="purple" />
+            <StatCard label="매출 생성" value={summary.createdSales} icon={TrendingUp} tone="success" />
+          </div>
+
+          <section className="premium-card mt-4 overflow-hidden p-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+              <div>
+                <p className="crm-section-title">업로드 미리보기</p>
+                <p className="crm-tiny">최대 80건까지 화면에 표시됩니다.</p>
+              </div>
+              <Badge tone={importableCount > 0 ? "success" : "muted"}>{importableCount.toLocaleString()}건 반영 가능</Badge>
+            </div>
+            <div className="max-h-[360px] overflow-auto">
+              {rows.length === 0 ? (
+                <div className="p-8 text-center crm-tiny">엑셀 파일을 선택하면 미리보기가 표시됩니다.</div>
+              ) : (
+                <table className="crm-table min-w-[1120px]">
+                  <thead>
+                    <tr>
+                      <th className="w-[80px]">상태</th>
+                      <th className="w-[120px]">회원번호</th>
+                      <th className="w-[130px]">회원명</th>
+                      <th className="w-[150px]">연락처</th>
+                      <th className="w-[100px]">청구월</th>
+                      <th className="w-[120px]">결제일</th>
+                      <th className="w-[120px]">수납상태</th>
+                      <th className="w-[120px]">결제상태</th>
+                      <th className="w-[130px]">수납금액</th>
+                      <th className="w-[160px]">결제결과</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 80).map((row) => (
+                      <tr key={`${row.externalPaymentId}-${row.rowIndex}`}>
+                        <td>
+                          {row.isDuplicate ? <Badge tone="warning">중복</Badge> : row.isPaid ? <Badge tone="success">매출</Badge> : <Badge tone="danger">실패</Badge>}
+                        </td>
+                        <td><span className="crm-meta">{row.memberNumber || "-"}</span></td>
+                        <td><span className="crm-row-main">{row.memberName || "-"}</span></td>
+                        <td><span className="crm-meta">{row.memberPhone || "-"}</span></td>
+                        <td><span className="crm-meta">{row.billingMonth || "-"}</span></td>
+                        <td><span className="crm-meta">{formatFullDate(row.paidAt)}</span></td>
+                        <td><Badge tone={row.collectionStatus === "완납" ? "success" : "danger"}>{row.collectionStatus || "-"}</Badge></td>
+                        <td><Badge tone={row.paymentStatus === "결제완료" ? "success" : "danger"}>{row.paymentStatus || "-"}</Badge></td>
+                        <td><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.paidAmount)}</span></td>
+                        <td><span className="crm-meta">{row.resultMessage || "-"}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+          <button type="button" onClick={onClose} className="btn-premium btn-secondary">닫기</button>
+          <button type="button" onClick={onImport} disabled={saving || importableCount === 0} className="btn-premium btn-primary disabled:opacity-50">
+            <UploadCloud size={14} />{saving ? "반영 중..." : "통합매출 반영"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesPage() {
   const [rows, setRows] = useState<AdExecution[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<AdExecution | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [showModal, setShowModal] = useState(false);
+  const [showHyosungModal, setShowHyosungModal] = useState(false);
+  const [hyosungRows, setHyosungRows] = useState<HyosungCmsPreviewRow[]>([]);
+  const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
+  const [hyosungSaving, setHyosungSaving] = useState(false);
   const [editItem, setEditItem] = useState<AdExecution | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -450,6 +733,152 @@ export default function SalesPage() {
     if (selectedItem && editItem?.id === selectedItem.id) setSelectedItem({ ...selectedItem, ...payload } as AdExecution);
   };
 
+
+  const updateHyosungSummary = (nextRows: HyosungCmsPreviewRow[], extra?: Partial<HyosungImportSummary>) => {
+    const total = nextRows.length;
+    const paid = nextRows.filter((row) => row.isPaid).length;
+    const failed = nextRows.filter((row) => !row.isPaid).length;
+    const duplicate = nextRows.filter((row) => row.isDuplicate).length;
+    setHyosungSummary({
+      total,
+      paid,
+      failed,
+      duplicate,
+      importedLogs: extra?.importedLogs || 0,
+      createdSales: extra?.createdSales || 0,
+    });
+  };
+
+  const handleHyosungFile = async (file: File) => {
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheetName];
+      const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const parsedRows = parseHyosungCmsRows(jsonRows);
+      const ids = parsedRows.map((row) => row.externalPaymentId);
+      let duplicateIds = new Set<string>();
+
+      if (ids.length > 0) {
+        const { data, error } = await supabase
+          .from("external_payment_records")
+          .select("external_payment_id")
+          .eq("provider", HYOSUNG_PROVIDER)
+          .in("external_payment_id", ids);
+
+        if (error) throw error;
+        duplicateIds = new Set((data || []).map((row) => String(row.external_payment_id)));
+      }
+
+      const nextRows = parsedRows.map((row) => ({ ...row, isDuplicate: duplicateIds.has(row.externalPaymentId) }));
+      setHyosungRows(nextRows);
+      updateHyosungSummary(nextRows);
+    } catch (error) {
+      console.error("효성CMS 엑셀 파싱 실패:", error);
+      alert(`효성CMS 엑셀 파싱 실패: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleHyosungImport = async () => {
+    const importTargets = hyosungRows.filter((row) => !row.isDuplicate);
+    if (importTargets.length === 0) return alert("반영할 신규 수납내역이 없습니다.");
+
+    setHyosungSaving(true);
+    let importedLogs = 0;
+    let createdSales = 0;
+
+    try {
+      for (const row of importTargets) {
+        const baseLogPayload = {
+          provider: HYOSUNG_PROVIDER,
+          external_payment_id: row.externalPaymentId,
+          member_number: row.memberNumber || null,
+          contract_number: row.contractNumber || null,
+          member_name: row.memberName || null,
+          member_phone: row.memberPhone || null,
+          billing_month: row.billingMonth || null,
+          product_name: row.productName || null,
+          collection_status: row.collectionStatus || null,
+          payment_status: row.paymentStatus || null,
+          payment_type: row.paymentType || null,
+          payment_method: row.paymentMethod || null,
+          promised_at: row.promisedAt,
+          paid_at: row.paidAt,
+          completed_at: row.completedAt,
+          billing_amount: row.billingAmount || 0,
+          paid_amount: row.paidAmount || 0,
+          unpaid_amount: row.unpaidAmount || 0,
+          result_message: row.resultMessage || null,
+          member_type: row.memberType || null,
+          manager_name: row.managerName || null,
+          match_status: "pending",
+          import_status: row.isPaid ? "paid" : "failed",
+          import_message: row.isPaid ? "통합매출 반영 대상" : row.resultMessage || "결제실패 또는 미납",
+          raw_data: row.rawData,
+        };
+
+        const { data: paymentLog, error: logError } = await supabase
+          .from("external_payment_records")
+          .insert(baseLogPayload)
+          .select("id")
+          .single();
+
+        if (logError) throw logError;
+        importedLogs += 1;
+
+        if (!row.isPaid) continue;
+
+        const salesPayload = {
+          member_name: row.memberName || null,
+          execution_amount: row.paidAmount || 0,
+          vat_amount: row.paidAmount || 0,
+          refund_amount: row.refundAmount || 0,
+          channel: "효성CMS",
+          contract_route: "분양회",
+          payment_date: row.paidAt || new Date().toISOString().slice(0, 10),
+          team_member: null,
+          consultant: null,
+          memo: buildSalesMemoFromHyosung(row),
+        };
+
+        const { data: salesRow, error: salesError } = await supabase
+          .from("ad_executions")
+          .insert(salesPayload)
+          .select("id")
+          .single();
+
+        if (salesError) throw salesError;
+        createdSales += 1;
+
+        if (paymentLog?.id && salesRow?.id) {
+          const { error: updateError } = await supabase
+            .from("external_payment_records")
+            .update({ sales_record_id: salesRow.id, import_status: "sales_created", import_message: "통합매출관리 자동 반영 완료" })
+            .eq("id", paymentLog.id);
+          if (updateError) throw updateError;
+        }
+      }
+
+      const nextRows = hyosungRows.map((row) => (row.isDuplicate ? row : { ...row, isDuplicate: true }));
+      setHyosungRows(nextRows);
+      updateHyosungSummary(nextRows, { importedLogs, createdSales });
+      alert(`효성CMS 수납내역 반영 완료\n수집 로그: ${importedLogs.toLocaleString()}건\n통합매출 생성: ${createdSales.toLocaleString()}건`);
+      fetchRows();
+    } catch (error) {
+      console.error("효성CMS 수납내역 반영 실패:", error);
+      alert(`효성CMS 수납내역 반영 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setHyosungSaving(false);
+    }
+  };
+
+  const openHyosungModal = () => {
+    setHyosungRows([]);
+    setHyosungSummary({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
+    setShowHyosungModal(true);
+  };
+
   const exportCsv = () => {
     const headers = ["ID", "고객명", "결제일", "채널", "계약경로", "집행금액", "VAT금액", "환불금액", "실매출", "담당자", "컨설턴트", "메모"];
     const lines = filteredRows.map((row) => [row.id, row.member_name || "", row.payment_date || "", row.channel || "", row.contract_route || "", row.execution_amount || 0, row.vat_amount || 0, row.refund_amount || 0, effectiveSales(row), row.team_member || "", row.consultant || "", row.memo || ""]);
@@ -464,7 +893,7 @@ export default function SalesPage() {
     <div className="premium-page flex h-full flex-col overflow-hidden">
       <div className="premium-header flex flex-shrink-0 items-center justify-between gap-4 px-5 py-4 md:px-7">
         <div className="min-w-0"><div className="flex items-center gap-2"><CreditCard size={20} style={{ color: "var(--accent-text)" }} /><h1 className="crm-title">통합매출관리</h1></div><p className="crm-subtitle mt-1">광고 집행, 분양회 매출, 연계매출, 환불 반영 실매출을 통합 관리합니다.</p></div>
-        <div className="flex flex-shrink-0 items-center gap-2"><button type="button" onClick={fetchRows} className="btn-premium btn-secondary"><RefreshCw size={14} />새로고침</button><button type="button" onClick={exportCsv} className="btn-premium btn-secondary"><Download size={14} />CSV</button><button type="button" onClick={openAdd} className="btn-premium btn-primary"><Plus size={14} />매출 등록</button></div>
+        <div className="flex flex-shrink-0 items-center gap-2"><button type="button" onClick={fetchRows} className="btn-premium btn-secondary"><RefreshCw size={14} />새로고침</button><button type="button" onClick={openHyosungModal} className="btn-premium btn-secondary"><UploadCloud size={14} />효성CMS 업로드</button><button type="button" onClick={exportCsv} className="btn-premium btn-secondary"><Download size={14} />CSV</button><button type="button" onClick={openAdd} className="btn-premium btn-primary"><Plus size={14} />매출 등록</button></div>
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
@@ -518,6 +947,17 @@ export default function SalesPage() {
       </main>
 
       {selectedItem && <DetailSlidePanel item={selectedItem} tab={detailTab} onTab={setDetailTab} onClose={() => setSelectedItem(null)} onEdit={openEdit} />}
+
+      {showHyosungModal && (
+        <HyosungUploadModal
+          rows={hyosungRows}
+          summary={hyosungSummary}
+          saving={hyosungSaving}
+          onFile={handleHyosungFile}
+          onImport={handleHyosungImport}
+          onClose={() => setShowHyosungModal(false)}
+        />
+      )}
 
       {showModal && (
         <div className="crm-modal-overlay" onClick={() => setShowModal(false)}>
