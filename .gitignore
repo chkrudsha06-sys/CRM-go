@@ -2,3 +2,6 @@
 node_modules/
 *.tsbuildinfo
 .env*
+# Hyosung CMS crawler local secrets and downloads
+tools/hyosung-cms-crawler/.env
+tools/hyosung-cms-crawler/downloads/
