@@ -155,6 +155,33 @@ function formatInputAmount(value: string) {
   return clean ? Number(clean).toLocaleString() : "";
 }
 
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      record.message,
+      record.details,
+      record.hint,
+      record.code ? `code: ${record.code}` : null,
+    ]
+      .filter(Boolean)
+      .map((item) => String(item));
+
+    if (parts.length > 0) return parts.join(" / ");
+
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+}
+
 function cellText(value: unknown) {
   if (value === null || value === undefined) return "";
   return String(value).trim();
@@ -767,7 +794,7 @@ export default function SalesPage() {
           .eq("provider", HYOSUNG_PROVIDER)
           .in("external_payment_id", ids);
 
-        if (error) throw error;
+        if (error) throw new Error(`중복 수납내역 조회 실패: ${getErrorMessage(error)}`);
         duplicateIds = new Set((data || []).map((row) => String(row.external_payment_id)));
       }
 
@@ -776,7 +803,7 @@ export default function SalesPage() {
       updateHyosungSummary(nextRows);
     } catch (error) {
       console.error("효성CMS 엑셀 파싱 실패:", error);
-      alert(`효성CMS 엑셀 파싱 실패: ${error instanceof Error ? error.message : String(error)}`);
+      alert(`효성CMS 엑셀 파싱 실패: ${getErrorMessage(error)}`);
     }
   };
 
@@ -820,12 +847,18 @@ export default function SalesPage() {
 
         const { data: paymentLog, error: logError } = await supabase
           .from("external_payment_records")
-          .insert(baseLogPayload)
-          .select("id")
+          .upsert(baseLogPayload, {
+            onConflict: "provider,external_payment_id",
+          })
+          .select("id,sales_record_id")
           .single();
 
-        if (logError) throw logError;
+        if (logError) throw new Error(`수집 로그 저장 실패: ${getErrorMessage(logError)}`);
         importedLogs += 1;
+
+        if (paymentLog?.sales_record_id) {
+          continue;
+        }
 
         if (!row.isPaid) continue;
 
@@ -848,7 +881,7 @@ export default function SalesPage() {
           .select("id")
           .single();
 
-        if (salesError) throw salesError;
+        if (salesError) throw new Error(`통합매출 생성 실패: ${getErrorMessage(salesError)}`);
         createdSales += 1;
 
         if (paymentLog?.id && salesRow?.id) {
@@ -856,7 +889,7 @@ export default function SalesPage() {
             .from("external_payment_records")
             .update({ sales_record_id: salesRow.id, import_status: "sales_created", import_message: "통합매출관리 자동 반영 완료" })
             .eq("id", paymentLog.id);
-          if (updateError) throw updateError;
+          if (updateError) throw new Error(`수집 로그 업데이트 실패: ${getErrorMessage(updateError)}`);
         }
       }
 
@@ -867,7 +900,7 @@ export default function SalesPage() {
       fetchRows();
     } catch (error) {
       console.error("효성CMS 수납내역 반영 실패:", error);
-      alert(`효성CMS 수납내역 반영 실패: ${error instanceof Error ? error.message : String(error)}`);
+      alert(`효성CMS 수납내역 반영 실패: ${getErrorMessage(error)}`);
     } finally {
       setHyosungSaving(false);
     }
