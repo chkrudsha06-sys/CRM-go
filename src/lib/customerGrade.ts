@@ -5,7 +5,8 @@ export type CustomerGrade =
   | "챌린저"
   | "추가 심사 후보"
   | "브론즈"
-  | "판정 보류";
+  | "판정 보류"
+  | "심사미진행";
 
 export type GradeAssessmentForm = {
   annual_site_count: string;
@@ -53,6 +54,7 @@ export const CUSTOMER_GRADE_OPTIONS: CustomerGrade[] = [
   "챌린저",
   "추가 심사 후보",
   "브론즈",
+  "심사미진행",
   "판정 보류",
 ];
 
@@ -285,6 +287,12 @@ export function calculateCustomerGrade(
       advertising,
     },
   };
+}
+
+export function hasGradeAssessmentInput(assessment: GradeAssessmentForm) {
+  return Object.values(assessment).some(
+    (item) => String(item || "").trim().length > 0,
+  );
 }
 
 export function stripGradeAssessmentBlock(memo: string | null | undefined) {

@@ -4,6 +4,7 @@ import { Award, BarChart3, ShieldCheck } from "lucide-react";
 import {
   calculateCustomerGrade,
   GRADE_SELECT_OPTIONS,
+  hasGradeAssessmentInput,
   type GradeAssessmentForm,
 } from "@/lib/customerGrade";
 
@@ -137,19 +138,13 @@ function ScorePill({
   );
 }
 
-function hasAssessmentInput(value: GradeAssessmentForm) {
-  return Object.values(value).some(
-    (item) => String(item || "").trim().length > 0,
-  );
-}
-
 export default function CustomerGradeAssessment({
   value,
   title,
   onChange,
 }: Props) {
   const result = calculateCustomerGrade(value, title);
-  const hasInput = hasAssessmentInput(value);
+  const hasInput = hasGradeAssessmentInput(value);
   const displayGrade = hasInput ? result.customerGrade : "입력 대기";
   const displayBasis = title ? `${result.roleBasis} 기준` : "직급 선택 전";
 

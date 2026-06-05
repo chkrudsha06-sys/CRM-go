@@ -23,6 +23,7 @@ import {
   calculateCustomerGrade,
   CUSTOMER_GRADE_OPTIONS,
   EMPTY_GRADE_ASSESSMENT,
+  hasGradeAssessmentInput,
   parseGradeAssessmentBlock,
   stripGradeAssessmentBlock,
   type GradeAssessmentForm,
@@ -57,6 +58,7 @@ const STORAGE_KEY = "crm_go_customer_db_local_v2";
 const INTAKE_ROUTES = ["분양의신DB", "완판트럭", "분양라인", "분양회MGM", "대협팀활동"];
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const MANAGEMENT_STAGES = ["리드", "프로스펙팅", "딜크로징", "리텐션"];
+const UNREVIEWED_GRADE = "심사미진행";
 
 const EMPTY_FORM: FormState = {
   name: "",
@@ -97,6 +99,7 @@ function badgeClass(value?: string | null) {
   if (value === "챌린저") return "grade-challenger";
   if (value === "브론즈") return "grade-bronze";
   if (value === "추가 심사 후보") return "grade-review";
+  if (value === UNREVIEWED_GRADE) return "grade-hold";
   if (value === "판정 보류") return "grade-hold";
   if (value === "분양의신DB") return "badge-purple";
   if (value === "완판트럭") return "badge-warning";
@@ -142,6 +145,18 @@ function SelectBox({
       />
     </div>
   );
+}
+
+function recordAssessment(record: CustomerDbRecord) {
+  return parseGradeAssessmentBlock(record.memo);
+}
+
+function isRecordUnreviewed(record: CustomerDbRecord) {
+  return !hasGradeAssessmentInput(recordAssessment(record));
+}
+
+function displayCustomerGrade(record: CustomerDbRecord) {
+  return isRecordUnreviewed(record) ? UNREVIEWED_GRADE : record.customer_grade;
 }
 
 function TextInput({
@@ -230,9 +245,14 @@ export default function ContactsPage() {
   const gradeStats = useMemo(() => {
     return CUSTOMER_GRADE_OPTIONS.map((grade) => ({
       grade,
-      count: records.filter((record) => record.customer_grade === grade).length,
+      count: records.filter((record) => displayCustomerGrade(record) === grade).length,
     }));
   }, [records]);
+
+  const unreviewedCount = useMemo(
+    () => records.filter(isRecordUnreviewed).length,
+    [records],
+  );
 
   const filteredRecords = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -247,7 +267,7 @@ export default function ContactsPage() {
             record.intake_route,
             record.management_stage,
             record.company,
-            record.customer_grade,
+            displayCustomerGrade(record),
             cleanMemo,
           ]
             .join(" ")
@@ -258,7 +278,7 @@ export default function ContactsPage() {
         matchesKeyword &&
         (!filterRoute || record.intake_route === filterRoute) &&
         (!filterStage || record.management_stage === filterStage) &&
-        (!filterGrade || record.customer_grade === filterGrade)
+        (!filterGrade || displayCustomerGrade(record) === filterGrade)
       );
     });
   }, [records, search, filterRoute, filterStage, filterGrade]);
@@ -313,6 +333,9 @@ export default function ContactsPage() {
 
     const now = new Date().toISOString();
     const gradeResult = calculateCustomerGrade(gradeAssessment, form.title);
+    const customerGrade = hasGradeAssessmentInput(gradeAssessment)
+      ? gradeResult.customerGrade
+      : UNREVIEWED_GRADE;
     const memoWithGrade = appendGradeAssessmentBlock(
       form.memo,
       gradeAssessment,
@@ -341,7 +364,7 @@ export default function ContactsPage() {
         intake_route: form.intake_route,
         management_stage: form.management_stage,
         company: form.company.trim(),
-        customer_grade: gradeResult.customerGrade,
+        customer_grade: customerGrade,
         memo: memoWithGrade,
         updated_at: now,
       };
@@ -364,7 +387,7 @@ export default function ContactsPage() {
       intake_route: form.intake_route,
       management_stage: form.management_stage,
       company: form.company.trim(),
-      customer_grade: gradeResult.customerGrade,
+      customer_grade: customerGrade,
       memo: memoWithGrade,
       created_at: now,
       updated_at: now,
@@ -477,7 +500,7 @@ export default function ContactsPage() {
       )}
 
       <div className="w-full space-y-5 px-4 py-5 sm:px-5 md:px-6 lg:px-7 2xl:px-9">
-        <header className="premium-card relative overflow-hidden rounded-[26px] p-5 sm:p-6 xl:p-7">
+        <header className="premium-card relative overflow-hidden rounded-[24px] p-4 sm:p-5">
           <div
             className="absolute right-0 top-0 h-56 w-56 rounded-full blur-3xl"
             style={{ background: "var(--accent-bg)" }}
@@ -487,16 +510,16 @@ export default function ContactsPage() {
             style={{ background: "var(--cyan-bg)" }}
           />
 
-          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-purple sm:text-sm">
+              <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs font-[850] badge-purple">
                 <Database className="h-4 w-4 flex-none" />
                 <span className="truncate">고객DB · 자동등급 판정 적용 · Supabase 미연동 임시 작업영역</span>
               </div>
-              <h1 className="crm-title text-[34px] font-[930] leading-tight tracking-[-0.06em] sm:text-[42px]">
+              <h1 className="crm-title text-[30px] font-[930] leading-tight tracking-[-0.06em] sm:text-[36px]">
                 고객DB
               </h1>
-              <p className="crm-subtitle mt-3 max-w-3xl text-sm font-[620] leading-7 sm:text-base">
+              <p className="crm-subtitle mt-2 max-w-3xl text-sm font-[620] leading-6">
                 고객등록 메뉴 구조를 기반으로, 유입경로별 DB 수취 현황과 자동 고객등급 판정 결과를 함께 관리합니다.
               </p>
             </div>
@@ -504,7 +527,7 @@ export default function ContactsPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="btn-premium btn-primary h-12 shrink-0"
+              className="btn-premium btn-primary h-11 shrink-0"
             >
               <Plus className="h-4 w-4" />
               신규고객등록
@@ -512,28 +535,31 @@ export default function ContactsPage() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(320px,0.95fr)_minmax(0,2.2fr)]">
-          <div className="premium-card rounded-[24px] p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-4">
+        <section className="grid grid-cols-1 gap-3 2xl:grid-cols-[minmax(300px,0.82fr)_minmax(0,2.4fr)]">
+          <div className="premium-card rounded-[20px] p-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="crm-meta">전체 수취 DB</p>
                 <p
-                  className="mt-2 text-[42px] font-[930] leading-none tracking-[-0.07em] sm:text-5xl"
+                  className="mt-1.5 text-[34px] font-[930] leading-none tracking-[-0.07em] sm:text-[38px]"
                   style={{ color: "var(--text-strong)" }}
                 >
                   {records.length.toLocaleString()}건
                 </p>
+                <p className="crm-tiny mt-2">
+                  미심사 <span className="font-[920]" style={{ color: "var(--text-strong)" }}>{unreviewedCount.toLocaleString()}건</span>
+                </p>
               </div>
-              <div className="premium-icon-lg">
-                <ClipboardList className="h-6 w-6" />
+              <div className="premium-icon-lg h-10 w-10">
+                <ClipboardList className="h-5 w-5" />
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {gradeStats.map((item) => (
                 <div
                   key={item.grade}
-                  className="rounded-[18px] p-3 text-center sm:p-4"
+                  className="rounded-[14px] px-2.5 py-2.5 text-center"
                   style={{
                     background: "var(--surface-2)",
                     border: "1px solid var(--border)",
@@ -541,7 +567,7 @@ export default function ContactsPage() {
                 >
                   <p className="crm-tiny truncate">{item.grade}</p>
                   <p
-                    className="mt-2 text-2xl font-[920]"
+                    className="mt-1 text-xl font-[920]"
                     style={{ color: "var(--text-strong)" }}
                   >
                     {item.count}
@@ -551,25 +577,25 @@ export default function ContactsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
             {routeStats.map((item) => (
-              <div key={item.route} className="premium-card min-w-0 rounded-[24px] p-5">
-                <div className="flex items-start justify-between gap-3">
+              <div key={item.route} className="premium-card min-w-0 rounded-[18px] p-3.5">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="crm-meta truncate">{item.route}</p>
                     <p
-                      className="mt-3 text-3xl font-[930] tracking-[-0.06em]"
+                      className="mt-2 text-2xl font-[930] tracking-[-0.06em]"
                       style={{ color: "var(--text-strong)" }}
                     >
                       {item.count}건
                     </p>
                   </div>
-                  <span className={`badge-premium ${badgeClass(item.route)}`}>
+                  <span className={`badge-premium px-2 py-1 text-[11px] ${badgeClass(item.route)}`}>
                     {item.percent}%
                   </span>
                 </div>
                 <div
-                  className="mt-5 h-2 overflow-hidden rounded-full"
+                  className="mt-3 h-1.5 overflow-hidden rounded-full"
                   style={{ background: "var(--surface-3)" }}
                 >
                   <div
@@ -619,8 +645,8 @@ export default function ContactsPage() {
                   등록저장 또는 수정저장을 누르면 실제로 들어간 값이 아래에 표시됩니다.
                 </p>
               </div>
-              <span className={`badge-premium ${badgeClass(lastSavedRecord.customer_grade)}`}>
-                {lastSavedRecord.customer_grade}
+              <span className={`badge-premium ${badgeClass(displayCustomerGrade(lastSavedRecord))}`}>
+                {displayCustomerGrade(lastSavedRecord)}
               </span>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -629,7 +655,7 @@ export default function ContactsPage() {
               <PreviewItem label="연락처" value={lastSavedRecord.phone} />
               <PreviewItem label="유입경로" value={lastSavedRecord.intake_route} />
               <PreviewItem label="관리구간" value={lastSavedRecord.management_stage} />
-              <PreviewItem label="자동등급" value={lastSavedRecord.customer_grade} />
+              <PreviewItem label="자동등급" value={displayCustomerGrade(lastSavedRecord)} />
               <PreviewItem label="등록일" value={dateLabel(lastSavedRecord.created_at)} />
               <PreviewItem label="저장위치" value="브라우저 localStorage" />
             </div>
@@ -740,8 +766,8 @@ export default function ContactsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
-                          {fmt(record.customer_grade)}
+                        <span className={`badge-premium ${badgeClass(displayCustomerGrade(record))}`}>
+                          {fmt(displayCustomerGrade(record))}
                         </span>
                       </td>
                       <td className="max-w-[260px] px-5 py-4">
@@ -803,8 +829,8 @@ export default function ContactsPage() {
                     <span className={`badge-premium ${badgeClass(record.management_stage)}`}>
                       {fmt(record.management_stage)}
                     </span>
-                    <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
-                      {fmt(record.customer_grade)}
+                    <span className={`badge-premium ${badgeClass(displayCustomerGrade(record))}`}>
+                      {fmt(displayCustomerGrade(record))}
                     </span>
                   </div>
 
@@ -1023,6 +1049,8 @@ function CustomerDetailPanel({
   const cleanMemo = stripGradeAssessmentBlock(record.memo);
   const assessment = parseGradeAssessmentBlock(record.memo);
   const result = calculateCustomerGrade(assessment, record.title);
+  const isUnreviewed = !hasGradeAssessmentInput(assessment);
+  const visibleGrade = isUnreviewed ? UNREVIEWED_GRADE : result.customerGrade;
 
   return (
     <div className="fixed inset-0 z-40">
@@ -1058,8 +1086,8 @@ function CustomerDetailPanel({
         <div className="slide-panel-header flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap gap-2">
-              <span className={`badge-premium ${badgeClass(record.customer_grade)}`}>
-                {fmt(record.customer_grade)}
+              <span className={`badge-premium ${badgeClass(visibleGrade)}`}>
+                {fmt(visibleGrade)}
               </span>
               <span className={`badge-premium ${badgeClass(record.intake_route)}`}>
                 {fmt(record.intake_route)}
@@ -1123,7 +1151,7 @@ function CustomerDetailPanel({
               <DetailItem label="유입경로" value={record.intake_route} badge />
               <DetailItem label="관리구간" value={record.management_stage} badge />
               <DetailItem label="소속회사" value={record.company} />
-              <DetailItem label="자동등급" value={record.customer_grade} badge />
+              <DetailItem label="자동등급" value={visibleGrade} badge />
               <DetailItem label="등록일" value={dateLabel(record.created_at)} />
               <DetailItem label="수정일" value={dateLabel(record.updated_at)} />
               <DetailItem label="저장위치" value="브라우저 localStorage" />
@@ -1137,8 +1165,8 @@ function CustomerDetailPanel({
                 <p className="crm-card-title">자동등급 판정 결과</p>
                 <p className="crm-tiny mt-1">저장 당시 입력된 판정 항목을 기준으로 다시 계산한 결과입니다.</p>
               </div>
-              <span className={`badge-premium ${badgeClass(result.customerGrade)}`}>
-                {result.customerGrade} · {result.totalScore}/120점
+              <span className={`badge-premium ${badgeClass(visibleGrade)}`}>
+                {isUnreviewed ? visibleGrade : `${visibleGrade} · ${result.totalScore}/120점`}
               </span>
             </div>
 
@@ -1157,7 +1185,9 @@ function CustomerDetailPanel({
                 borderColor: "var(--border)",
               }}
             >
-              {result.decisionMessage}
+              {isUnreviewed
+                ? "등급 판정 항목이 아직 입력되지 않았습니다."
+                : result.decisionMessage}
             </div>
           </section>
 
