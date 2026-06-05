@@ -57,6 +57,7 @@ const STORAGE_KEY = "crm_go_customer_db_local_v2";
 
 const INTAKE_ROUTES = [
   "분양의신DB",
+  "컨설턴트VIP DB",
   "완판트럭",
   "분양라인",
   "분양회MGM",
@@ -125,6 +126,7 @@ function badgeClass(value?: string | null) {
   if (value === UNREVIEWED_GRADE) return "grade-hold";
   if (value === "판정 보류") return "grade-hold";
   if (value === "분양의신DB") return "badge-purple";
+  if (value === "컨설턴트VIP DB") return "badge-info";
   if (value === "완판트럭") return "badge-warning";
   if (value === "분양라인") return "badge-cyan";
   if (value === "분양회MGM") return "badge-success";
@@ -175,11 +177,29 @@ function recordAssessment(record: CustomerDbRecord) {
 }
 
 function isRecordUnreviewed(record: CustomerDbRecord) {
+  const storedGrade = String(record.customer_grade || "").trim();
+
+  if (storedGrade && storedGrade !== UNREVIEWED_GRADE) {
+    return false;
+  }
+
   return !hasGradeAssessmentInput(recordAssessment(record));
 }
 
 function displayCustomerGrade(record: CustomerDbRecord) {
-  return isRecordUnreviewed(record) ? UNREVIEWED_GRADE : record.customer_grade;
+  const storedGrade = String(record.customer_grade || "").trim();
+
+  if (storedGrade && storedGrade !== UNREVIEWED_GRADE) {
+    return storedGrade;
+  }
+
+  const assessment = recordAssessment(record);
+
+  if (hasGradeAssessmentInput(assessment)) {
+    return calculateCustomerGrade(assessment, record.title).customerGrade;
+  }
+
+  return UNREVIEWED_GRADE;
 }
 
 function TextInput({
@@ -224,8 +244,6 @@ export default function ContactsPage() {
   });
   const [toast, setToast] = useState("");
   const [formError, setFormError] = useState("");
-  const [lastSavedRecord, setLastSavedRecord] =
-    useState<CustomerDbRecord | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<CustomerDbRecord | null>(
     null,
   );
@@ -416,7 +434,6 @@ export default function ContactsPage() {
       };
 
       console.log("[고객DB 수정 저장값]", nextUpdatedRecord);
-      setLastSavedRecord(nextUpdatedRecord);
       setRecords((prev) =>
         prev.map((record) =>
           record.id === editId ? nextUpdatedRecord : record,
@@ -442,7 +459,6 @@ export default function ContactsPage() {
     };
 
     console.log("[고객DB 신규 저장값]", nextRecord);
-    setLastSavedRecord(nextRecord);
     setRecords((prev) => [nextRecord, ...prev]);
     showToast("신규 고객 DB가 등록되었습니다.");
     resetForm();
@@ -712,47 +728,6 @@ export default function ContactsPage() {
               </button>
             </div>
           </section>
-
-          {lastSavedRecord && (
-            <section className="premium-card rounded-[22px] p-4 sm:p-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="crm-card-title">최근 저장 확인</p>
-                  <p className="crm-tiny mt-1">
-                    등록저장 또는 수정저장을 누르면 실제로 들어간 값이 아래에
-                    표시됩니다.
-                  </p>
-                </div>
-                <span
-                  className={`badge-premium ${badgeClass(displayCustomerGrade(lastSavedRecord))}`}
-                >
-                  {displayCustomerGrade(lastSavedRecord)}
-                </span>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <PreviewItem label="고객명" value={lastSavedRecord.name} />
-                <PreviewItem label="직급" value={lastSavedRecord.title} />
-                <PreviewItem label="연락처" value={lastSavedRecord.phone} />
-                <PreviewItem
-                  label="유입경로"
-                  value={lastSavedRecord.intake_route}
-                />
-                <PreviewItem
-                  label="관리구간"
-                  value={lastSavedRecord.management_stage}
-                />
-                <PreviewItem
-                  label="자동등급"
-                  value={displayCustomerGrade(lastSavedRecord)}
-                />
-                <PreviewItem
-                  label="등록일"
-                  value={dateLabel(lastSavedRecord.created_at)}
-                />
-                <PreviewItem label="저장위치" value="브라우저 localStorage" />
-              </div>
-            </section>
-          )}
 
           <section className="premium-card overflow-hidden rounded-[24px]">
             <div
@@ -1102,56 +1077,6 @@ export default function ContactsPage() {
                     {formError}
                   </div>
                 )}
-
-                <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                  <div
-                    className="rounded-[18px] border px-4 py-4"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border)",
-                    }}
-                  >
-                    <p className="crm-card-title text-[15px]">
-                      현재 입력값 미리보기
-                    </p>
-                    <div className="mt-3 grid gap-2">
-                      <PreviewItem label="고객명" value={form.name} />
-                      <PreviewItem label="직급" value={form.title} />
-                      <PreviewItem label="연락처" value={form.phone} />
-                      <PreviewItem label="유입경로" value={form.intake_route} />
-                      <PreviewItem
-                        label="관리구간"
-                        value={form.management_stage}
-                      />
-                      <PreviewItem label="소속회사" value={form.company} />
-                    </div>
-                  </div>
-
-                  <div
-                    className="rounded-[18px] border px-4 py-4"
-                    style={{
-                      background: "var(--surface-2)",
-                      borderColor: "var(--border)",
-                    }}
-                  >
-                    <p className="crm-card-title text-[15px]">저장 방식</p>
-                    <p
-                      className="mt-3 text-sm font-[720] leading-6"
-                      style={{ color: "var(--text-subtle)" }}
-                    >
-                      현재 고객DB 메뉴는 Supabase와 연결하지 않은 임시
-                      화면입니다. 등록 데이터는 브라우저 localStorage에만
-                      저장되며, 기존 CRM 데이터에는 영향을 주지 않습니다.
-                    </p>
-                    <p
-                      className="mt-3 text-xs font-[800]"
-                      style={{ color: "var(--text-faint)" }}
-                    >
-                      개발자도구 Console에는 [고객DB 신규 저장값] 또는 [고객DB
-                      수정 저장값]으로 전체 저장 객체가 표시됩니다.
-                    </p>
-                  </div>
-                </div>
               </div>
 
               <div className="slide-panel-footer flex items-center justify-end gap-2">
