@@ -298,6 +298,8 @@ export function hasGradeAssessmentInput(assessment: GradeAssessmentForm) {
 export function stripGradeAssessmentBlock(memo: string | null | undefined) {
   return String(memo ?? "")
     .replace(new RegExp(`${START}[\\s\\S]*?${END}`, "g"), "")
+    .replace(/\[\[CRM_GRADE_ASSESSMENT\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMENT\]\]|$)/g, "")
+    .replace(/\[\[CRM_GRADE_ASSESSMEN[^\]]*\]\][\s\S]*?(?:\[\[\/CRM_GRADE_ASSESSMEN[^\]]*\]\]|$)/g, "")
     .trim();
 }
 
@@ -307,6 +309,11 @@ export function appendGradeAssessmentBlock(
   result: GradeResult,
 ) {
   const cleanMemo = stripGradeAssessmentBlock(memo);
+
+  if (!hasGradeAssessmentInput(assessment)) {
+    return cleanMemo;
+  }
+
   const block: StoredAssessment = {
     assessment,
     result,
