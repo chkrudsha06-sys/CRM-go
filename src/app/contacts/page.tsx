@@ -202,6 +202,31 @@ function displayCustomerGrade(record: CustomerDbRecord) {
   return UNREVIEWED_GRADE;
 }
 
+function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
+  const assessment = recordAssessment(record);
+  const cleanMemo = stripGradeAssessmentBlock(record.memo);
+  const hasAssessment = hasGradeAssessmentInput(assessment);
+
+  if (!hasAssessment) {
+    return {
+      ...record,
+      customer_grade: UNREVIEWED_GRADE,
+      memo: cleanMemo,
+    };
+  }
+
+  const calculatedGrade = calculateCustomerGrade(assessment, record.title).customerGrade;
+  const storedGrade = String(record.customer_grade || "").trim();
+
+  return {
+    ...record,
+    customer_grade:
+      storedGrade && storedGrade !== UNREVIEWED_GRADE
+        ? storedGrade
+        : calculatedGrade,
+  };
+}
+
 function TextInput({
   value,
   onChange,
@@ -258,7 +283,7 @@ export default function ContactsPage() {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as CustomerDbRecord[];
-        if (Array.isArray(parsed)) setRecords(parsed);
+        if (Array.isArray(parsed)) setRecords(parsed.map(normalizeRecordGrade));
       }
     } catch {
       setRecords([]);
@@ -396,15 +421,15 @@ export default function ContactsPage() {
     }
 
     const now = new Date().toISOString();
+    const hasAssessment = hasGradeAssessmentInput(gradeAssessment);
     const gradeResult = calculateCustomerGrade(gradeAssessment, form.title);
-    const customerGrade = hasGradeAssessmentInput(gradeAssessment)
+    const customerGrade = hasAssessment
       ? gradeResult.customerGrade
       : UNREVIEWED_GRADE;
-    const memoWithGrade = appendGradeAssessmentBlock(
-      form.memo,
-      gradeAssessment,
-      gradeResult,
-    );
+    const cleanMemo = stripGradeAssessmentBlock(form.memo);
+    const memoWithGrade = hasAssessment
+      ? appendGradeAssessmentBlock(cleanMemo, gradeAssessment, gradeResult)
+      : cleanMemo;
 
     if (editId) {
       const updatedRecord = records.find((record) => record.id === editId);
@@ -1316,7 +1341,6 @@ function CustomerDetailPanel({
               <DetailItem label="자동등급" value={visibleGrade} badge />
               <DetailItem label="등록일" value={dateLabel(record.created_at)} />
               <DetailItem label="수정일" value={dateLabel(record.updated_at)} />
-              <DetailItem label="저장위치" value="브라우저 localStorage" />
               <DetailItem label="등록 ID" value={`#${record.id}`} />
             </div>
           </section>
