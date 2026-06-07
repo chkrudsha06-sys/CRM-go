@@ -1673,16 +1673,17 @@ export default function DailyActivityPage() {
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[980px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
+                <table className="crm-table min-w-[1120px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
+                    <col className="w-[11%]" />
                     <col className="w-[13%]" />
-                    <col className="w-[15%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[12%]" />
                     <col className="w-[13%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[14%]" />
-                    <col className="w-[15%]" />
                     <col className="w-[13%]" />
-                    <col className="w-[15%]" />
                   </colgroup>
                   <thead>
                     <tr>
@@ -1693,13 +1694,14 @@ export default function DailyActivityPage() {
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>콜드톡 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>브론즈DB 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>1%DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>특발성활동목표 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>수정일</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleDetailRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center align-middle">
+                        <td colSpan={9} className="text-center align-middle">
                           기록이 없습니다.
                         </td>
                       </tr>
@@ -1737,6 +1739,9 @@ export default function DailyActivityPage() {
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
+                          </td>
+                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
+                            {activeWorkItems(normalizeWorkItems(row.goal_work_items)).length.toLocaleString()} / {activeWorkItems(normalizeWorkItems(row.goal_work_items)).filter((item) => item.done).length.toLocaleString()}
                           </td>
                           <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             {new Date(row.updated_at).toLocaleString("ko-KR", {
