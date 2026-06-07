@@ -2506,3 +2506,68 @@ button,
     font-size: 14px !important;
   }
 }
+/* =========================================================
+   STEP 8 - VIP Activity DB / Contacts UI bridge
+   Applies common avatar, table center alignment, detail panel polish
+   ========================================================= */
+
+.crm-avatar-v2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 15px;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 930;
+  letter-spacing: -0.04em;
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 10px 24px rgba(0,0,0,.16);
+}
+
+.crm-avatar-v2.large {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  border-radius: 18px;
+  font-size: 18px;
+}
+
+[data-theme="light"] .crm-avatar-v2,
+.light .crm-avatar-v2 {
+  color: #1f2937;
+  border-color: rgba(15, 23, 42, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.80), 0 10px 22px rgba(15,23,42,.08);
+}
+
+.vip-activity-shell table th,
+.vip-activity-shell table td,
+.premium-page table th,
+.premium-page table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.vip-activity-shell table td:first-child,
+.premium-page table td:first-child {
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .crm-avatar-v2 {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 13px;
+  }
+
+  .crm-avatar-v2.large {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 16px;
+  }
+}
