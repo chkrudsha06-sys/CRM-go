@@ -1770,3 +1770,216 @@ table td {
     border-radius: 22px !important;
   }
 }
+
+/* =========================================================
+   CRM UI STEP 4 - 메뉴 전체 리스트/테이블/카드 정렬 고급화
+   적용 위치: src/app/globals.css 맨 아래 추가
+   목적: 각 메뉴별로 흩어진 table/list/card UI를 공통 SaaS CRM 톤으로 통일
+   ========================================================= */
+
+/* 전체 페이지 본문 SaaS 배경/여백 기준 */
+.crm-main-shell {
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.08), transparent 28rem),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.86));
+}
+
+[data-theme="dark"] .crm-main-shell,
+.dark .crm-main-shell {
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.12), transparent 30rem),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(15, 23, 42, 0.96));
+}
+
+/* 메뉴별 페이지 공통 컨테이너 안정화 */
+.crm-main-shell > div,
+.crm-main-shell main,
+.crm-page-shell {
+  min-width: 0;
+}
+
+/* 기존 페이지의 흩어진 흰색/다크 카드들을 CRM 카드 톤으로 보정 */
+.crm-main-shell .rounded-2xl,
+.crm-main-shell .rounded-3xl,
+.crm-main-shell .card,
+.crm-main-shell [class*="shadow"] {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* 모든 메뉴의 table 기본 중앙정렬 */
+.crm-main-shell table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.crm-main-shell th,
+.crm-main-shell td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.crm-main-shell thead th {
+  height: 44px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-muted, #64748b);
+  background: rgba(248, 250, 252, 0.82);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .crm-main-shell thead th,
+.dark .crm-main-shell thead th {
+  background: rgba(15, 23, 42, 0.86);
+  color: rgba(203, 213, 225, 0.78);
+}
+
+.crm-main-shell tbody td {
+  height: 56px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.crm-main-shell tbody tr {
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.crm-main-shell tbody tr:hover {
+  background: rgba(99, 102, 241, 0.045);
+}
+
+[data-theme="dark"] .crm-main-shell tbody tr:hover,
+.dark .crm-main-shell tbody tr:hover {
+  background: rgba(129, 140, 248, 0.08);
+}
+
+/* 이름/고객명 칸은 가운데 정렬 유지하면서 내용은 균형 있게 */
+.crm-main-shell td:has(.crm-avatar),
+.crm-main-shell td:has([class*="avatar"]),
+.crm-main-shell td:has([class*="Avatar"]) {
+  text-align: center !important;
+}
+
+.crm-main-shell td .crm-name-cell,
+.crm-main-shell .crm-name-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* input/select/textarea 공통 높이와 가독성 */
+.crm-main-shell input,
+.crm-main-shell select,
+.crm-main-shell textarea {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.crm-main-shell input::placeholder,
+.crm-main-shell textarea::placeholder {
+  color: rgba(100, 116, 139, 0.72);
+}
+
+/* 버튼 높이/폰트 통일 */
+.crm-main-shell button {
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+/* 기존 배지류 pill 통일 */
+.crm-main-shell .badge,
+.crm-main-shell [class*="badge-"],
+.crm-main-shell [class*="grade-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 0 10px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+
+/* 리스트 카드형 요소 정렬감 보정 */
+.crm-main-shell .crm-card,
+.crm-main-shell .crm-panel,
+.crm-main-shell .crm-surface {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+[data-theme="dark"] .crm-main-shell .crm-card,
+[data-theme="dark"] .crm-main-shell .crm-panel,
+[data-theme="dark"] .crm-main-shell .crm-surface,
+.dark .crm-main-shell .crm-card,
+.dark .crm-main-shell .crm-panel,
+.dark .crm-main-shell .crm-surface {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.74);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.26);
+}
+
+/* 상단 타이틀/설명 텍스트 최신 SaaS 톤 */
+.crm-main-shell h1 {
+  font-size: clamp(24px, 2.4vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 1.15;
+}
+
+.crm-main-shell h2 {
+  font-size: clamp(19px, 1.6vw, 24px);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+}
+
+.crm-main-shell p {
+  letter-spacing: -0.025em;
+}
+
+/* 모바일: 테이블 가로 스크롤 안정화 */
+@media (max-width: 768px) {
+  .crm-main-shell {
+    padding-bottom: 84px;
+  }
+
+  .crm-main-shell table {
+    min-width: 760px;
+  }
+
+  .crm-main-shell th,
+  .crm-main-shell td {
+    font-size: 12px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .crm-main-shell h1 {
+    font-size: 24px;
+  }
+
+  .crm-main-shell h2 {
+    font-size: 19px;
+  }
+
+  .crm-main-shell input,
+  .crm-main-shell select,
+  .crm-main-shell textarea,
+  .crm-main-shell button {
+    min-height: 42px;
+  }
+}
