@@ -1000,8 +1000,8 @@ export default function SalesPage() {
   };
 
   return (
-    <div className="premium-page flex h-full flex-col overflow-hidden">
-      <div className="premium-header flex flex-shrink-0 items-center justify-between gap-4 px-5 py-4 md:px-7">
+    <div className="premium-page sales-modern-page flex h-full flex-col overflow-hidden">
+      <div className="premium-header sales-modern-header flex flex-shrink-0 items-center justify-between gap-4 px-5 py-4 md:px-7">
         <div className="min-w-0"><div className="flex items-center gap-2"><CreditCard size={20} style={{ color: "var(--accent-text)" }} /><h1 className="crm-title">통합매출관리</h1></div><p className="crm-subtitle mt-1">광고 집행, 분양회 매출, 연계매출, 환불 반영 실매출을 통합 관리합니다.</p></div>
         <div className="flex flex-shrink-0 items-center gap-2"><button type="button" onClick={fetchRows} className="btn-premium btn-secondary"><RefreshCw size={14} />새로고침</button><button type="button" onClick={openHyosungModal} className="btn-premium btn-secondary"><UploadCloud size={14} />효성CMS 업로드</button><button type="button" onClick={exportCsv} className="btn-premium btn-secondary"><Download size={14} />CSV</button><button type="button" onClick={openAdd} className="btn-premium btn-primary"><Plus size={14} />매출 등록</button></div>
       </div>
@@ -1017,7 +1017,7 @@ export default function SalesPage() {
         </div>
       </div>
 
-      <div className="premium-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
+      <div className="premium-filterbar sales-modern-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-full border px-3 text-[13px] font-bold outline-none" style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }} />
         <div className="relative w-full sm:w-[340px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="고객명, 채널, 담당자, 메모 검색..." className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none" /></div>
         <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="계약경로" />
@@ -1028,11 +1028,11 @@ export default function SalesPage() {
         <span className="ml-auto hidden text-[12px] font-bold md:block" style={{ color: "var(--text-faint)" }}>{filteredRows.length.toLocaleString()} / {rows.length.toLocaleString()}건</span>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
+      <main className="sales-modern-main min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
         {loading ? <div className="flex h-full items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} /></div> : filteredRows.length === 0 ? <div className="flex h-full items-center justify-center"><div className="premium-card p-8"><EmptyState icon="💳" title="표시할 매출 데이터가 없습니다" description="월 또는 필터 조건을 변경하거나 새 매출을 등록하세요" actionLabel="매출 등록" onAction={openAdd} /></div></div> : (
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_310px]">
             <section className="min-h-0 overflow-hidden">
-              <div className="crm-table-wrap hidden h-full overflow-auto xl:block">
+              <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
                 <table className="crm-table min-w-[1380px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[120px]">채널</th><th className="w-[120px]">계약경로</th><th className="w-[150px]">집행금액</th><th className="w-[150px]">VAT금액</th><th className="w-[140px]">환불금액</th><th className="w-[160px]">실매출</th><th className="w-[120px]">담당자</th><th className="w-[120px]">컨설턴트</th><th className="w-[80px]"></th></tr></thead><tbody>
                   {filteredRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td><div className="crm-row-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0"><div className="crm-row-main truncate">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate">ID {row.id}</div></div></div></td>
