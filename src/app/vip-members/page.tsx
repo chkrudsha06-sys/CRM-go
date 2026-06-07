@@ -9,6 +9,7 @@ import {
 } from "react";
 import BankAccountDialog from "@/components/BankAccountDialog";
 import EmptyState from "@/components/EmptyState";
+import { Avatar } from "@/components/ui";
 import { supabase } from "@/lib/supabase";
 import {
   Award,
@@ -496,14 +497,11 @@ function VipTable({
 
                     <TableCell>
                       <div className="flex min-w-0 items-center justify-center gap-2 text-center">
-                        <div
-                          className="hidden h-7 w-7 flex-shrink-0 items-center justify-center rounded-[10px] text-[11px] font-[760] text-white shadow-sm min-[1480px]:flex"
-                          style={{
-                            background: `linear-gradient(135deg, ${stageColor(contact.meeting_result)}, var(--accent))`,
-                          }}
-                        >
-                          {getInitial(contact.name)}
-                        </div>
+                        <Avatar
+                          name={contact.name}
+                          size="sm"
+                          className="hidden min-[1480px]:flex"
+                        />
                         <div className="min-w-0 text-center">
                           <p className="truncate whitespace-nowrap text-center text-[12.5px] font-[720] leading-[1.15]" style={{ color: "var(--text-strong)" }}>
                             {contact.name}
@@ -574,14 +572,7 @@ function VipTable({
               >
                 <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:justify-between">
                   <div className="flex min-w-0 items-center justify-center gap-2 text-center">
-                    <div
-                      className="crm-avatar flex-shrink-0"
-                      style={{
-                        background: `linear-gradient(135deg, ${stageColor(contact.meeting_result)}, var(--accent))`,
-                      }}
-                    >
-                      {getInitial(contact.name)}
-                    </div>
+                    <Avatar name={contact.name} size="md" />
                     <div className="min-w-0 text-center">
                       <div className="flex flex-wrap items-center justify-center gap-2">
                         <p className="truncate text-center text-[15px] font-[760]" style={{ color: "var(--text-strong)" }}>
@@ -767,8 +758,8 @@ export default function VipMembersPage() {
   };
 
   return (
-    <div className="premium-page flex h-full flex-col overflow-hidden">
-      <header className="premium-header flex-shrink-0 px-5 py-4 lg:px-7">
+    <div className="crm-modern-page premium-page flex h-full flex-col overflow-hidden">
+      <header className="crm-modern-header premium-header flex-shrink-0 px-5 py-4 lg:px-7">
         <div className="premium-shell flex flex-col gap-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0 text-center">
@@ -890,7 +881,7 @@ export default function VipMembersPage() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-auto px-5 py-5 lg:px-7">
+      <main className="crm-modern-main min-h-0 flex-1 overflow-auto px-5 py-5 lg:px-7">
         <div className="premium-shell space-y-4">
           {loading ? (
             <section className="premium-card">
