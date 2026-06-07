@@ -3600,3 +3600,174 @@ main.crm-main-shell table td:first-child {
     font-size: 12px;
   }
 }
+
+/* =========================================================
+   STEP 18 — Pipeline3 / Kanban CRM Premium UI Polish
+   - Safe append only
+   - Applies to existing classes used in src/app/pipeline3/page.tsx
+   ========================================================= */
+
+/* Pipeline page shell */
+.premium-page {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 32%),
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.07), transparent 30%),
+    var(--crm-app-bg, #f7f8fb);
+  color: var(--text-main, #111827);
+}
+
+.dark .premium-page {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(129, 140, 248, 0.12), transparent 32%),
+    var(--crm-app-bg, #070b12);
+  color: var(--text-main, #f8fafc);
+}
+
+/* Header: Attio/Linear-like calm SaaS surface */
+.premium-header {
+  position: relative;
+  border-bottom: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+  background: color-mix(in srgb, var(--crm-panel-bg, #ffffff) 86%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.dark .premium-header {
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+  background: color-mix(in srgb, var(--crm-panel-bg, #0f172a) 82%, transparent);
+}
+
+/* Kanban columns */
+.premium-page .grid > section.premium-card {
+  border: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.72)),
+    var(--crm-card-bg, #ffffff);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+}
+
+.dark .premium-page .grid > section.premium-card {
+  border-color: rgba(148, 163, 184, 0.14);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.78)),
+    var(--crm-card-bg, #111827);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.3);
+}
+
+/* Customer cards inside pipeline */
+.premium-page button[class*="rounded-[16px]"] {
+  border-color: var(--border-subtle, rgba(15, 23, 42, 0.08)) !important;
+  background: color-mix(in srgb, var(--crm-card-bg, #ffffff) 94%, var(--accent, #2563eb) 6%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.premium-page button[class*="rounded-[16px]"]:hover {
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 36%, var(--border-subtle, #e5e7eb));
+  background: color-mix(in srgb, var(--crm-card-bg, #ffffff) 88%, var(--accent, #2563eb) 12%);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.09);
+}
+
+.dark .premium-page button[class*="rounded-[16px]"] {
+  border-color: rgba(148, 163, 184, 0.13) !important;
+  background: color-mix(in srgb, var(--crm-card-bg, #111827) 88%, var(--accent, #60a5fa) 12%);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+}
+
+.dark .premium-page button[class*="rounded-[16px]"]:hover {
+  border-color: rgba(96, 165, 250, 0.42) !important;
+  background: color-mix(in srgb, var(--crm-card-bg, #111827) 78%, var(--accent, #60a5fa) 22%);
+}
+
+/* Inputs / filters */
+.premium-page .crm-search,
+.premium-page input,
+.premium-page select,
+.premium-page textarea {
+  border: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.1));
+  background: var(--crm-input-bg, #ffffff);
+  color: var(--text-main, #111827);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.premium-page .crm-search:focus,
+.premium-page input:focus,
+.premium-page select:focus,
+.premium-page textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 62%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
+}
+
+.dark .premium-page .crm-search,
+.dark .premium-page input,
+.dark .premium-page select,
+.dark .premium-page textarea {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+}
+
+/* Detail slide panel */
+.premium-page .slide-panel-header,
+.premium-page .slide-panel-footer {
+  border-color: var(--border-subtle, rgba(15, 23, 42, 0.08));
+  background: color-mix(in srgb, var(--crm-panel-bg, #ffffff) 90%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.dark .premium-page .slide-panel-header,
+.dark .premium-page .slide-panel-footer {
+  border-color: rgba(148, 163, 184, 0.15);
+  background: color-mix(in srgb, var(--crm-panel-bg, #0f172a) 86%, transparent);
+}
+
+/* Badges become consistent across kanban/detail */
+.premium-page .badge-premium {
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 999px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Better scrollbars for dense Kanban columns */
+.premium-page *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.premium-page *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted, #64748b) 28%, transparent);
+  background-clip: content-box;
+}
+
+.premium-page *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Mobile: pipeline should become readable card flow */
+@media (max-width: 768px) {
+  .premium-page {
+    min-height: 100dvh;
+  }
+
+  .premium-page .premium-header {
+    padding: 16px !important;
+  }
+
+  .premium-page .crm-title {
+    font-size: 22px !important;
+    letter-spacing: -0.05em;
+  }
+
+  .premium-page .crm-subtitle {
+    font-size: 12.5px !important;
+    line-height: 1.55;
+  }
+
+  .premium-page .grid.h-full.min-w-[1180px] {
+    min-width: 980px !important;
+  }
+}
