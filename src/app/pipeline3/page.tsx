@@ -2,7 +2,6 @@
 
 import { supabase } from "@/lib/supabase";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
-import ContactNotes from "@/components/ContactNotes";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -25,6 +24,7 @@ import {
   Search,
   Send,
   Target,
+  Trash2,
   User,
   UserCheck,
   X,
@@ -674,6 +674,7 @@ function DetailPanel({
   onOpenNoteComposer,
   onOpenEdit,
   onOpenAdRequest,
+  onDeleteCustomer,
 }: {
   customer: PipelineCustomer;
   tab: DetailTab;
@@ -690,6 +691,7 @@ function DetailPanel({
   onOpenNoteComposer: () => void;
   onOpenEdit: () => void;
   onOpenAdRequest: () => void;
+  onDeleteCustomer: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-40">
@@ -789,7 +791,7 @@ function DetailPanel({
           className="slide-panel-footer"
           style={{ padding: "clamp(16px, 1.6vw, 22px) clamp(20px, 2vw, 28px)" }}
         >
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <button
               type="button"
               onClick={onOpenEdit}
@@ -813,6 +815,15 @@ function DetailPanel({
             >
               <Plus size={14} />
               광고요청
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteCustomer}
+              className="btn-premium btn-secondary"
+              style={{ color: "#e11d48", borderColor: "rgba(225, 29, 72, 0.28)" }}
+            >
+              <Trash2 size={14} />
+              고객삭제
             </button>
           </div>
         </div>
@@ -1080,24 +1091,141 @@ function QuickActions({
 
 function NotesTab({
   customer,
+  composerOpen,
 }: {
   customer: PipelineCustomer;
   composerOpen: boolean;
 }) {
+  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [newContent, setNewContent] = useState("");
+  const [notes, setNotes] = useState([
+    {
+      id: 1,
+      noteDate: customer.registeredAt,
+      content: customer.noteSummary,
+      author: "고객DB 메모",
+    },
+  ]);
+
+  const handleAdd = () => {
+    if (!newContent.trim()) return;
+    setNotes((items) => [
+      {
+        id: Date.now(),
+        noteDate: newDate,
+        content: newContent.trim(),
+        author: "현재 사용자",
+      },
+      ...items,
+    ]);
+    setNewContent("");
+    setNewDate(new Date().toISOString().slice(0, 10));
+  };
+
   return (
     <section className="premium-card mt-4 p-5">
-      <ContactNotes contactId={customer.id} />
+      <div className="mb-4 flex items-center gap-2">
+        <FileText size={17} style={{ color: "var(--accent)" }} />
+        <div>
+          <p className="crm-section-title">Notes</p>
+          <p className="crm-tiny">활동노트 작성과 상담 기록</p>
+        </div>
+      </div>
+
+      {composerOpen ? (
+        <div
+          className="mb-4 space-y-3 rounded-[16px] border p-4"
+          style={{
+            background: "var(--surface-2)",
+            borderColor: "var(--border)",
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p
+              className="text-[14px] font-[900]"
+              style={{ color: "var(--text-strong)" }}
+            >
+              활동노트 작성
+            </p>
+            <input
+              type="date"
+              value={newDate}
+              onChange={(event) => setNewDate(event.target.value)}
+              className="h-9 rounded-[10px] border px-3 text-[12px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            />
+          </div>
+          <textarea
+            value={newContent}
+            onChange={(event) => setNewContent(event.target.value)}
+            placeholder="활동 내용을 입력하세요."
+            rows={5}
+            className="w-full resize-none rounded-[12px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--border-subtle)",
+              color: "var(--text-strong)",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="btn-premium btn-primary w-full"
+          >
+            <Plus size={14} />
+            활동노트 저장
+          </button>
+          <p className="crm-tiny">
+            현재 화면에서는 패널 내 임시 작성이며, 실제 Supabase 저장은 후속
+            작업에서 연결합니다.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        {notes.map((note) => (
+          <article
+            key={note.id}
+            className="rounded-[16px] border p-4"
+            style={{
+              background: "var(--surface-2)",
+              borderColor: "var(--border)",
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p
+                className="text-[12px] font-[900]"
+                style={{ color: "var(--text-subtle)" }}
+              >
+                {note.noteDate}
+              </p>
+              <span className="badge-premium badge-muted">{note.author}</span>
+            </div>
+            <p
+              className="whitespace-pre-wrap text-sm font-[760] leading-7"
+              style={{ color: "var(--text-subtle)" }}
+            >
+              {note.content}
+            </p>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
 
-
 function AdsTab({
   customer,
   onOpenAdRequest,
+  onDeleteCustomer,
 }: {
   customer: PipelineCustomer;
   onOpenAdRequest: () => void;
+  onDeleteCustomer: () => void;
 }) {
   return (
     <section className="premium-card mt-4 p-5">
@@ -2131,6 +2259,30 @@ export default function Pipeline3Page() {
       ),
     );
   };
+  const deleteRecord = async (customer: PipelineCustomer) => {
+    const confirmed = window.confirm(
+      "파이프라인3에서 고객 데이터를 삭제하면 고객DB도 함께 삭제됩니다. 삭제하시겠습니까?",
+    );
+
+    if (!confirmed) return;
+
+    const nextRecords = records.filter((record) => record.id !== customer.id);
+    persistRecords(nextRecords);
+    setSelectedCustomerId(null);
+    setEditCustomerId(null);
+    setAdRequestCustomerId(null);
+
+    try {
+      const { error } = await supabase.from("contacts").delete().eq("id", customer.id);
+      if (error) {
+        alert(`고객DB 삭제 중 오류가 발생했습니다: ${error.message}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      alert(`고객DB 삭제 중 오류가 발생했습니다: ${message}`);
+    }
+  };
+
 
   const openDetail = (customer: PipelineCustomer) => {
     setSelectedCustomerId(customer.id);
@@ -2311,6 +2463,7 @@ export default function Pipeline3Page() {
           onOpenNoteComposer={handleOpenNoteComposer}
           onOpenEdit={() => setEditCustomerId(selectedCustomer.id)}
           onOpenAdRequest={() => setAdRequestCustomerId(selectedCustomer.id)}
+          onDeleteCustomer={() => deleteRecord(selectedCustomer)}
         />
       ) : null}
 
