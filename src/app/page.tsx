@@ -96,6 +96,33 @@ type UserInfo = {
   role?: string;
 };
 
+type DailyActivityRow = {
+  id: number;
+  work_date: string;
+  owner_name: string;
+  owner_title: string | null;
+  owner_role: string | null;
+  is_outside_meeting: boolean;
+  goal_consultant_db: number | null;
+  goal_second_touch: number | null;
+  goal_new_tm: number | null;
+  goal_manage_tm: number | null;
+  goal_coldtalk: number | null;
+  goal_media_mix: number | null;
+  goal_meeting_confirmed: number | null;
+  goal_work_items: { id: string; text: string; done: boolean }[] | null;
+  result_consultant_db: number | null;
+  result_second_touch: number | null;
+  result_new_tm: number | null;
+  result_manage_tm: number | null;
+  result_coldtalk: number | null;
+  result_media_mix: number | null;
+  result_meeting_confirmed: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+
 const TODAY = new Date().toISOString().slice(0, 10);
 
 const EXECUTION_PART_NAMES = ["조계현", "기여운", "최연전", "이세호"];
@@ -633,6 +660,180 @@ function TaskRow({ task }: { task: Task }) {
   );
 }
 
+function numberValue(value?: number | null) {
+  return Number(value || 0);
+}
+
+function activeGoalWorkItems(row?: DailyActivityRow | null) {
+  if (!row || !Array.isArray(row.goal_work_items)) return [];
+  return row.goal_work_items.filter((item) => item?.text?.trim());
+}
+
+function totalDailyGoal(row?: DailyActivityRow | null) {
+  if (!row || row.is_outside_meeting) return 0;
+  return (
+    numberValue(row.goal_new_tm) +
+    numberValue(row.goal_coldtalk) +
+    numberValue(row.goal_consultant_db) +
+    numberValue(row.goal_second_touch)
+  );
+}
+
+function totalDailyResult(row?: DailyActivityRow | null) {
+  if (!row || row.is_outside_meeting) return 0;
+  return (
+    numberValue(row.result_new_tm) +
+    numberValue(row.result_coldtalk) +
+    numberValue(row.result_consultant_db) +
+    numberValue(row.result_second_touch)
+  );
+}
+
+function DailyGoalChip({
+  label,
+  value,
+  result,
+  unit = "건",
+}: {
+  label: string;
+  value: number;
+  result?: number;
+  unit?: string;
+}) {
+  return (
+    <div
+      className="rounded-[13px] border px-3 py-2"
+      style={{
+        background: "var(--surface-2)",
+        borderColor: "var(--border-subtle)",
+      }}
+    >
+      <p className="crm-tiny">{label}</p>
+      <p
+        className="mt-1 text-[18px] font-[820] tracking-[-0.05em]"
+        style={{ color: "var(--text-strong)" }}
+      >
+        <span>{value.toLocaleString()}</span>
+        <span className="ml-0.5 text-[12px] font-bold" style={{ color: "var(--text-subtle)" }}>
+          {unit}
+        </span>
+        {typeof result === "number" && (
+          <span className="ml-2 text-[12px] font-bold" style={{ color: "var(--success-text)" }}>
+            / 달성 {result.toLocaleString()}
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function MyDailyActivityCard({
+  row,
+  todayMeetingCount,
+}: {
+  row?: DailyActivityRow | null;
+  todayMeetingCount: number;
+}) {
+  const workItems = activeGoalWorkItems(row);
+
+  return (
+    <section className="premium-card overflow-hidden">
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-4"
+        style={{ borderBottom: "1px solid var(--border-subtle)" }}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <PremiumIcon icon={Target} tone="warning" />
+          <div className="min-w-0">
+            <p className="crm-section-title">내 오늘 활동목표</p>
+            <p className="crm-tiny">일별활동기록에 저장한 본인 목표값 기준</p>
+          </div>
+        </div>
+        <a href="/daily-activity" className="btn-premium btn-secondary">
+          기록하기
+        </a>
+      </div>
+
+      {!row ? (
+        <div className="p-5">
+          <EmptyState
+            icon="🎯"
+            title="오늘 입력한 활동목표가 없습니다"
+            description="일별활동기록에서 오늘 목표를 저장하면 대시보드에 바로 표시됩니다"
+          />
+        </div>
+      ) : row.is_outside_meeting ? (
+        <div className="p-5">
+          <div
+            className="rounded-[16px] border p-4"
+            style={{
+              background: "var(--warning-bg)",
+              borderColor: "var(--warning-border)",
+              color: "var(--warning-text)",
+            }}
+          >
+            <p className="text-[15px] font-[820]">오늘은 외근/미팅 기준으로 기록되었습니다.</p>
+            <p className="mt-2 text-[12px] font-semibold leading-relaxed">
+              활동목표 입력 대상에서 제외된 날로 표시됩니다. 오늘 예정 미팅은 {todayMeetingCount.toLocaleString()}건입니다.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4">
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <DailyGoalChip label="오늘 미팅 예정" value={todayMeetingCount} unit="건" />
+            <DailyGoalChip label="목표 합계" value={totalDailyGoal(row)} unit="건" />
+            <DailyGoalChip label="달성 합계" value={totalDailyResult(row)} unit="건" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DailyGoalChip
+              label="당일 TM"
+              value={numberValue(row.goal_new_tm)}
+              result={numberValue(row.result_new_tm)}
+              unit="건"
+            />
+            <DailyGoalChip
+              label="당일 콜드톡"
+              value={numberValue(row.goal_coldtalk)}
+              result={numberValue(row.result_coldtalk)}
+              unit="건"
+            />
+            <DailyGoalChip
+              label="브론즈 DB 확보"
+              value={numberValue(row.goal_consultant_db)}
+              result={numberValue(row.result_consultant_db)}
+              unit="개"
+            />
+            <DailyGoalChip
+              label="1% DB 확보"
+              value={numberValue(row.goal_second_touch)}
+              result={numberValue(row.result_second_touch)}
+              unit="개"
+            />
+          </div>
+
+          {workItems.length > 0 && (
+            <div className="mt-4 rounded-[14px] border p-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+              <p className="crm-tiny mb-2">오늘 활동 체크리스트</p>
+              <div className="space-y-2">
+                {workItems.slice(0, 5).map((item, index) => (
+                  <div key={item.id || index} className="flex items-start gap-2 text-[12px] font-semibold" style={{ color: "var(--text-muted)" }}>
+                    <span className={`badge-premium ${item.done ? "badge-success" : "badge-muted"}`}>
+                      {item.done ? "완료" : "대기"}
+                    </span>
+                    <span className="min-w-0 flex-1 leading-relaxed">{item.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ActivityNote({
   note,
   contact,
@@ -849,6 +1050,7 @@ export default function HomePage() {
   const [sales, setSales] = useState<AdExecution[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteContacts, setNoteContacts] = useState<NoteContact[]>([]);
+  const [myDailyActivity, setMyDailyActivity] = useState<DailyActivityRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<UserInfo | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -914,6 +1116,15 @@ export default function HomePage() {
         .limit(30),
     ]);
 
+    const dailyActivityRes = user?.name
+      ? await supabase
+          .from("daily_activity_goals")
+          .select("*")
+          .eq("work_date", TODAY)
+          .eq("owner_name", user.name)
+          .maybeSingle()
+      : { data: null, error: null };
+
     if (contactRes.error && contactRes.error.message.includes("meeting_registered_at")) {
       contactRes = await buildContactQuery(`${baseContactColumns},updated_at`);
     }
@@ -926,6 +1137,7 @@ export default function HomePage() {
     if (taskRes.error) console.error("tasks:", taskRes.error.message);
     if (salesRes.error) console.error("ad_executions:", salesRes.error.message);
     if (noteRes.error) console.error("contact_notes:", noteRes.error.message);
+    if (dailyActivityRes.error) console.error("daily_activity_goals:", dailyActivityRes.error.message);
 
     const allContactRows = ((contactRes.data || []) as unknown) as Contact[];
     const dashboardContacts = shouldLimitToOwnCustomers
@@ -1006,6 +1218,7 @@ export default function HomePage() {
     setSales(((salesRes.data || []) as unknown) as AdExecution[]);
     setNotes(noteRows);
     setNoteContacts(noteContactRows);
+    setMyDailyActivity((dailyActivityRes.data || null) as DailyActivityRow | null);
     setLoading(false);
   }, []);
 
@@ -1463,6 +1676,11 @@ export default function HomePage() {
         ) : (
           <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
             <div className="space-y-5">
+              <MyDailyActivityCard
+                row={myDailyActivity}
+                todayMeetingCount={stats.todayMeetings}
+              />
+
               <section className="premium-card overflow-hidden">
                 <div
                   className="flex items-center justify-between gap-3 px-4 py-4"
