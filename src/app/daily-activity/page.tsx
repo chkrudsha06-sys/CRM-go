@@ -734,6 +734,37 @@ function WorkItemsResultChecklist({
   );
 }
 
+
+function AutoResultNotice({ result }: { result: ActivityValues }) {
+  return (
+    <div
+      className="rounded-[16px] border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+    >
+      <div className="mb-3">
+        <p className="crm-section-title">자동 집계 활동결과</p>
+        <p className="crm-tiny mt-1">
+          TM·콜드톡·DB 확보 달성값은 관련 데이터 입력 시 자동으로 집계됩니다.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {ACTIVITY_FIELDS.map((field) => (
+          <div
+            key={field.key}
+            className="rounded-[13px] border px-3 py-3"
+            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+          >
+            <p className="crm-tiny">{field.label} 달성</p>
+            <p className="crm-row-main mt-1">
+              {result[field.key].toLocaleString()} {field.unit}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DailyActivityPrompt({
   mode,
   intro,
@@ -839,31 +870,27 @@ function DailyActivityPrompt({
               >
                 지금까지의 진행 상황을 잠깐 점검하고, 남은 시간을 어디에 집중할지 다시 정리해보세요.
               </div>
-            ) : (
-              <div className="grid gap-5 xl:grid-cols-2">
-                <div>
-                  <div className="mb-3 flex items-center gap-2">
-                    {isGoal ? <Sparkles size={17} /> : <Coffee size={17} />}
-                    <p className="crm-section-title">{isGoal ? "당일 활동목표 입력" : "퇴근 전 활동결과 입력"}</p>
+            ) : isGoal ? (
+                <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Sparkles size={17} />
+                      <p className="crm-section-title">당일 활동목표 입력</p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {ACTIVITY_FIELDS.map((field) => (
+                        <NumberInput
+                          key={field.key}
+                          label={field.goalLabel}
+                          value={goal[field.key]}
+                          unit={field.unit}
+                          disabled={disabled}
+                          onChange={(value) => onGoalChange(field.key, value)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {ACTIVITY_FIELDS.map((field) => (
-                      <NumberInput
-                        key={field.key}
-                        label={isGoal ? field.goalLabel : field.resultLabel}
-                        value={isGoal ? goal[field.key] : result[field.key]}
-                        unit={field.unit}
-                        disabled={disabled}
-                        onChange={(value) =>
-                          isGoal ? onGoalChange(field.key, value) : onResultChange(field.key, value)
-                        }
-                      />
-                    ))}
-
-                  </div>
-                </div>
-                <div>
-                  {isGoal ? (
+                  <div>
                     <WorkItemsEditor
                       items={workItems}
                       disabled={disabled}
@@ -871,16 +898,18 @@ function DailyActivityPrompt({
                       onAdd={onTaskAdd}
                       onRemove={onTaskRemove}
                     />
-                  ) : (
-                    <WorkItemsResultChecklist
-                      items={workItems}
-                      disabled={disabled}
-                      onToggle={onTaskToggle}
-                    />
-                  )}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+                  <WorkItemsResultChecklist
+                    items={workItems}
+                    disabled={disabled}
+                    onToggle={onTaskToggle}
+                  />
+                  <AutoResultNotice result={result} />
+                </div>
+              )}
 
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={onClose} className="btn-premium btn-secondary">
@@ -1430,30 +1459,13 @@ export default function DailyActivityPage() {
                       />
                       <p className="crm-section-title">퇴근 전 활동결과</p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {ACTIVITY_FIELDS.map((field) => (
-                        <NumberInput
-                          key={field.key}
-                          label={field.resultLabel}
-                          value={result[field.key]}
-                          unit={field.unit}
-                          disabled={isOutsideMeeting}
-                          onChange={(value) =>
-                            setResult((prev) => ({
-                              ...prev,
-                              [field.key]: value,
-                            }))
-                          }
-                        />
-                      ))}
-
-                    </div>
+                    <WorkItemsResultChecklist
+                      items={workItems}
+                      disabled={isOutsideMeeting}
+                      onToggle={toggleWorkItemDone}
+                    />
                     <div className="mt-4">
-                      <WorkItemsResultChecklist
-                        items={workItems}
-                        disabled={isOutsideMeeting}
-                        onToggle={toggleWorkItemDone}
-                      />
+                      <AutoResultNotice result={result} />
                     </div>
                   </div>
                 </div>
@@ -1574,18 +1586,18 @@ export default function DailyActivityPage() {
                   </p>
                 </div>
               </div>
-              <div className="max-h-[620px] overflow-auto">
-                <table className="crm-table min-w-[980px]">
+              <div className="max-h-[560px] overflow-auto">
+                <table className="crm-table min-w-[980px] text-center">
                   <thead>
                     <tr>
-                      <th>일자</th>
-                      <th>담당자</th>
-                      <th>상태</th>
-                      <th>TM 목표/달성</th>
-                      <th>콜드톡 목표/달성</th>
-                      <th>브론즈DB 목표/달성</th>
-                      <th>1%DB 목표/달성</th>
-                      <th>수정일</th>
+                      <th className="sticky top-0 z-10 text-center">일자</th>
+                      <th className="sticky top-0 z-10 text-center">담당자</th>
+                      <th className="sticky top-0 z-10 text-center">상태</th>
+                      <th className="sticky top-0 z-10 text-center">TM 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center">콜드톡 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center">브론즈DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center">1%DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center">수정일</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1598,8 +1610,8 @@ export default function DailyActivityPage() {
                     ) : (
                       visibleDetailRows.map((row) => (
                         <tr key={row.id}>
-                          <td>{formatKoreanDate(row.work_date)}</td>
-                          <td>
+                          <td className="text-center">{formatKoreanDate(row.work_date)}</td>
+                          <td className="text-center">
                             <span className="crm-row-main">
                               {row.owner_name}
                             </span>{" "}
@@ -1607,7 +1619,7 @@ export default function DailyActivityPage() {
                               {row.owner_title || ""}
                             </span>
                           </td>
-                          <td>
+                          <td className="text-center">
                             <span
                               className={`badge-premium ${row.is_outside_meeting ? "badge-warning" : "badge-success"}`}
                             >
@@ -1616,19 +1628,19 @@ export default function DailyActivityPage() {
                                 : "기록대상"}
                             </span>
                           </td>
-                          <td>
+                          <td className="text-center">
                             {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
                           </td>
-                          <td>
+                          <td className="text-center">
                             {goalValue(row, "coldtalk").toLocaleString()} / {resultValue(row, "coldtalk").toLocaleString()}
                           </td>
-                          <td>
+                          <td className="text-center">
                             {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
                           </td>
-                          <td>
+                          <td className="text-center">
                             {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
                           </td>
-                          <td>
+                          <td className="text-center">
                             {new Date(row.updated_at).toLocaleString("ko-KR", {
                               month: "2-digit",
                               day: "2-digit",
