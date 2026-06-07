@@ -1488,119 +1488,39 @@ export default function HomePage() {
           </div>
         </header>
 
-        <section className="premium-hero mb-5 p-5 md:p-6">
-          <div className="relative z-[1] grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
-            <div className="min-w-0">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge tone="info" icon={CalendarDays}>
-                  오늘 미팅 {stats.todayMeetings}건
-                </Badge>
-                <Badge tone="success" icon={BadgeCheck}>
-                  계약완료 {stats.contracts}명
-                </Badge>
-                <Badge tone="warning" icon={Zap}>
-                  딜클로징 {stats.closing}명
-                </Badge>
-              </div>
+        <section className="premium-hero mb-4 p-4 md:p-5">
+          <div className="relative z-[1] min-w-0">
+            <h2
+              className="max-w-5xl text-[28px] font-[760] leading-[1.25] tracking-[0.02em] md:text-[38px]"
+              style={{
+                color: "var(--text-strong)",
+                wordBreak: "keep-all",
+                overflowWrap: "normal",
+              }}
+            >
+              {dashboardMessage.title}
+            </h2>
 
-              <h2
-                className="max-w-5xl text-[28px] font-[760] leading-[1.28] tracking-[0.02em] md:text-[38px]"
-                style={{
-                  color: "var(--text-strong)",
-                  wordBreak: "keep-all",
-                  overflowWrap: "normal",
-                }}
-              >
-                {dashboardMessage.title}
-              </h2>
+            <p
+              className="mt-3 max-w-3xl text-[13px] font-medium leading-[1.8] tracking-[0.005em] md:text-[14px]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {dashboardMessage.desc}
+            </p>
 
-              <p
-                className="mt-4 max-w-3xl text-[13px] font-medium leading-[1.95] tracking-[0.005em] md:text-[14px]"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {dashboardMessage.desc}
-              </p>
-
-              <div className="mt-6 flex flex-wrap gap-2">
-                <a href="/pipeline" className="btn-premium btn-primary">
-                  <Target size={14} />
-                  파이프라인 확인
-                </a>
-                <a href="/tasks" className="btn-premium btn-secondary">
-                  <MessageCircle size={14} />
-                  업무전달 보기
-                </a>
-                <a href="/calendar" className="btn-premium btn-secondary">
-                  <CalendarDays size={14} />
-                  캘린더 열기
-                </a>
-              </div>
-            </div>
-
-            <div className="premium-card p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <PremiumIcon icon={Activity} tone="purple" />
-                <div>
-                  <p className="crm-section-title">운영 상태</p>
-                  <p className="crm-tiny">실시간 요약</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  {
-                    label: "오늘 미팅",
-                    value: stats.todayMeetings,
-                    max: Math.max(stats.customers, 1),
-                    tone: "cyan",
-                  },
-                  {
-                    label: "딜클로징",
-                    value: stats.closing,
-                    max: Math.max(stats.customers, 1),
-                    tone: "warning",
-                  },
-                  {
-                    label: "미완료 업무",
-                    value: stats.openTasks,
-                    max: Math.max(tasks.length, 1),
-                    tone: "danger",
-                  },
-                  {
-                    label: "계약/예약",
-                    value: stats.contracts + stats.reservations,
-                    max: Math.max(stats.customers, 1),
-                    tone: "success",
-                  },
-                ].map((item) => {
-                  const c = toneStyle(item.tone);
-                  const width = Math.min(
-                    100,
-                    Math.max(4, (item.value / item.max) * 100),
-                  );
-                  return (
-                    <div key={item.label}>
-                      <div className="mb-1.5 flex items-center justify-between text-[12px] font-bold">
-                        <span style={{ color: "var(--text-muted)" }}>
-                          {item.label}
-                        </span>
-                        <span style={{ color: c.color }}>
-                          {item.value.toLocaleString()}
-                        </span>
-                      </div>
-                      <div
-                        className="h-2 overflow-hidden rounded-full"
-                        style={{ background: "var(--surface-3)" }}
-                      >
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${width}%`, background: c.dot }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <a href="/pipeline" className="btn-premium btn-primary">
+                <Target size={14} />
+                파이프라인 확인
+              </a>
+              <a href="/tasks" className="btn-premium btn-secondary">
+                <MessageCircle size={14} />
+                업무전달 보기
+              </a>
+              <a href="/calendar" className="btn-premium btn-secondary">
+                <CalendarDays size={14} />
+                캘린더 열기
+              </a>
             </div>
           </div>
         </section>
