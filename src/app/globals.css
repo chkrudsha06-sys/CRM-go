@@ -2024,6 +2024,153 @@ table td {
   background-clip: padding-box;
 }
 
+/* =========================================================
+   CRM UI STEP 6 - Global App Shell / Light & Dark Background Polish
+   적용 위치: src/app/globals.css 맨 아래 추가
+   ========================================================= */
+
+.crm-app-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.crm-app-frame::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(139, 124, 246, 0.16), transparent 28%),
+    radial-gradient(circle at 92% 10%, rgba(96, 165, 250, 0.11), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(34, 211, 238, 0.055), transparent 34%),
+    linear-gradient(180deg, var(--bg), var(--bg-2) 52%, var(--bg));
+}
+
+[data-theme="light"] .crm-app-frame::before {
+  background:
+    radial-gradient(circle at 13% 7%, rgba(102, 88, 246, 0.11), transparent 27%),
+    radial-gradient(circle at 90% 8%, rgba(37, 99, 235, 0.075), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(8, 145, 178, 0.045), transparent 34%),
+    linear-gradient(180deg, #f7f8fb 0%, #f1f4f8 48%, #eef2f7 100%);
+}
+
+.crm-main-shell {
+  position: relative;
+  background: transparent;
+  scroll-behavior: smooth;
+}
+
+.crm-main-shell::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 1px;
+  z-index: 4;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  opacity: 0.85;
+}
+
+.crm-main-shell > * {
+  position: relative;
+}
+
+.crm-page-shell,
+.crm-page,
+.page-shell,
+main > section {
+  color: var(--text);
+}
+
+.crm-section-surface,
+.crm-card,
+.crm-panel,
+.crm-table-wrap,
+.crm-filterbar,
+.crm-page-header {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, transparent), color-mix(in srgb, var(--surface-2) 88%, transparent));
+  border-color: var(--border);
+}
+
+[data-theme="light"] .crm-section-surface,
+[data-theme="light"] .crm-card,
+[data-theme="light"] .crm-panel,
+[data-theme="light"] .crm-table-wrap,
+[data-theme="light"] .crm-filterbar,
+[data-theme="light"] .crm-page-header {
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.075);
+  backdrop-filter: blur(16px);
+}
+
+[data-theme="dark"] .crm-section-surface,
+[data-theme="dark"] .crm-card,
+[data-theme="dark"] .crm-panel,
+[data-theme="dark"] .crm-table-wrap,
+[data-theme="dark"] .crm-filterbar,
+[data-theme="dark"] .crm-page-header {
+  background: rgba(16, 17, 20, 0.76);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.crm-table-wrap table,
+table.crm-table,
+.crm-data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.crm-table-wrap th,
+.crm-table-wrap td,
+table.crm-table th,
+table.crm-table td,
+.crm-data-table th,
+.crm-data-table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.crm-table-wrap th:first-child,
+.crm-table-wrap td:first-child,
+table.crm-table th:first-child,
+table.crm-table td:first-child,
+.crm-data-table th:first-child,
+.crm-data-table td:first-child {
+  text-align: center !important;
+}
+
+.crm-table-wrap tbody tr,
+table.crm-table tbody tr,
+.crm-data-table tbody tr {
+  transition: background 160ms var(--ease), transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.crm-table-wrap tbody tr:hover,
+table.crm-table tbody tr:hover,
+.crm-data-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 768px) {
+  .crm-main-shell {
+    padding-top: 0;
+  }
+
+  .crm-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .crm-table-wrap table,
+  table.crm-table,
+  .crm-data-table {
+    min-width: 760px;
+  }
+}
+
 .vip-member-table-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
