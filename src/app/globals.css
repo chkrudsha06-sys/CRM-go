@@ -1735,3 +1735,38 @@ table td {
     width: min(86vw, 318px) !important;
   }
 }
+
+
+/* =========================================================
+   CRM UI STEP 3 - Customer DB refinement
+   고객DB 화면: 모바일 카드, 선택 행, 텍스트 정렬 보정
+========================================================= */
+.crm-table tr[data-selected="true"] td {
+  background: var(--accent-subtle);
+}
+
+.crm-table td,
+.crm-table th,
+.crm-table-v2 td,
+.crm-table-v2 th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.crm-row-main,
+.crm-row-sub,
+.crm-tiny,
+.crm-meta {
+  word-break: keep-all;
+}
+
+@media (max-width: 1023px) {
+  .premium-page {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .premium-hero {
+    border-radius: 22px !important;
+  }
+}
