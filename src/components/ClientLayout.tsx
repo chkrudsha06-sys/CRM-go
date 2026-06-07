@@ -351,7 +351,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
+    <div className="crm-app-frame flex h-screen overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
       <Sidebar
         user={user}
         unreadCount={unreadCount}
@@ -418,9 +418,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         </button>
       </div>
 
-   <main className="crm-main-shell min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">
-  {children}
-</main>
+      <main className="crm-main-shell min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">
+        {children}
+      </main>
 
       <DailyActivityReminderPopup user={user} />
 
