@@ -936,6 +936,7 @@ function DailyActivityPrompt({
 export default function DailyActivityPage() {
   const [user, setUser] = useState<CRMUser | null>(null);
   const [date, setDate] = useState(todayString());
+  const [monthFilter, setMonthFilter] = useState(todayString().slice(0, 7));
   const [dailyRows, setDailyRows] = useState<DailyActivityRow[]>([]);
   const [periodRows, setPeriodRows] = useState<DailyActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -967,14 +968,25 @@ export default function DailyActivityPage() {
     [dailyRows, user?.name],
   );
 
+  const monthOptions = useMemo(() => {
+    const base = new Date(`${todayString()}T00:00:00`);
+    return Array.from({ length: 18 }, (_, index) => {
+      const d = new Date(base.getFullYear(), base.getMonth() - index, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return {
+        value,
+        label: `${d.getFullYear()}년 ${d.getMonth() + 1}월`,
+      };
+    });
+  }, []);
+
   const fetchRows = useCallback(async () => {
     setLoading(true);
     const loginUser = getCurrentUser();
     setUser(loginUser);
 
-    const weekStart = startOfWeek(date);
-    const monthStart = startOfMonth(date);
-    const monthEnd = endOfMonth(date);
+    const monthStart = `${monthFilter}-01`;
+    const monthEnd = endOfMonth(monthStart);
 
     const [dailyRes, periodRes] = await Promise.all([
       supabase.from("daily_activity_goals").select("*").eq("work_date", date),
@@ -1029,7 +1041,7 @@ export default function DailyActivityPage() {
     }
 
     setLoading(false);
-  }, [date]);
+  }, [date, monthFilter]);
 
   useEffect(() => {
     fetchRows();
@@ -1419,53 +1431,54 @@ export default function DailyActivityPage() {
                   </label>
                 </div>
 
-                <div className="grid gap-5 p-5 xl:grid-cols-2">
-                  <div>
-                    <div className="mb-4 flex items-center gap-2">
-                      <Flag size={17} style={{ color: "var(--info-text)" }} />
-                      <p className="crm-section-title">당일 활동목표</p>
+                <div className="space-y-5 p-5">
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <div>
+                      <div className="mb-4 flex items-center gap-2">
+                        <Flag size={17} style={{ color: "var(--info-text)" }} />
+                        <p className="crm-section-title">당일 활동목표</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {ACTIVITY_FIELDS.map((field) => (
+                          <NumberInput
+                            key={field.key}
+                            label={field.goalLabel}
+                            value={goal[field.key]}
+                            unit={field.unit}
+                            disabled={isOutsideMeeting}
+                            onChange={(value) =>
+                              setGoal((prev) => ({ ...prev, [field.key]: value }))
+                            }
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {ACTIVITY_FIELDS.map((field) => (
-                        <NumberInput
-                          key={field.key}
-                          label={field.goalLabel}
-                          value={goal[field.key]}
-                          unit={field.unit}
-                          disabled={isOutsideMeeting}
-                          onChange={(value) =>
-                            setGoal((prev) => ({ ...prev, [field.key]: value }))
-                          }
-                        />
-                      ))}
-
-                    </div>
-                    <div className="mt-4">
-                      <WorkItemsEditor
-                        items={workItems}
-                        disabled={isOutsideMeeting}
-                        onTextChange={updateWorkItemText}
-                        onAdd={addWorkItem}
-                        onRemove={removeWorkItem}
-                      />
+                    <div className="xl:pt-[37px]">
+                      <AutoResultNotice result={result} />
                     </div>
                   </div>
 
-                  <div>
-                    <div className="mb-4 flex items-center gap-2">
-                      <TrendingUp
-                        size={17}
-                        style={{ color: "var(--success-text)" }}
-                      />
-                      <p className="crm-section-title">퇴근 전 활동결과</p>
-                    </div>
-                    <WorkItemsResultChecklist
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <WorkItemsEditor
                       items={workItems}
                       disabled={isOutsideMeeting}
-                      onToggle={toggleWorkItemDone}
+                      onTextChange={updateWorkItemText}
+                      onAdd={addWorkItem}
+                      onRemove={removeWorkItem}
                     />
-                    <div className="mt-4">
-                      <AutoResultNotice result={result} />
+                    <div>
+                      <div className="mb-4 flex items-center gap-2">
+                        <TrendingUp
+                          size={17}
+                          style={{ color: "var(--success-text)" }}
+                        />
+                        <p className="crm-section-title">퇴근 전 활동결과</p>
+                      </div>
+                      <WorkItemsResultChecklist
+                        items={workItems}
+                        disabled={isOutsideMeeting}
+                        onToggle={toggleWorkItemDone}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1570,24 +1583,45 @@ export default function DailyActivityPage() {
 
             <section className="premium-card overflow-hidden">
               <div
-                className="flex items-center gap-3 border-b px-5 py-4"
+                className="flex flex-col gap-4 border-b px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
                 style={{ borderColor: "var(--border)" }}
               >
-                <BarChart3 size={18} style={{ color: "var(--accent-text)" }} />
-                <div>
-                  <p className="crm-section-title">
-                    {access.canViewAll
-                      ? `${selectedMember.name} 월간 상세 기록`
-                      : "나의 월간 상세 기록"}
-                  </p>
-                  <p className="crm-tiny mt-1">
-                    선택한 날짜가 포함된 월 기준 기록입니다. 최대 10개 행
-                    높이까지만 보이고, 추가 기록은 박스 안에서 스크롤됩니다.
-                  </p>
+                <div className="flex items-center gap-3">
+                  <BarChart3 size={18} style={{ color: "var(--accent-text)" }} />
+                  <div>
+                    <p className="crm-section-title">
+                      {access.canViewAll
+                        ? `${selectedMember.name} 월간 상세 기록`
+                        : "나의 월간 상세 기록"}
+                    </p>
+                    <p className="crm-tiny mt-1">
+                      선택한 월 기준 기록입니다. 최대 10개 행 높이까지만 보이고,
+                      추가 기록은 박스 안에서 스크롤됩니다.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="crm-tiny font-[800]">월별 검색</span>
+                  <select
+                    value={monthFilter}
+                    onChange={(event) => setMonthFilter(event.target.value)}
+                    className="h-[38px] min-w-[150px] rounded-full border px-3 text-center text-[13px] font-[800] outline-none"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border)",
+                      color: "var(--text)",
+                    }}
+                  >
+                    {monthOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[980px] table-fixed text-center [&_td]:text-center [&_td]:align-middle [&_th]:text-center [&_th]:align-middle">
+                <table className="crm-table min-w-[980px] table-fixed text-center [&_td]:!text-center [&_td]:align-middle [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
                     <col className="w-[13%]" />
                     <col className="w-[15%]" />
@@ -1600,14 +1634,14 @@ export default function DailyActivityPage() {
                   </colgroup>
                   <thead>
                     <tr>
-                      <th className="sticky top-0 z-10 text-center align-middle">일자</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">담당자</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">상태</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">TM 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">콜드톡 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">브론즈DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">1%DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle">수정일</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>일자</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>담당자</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>상태</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>TM 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>콜드톡 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>브론즈DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>1%DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>수정일</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1620,10 +1654,10 @@ export default function DailyActivityPage() {
                     ) : (
                       visibleDetailRows.map((row) => (
                         <tr key={row.id}>
-                          <td className="text-center align-middle">
+                          <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             <span className="block w-full text-center">{formatKoreanDate(row.work_date)}</span>
                           </td>
-                          <td className="text-center align-middle">
+                          <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             <span className="crm-row-main block w-full text-center">
                               {row.owner_name}
                             </span>
@@ -1631,28 +1665,28 @@ export default function DailyActivityPage() {
                               {row.owner_title || ""}
                             </span>
                           </td>
-                          <td className="text-center align-middle">
+                          <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             <span
-                              className={`badge-premium ${row.is_outside_meeting ? "badge-warning" : "badge-success"}`}
+                              className={`badge-premium mx-auto inline-flex justify-center ${row.is_outside_meeting ? "badge-warning" : "badge-success"}`}
                             >
                               {row.is_outside_meeting
                                 ? "외근 제외"
                                 : "기록대상"}
                             </span>
                           </td>
-                          <td className="text-center align-middle tabular-nums">
+                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
                           </td>
-                          <td className="text-center align-middle tabular-nums">
+                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "coldtalk").toLocaleString()} / {resultValue(row, "coldtalk").toLocaleString()}
                           </td>
-                          <td className="text-center align-middle tabular-nums">
+                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
                           </td>
-                          <td className="text-center align-middle tabular-nums">
+                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
                           </td>
-                          <td className="text-center align-middle">
+                          <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             {new Date(row.updated_at).toLocaleString("ko-KR", {
                               month: "2-digit",
                               day: "2-digit",
@@ -1684,3 +1718,4 @@ export default function DailyActivityPage() {
     </div>
   );
 }
+
