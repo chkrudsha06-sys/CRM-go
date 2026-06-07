@@ -535,7 +535,116 @@ export default function CustomerDbPage() {
   };
 
   return (
-    <main className="min-h-screen px-5 py-6 md:px-8">
+    <main className="customer-db-page min-h-screen px-5 py-6 md:px-8">
+      <style jsx global>{`
+        .customer-db-page {
+          background: var(--bg);
+          color: var(--text);
+        }
+        .customer-db-page .bg-white {
+          background: var(--surface) !important;
+        }
+        .customer-db-page .bg-slate-50 {
+          background: var(--surface-2) !important;
+        }
+        .customer-db-page .bg-slate-950 {
+          background: var(--text-strong) !important;
+          color: var(--surface) !important;
+        }
+        .customer-db-page .border-slate-100,
+        .customer-db-page .border-slate-200 {
+          border-color: var(--border) !important;
+        }
+        .customer-db-page .text-slate-950,
+        .customer-db-page .text-slate-900,
+        .customer-db-page .text-slate-800,
+        .customer-db-page .text-slate-700 {
+          color: var(--text-strong) !important;
+        }
+        .customer-db-page .text-slate-600,
+        .customer-db-page .text-slate-500,
+        .customer-db-page .text-slate-400 {
+          color: var(--text-subtle) !important;
+        }
+        .customer-db-page input,
+        .customer-db-page select,
+        .customer-db-page textarea {
+          background: var(--surface-2) !important;
+          border-color: var(--border) !important;
+          color: var(--text) !important;
+        }
+        .customer-db-page input::placeholder,
+        .customer-db-page textarea::placeholder {
+          color: var(--text-muted) !important;
+        }
+        .customer-db-page input:focus,
+        .customer-db-page select:focus,
+        .customer-db-page textarea:focus {
+          border-color: var(--accent-border) !important;
+          box-shadow: 0 0 0 4px var(--accent-bg) !important;
+        }
+        .customer-db-page .hover\:bg-slate-50:hover {
+          background: var(--surface-3) !important;
+        }
+        .customer-db-page .shadow-sm {
+          box-shadow: var(--shadow-sm) !important;
+        }
+        .customer-db-page .shadow-xl,
+        .customer-db-page .shadow-2xl {
+          box-shadow: var(--shadow-lg) !important;
+        }
+        .customer-db-page .bg-violet-50 {
+          background: var(--accent-bg) !important;
+        }
+        .customer-db-page .border-violet-200,
+        .customer-db-page .border-violet-300 {
+          border-color: var(--accent-border) !important;
+        }
+        .customer-db-page .text-violet-600,
+        .customer-db-page .text-violet-700 {
+          color: var(--accent-text) !important;
+        }
+        .customer-db-page .bg-blue-50 {
+          background: rgba(59, 130, 246, 0.12) !important;
+        }
+        .customer-db-page .border-blue-200 {
+          border-color: rgba(59, 130, 246, 0.28) !important;
+        }
+        .customer-db-page .text-blue-500,
+        .customer-db-page .text-blue-700 {
+          color: #3b82f6 !important;
+        }
+        .customer-db-page .bg-emerald-50 {
+          background: rgba(16, 185, 129, 0.12) !important;
+        }
+        .customer-db-page .border-emerald-200 {
+          border-color: rgba(16, 185, 129, 0.28) !important;
+        }
+        .customer-db-page .text-emerald-500,
+        .customer-db-page .text-emerald-700 {
+          color: #10b981 !important;
+        }
+        .customer-db-page .bg-amber-50 {
+          background: rgba(245, 158, 11, 0.14) !important;
+        }
+        .customer-db-page .border-amber-200 {
+          border-color: rgba(245, 158, 11, 0.3) !important;
+        }
+        .customer-db-page .text-amber-500,
+        .customer-db-page .text-amber-600,
+        .customer-db-page .text-amber-700 {
+          color: #f59e0b !important;
+        }
+        .customer-db-page .bg-red-50 {
+          background: rgba(239, 68, 68, 0.12) !important;
+        }
+        .customer-db-page .border-red-200 {
+          border-color: rgba(239, 68, 68, 0.28) !important;
+        }
+        .customer-db-page .text-red-600 {
+          color: #ef4444 !important;
+        }
+      `}</style>
       {toast ? (
         <div className="fixed right-5 top-5 z-[80] rounded-[16px] bg-slate-950 px-4 py-3 text-sm font-[900] text-white shadow-xl">
           {toast}
