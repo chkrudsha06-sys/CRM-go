@@ -456,7 +456,7 @@ function ProgressBar({ result, goal }: { result: number; goal: number }) {
     <div>
       <div className="mb-1 flex items-center justify-between text-[11px] font-bold">
         <span style={{ color: "var(--text-subtle)" }}>
-          {goal.toLocaleString()}(목표) / {result.toLocaleString()}(달성)
+          {goal.toLocaleString()} / {result.toLocaleString()}
         </span>
         <span style={{ color }}>{rate}%</span>
       </div>
@@ -533,8 +533,7 @@ function MemberDayCard({
                 className="text-[12px] font-[780]"
                 style={{ color: "var(--text)" }}
               >
-                {goalValue(row, field.key)}(목표) / {resultValue(row, field.key)}(달성)
-                {field.unit}
+                {goalValue(row, field.key)} / {resultValue(row, field.key)} {field.unit}
               </p>
             </div>
             <ProgressBar
@@ -1313,14 +1312,14 @@ export default function DailyActivityPage() {
           <StatCard
             icon={Clock3}
             label="총 TM"
-            value={`${totalGoalTm}(목표)/${totalResultTm}(달성)`}
+            value={`${totalGoalTm}/${totalResultTm}`}
             sub={`달성율 ${percent(totalResultTm, totalGoalTm)}%`}
             tone="warning"
           />
           <StatCard
             icon={CalendarDays}
             label="전체 활동"
-            value={`${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + goalValue(item.row, field.key), 0), 0)}(목표)/${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + resultValue(item.row, field.key), 0), 0)}(달성)`}
+            value={`${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + goalValue(item.row, field.key), 0), 0)}/${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + resultValue(item.row, field.key), 0), 0)}`}
             sub="4개 항목 합산"
             tone="purple"
           />
@@ -1618,16 +1617,16 @@ export default function DailyActivityPage() {
                             </span>
                           </td>
                           <td>
-                            {goalValue(row, "new_tm").toLocaleString()}(목표) / {resultValue(row, "new_tm").toLocaleString()}(달성)
+                            {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
                           </td>
                           <td>
-                            {goalValue(row, "coldtalk").toLocaleString()}(목표) / {resultValue(row, "coldtalk").toLocaleString()}(달성)
+                            {goalValue(row, "coldtalk").toLocaleString()} / {resultValue(row, "coldtalk").toLocaleString()}
                           </td>
                           <td>
-                            {goalValue(row, "consultant_db").toLocaleString()}(목표) / {resultValue(row, "consultant_db").toLocaleString()}(달성)
+                            {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
                           </td>
                           <td>
-                            {goalValue(row, "second_touch").toLocaleString()}(목표) / {resultValue(row, "second_touch").toLocaleString()}(달성)
+                            {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
                           </td>
                           <td>
                             {new Date(row.updated_at).toLocaleString("ko-KR", {
