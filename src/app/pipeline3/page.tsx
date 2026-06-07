@@ -77,6 +77,7 @@ type PipelineCustomer = {
 };
 
 type DetailTab = "summary" | "notes" | "ads";
+type FilterValue = "전체" | string;
 
 type EditForm = {
   name: string;
@@ -434,6 +435,10 @@ function stageLabel(value: StageKey) {
   return value;
 }
 
+function normalizeSearchText(value?: string | null) {
+  return String(value || "").trim().toLowerCase().replace(/[\s-]/g, "");
+}
+
 function getWeekday(date: string) {
   if (!date) return "";
   return WEEKDAYS[new Date(`${date}T00:00:00`).getDay()];
@@ -783,7 +788,7 @@ function DetailPanel({
             <NotesTab customer={customer} composerOpen={noteComposerOpen} />
           ) : null}
           {tab === "ads" ? (
-            <AdsTab customer={customer} onOpenAdRequest={onOpenAdRequest} onDeleteCustomer={onDeleteCustomer} />
+            <AdsTab customer={customer} onOpenAdRequest={onOpenAdRequest} />
           ) : null}
         </div>
 
@@ -2183,6 +2188,9 @@ export default function Pipeline3Page() {
   const [adRequestCustomerId, setAdRequestCustomerId] = useState<number | null>(
     null,
   );
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [intakeFilter, setIntakeFilter] = useState<FilterValue>("전체");
+  const [stageFilter, setStageFilter] = useState<FilterValue>("전체");
 
   useEffect(() => {
     try {
@@ -2203,6 +2211,27 @@ export default function Pipeline3Page() {
 
   const customers = useMemo(() => records.map(toPipelineCustomer), [records]);
 
+  const filteredCustomers = useMemo(() => {
+    const keyword = normalizeSearchText(searchKeyword);
+
+    return customers.filter((customer) => {
+      const matchesKeyword =
+        !keyword ||
+        [customer.name, customer.phone, customer.title, customer.company]
+          .map(normalizeSearchText)
+          .some((value) => value.includes(keyword));
+
+      const matchesIntake =
+        intakeFilter === "전체" || customer.intakeRoute === intakeFilter;
+      const matchesStage = stageFilter === "전체" || customer.stage === stageFilter;
+
+      return matchesKeyword && matchesIntake && matchesStage;
+    });
+  }, [customers, searchKeyword, intakeFilter, stageFilter]);
+
+  const hasActiveFilter =
+    searchKeyword.trim() || intakeFilter !== "전체" || stageFilter !== "전체";
+
   const selectedCustomer = useMemo(
     () =>
       customers.find((customer) => customer.id === selectedCustomerId) || null,
@@ -2222,19 +2251,19 @@ export default function Pipeline3Page() {
 
   const stats = useMemo(
     () => ({
-      total: customers.length,
-      lead: customers.filter((customer) => customer.stage === "리드").length,
-      prospecting: customers.filter(
+      total: filteredCustomers.length,
+      lead: filteredCustomers.filter((customer) => customer.stage === "리드").length,
+      prospecting: filteredCustomers.filter(
         (customer) => customer.stage === "프로스펙팅",
       ).length,
-      closing: customers.filter((customer) => customer.stage === "딜크로징")
+      closing: filteredCustomers.filter((customer) => customer.stage === "딜크로징")
         .length,
-      signed: customers.filter((customer) => customer.stage === "리텐션")
+      signed: filteredCustomers.filter((customer) => customer.stage === "리텐션")
         .length,
-      paused: customers.filter((customer) => customer.stage === "보류/이탈")
+      paused: filteredCustomers.filter((customer) => customer.stage === "보류/이탈")
         .length,
     }),
-    [customers],
+    [filteredCustomers],
   );
 
   const persistRecords = (nextRecords: CustomerDbRecord[]) => {
@@ -2394,10 +2423,82 @@ export default function Pipeline3Page() {
         </div>
       </div>
 
+      <div className="flex-shrink-0 px-5 pb-4 md:px-7">
+        <div className="premium-card rounded-[22px] p-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(320px,1.4fr)_minmax(190px,0.8fr)_minmax(190px,0.8fr)_auto]">
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block">고객 검색</span>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <input
+                  className="crm-search h-12 w-full pl-10 pr-3"
+                  value={searchKeyword}
+                  onChange={(event) => setSearchKeyword(event.target.value)}
+                  placeholder="고객명, 연락처, 직급, 소속회사 검색"
+                />
+              </div>
+            </label>
+
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block">유입경로 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3"
+                value={intakeFilter}
+                onChange={(event) => setIntakeFilter(event.target.value)}
+              >
+                <option value="전체">전체 유입경로</option>
+                {INTAKE_ROUTES.map((route) => (
+                  <option key={route} value={route}>
+                    {route}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block">관리구간 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3"
+                value={stageFilter}
+                onChange={(event) => setStageFilter(event.target.value)}
+              >
+                <option value="전체">전체 관리구간</option>
+                {MANAGEMENT_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stageLabel(stage)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                className="btn-premium btn-secondary h-12 whitespace-nowrap px-4"
+                onClick={() => {
+                  setSearchKeyword("");
+                  setIntakeFilter("전체");
+                  setStageFilter("전체");
+                }}
+                disabled={!hasActiveFilter}
+              >
+                필터 초기화
+              </button>
+            </div>
+          </div>
+          <p className="crm-tiny mt-3">
+            현재 조건 기준 {filteredCustomers.length.toLocaleString()}명 / 전체 {customers.length.toLocaleString()}명
+          </p>
+        </div>
+      </div>
+
       <div className="min-h-0 flex-1 overflow-x-auto px-5 pb-5 md:px-7">
         <div className="grid h-full min-w-[1180px] grid-cols-5 gap-3 2xl:min-w-0">
           {STAGES.map((stage) => {
-            const stageCustomers = customers.filter(
+            const stageCustomers = filteredCustomers.filter(
               (customer) => customer.stage === stage.key,
             );
             const Icon = stage.icon;
@@ -2440,6 +2541,14 @@ export default function Pipeline3Page() {
                         onClick={() => openDetail(customer)}
                       />
                     ))}
+                    {stageCustomers.length === 0 ? (
+                      <div
+                        className="rounded-[18px] border p-4 text-center"
+                        style={{ borderColor: "var(--border-subtle)" }}
+                      >
+                        <p className="crm-tiny">조건에 맞는 고객이 없습니다.</p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </section>
