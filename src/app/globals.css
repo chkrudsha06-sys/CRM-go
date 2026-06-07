@@ -3401,3 +3401,202 @@ main.crm-main-shell [class*="text-3xl"] {
     border-radius: 22px 22px 0 0;
   }
 }
+
+/* =========================================================
+   CRM UI STEP 15 — Pipeline / Tasks / Dense workflow polish
+   Apply: append to src/app/globals.css
+   Purpose: modern CRM tone for kanban, task board, dense cards
+   ========================================================= */
+
+/* Pipeline / kanban page shell */
+main.crm-main-shell [class*="pipeline"],
+main.crm-main-shell [class*="kanban"],
+main.crm-main-shell [class*="task"] {
+  color: var(--crm-text-primary, #111827);
+}
+
+.dark main.crm-main-shell [class*="pipeline"],
+.dark main.crm-main-shell [class*="kanban"],
+.dark main.crm-main-shell [class*="task"] {
+  color: var(--crm-dark-text-primary, #f9fafb);
+}
+
+/* Generic modern surface normalization for workflow screens */
+main.crm-main-shell section,
+main.crm-main-shell article,
+main.crm-main-shell aside {
+  border-color: var(--crm-border, rgba(15, 23, 42, 0.08));
+}
+
+.dark main.crm-main-shell section,
+.dark main.crm-main-shell article,
+.dark main.crm-main-shell aside {
+  border-color: var(--crm-dark-border, rgba(148, 163, 184, 0.16));
+}
+
+/* Kanban columns */
+main.crm-main-shell [class*="column"],
+main.crm-main-shell [class*="stage"],
+main.crm-main-shell [class*="lane"] {
+  border-radius: 22px;
+}
+
+main.crm-main-shell [class*="kanban"] [class*="column"],
+main.crm-main-shell [class*="pipeline"] [class*="column"],
+main.crm-main-shell [class*="pipeline"] [class*="stage"] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
+}
+
+.dark main.crm-main-shell [class*="kanban"] [class*="column"],
+.dark main.crm-main-shell [class*="pipeline"] [class*="column"],
+.dark main.crm-main-shell [class*="pipeline"] [class*="stage"] {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.94), rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.24);
+}
+
+/* Cards inside workflow screens */
+main.crm-main-shell [class*="pipeline"] [class*="card"],
+main.crm-main-shell [class*="kanban"] [class*="card"],
+main.crm-main-shell [class*="task"] [class*="card"] {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.055);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+main.crm-main-shell [class*="pipeline"] [class*="card"]:hover,
+main.crm-main-shell [class*="kanban"] [class*="card"]:hover,
+main.crm-main-shell [class*="task"] [class*="card"]:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.24);
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.09);
+}
+
+.dark main.crm-main-shell [class*="pipeline"] [class*="card"],
+.dark main.crm-main-shell [class*="kanban"] [class*="card"],
+.dark main.crm-main-shell [class*="task"] [class*="card"] {
+  background: rgba(17, 24, 39, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+}
+
+.dark main.crm-main-shell [class*="pipeline"] [class*="card"]:hover,
+.dark main.crm-main-shell [class*="kanban"] [class*="card"]:hover,
+.dark main.crm-main-shell [class*="task"] [class*="card"]:hover {
+  border-color: rgba(96, 165, 250, 0.34);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.32);
+}
+
+/* Workflow text hierarchy */
+main.crm-main-shell h1,
+main.crm-main-shell h2,
+main.crm-main-shell h3 {
+  letter-spacing: -0.035em;
+}
+
+main.crm-main-shell p,
+main.crm-main-shell span,
+main.crm-main-shell td,
+main.crm-main-shell th,
+main.crm-main-shell label {
+  text-rendering: geometricPrecision;
+}
+
+/* Task and pipeline compact metadata */
+main.crm-main-shell [class*="meta"],
+main.crm-main-shell [class*="sub"],
+main.crm-main-shell [class*="caption"] {
+  color: var(--crm-text-muted, #64748b);
+}
+
+.dark main.crm-main-shell [class*="meta"],
+.dark main.crm-main-shell [class*="sub"],
+.dark main.crm-main-shell [class*="caption"] {
+  color: var(--crm-dark-text-muted, #94a3b8);
+}
+
+/* Filters/search/action areas */
+main.crm-main-shell input,
+main.crm-main-shell select,
+main.crm-main-shell textarea {
+  border-radius: 14px;
+  border-color: rgba(15, 23, 42, 0.11);
+  background-color: rgba(255, 255, 255, 0.94);
+}
+
+main.crm-main-shell input:focus,
+main.crm-main-shell select:focus,
+main.crm-main-shell textarea:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+}
+
+.dark main.crm-main-shell input,
+.dark main.crm-main-shell select,
+.dark main.crm-main-shell textarea {
+  border-color: rgba(148, 163, 184, 0.18);
+  background-color: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+}
+
+.dark main.crm-main-shell input:focus,
+.dark main.crm-main-shell select:focus,
+.dark main.crm-main-shell textarea:focus {
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.12);
+}
+
+/* Buttons inside dense pages */
+main.crm-main-shell button {
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+main.crm-main-shell button:hover {
+  transform: translateY(-0.5px);
+}
+
+main.crm-main-shell button:active {
+  transform: translateY(0);
+}
+
+/* Tables remain centered and readable */
+main.crm-main-shell table th,
+main.crm-main-shell table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap;
+}
+
+main.crm-main-shell table th:first-child,
+main.crm-main-shell table td:first-child {
+  text-align: center !important;
+}
+
+/* Mobile workflow adjustment */
+@media (max-width: 768px) {
+  main.crm-main-shell {
+    padding-inline: 12px;
+  }
+
+  main.crm-main-shell [class*="pipeline"],
+  main.crm-main-shell [class*="kanban"],
+  main.crm-main-shell [class*="task"] {
+    gap: 12px;
+  }
+
+  main.crm-main-shell [class*="column"],
+  main.crm-main-shell [class*="stage"],
+  main.crm-main-shell [class*="lane"],
+  main.crm-main-shell [class*="card"] {
+    border-radius: 16px;
+  }
+
+  main.crm-main-shell table {
+    font-size: 12px;
+  }
+}
