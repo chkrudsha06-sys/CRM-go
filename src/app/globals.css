@@ -1194,3 +1194,362 @@ aside span {
     max-width: none !important;
   }
 }
+
+/* =========================================================
+   CRM Premium UI System v1 — Attio/Linear inspired
+   붙여넣을 위치: src/app/globals.css 파일의 가장 아래
+   목적: 메뉴/테이블/카드/아바타/모바일 UI 기준 통합
+   ========================================================= */
+
+:root {
+  --crm-sidebar-width: 286px;
+  --crm-sidebar-collapsed-width: 82px;
+  --crm-content-padding: clamp(16px, 1.5vw, 28px);
+  --crm-table-row-height: 54px;
+  --crm-control-height: 38px;
+  --crm-avatar-size: 34px;
+  --crm-avatar-large-size: 46px;
+}
+
+.crm-app-shell {
+  background:
+    radial-gradient(circle at 20% -10%, rgba(139, 124, 246, 0.13), transparent 34%),
+    radial-gradient(circle at 86% 4%, rgba(96, 165, 250, 0.1), transparent 30%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+.crm-page {
+  position: relative;
+  min-height: 100%;
+  padding: var(--crm-content-padding);
+}
+
+.crm-page-inner {
+  width: min(100%, var(--page-max));
+  margin: 0 auto;
+}
+
+.crm-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.crm-page-kicker {
+  margin: 0 0 7px;
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.crm-page-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(23px, 1.55vw, 32px);
+  font-weight: 820;
+  letter-spacing: -0.064em;
+  line-height: 1.05;
+}
+
+.crm-page-description {
+  margin: 8px 0 0;
+  color: var(--text-subtle);
+  font-size: 13.5px;
+  font-weight: 590;
+  line-height: 1.55;
+  letter-spacing: -0.018em;
+}
+
+.crm-card-v2 {
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.014)),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .crm-card-v2 {
+  background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.045), 0 16px 38px rgba(15, 23, 42, 0.06);
+}
+
+.crm-toolbar-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.038), rgba(255,255,255,.012)), var(--surface);
+}
+
+.crm-input-v2,
+.crm-select-v2,
+.crm-textarea-v2 {
+  min-height: var(--crm-control-height);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  outline: none;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), background 160ms var(--ease);
+}
+
+.crm-input-v2,
+.crm-select-v2 { padding: 0 12px; }
+.crm-textarea-v2 { padding: 10px 12px; resize: vertical; }
+
+.crm-input-v2:focus,
+.crm-select-v2:focus,
+.crm-textarea-v2:focus {
+  border-color: var(--accent-border) !important;
+  box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.14);
+}
+
+.crm-btn-v2 {
+  display: inline-flex;
+  min-height: var(--crm-control-height);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  font-size: 12.8px;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  transition: transform 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease), box-shadow 160ms var(--ease), opacity 160ms var(--ease);
+}
+
+.crm-btn-v2:hover { transform: translateY(-1px); }
+.crm-btn-v2:active { transform: translateY(0); }
+.crm-btn-v2:disabled { opacity: 0.48; transform: none; }
+
+.crm-btn-primary-v2 {
+  color: #fff;
+  border-color: rgba(167, 139, 250, 0.36);
+  background: linear-gradient(180deg, rgba(255,255,255,.17), transparent), linear-gradient(135deg, #8b7cf6, #6366f1 52%, #3b82f6);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.crm-btn-secondary-v2 {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,.042), rgba(255,255,255,.012)), var(--surface-2);
+}
+
+.crm-btn-ghost-v2 {
+  color: var(--text-subtle);
+  border-color: transparent;
+  background: transparent;
+}
+
+.crm-btn-secondary-v2:hover,
+.crm-btn-ghost-v2:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+  background: var(--surface-hover);
+}
+
+.crm-avatar-v2 {
+  display: inline-flex;
+  width: var(--crm-avatar-size);
+  height: var(--crm-avatar-size);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: linear-gradient(135deg, rgba(139,124,246,.24), rgba(96,165,250,.16));
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+.crm-avatar-v2.large {
+  width: var(--crm-avatar-large-size);
+  height: var(--crm-avatar-large-size);
+  font-size: 16px;
+}
+
+.crm-badge-v2 {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11.2px;
+  font-weight: 790;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.crm-badge-accent-v2 { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent-text); }
+.crm-badge-success-v2 { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.crm-badge-warning-v2 { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
+.crm-badge-danger-v2 { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.crm-badge-info-v2 { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
+
+.crm-table-wrap-v2 {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.crm-table-v2 {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.crm-table-v2 th,
+.crm-table-v2 td {
+  height: var(--crm-table-row-height);
+  padding: 10px 12px;
+  text-align: center !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.crm-table-v2 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  color: var(--text-subtle);
+  font-size: 11.5px;
+  font-weight: 830;
+  letter-spacing: -0.006em;
+}
+
+.crm-table-v2 td {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 640;
+  letter-spacing: -0.018em;
+}
+
+.crm-table-v2 tbody tr {
+  transition: background 140ms var(--ease), transform 140ms var(--ease);
+}
+
+.crm-table-v2 tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.crm-table-v2 tbody tr:last-child td { border-bottom: 0; }
+
+.crm-cell-center-v2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.crm-cell-text-v2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-slide-backdrop-v2 {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--overlay);
+  backdrop-filter: blur(6px);
+}
+
+.crm-slide-panel-v2 {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 80;
+  height: 100dvh;
+  width: min(94vw, var(--panel-width));
+  overflow: auto;
+  border-left: 1px solid var(--border-2);
+  background: var(--surface);
+  box-shadow: var(--shadow-xl);
+  animation: crmSlideInV2 240ms var(--ease-soft) both;
+}
+
+@keyframes crmSlideInV2 {
+  from { transform: translateX(26px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* 기존 메뉴별 테이블의 정렬 깨짐 보정용. 2단계에서 DataTable로 교체하면 더 안정적입니다. */
+table th,
+table td {
+  vertical-align: middle;
+}
+
+@media (min-width: 768px) {
+  table.crm-force-center th,
+  table.crm-force-center td,
+  .crm-force-center table th,
+  .crm-force-center table td {
+    text-align: center !important;
+  }
+}
+
+@media (max-width: 767px) {
+  body { overflow: auto; }
+
+  .crm-page {
+    padding: 14px;
+  }
+
+  .crm-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 14px;
+  }
+
+  .crm-toolbar-v2 {
+    align-items: stretch;
+  }
+
+  .crm-toolbar-v2 > * {
+    width: 100%;
+  }
+
+  .crm-table-wrap-v2 {
+    border-radius: 16px;
+  }
+
+  .crm-table-v2 {
+    min-width: 760px;
+  }
+
+  .crm-btn-v2 {
+    width: 100%;
+  }
+}
