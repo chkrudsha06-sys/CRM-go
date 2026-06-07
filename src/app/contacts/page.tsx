@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
+import { Avatar } from "@/components/ui";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -823,15 +824,7 @@ export default function ContactsPage() {
                       >
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div
-                              className="flex h-10 w-10 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, var(--accent), var(--accent-3))",
-                              }}
-                            >
-                              {record.name.slice(0, 1)}
-                            </div>
+                            <Avatar name={record.name} size="md" className="shrink-0" />
                             <div>
                               <p
                                 className="font-[900]"
@@ -924,15 +917,7 @@ export default function ContactsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
-                          style={{
-                            background:
-                              "linear-gradient(135deg, var(--accent), var(--accent-3))",
-                          }}
-                        >
-                          {record.name.slice(0, 1)}
-                        </div>
+                        <Avatar name={record.name} size="md" className="shrink-0" />
                         <div className="min-w-0">
                           <p
                             className="truncate text-base font-[900]"
@@ -1255,8 +1240,10 @@ function CustomerDetailPanel({
         `}</style>
 
         <div className="slide-panel-header flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap gap-2">
+          <div className="flex min-w-0 items-start gap-4">
+            <Avatar name={record.name} size="lg" className="shrink-0" />
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap gap-2">
               <span className={`badge-premium ${badgeClass(visibleGrade)}`}>
                 {fmt(visibleGrade)}
               </span>
@@ -1277,12 +1264,13 @@ function CustomerDetailPanel({
             >
               {fmt(record.name)}
             </h2>
-            <p
-              className="mt-2 text-sm font-[720]"
-              style={{ color: "var(--text-muted)" }}
-            >
-              {fmt(record.title)} · {fmt(record.phone)}
-            </p>
+              <p
+                className="mt-2 text-sm font-[720]"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {fmt(record.title)} · {fmt(record.phone)}
+              </p>
+            </div>
           </div>
 
           <button
