@@ -735,7 +735,7 @@ function WorkItemsResultChecklist({
 }
 
 
-function AutoResultNotice({ result }: { result: ActivityValues }) {
+function AutoResultNotice({ result }: { result: FormValues }) {
   return (
     <div
       className="rounded-[16px] border p-4"
