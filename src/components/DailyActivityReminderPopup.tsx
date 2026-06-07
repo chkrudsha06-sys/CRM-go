@@ -8,15 +8,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 const EXEC_MEMBERS = ["조계현", "이세호", "기여운", "최연전"];
 
 const ACTIVITY_FIELDS = [
-  { key: "new_tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
+  { key: "tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
   { key: "coldtalk", label: "당일 콜드톡", goalLabel: "당일 콜드톡 목표", resultLabel: "당일 콜드톡 달성", unit: "건" },
-  { key: "consultant_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
-  { key: "second_touch", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
+  { key: "bronze_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
+  { key: "one_percent_db", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
 ] as const;
 
 type ActivityKey = (typeof ACTIVITY_FIELDS)[number]["key"];
 type ReminderMode = "goal" | "mid" | "result";
-type FormValues = Record<ActivityKey | "meeting_confirmed", number>;
+type FormValues = Record<ActivityKey, number>;
 
 type WorkItem = {
   id: string;
@@ -31,31 +31,24 @@ type DailyActivityRow = {
   owner_title: string | null;
   owner_role: string | null;
   is_outside_meeting: boolean;
-  goal_consultant_db: number;
-  goal_second_touch: number;
-  goal_new_tm: number;
-  goal_manage_tm: number;
+  goal_tm: number;
   goal_coldtalk: number;
-  goal_media_mix: number;
-  goal_meeting_confirmed: number;
+  goal_bronze_db: number;
+  goal_one_percent_db: number;
   goal_work_items: WorkItem[] | null;
-  result_consultant_db: number;
-  result_second_touch: number;
-  result_new_tm: number;
-  result_manage_tm: number;
+  result_tm: number;
   result_coldtalk: number;
-  result_media_mix: number;
-  result_meeting_confirmed: number;
+  result_bronze_db: number;
+  result_one_percent_db: number;
   created_at?: string;
   updated_at?: string;
 };
 
 const EMPTY_VALUES: FormValues = {
-  new_tm: 0,
+  tm: 0,
   coldtalk: 0,
-  consultant_db: 0,
-  second_touch: 0,
-  meeting_confirmed: 0,
+  bronze_db: 0,
+  one_percent_db: 0,
 };
 
 function todayString() {
@@ -73,6 +66,7 @@ function createEmptyWorkItems(): WorkItem[] {
 
 function normalizeWorkItems(value: unknown): WorkItem[] {
   if (!Array.isArray(value)) return createEmptyWorkItems();
+
   const items = value
     .map((item, index) => {
       if (!item || typeof item !== "object") return null;
@@ -92,18 +86,15 @@ function activeWorkItems(items: WorkItem[]) {
   return items.filter((item) => item.text.trim().length > 0);
 }
 
-function hasAnyValue(values: FormValues) {
-  return Object.values(values).some((value) => Number(value || 0) > 0);
-}
-
 function isGoalEntered(row: DailyActivityRow | null) {
   if (!row) return false;
   if (row.is_outside_meeting) return true;
+
   return (
-    Number(row.goal_new_tm || 0) > 0 ||
+    Number(row.goal_tm || 0) > 0 ||
     Number(row.goal_coldtalk || 0) > 0 ||
-    Number(row.goal_consultant_db || 0) > 0 ||
-    Number(row.goal_second_touch || 0) > 0 ||
+    Number(row.goal_bronze_db || 0) > 0 ||
+    Number(row.goal_one_percent_db || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).length > 0
   );
 }
@@ -111,34 +102,35 @@ function isGoalEntered(row: DailyActivityRow | null) {
 function isResultEntered(row: DailyActivityRow | null) {
   if (!row) return false;
   if (row.is_outside_meeting) return true;
+
   return (
-    Number(row.result_new_tm || 0) > 0 ||
+    Number(row.result_tm || 0) > 0 ||
     Number(row.result_coldtalk || 0) > 0 ||
-    Number(row.result_consultant_db || 0) > 0 ||
-    Number(row.result_second_touch || 0) > 0 ||
+    Number(row.result_bronze_db || 0) > 0 ||
+    Number(row.result_one_percent_db || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).some((item) => item.done)
   );
 }
 
 function goalFromRow(row: DailyActivityRow | null): FormValues {
   if (!row) return { ...EMPTY_VALUES };
+
   return {
-    new_tm: Number(row.goal_new_tm || 0),
+    tm: Number(row.goal_tm || 0),
     coldtalk: Number(row.goal_coldtalk || 0),
-    consultant_db: Number(row.goal_consultant_db || 0),
-    second_touch: Number(row.goal_second_touch || 0),
-    meeting_confirmed: 0,
+    bronze_db: Number(row.goal_bronze_db || 0),
+    one_percent_db: Number(row.goal_one_percent_db || 0),
   };
 }
 
 function resultFromRow(row: DailyActivityRow | null): FormValues {
   if (!row) return { ...EMPTY_VALUES };
+
   return {
-    new_tm: Number(row.result_new_tm || 0),
+    tm: Number(row.result_tm || 0),
     coldtalk: Number(row.result_coldtalk || 0),
-    consultant_db: Number(row.result_consultant_db || 0),
-    second_touch: Number(row.result_second_touch || 0),
-    meeting_confirmed: 0,
+    bronze_db: Number(row.result_bronze_db || 0),
+    one_percent_db: Number(row.result_one_percent_db || 0),
   };
 }
 
@@ -201,12 +193,12 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
   const [workItems, setWorkItems] = useState<WorkItem[]>(createEmptyWorkItems());
   const [errorText, setErrorText] = useState("");
 
-  const canSaveGoal = true;
   const isOutsideSaved = Boolean(row?.is_outside_meeting);
 
   const loadTodayRow = useCallback(async () => {
     if (!user?.name || !isExec) return;
     setLoading(true);
+    setErrorText("");
 
     const { data, error } = await supabase
       .from("daily_activity_goals")
@@ -216,6 +208,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
       .maybeSingle();
 
     setLoading(false);
+
     if (error) {
       setErrorText(error.message);
       return;
@@ -242,6 +235,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
 
   const decideMode = useCallback(() => {
     if (!user?.name || !isExec || loading) return;
+
     if (isOutsideSaved) {
       setMode(null);
       return;
@@ -253,12 +247,12 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     const afterMidCheck = minutes >= 15 * 60;
     const afterResultTime = minutes >= 17 * 60 + 30;
 
-    if (afterWorkStart && !isGoalEntered(row)) {
+    if (afterWorkStart && !isGoalEntered(row) && !window.localStorage.getItem(reminderKey(user.name, "goal"))) {
       setMode("goal");
       return;
     }
 
-    if (afterResultTime && !isResultEntered(row)) {
+    if (afterResultTime && !isResultEntered(row) && !window.localStorage.getItem(reminderKey(user.name, "result"))) {
       setMode("result");
       return;
     }
@@ -295,21 +289,16 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
       owner_title: user.title || null,
       owner_role: "exec",
       is_outside_meeting: outside,
-      goal_consultant_db: outside ? 0 : goal.consultant_db,
-      goal_second_touch: outside ? 0 : goal.second_touch,
-      goal_new_tm: outside ? 0 : goal.new_tm,
-      goal_manage_tm: 0,
+      goal_tm: outside ? 0 : goal.tm,
       goal_coldtalk: outside ? 0 : goal.coldtalk,
-      goal_media_mix: 0,
-      goal_meeting_confirmed: 0,
+      goal_bronze_db: outside ? 0 : goal.bronze_db,
+      goal_one_percent_db: outside ? 0 : goal.one_percent_db,
       goal_work_items: outside ? [] : workItems,
-      result_consultant_db: outside ? 0 : result.consultant_db,
-      result_second_touch: outside ? 0 : result.second_touch,
-      result_new_tm: outside ? 0 : result.new_tm,
-      result_manage_tm: 0,
+      result_tm: outside ? 0 : result.tm,
       result_coldtalk: outside ? 0 : result.coldtalk,
-      result_media_mix: 0,
-      result_meeting_confirmed: 0,
+      result_bronze_db: outside ? 0 : result.bronze_db,
+      result_one_percent_db: outside ? 0 : result.one_percent_db,
+      updated_at: new Date().toISOString(),
     };
 
     const { error } = await supabase
@@ -317,14 +306,14 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
       .upsert(payload, { onConflict: "work_date,owner_name" });
 
     setSaving(false);
+
     if (error) {
       setErrorText(error.message);
       return;
     }
 
     await loadTodayRow();
-    if (target === "goal") window.localStorage.setItem(reminderKey(user.name, "goal"), "1");
-    if (target === "result") window.localStorage.setItem(reminderKey(user.name, "result"), "1");
+    window.localStorage.setItem(reminderKey(user.name, target), "1");
     setMode(null);
   };
 
@@ -429,8 +418,11 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                     오전에 세운 목표를 다시 확인하고, 아직 남은 업무는 우선순위를 다시 잡아보세요.
                   </p>
                 </div>
+
                 <div className="rounded-[20px] border p-5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
-                  <p className="mb-3 text-[13px] font-[860]" style={{ color: "var(--text-strong)" }}>금일 당일활동목표</p>
+                  <p className="mb-3 text-[13px] font-[860]" style={{ color: "var(--text-strong)" }}>
+                    금일 당일활동목표
+                  </p>
                   <div className="space-y-2">
                     {activeWorkItems(workItems).length > 0 ? (
                       activeWorkItems(workItems).map((item, index) => (
@@ -439,10 +431,13 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                         </div>
                       ))
                     ) : (
-                      <p className="text-[13px] font-[700]" style={{ color: "var(--text-muted)" }}>등록된 텍스트 목표가 없습니다.</p>
+                      <p className="text-[13px] font-[700]" style={{ color: "var(--text-muted)" }}>
+                        등록된 텍스트 목표가 없습니다.
+                      </p>
                     )}
                   </div>
                 </div>
+
                 <button type="button" onClick={closeSoftReminder} className="btn-premium btn-primary w-full justify-center">
                   확인했습니다
                 </button>
@@ -474,6 +469,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                         {isGoalMode ? "당일 활동목표 입력" : "퇴근 전 활동결과 입력"}
                       </p>
                     </div>
+
                     <div className="grid gap-3 sm:grid-cols-2">
                       {ACTIVITY_FIELDS.map((field) => (
                         <NumberField
@@ -489,7 +485,6 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                           }
                         />
                       ))}
-
                     </div>
                   </div>
                 </div>
@@ -516,7 +511,9 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                       const hasText = item.text.trim().length > 0;
                       return (
                         <div key={item.id} className="flex items-center gap-2 rounded-[14px] border px-3 py-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-                          <span className="w-5 shrink-0 text-[13px] font-[860]" style={{ color: "var(--text-muted)" }}>{index + 1}.</span>
+                          <span className="w-5 shrink-0 text-[13px] font-[860]" style={{ color: "var(--text-muted)" }}>
+                            {index + 1}.
+                          </span>
                           {isGoalMode ? (
                             <input
                               value={item.text}
@@ -535,7 +532,13 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                             </label>
                           )}
                           {isGoalMode && (
-                            <button type="button" onClick={() => removeWorkItem(item.id)} disabled={outside || workItems.length <= 3} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border disabled:opacity-35" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                            <button
+                              type="button"
+                              onClick={() => removeWorkItem(item.id)}
+                              disabled={outside || workItems.length <= 3}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border disabled:opacity-35"
+                              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                            >
                               <Trash2 size={14} />
                             </button>
                           )}
@@ -545,7 +548,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                   </div>
                 </div>
 
-                <div className="xl:col-span-2 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end xl:col-span-2">
                   {isResultMode && (
                     <button type="button" onClick={closeSoftReminder} className="btn-premium btn-secondary justify-center">
                       잠시 후 입력
