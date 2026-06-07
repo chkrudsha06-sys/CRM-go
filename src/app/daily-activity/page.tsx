@@ -1587,39 +1587,51 @@ export default function DailyActivityPage() {
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[980px] text-center">
+                <table className="crm-table min-w-[980px] table-fixed text-center [&_td]:text-center [&_td]:align-middle [&_th]:text-center [&_th]:align-middle">
+                  <colgroup>
+                    <col className="w-[13%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[15%]" />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th className="sticky top-0 z-10 text-center">일자</th>
-                      <th className="sticky top-0 z-10 text-center">담당자</th>
-                      <th className="sticky top-0 z-10 text-center">상태</th>
-                      <th className="sticky top-0 z-10 text-center">TM 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center">콜드톡 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center">브론즈DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center">1%DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center">수정일</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">일자</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">담당자</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">상태</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">TM 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">콜드톡 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">브론즈DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">1%DB 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle">수정일</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleDetailRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center">
+                        <td colSpan={8} className="text-center align-middle">
                           기록이 없습니다.
                         </td>
                       </tr>
                     ) : (
                       visibleDetailRows.map((row) => (
                         <tr key={row.id}>
-                          <td className="text-center">{formatKoreanDate(row.work_date)}</td>
-                          <td className="text-center">
-                            <span className="crm-row-main">
+                          <td className="text-center align-middle">
+                            <span className="block w-full text-center">{formatKoreanDate(row.work_date)}</span>
+                          </td>
+                          <td className="text-center align-middle">
+                            <span className="crm-row-main block w-full text-center">
                               {row.owner_name}
-                            </span>{" "}
-                            <span className="crm-row-sub">
+                            </span>
+                            <span className="crm-row-sub block w-full text-center">
                               {row.owner_title || ""}
                             </span>
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle">
                             <span
                               className={`badge-premium ${row.is_outside_meeting ? "badge-warning" : "badge-success"}`}
                             >
@@ -1628,19 +1640,19 @@ export default function DailyActivityPage() {
                                 : "기록대상"}
                             </span>
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle tabular-nums">
                             {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle tabular-nums">
                             {goalValue(row, "coldtalk").toLocaleString()} / {resultValue(row, "coldtalk").toLocaleString()}
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle tabular-nums">
                             {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle tabular-nums">
                             {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
                           </td>
-                          <td className="text-center">
+                          <td className="text-center align-middle">
                             {new Date(row.updated_at).toLocaleString("ko-KR", {
                               month: "2-digit",
                               day: "2-digit",
