@@ -84,6 +84,35 @@ function normalizeGeminiMimeType(mimeType: string) {
   return mimeType || "audio/mp4";
 }
 
+
+function getSyncStartAt() {
+  const raw = process.env.CALL_RECORDING_SYNC_START_AT;
+
+  if (!raw) return null;
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(
+      `Invalid CALL_RECORDING_SYNC_START_AT value. Use ISO format, for example 2026-06-05T00:00:00+09:00. Current value: ${raw}`
+    );
+  }
+
+  return parsed;
+}
+
+function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
+  if (!syncStartAt) return true;
+
+  const baseTime = file.createdTime || file.modifiedTime;
+  if (!baseTime) return false;
+
+  const fileTime = new Date(baseTime);
+  if (Number.isNaN(fileTime.getTime())) return false;
+
+  return fileTime.getTime() >= syncStartAt.getTime();
+}
+
 function extractPhoneFromFileName(fileName: string) {
   const candidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
 
@@ -733,9 +762,17 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const syncStartAt = getSyncStartAt();
+
     const audioFiles = folderResults
       .flatMap((result) => result.files)
-      .filter((file) => file.mimeType?.startsWith("audio/"));
+      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => isFileAfterSyncStart(file, syncStartAt));
+
+    const skippedOldFileCount = folderResults
+      .flatMap((result) => result.files)
+      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => !isFileAfterSyncStart(file, syncStartAt)).length;
 
     const processTargets = [];
 
@@ -795,7 +832,9 @@ export async function GET(request: NextRequest) {
       ok: true,
       message: "Call recording process completed.",
       limit,
+      syncStartAt: syncStartAt?.toISOString() || null,
       foundAudioFileCount: audioFiles.length,
+      skippedOldFileCount,
       processedCount: results.length,
       results,
       folderResults: folderResults.map((folder) => ({
