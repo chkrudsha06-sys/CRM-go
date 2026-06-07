@@ -3112,3 +3112,91 @@ main.crm-main-shell [class*="text-3xl"] {
     grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
   }
 }
+/* CRM UI Step 12 - Sales page refinement */
+.sales-modern-page {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+}
+
+.sales-modern-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.sales-modern-header::after {
+  content: "";
+  position: absolute;
+  inset: auto 24px 0 24px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  pointer-events: none;
+}
+
+.sales-modern-filterbar {
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.sales-modern-filterbar input,
+.sales-modern-filterbar select,
+.sales-modern-page input,
+.sales-modern-page select,
+.sales-modern-page textarea {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.sales-modern-table .crm-table th,
+.sales-modern-table .crm-table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.sales-modern-table .crm-table tbody tr {
+  transition: transform 160ms var(--ease-soft), background 160ms var(--ease-soft), box-shadow 160ms var(--ease-soft);
+}
+
+.sales-modern-table .crm-table tbody tr:hover {
+  transform: translateY(-1px);
+  background: var(--surface-hover) !important;
+}
+
+.sales-modern-page .crm-avatar {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface) 70%, transparent), 0 8px 18px rgba(15, 23, 42, 0.10);
+  font-weight: 800;
+}
+
+.sales-modern-page .premium-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.sales-modern-page .btn-premium {
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .sales-modern-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sales-modern-header > div:last-child {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-modern-header .btn-premium {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sales-modern-main {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+}
