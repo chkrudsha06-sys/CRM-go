@@ -11,7 +11,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const MOBILE_TITLES: Record<string, string> = {
   "/": "대시보드",
   "/tasks": "결제&업무요청",
-  "/contacts": "고객 DB",
+  "/contacts": "VIP활동DB",
+  "/customer-db": "고객DB",
   "/pipeline": "파이프라인",
   "/pipeline3": "파이프라인3",
   "/vip-members": "분양회 입회자",
