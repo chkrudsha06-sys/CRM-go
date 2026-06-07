@@ -2,6 +2,7 @@
 
 import { supabase } from "@/lib/supabase";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
+import ContactNotes from "@/components/ContactNotes";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -1079,132 +1080,17 @@ function QuickActions({
 
 function NotesTab({
   customer,
-  composerOpen,
 }: {
   customer: PipelineCustomer;
   composerOpen: boolean;
 }) {
-  const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
-  const [newContent, setNewContent] = useState("");
-  const [notes, setNotes] = useState([
-    {
-      id: 1,
-      noteDate: customer.registeredAt,
-      content: customer.noteSummary,
-      author: "고객DB 메모",
-    },
-  ]);
-
-  const handleAdd = () => {
-    if (!newContent.trim()) return;
-    setNotes((items) => [
-      {
-        id: Date.now(),
-        noteDate: newDate,
-        content: newContent.trim(),
-        author: "현재 사용자",
-      },
-      ...items,
-    ]);
-    setNewContent("");
-    setNewDate(new Date().toISOString().slice(0, 10));
-  };
-
   return (
     <section className="premium-card mt-4 p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <FileText size={17} style={{ color: "var(--accent)" }} />
-        <div>
-          <p className="crm-section-title">Notes</p>
-          <p className="crm-tiny">활동노트 작성과 상담 기록</p>
-        </div>
-      </div>
-
-      {composerOpen ? (
-        <div
-          className="mb-4 space-y-3 rounded-[16px] border p-4"
-          style={{
-            background: "var(--surface-2)",
-            borderColor: "var(--border)",
-          }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p
-              className="text-[14px] font-[900]"
-              style={{ color: "var(--text-strong)" }}
-            >
-              활동노트 작성
-            </p>
-            <input
-              type="date"
-              value={newDate}
-              onChange={(event) => setNewDate(event.target.value)}
-              className="h-9 rounded-[10px] border px-3 text-[12px] font-semibold outline-none"
-              style={{
-                background: "var(--surface)",
-                borderColor: "var(--border-subtle)",
-                color: "var(--text-strong)",
-              }}
-            />
-          </div>
-          <textarea
-            value={newContent}
-            onChange={(event) => setNewContent(event.target.value)}
-            placeholder="활동 내용을 입력하세요."
-            rows={5}
-            className="w-full resize-none rounded-[12px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
-            style={{
-              background: "var(--surface)",
-              borderColor: "var(--border-subtle)",
-              color: "var(--text-strong)",
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="btn-premium btn-primary w-full"
-          >
-            <Plus size={14} />
-            활동노트 저장
-          </button>
-          <p className="crm-tiny">
-            현재 화면에서는 패널 내 임시 작성이며, 실제 Supabase 저장은 후속
-            작업에서 연결합니다.
-          </p>
-        </div>
-      ) : null}
-
-      <div className="space-y-3">
-        {notes.map((note) => (
-          <article
-            key={note.id}
-            className="rounded-[16px] border p-4"
-            style={{
-              background: "var(--surface-2)",
-              borderColor: "var(--border)",
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p
-                className="text-[12px] font-[900]"
-                style={{ color: "var(--text-subtle)" }}
-              >
-                {note.noteDate}
-              </p>
-              <span className="badge-premium badge-muted">{note.author}</span>
-            </div>
-            <p
-              className="whitespace-pre-wrap text-sm font-[760] leading-7"
-              style={{ color: "var(--text-subtle)" }}
-            >
-              {note.content}
-            </p>
-          </article>
-        ))}
-      </div>
+      <ContactNotes contactId={customer.id} />
     </section>
   );
 }
+
 
 function AdsTab({
   customer,
