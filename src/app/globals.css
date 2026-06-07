@@ -1553,3 +1553,185 @@ table td {
     width: 100%;
   }
 }
+
+
+/* =========================================================
+   CRM UI STEP 2 — Attio/Linear style sidebar + table alignment
+   적용 위치: src/app/globals.css 파일 맨 아래에 추가
+   ========================================================= */
+
+:root {
+  --crm-sidebar-width: 292px;
+  --crm-sidebar-collapsed-width: 86px;
+  --crm-topbar-height: 54px;
+}
+
+.crm-app-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), transparent 34rem),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30rem),
+    var(--bg);
+}
+
+.crm-sidebar-shell {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-right: 1px solid var(--border);
+  box-shadow: 18px 0 60px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(22px);
+}
+
+.crm-sidebar-logo-card {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--surface-2) 88%, transparent), color-mix(in srgb, var(--accent-subtle) 34%, transparent));
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.crm-sidebar-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-radius: 14px;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  color: var(--text-subtle);
+  border: 1px solid transparent;
+  transition: background 180ms var(--ease-soft), border-color 180ms var(--ease-soft), color 180ms var(--ease-soft), transform 180ms var(--ease-soft);
+}
+
+.crm-sidebar-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  transform: translateX(2px);
+}
+
+.crm-sidebar-item[data-active="true"] {
+  background: linear-gradient(135deg, var(--accent-subtle), color-mix(in srgb, var(--surface) 52%, transparent));
+  border-color: var(--accent-border);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-border) 44%, transparent);
+}
+
+.crm-sidebar-item[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 10px;
+  width: 3px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.crm-sidebar-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: var(--text-faint);
+  background: transparent;
+}
+
+.crm-sidebar-item[data-active="true"] .crm-sidebar-icon {
+  color: var(--accent-text);
+  background: var(--accent-bg);
+}
+
+.crm-sidebar-section-title {
+  padding: 18px 8px 8px;
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 1;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.crm-user-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 모든 메뉴의 테이블/리스트 텍스트 중앙 정렬 기본값 */
+.crm-table,
+.crm-modern-table,
+table {
+  width: 100%;
+}
+
+.crm-table th,
+.crm-table td,
+.crm-modern-table th,
+.crm-modern-table td,
+table th,
+table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.crm-table th,
+.crm-modern-table th,
+table th {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-muted);
+}
+
+.crm-table td,
+.crm-modern-table td,
+table td {
+  font-size: 13px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  color: var(--text-subtle);
+}
+
+/* 이름/프로필 셀도 가운데 기준으로 통일 */
+.crm-name-cell,
+.crm-person-cell,
+.crm-avatar-cell {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  min-width: 0;
+}
+
+/* 모바일에서는 테이블 가독성 확보 */
+@media (max-width: 768px) {
+  .crm-page-wrap,
+  .crm-page-container {
+    padding: 16px !important;
+  }
+
+  .crm-table-wrap,
+  .crm-responsive-table,
+  .crm-card {
+    border-radius: 18px !important;
+  }
+
+  .crm-table th,
+  .crm-table td,
+  .crm-modern-table th,
+  .crm-modern-table td,
+  table th,
+  table td {
+    min-width: 92px;
+    padding: 11px 10px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+
+  .crm-sidebar-shell {
+    width: min(86vw, 318px) !important;
+  }
+}
