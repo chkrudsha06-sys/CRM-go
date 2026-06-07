@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -46,7 +46,7 @@ type RawCustomerRecord = {
   name: string;
   title: string;
   phone: string;
-  intake_route: "TM DB" | "콜드톡 DB";
+  intake_route: string;
   company: string;
   activity_type: ActivityType;
   memo: string;
@@ -59,7 +59,7 @@ type RawCustomerForm = {
   name: string;
   title: string;
   phone: string;
-  intake_route: "" | "TM DB" | "콜드톡 DB";
+  intake_route: string;
   company: string;
   activity_type: "" | ActivityType;
   memo: string;
@@ -82,7 +82,14 @@ type VipRecord = {
 
 const RAW_DB_STORAGE_KEY = "crm_go_raw_customer_db_v1";
 const VIP_DB_STORAGE_KEY = "crm_go_customer_db_local_v2";
-const INTAKE_ROUTES: Array<"TM DB" | "콜드톡 DB"> = ["TM DB", "콜드톡 DB"];
+const INTAKE_ROUTES = [
+  "분양의신DB",
+  "컨설턴트VIP DB",
+  "완판트럭",
+  "분양라인",
+  "분양회MGM",
+  "대협팀활동",
+];
 const ACTIVITY_TYPES: ActivityType[] = ["TM", "콜드톡"];
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 
@@ -112,6 +119,16 @@ function dateLabel(value: string) {
     year: "2-digit",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function timeLabel(value: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("ko-KR", {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
@@ -147,7 +164,7 @@ function buildNoteMemo(notes: CustomerDbNote[]) {
   return notes
     .map(
       (note) =>
-        `[${note.activityType}] ${note.noteDate}\n${note.content.trim()}\n- ${note.author}`,
+        `[${note.activityType}] ${note.noteDate} ${timeLabel(note.createdAt)}\n${note.content.trim()}\n- ${note.author}`,
     )
     .join("\n\n");
 }
@@ -158,10 +175,9 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
     name: String(record.name || ""),
     title: String(record.title || ""),
     phone: String(record.phone || ""),
-    intake_route:
-      record.intake_route === "콜드톡 DB" || record.intake_route === "TM DB"
-        ? record.intake_route
-        : "TM DB",
+    intake_route: INTAKE_ROUTES.includes(String(record.intake_route || ""))
+      ? String(record.intake_route)
+      : INTAKE_ROUTES[0],
     company: String(record.company || ""),
     activity_type:
       record.activity_type === "콜드톡" || record.activity_type === "TM"
@@ -197,7 +213,7 @@ function StatCard({
   );
 }
 
-function InputLabel({ children }: { children: React.ReactNode }) {
+function InputLabel({ children }: { children: ReactNode }) {
   return <span className="crm-meta mb-2 block">{children}</span>;
 }
 
@@ -371,7 +387,7 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="max-h-[456px] space-y-3 overflow-y-auto pr-1">
       {notes.map((note) => (
         <article
           key={note.id}
@@ -390,7 +406,7 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
               >
                 {note.activityType}
               </span>
-              <p className="crm-meta">{note.noteDate}</p>
+              <p className="crm-meta">{note.noteDate} · {timeLabel(note.createdAt)}</p>
             </div>
             <p className="crm-tiny">{note.author}</p>
           </div>
@@ -402,6 +418,42 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
           </p>
         </article>
       ))}
+    </div>
+  );
+}
+
+
+function DetailBlock({
+  label,
+  value,
+  badge = false,
+}: {
+  label: string;
+  value?: string | number | null;
+  badge?: boolean;
+}) {
+  const display = typeof value === "number" ? String(value) : fmt(value || "");
+
+  return (
+    <div
+      className="rounded-[16px] border p-4"
+      style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+    >
+      <p className="crm-meta">{label}</p>
+      {badge ? (
+        <span
+          className="mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[900]"
+          style={{
+            background: "var(--accent-subtle)",
+            border: "1px solid var(--accent-border)",
+            color: "var(--accent-text)",
+          }}
+        >
+          {display}
+        </span>
+      ) : (
+        <p className="crm-card-title mt-2">{display}</p>
+      )}
     </div>
   );
 }
@@ -488,6 +540,8 @@ export default function CustomerDbPage() {
   const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
+  const [filterActivity, setFilterActivity] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [transferTarget, setTransferTarget] = useState<RawCustomerRecord | null>(null);
@@ -512,8 +566,8 @@ export default function CustomerDbPage() {
   };
 
   const stats = useMemo(() => {
-    const tm = records.filter((record) => record.intake_route === "TM DB").length;
-    const cold = records.filter((record) => record.intake_route === "콜드톡 DB").length;
+    const tm = records.filter((record) => record.activity_type === "TM").length;
+    const cold = records.filter((record) => record.activity_type === "콜드톡").length;
     const notes = records.reduce((sum, record) => sum + record.notes.length, 0);
     return { total: records.length, tm, cold, notes };
   }, [records]);
@@ -537,9 +591,24 @@ export default function CustomerDbPage() {
             .toLowerCase()
             .includes(keyword);
 
-      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute);
+      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute) && (!filterActivity || record.activity_type === filterActivity);
     });
-  }, [records, search, filterRoute]);
+  }, [records, search, filterRoute, filterActivity]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / 10));
+  const pagedRecords = useMemo(() => {
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * 10;
+    return filteredRecords.slice(start, start + 10);
+  }, [filteredRecords, currentPage, totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterRoute, filterActivity]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
@@ -737,7 +806,7 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card mb-5 p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
           <label className="relative block">
             <Search
               size={16}
@@ -763,81 +832,101 @@ export default function CustomerDbPage() {
               </option>
             ))}
           </select>
+          <select
+            value={filterActivity}
+            onChange={(event) => setFilterActivity(event.target.value)}
+            className="crm-search h-11 w-full px-3"
+          >
+            <option value="">전체 활동항목</option>
+            {ACTIVITY_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.65fr)]">
+      <section className="premium-card overflow-hidden">
         <div className="crm-table-wrap overflow-hidden">
-          <table className="crm-table">
+          <table className="crm-table text-center">
             <thead>
               <tr>
-                <th>고객정보</th>
-                <th>유입경로</th>
-                <th>활동항목</th>
-                <th>소속회사</th>
-                <th>활동노트</th>
-                <th>등록일</th>
-                <th>관리</th>
+                <th className="text-center">고객정보</th>
+                <th className="text-center">유입경로</th>
+                <th className="text-center">활동항목</th>
+                <th className="text-center">소속회사</th>
+                <th className="text-center">최근 활동노트</th>
+                <th className="text-center">등록일</th>
+                <th className="text-center">관리</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRecords.map((record) => (
-                <tr
-                  key={record.id}
-                  data-selected={selectedRecord?.id === record.id}
-                  onClick={() => setSelectedRecord(record)}
-                  className="cursor-pointer"
-                >
-                  <td>
-                    <div className="flex items-center gap-3">
-                      <div className="crm-avatar">{record.name.slice(0, 1) || "고"}</div>
-                      <div>
-                        <p className="crm-row-main">{record.name}</p>
-                        <p className="crm-row-sub">{fmt(record.title)} · {record.phone}</p>
+              {pagedRecords.map((record) => {
+                const latestNote = record.notes[0];
+                return (
+                  <tr
+                    key={record.id}
+                    data-selected={selectedRecord?.id === record.id}
+                    onClick={() => setSelectedRecord(record)}
+                    className="cursor-pointer"
+                  >
+                    <td className="text-center">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="crm-avatar">{record.name.slice(0, 1) || "고"}</div>
+                        <div className="text-center">
+                          <p className="crm-row-main">{record.name}</p>
+                          <p className="crm-row-sub">{fmt(record.title)} · {record.phone}</p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
-                      style={{
-                        background: "var(--accent-subtle)",
-                        border: "1px solid var(--accent-border)",
-                        color: "var(--accent-text)",
-                      }}
-                    >
-                      {record.intake_route}
-                    </span>
-                  </td>
-                  <td className="crm-row-main">{record.activity_type}</td>
-                  <td className="crm-row-sub">{fmt(record.company)}</td>
-                  <td className="crm-row-main">{record.notes.length}건</td>
-                  <td className="crm-row-sub">{dateLabel(record.created_at)}</td>
-                  <td>
-                    <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => requestTransfer(record)}
-                        className="btn-premium btn-primary h-9 px-3 text-[12px]"
+                    </td>
+                    <td className="text-center">
+                      <span
+                        className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                        style={{
+                          background: "var(--accent-subtle)",
+                          border: "1px solid var(--accent-border)",
+                          color: "var(--accent-text)",
+                        }}
                       >
-                        <ArrowRight size={13} /> 이관
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteRecord(record)}
-                        className="btn-premium btn-danger h-9 px-3 text-[12px]"
-                      >
-                        <Trash2 size={13} /> 삭제
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {record.intake_route}
+                      </span>
+                    </td>
+                    <td className="crm-row-main text-center">{record.activity_type}</td>
+                    <td className="crm-row-sub text-center">{fmt(record.company)}</td>
+                    <td className="max-w-[280px] text-center">
+                      <p className="truncate crm-row-main">{latestNote?.content || "-"}</p>
+                      <p className="crm-row-sub">
+                        {latestNote ? `${latestNote.activityType} · ${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
+                      </p>
+                    </td>
+                    <td className="crm-row-sub text-center">{dateLabel(record.created_at)}</td>
+                    <td className="text-center">
+                      <div className="flex flex-wrap justify-center gap-2" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => requestTransfer(record)}
+                          className="btn-premium btn-primary h-9 px-3 text-[12px]"
+                        >
+                          <ArrowRight size={13} /> 이관
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRecord(record)}
+                          className="btn-premium btn-danger h-9 px-3 text-[12px]"
+                        >
+                          <Trash2 size={13} /> 삭제
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {!filteredRecords.length ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center">
                     <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
-                    <p className="crm-tiny mt-1">TM 또는 콜드톡 DB를 등록해주세요.</p>
+                    <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 고객을 등록해주세요.</p>
                   </td>
                 </tr>
               ) : null}
@@ -845,41 +934,138 @@ export default function CustomerDbPage() {
           </table>
         </div>
 
-        <aside className="premium-card p-5">
-          {selectedRecord ? (
-            <div className="space-y-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="crm-title">
-                    {selectedRecord.name} <span className="text-[16px] font-[850]">{selectedRecord.title}</span>
-                  </p>
-                  <p className="crm-subtitle mt-2">{selectedRecord.phone}</p>
+        <div className="flex flex-col gap-3 border-t px-4 py-3 md:flex-row md:items-center md:justify-between" style={{ borderColor: "var(--border)" }}>
+          <p className="crm-tiny">
+            총 {filteredRecords.length}건 · 페이지 {Math.min(currentPage, totalPages)} / {totalPages}
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage <= 1}
+              className="btn-premium btn-ghost h-9 px-3 text-[12px] disabled:opacity-40"
+            >
+              이전
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage >= totalPages}
+              className="btn-premium btn-ghost h-9 px-3 text-[12px] disabled:opacity-40"
+            >
+              다음
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {selectedRecord ? (
+        <div className="fixed inset-0 z-40">
+          <button
+            type="button"
+            aria-label="고객 상세 닫기"
+            onClick={() => setSelectedRecord(null)}
+            className="absolute inset-0 cursor-default backdrop-blur-[2px]"
+            style={{ background: "var(--overlay)" }}
+          />
+
+          <aside
+            className="absolute right-0 top-0 flex h-full w-full max-w-[720px] animate-[crmSlideIn_220ms_ease-out] flex-col border-l"
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--border)",
+              boxShadow: "var(--shadow-lg)",
+            }}
+          >
+            <style jsx global>{`
+              @keyframes crmSlideIn {
+                from {
+                  transform: translateX(100%);
+                  opacity: 0.72;
+                }
+                to {
+                  transform: translateX(0);
+                  opacity: 1;
+                }
+              }
+            `}</style>
+
+            <div className="slide-panel-header flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                    style={{
+                      background: "var(--accent-subtle)",
+                      border: "1px solid var(--accent-border)",
+                      color: "var(--accent-text)",
+                    }}
+                  >
+                    {selectedRecord.intake_route}
+                  </span>
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                    style={{
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text-subtle)",
+                    }}
+                  >
+                    {selectedRecord.activity_type}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => requestTransfer(selectedRecord)}
-                  className="btn-premium btn-primary"
-                >
-                  <ArrowRight size={15} /> VIP활동DB 이관
-                </button>
+                <h2 className="truncate text-[30px] font-[930] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
+                  {fmt(selectedRecord.name)}
+                </h2>
+                <p className="mt-2 text-sm font-[720]" style={{ color: "var(--text-muted)" }}>
+                  {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
+                </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="crm-meta">유입경로</p>
-                  <p className="crm-card-title mt-2">{selectedRecord.intake_route}</p>
-                </div>
-                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="crm-meta">활동항목</p>
-                  <p className="crm-card-title mt-2">{selectedRecord.activity_type}</p>
-                </div>
-                <div className="rounded-[16px] border p-4 md:col-span-2" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="crm-meta">소속회사</p>
-                  <p className="crm-card-title mt-2">{fmt(selectedRecord.company)}</p>
-                </div>
-              </div>
+              <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-10 w-10 shrink-0 p-0">
+                <X size={17} />
+              </button>
+            </div>
 
-              <div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <section className="premium-card p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="crm-card-title">고객 기본정보</p>
+                    <p className="crm-tiny mt-1">최근 활동노트와 이관 전 원천 고객 정보를 확인합니다.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary">
+                      <ArrowRight size={14} /> VIP활동DB 이관
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRecord(selectedRecord)}
+                      className="btn-premium"
+                      style={{
+                        color: "var(--danger-text)",
+                        background: "var(--danger-bg)",
+                        border: "1px solid var(--danger-border)",
+                      }}
+                    >
+                      <Trash2 size={14} /> 삭제
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <DetailBlock label="고객명" value={selectedRecord.name} />
+                  <DetailBlock label="직급" value={selectedRecord.title} />
+                  <DetailBlock label="연락처" value={selectedRecord.phone} />
+                  <DetailBlock label="유입경로" value={selectedRecord.intake_route} badge />
+                  <DetailBlock label="활동항목" value={selectedRecord.activity_type} badge />
+                  <DetailBlock label="소속회사" value={selectedRecord.company} />
+                  <DetailBlock label="등록일" value={dateLabel(selectedRecord.created_at)} />
+                  <DetailBlock label="수정일" value={dateLabel(selectedRecord.updated_at)} />
+                </div>
+              </section>
+
+              <section className="premium-card mt-4 p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <MessageCircle size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">메모</p>
@@ -887,31 +1073,22 @@ export default function CustomerDbPage() {
                 <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
                   <p className="crm-body whitespace-pre-wrap">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
                 </div>
-              </div>
+              </section>
 
-              <div>
+              <section className="premium-card mt-4 p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <FileText size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">활동노트</p>
                 </div>
-                <NoteComposer
-                  defaultType={selectedRecord.activity_type}
-                  onAdd={(note) => handleAddNote(selectedRecord.id, note)}
-                />
+                <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
                 <div className="mt-4">
                   <NotesList notes={selectedRecord.notes} />
                 </div>
-              </div>
+              </section>
             </div>
-          ) : (
-            <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
-              <UserRound size={38} style={{ color: "var(--text-faint)" }} />
-              <p className="crm-card-title mt-4">고객을 선택해주세요.</p>
-              <p className="crm-tiny mt-1">목록에서 고객을 선택하면 메모와 활동노트를 확인할 수 있습니다.</p>
-            </div>
-          )}
-        </aside>
-      </section>
+          </aside>
+        </div>
+      ) : null}
 
       {showForm ? (
         <div className="crm-modal-overlay z-[70]">
@@ -952,9 +1129,7 @@ export default function CustomerDbPage() {
                 onChange={(value) =>
                   setForm((current) => ({
                     ...current,
-                    intake_route: value as RawCustomerForm["intake_route"],
-                    activity_type:
-                      value === "TM DB" ? "TM" : value === "콜드톡 DB" ? "콜드톡" : current.activity_type,
+                    intake_route: value,
                   }))
                 }
               />
