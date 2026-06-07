@@ -2899,3 +2899,216 @@ button,
     border-radius: 22px !important;
   }
 }
+
+/* =========================================================
+   STEP 11 - Daily activity / sales / dashboard refinement
+   목적: 영업현황, 일별활동기록, 메인 대시보드의 카드/표/입력 폼까지
+   동일한 Attio-style CRM 톤으로 강제 정리합니다.
+   ========================================================= */
+
+/* dashboard and legacy page containers */
+main.crm-main-shell > div:not([class*="fixed"]),
+main.crm-main-shell section,
+main.crm-main-shell article {
+  color: var(--text);
+}
+
+/* page title hierarchy */
+main.crm-main-shell h1,
+main.crm-main-shell .page-title,
+main.crm-main-shell [class*="text-3xl"],
+main.crm-main-shell [class*="text-4xl"] {
+  letter-spacing: -0.055em;
+  color: var(--text-strong);
+}
+
+main.crm-main-shell h2,
+main.crm-main-shell h3 {
+  color: var(--text-strong);
+  letter-spacing: -0.025em;
+}
+
+/* legacy white/gray cards -> premium CRM cards */
+main.crm-main-shell .bg-white,
+main.crm-main-shell .bg-gray-50,
+main.crm-main-shell .bg-slate-50,
+main.crm-main-shell .bg-zinc-50,
+main.crm-main-shell .dark\:bg-gray-800,
+main.crm-main-shell .dark\:bg-slate-800 {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, transparent), var(--surface-2)) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* sales/activity KPI cards */
+main.crm-main-shell [class*="rounded-xl"],
+main.crm-main-shell [class*="rounded-2xl"],
+main.crm-main-shell [class*="rounded-3xl"] {
+  border-color: var(--border);
+}
+
+main.crm-main-shell .shadow,
+main.crm-main-shell .shadow-sm,
+main.crm-main-shell .shadow-md,
+main.crm-main-shell .shadow-lg,
+main.crm-main-shell .shadow-xl {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* tables: center and readable */
+main.crm-main-shell table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+main.crm-main-shell thead,
+main.crm-main-shell thead tr {
+  background: var(--surface-2) !important;
+}
+
+main.crm-main-shell th {
+  height: 44px;
+  padding: 0 14px;
+  text-align: center !important;
+  vertical-align: middle !important;
+  color: var(--text-muted) !important;
+  font-size: var(--fs-tiny);
+  font-weight: 820;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+main.crm-main-shell td {
+  min-height: 52px;
+  padding: 12px 14px;
+  text-align: center !important;
+  vertical-align: middle !important;
+  color: var(--text) !important;
+  font-size: var(--fs-row-main);
+  font-weight: 650;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+main.crm-main-shell tbody tr {
+  transition: background 160ms var(--ease), transform 160ms var(--ease);
+}
+
+main.crm-main-shell tbody tr:hover {
+  background: var(--surface-hover) !important;
+}
+
+/* inputs/forms used in daily activity and sales */
+main.crm-main-shell input,
+main.crm-main-shell select,
+main.crm-main-shell textarea {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 12px;
+  font-weight: 650;
+  outline: none;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), background 160ms var(--ease);
+}
+
+main.crm-main-shell input::placeholder,
+main.crm-main-shell textarea::placeholder {
+  color: var(--text-faint) !important;
+}
+
+main.crm-main-shell input:focus,
+main.crm-main-shell select:focus,
+main.crm-main-shell textarea:focus {
+  border-color: var(--accent-border) !important;
+  box-shadow: 0 0 0 4px var(--accent-subtle) !important;
+}
+
+/* standardize legacy buttons without destroying special buttons */
+main.crm-main-shell button:not(.btn-premium) {
+  border-radius: 12px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), background 160ms var(--ease), border-color 160ms var(--ease);
+}
+
+main.crm-main-shell button:not(.btn-premium):hover {
+  transform: translateY(-1px);
+}
+
+/* colored tailwind text should remain visible in both modes */
+main.crm-main-shell .text-gray-400,
+main.crm-main-shell .text-gray-500,
+main.crm-main-shell .text-slate-400,
+main.crm-main-shell .text-slate-500,
+main.crm-main-shell .text-zinc-400,
+main.crm-main-shell .text-zinc-500 {
+  color: var(--text-subtle) !important;
+}
+
+main.crm-main-shell .text-gray-600,
+main.crm-main-shell .text-gray-700,
+main.crm-main-shell .text-slate-600,
+main.crm-main-shell .text-slate-700,
+main.crm-main-shell .text-zinc-600,
+main.crm-main-shell .text-zinc-700 {
+  color: var(--text-muted) !important;
+}
+
+main.crm-main-shell .text-gray-800,
+main.crm-main-shell .text-gray-900,
+main.crm-main-shell .text-slate-800,
+main.crm-main-shell .text-slate-900,
+main.crm-main-shell .text-zinc-800,
+main.crm-main-shell .text-zinc-900 {
+  color: var(--text-strong) !important;
+}
+
+/* borders */
+main.crm-main-shell .border,
+main.crm-main-shell .border-gray-100,
+main.crm-main-shell .border-gray-200,
+main.crm-main-shell .border-slate-100,
+main.crm-main-shell .border-slate-200,
+main.crm-main-shell .border-zinc-100,
+main.crm-main-shell .border-zinc-200 {
+  border-color: var(--border) !important;
+}
+
+/* KPI number emphasis */
+main.crm-main-shell [class*="text-2xl"],
+main.crm-main-shell [class*="text-3xl"] {
+  color: var(--text-strong);
+  font-weight: 850;
+  letter-spacing: -0.045em;
+}
+
+/* mobile: table readability fallback */
+@media (max-width: 768px) {
+  main.crm-main-shell {
+    padding: 14px !important;
+  }
+
+  main.crm-main-shell table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    border-radius: 18px;
+  }
+
+  main.crm-main-shell th,
+  main.crm-main-shell td {
+    padding: 10px 12px;
+    font-size: 12.5px;
+  }
+
+  main.crm-main-shell [class*="grid-cols-4"],
+  main.crm-main-shell [class*="grid-cols-5"],
+  main.crm-main-shell [class*="grid-cols-6"] {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+}
