@@ -2731,3 +2731,171 @@ button,
     border-radius: 18px;
   }
 }
+
+/* =========================================================
+   STEP 10 - Pipeline3 page detail refinement
+   Purpose: Make kanban columns, customer cards, slide panel,
+   filters and modal surfaces consistent in light/dark mode.
+   Safe CSS-only upgrade. No TypeScript logic changes.
+   ========================================================= */
+
+/* Pipeline shell */
+.premium-page {
+  color: var(--text-primary);
+}
+
+.premium-page [class*="grid"] > .premium-card,
+.premium-page section.premium-card {
+  box-shadow: var(--shadow-card);
+}
+
+/* Pipeline top stats */
+.premium-page .crm-stat-card,
+.premium-page [class*="premium-card"][class*="p-4"] {
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-page .crm-stat-card::before,
+.premium-page [class*="premium-card"][class*="p-4"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.38), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Pipeline customer card polish */
+.premium-page button[class*="rounded-[16px]"][class*="text-left"],
+.premium-page .pipeline-card,
+.pipeline-customer-card {
+  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
+  border-color: var(--border-subtle) !important;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.055);
+  transform: translateZ(0);
+}
+
+.dark .premium-page button[class*="rounded-[16px]"][class*="text-left"],
+.dark .premium-page .pipeline-card,
+.dark .pipeline-customer-card {
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.26);
+}
+
+.premium-page button[class*="rounded-[16px]"][class*="text-left"]:hover,
+.premium-page .pipeline-card:hover,
+.pipeline-customer-card:hover {
+  border-color: var(--accent-border) !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.11);
+}
+
+.dark .premium-page button[class*="rounded-[16px]"][class*="text-left"]:hover,
+.dark .premium-page .pipeline-card:hover,
+.dark .pipeline-customer-card:hover {
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
+}
+
+/* Better kanban column readability */
+.premium-page [class*="overflow-x-auto"] > [class*="grid"],
+.premium-page [class*="grid"][class*="h-full"] {
+  gap: 14px;
+}
+
+.premium-page [class*="grid"][class*="h-full"] > div,
+.pipeline-column {
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-card) 94%, transparent), color-mix(in srgb, var(--surface-2) 94%, transparent));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
+}
+
+.dark .premium-page [class*="grid"][class*="h-full"] > div,
+.dark .pipeline-column {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-card) 88%, transparent), color-mix(in srgb, var(--surface-2) 82%, transparent));
+}
+
+/* Pipeline detail slide panel */
+.slide-panel-header {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent-bg) 75%, transparent), transparent 34%),
+    var(--surface-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.slide-panel-footer {
+  background: color-mix(in srgb, var(--surface-card) 90%, transparent);
+  border-top: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+}
+
+/* Modal consistency */
+.crm-modal-overlay {
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.dark .crm-modal-overlay {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.crm-modal {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.22);
+}
+
+.dark .crm-modal {
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.55);
+}
+
+/* Pipeline inputs */
+.premium-page input,
+.premium-page select,
+.premium-page textarea,
+.crm-modal input,
+.crm-modal select,
+.crm-modal textarea {
+  background: var(--surface-input) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+
+.premium-page input:focus,
+.premium-page select:focus,
+.premium-page textarea:focus,
+.crm-modal input:focus,
+.crm-modal select:focus,
+.crm-modal textarea:focus {
+  border-color: var(--accent-border) !important;
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+/* Pipeline mobile */
+@media (max-width: 768px) {
+  .premium-page [class*="max-w-[1120px]"] {
+    max-width: 100vw !important;
+  }
+
+  .slide-panel-header {
+    padding: 18px 16px !important;
+  }
+
+  .premium-page [class*="text-[30px]"] {
+    font-size: 24px !important;
+    letter-spacing: -0.04em !important;
+  }
+
+  .premium-page [class*="grid"][class*="h-full"] {
+    min-width: 1040px;
+  }
+
+  .crm-modal {
+    width: calc(100vw - 20px) !important;
+    max-height: calc(100vh - 24px) !important;
+    border-radius: 22px !important;
+  }
+}
