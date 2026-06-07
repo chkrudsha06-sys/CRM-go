@@ -156,6 +156,36 @@ function isOwnedByUser(contact: Pick<Contact, "assigned_to" | "consultant">, use
   );
 }
 
+const VIP_ACTIVITY_DB_ROUTES = [
+  { key: "bunyangeuisin", label: "분양의신DB", aliases: ["분양의신DB"], icon: Users, tone: "purple" },
+  { key: "consultantVip", label: "컨설턴트VIP DB", aliases: ["컨설턴트VIP DB", "컨설턴트 VIP DB", "컨설턴트VIP", "컨설턴트 VIP"], icon: UserCheck, tone: "info" },
+  { key: "wanpanTruck", label: "완판트럭DB", aliases: ["완판트럭DB", "완판트럭"], icon: PackageCheck, tone: "warning" },
+  { key: "bunyangLine", label: "분양라인DB", aliases: ["분양라인DB", "분양라인"], icon: Target, tone: "cyan" },
+  { key: "bunyanghoeMgm", label: "분양회MGM", aliases: ["분양회MGM", "분양회 MGM"], icon: BadgeCheck, tone: "success" },
+  { key: "partnershipActivity", label: "대협팀 활동", aliases: ["대협팀 활동", "대협팀활동"], icon: Activity, tone: "purple" },
+] as const;
+
+function normalizeDbRoute(value?: string | null) {
+  return (value || "").replace(/\s+/g, "").trim();
+}
+
+function getMonthRange() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 1);
+  return { start, end };
+}
+
+function isCurrentMonthDate(value?: string | null) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const { start, end } = getMonthRange();
+  return date >= start && date < end;
+}
+
 
 const DEFAULT_WORKSPACE_HREFS = [
   "/contacts",
@@ -1314,6 +1344,26 @@ export default function HomePage() {
       .filter((row) => row.contract_route === "분양회")
       .reduce((sum, row) => sum + effectiveSales(row), 0);
 
+    const currentMonthContacts = contacts.filter((contact) =>
+      isCurrentMonthDate(contact.created_at),
+    );
+
+    const vipActivityDbCounts = VIP_ACTIVITY_DB_ROUTES.reduce(
+      (acc, route) => {
+        const aliases = route.aliases.map(normalizeDbRoute);
+        acc[route.key] = currentMonthContacts.filter((contact) =>
+          aliases.includes(normalizeDbRoute(contact.intake_route)),
+        ).length;
+        return acc;
+      },
+      {} as Record<(typeof VIP_ACTIVITY_DB_ROUTES)[number]["key"], number>,
+    );
+
+    const vipActivityDbTotal = VIP_ACTIVITY_DB_ROUTES.reduce(
+      (sum, route) => sum + (vipActivityDbCounts[route.key] || 0),
+      0,
+    );
+
     return {
       customers: contacts.length,
       todayMeetings: todayMeetings.length,
@@ -1325,6 +1375,8 @@ export default function HomePage() {
       adSpecialSales,
       linkedHighTargetSales,
       bunyanghoeMonthlyFee,
+      vipActivityDbCounts,
+      vipActivityDbTotal,
     };
   }, [contacts, tasks, sales, me?.name]);
 
@@ -1561,50 +1613,35 @@ export default function HomePage() {
             >
               <div className="flex items-center gap-2">
                 <PremiumIcon icon={Users} tone="info" size="sm" />
-                <p className="crm-section-title">고객관리</p>
+                <p className="crm-section-title">VIP 활동 DB</p>
               </div>
               <p className="crm-tiny">
-                전체 누적 고객 흐름과 오늘 예정된 미팅을 한 영역에서 빠르게
-                확인합니다.
+                분양의신DB, 컨설턴트VIP DB, 완판트럭DB, 분양라인DB,
+                분양회MGM, 대협팀 활동의 당월 DB 수취건을 구분해 확인합니다.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 2xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 2xl:grid-cols-4">
               <MetricCard
-                label="전체 고객"
-                value={stats.customers}
+                label="당월 DB 합계"
+                value={stats.vipActivityDbTotal}
                 icon={Users}
                 tone="info"
                 href="/contacts"
-                sub="전체 누적"
+                sub="당월 수취"
                 compact
               />
-              <MetricCard
-                label="딜클로징"
-                value={stats.closing}
-                icon={Zap}
-                tone="warning"
-                href="/pipeline"
-                sub="전체 누적"
-                compact
-              />
-              <MetricCard
-                label="예약완료"
-                value={stats.reservations}
-                icon={Clock}
-                tone="purple"
-                href="/vip-members"
-                sub="전체 누적"
-                compact
-              />
-              <MetricCard
-                label="계약완료"
-                value={stats.contracts}
-                icon={BadgeCheck}
-                tone="success"
-                href="/vip-members"
-                sub="전체 누적"
-                compact
-              />
+              {VIP_ACTIVITY_DB_ROUTES.map((route) => (
+                <MetricCard
+                  key={route.key}
+                  label={route.label}
+                  value={stats.vipActivityDbCounts[route.key] || 0}
+                  icon={route.icon}
+                  tone={route.tone}
+                  href="/contacts"
+                  sub="당월 수취"
+                  compact
+                />
+              ))}
               <MetricCard
                 label="오늘 미팅"
                 value={stats.todayMeetings}
