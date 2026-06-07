@@ -3292,3 +3292,112 @@ main.crm-main-shell [class*="text-3xl"] {
     font-size: 12px !important;
   }
 }
+/* =========================================================
+   CRM UI STEP 14 - Member Timeline polish
+   Scope: member-timeline page, event cards, timeline rail, modal
+   Safe to append below the current globals.css.
+   ========================================================= */
+
+.member-timeline-shell,
+.premium-page {
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.08), transparent 28rem),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.07), transparent 24rem),
+    var(--bg);
+}
+
+.dark .member-timeline-shell,
+.dark .premium-page {
+  background:
+    radial-gradient(circle at top left, rgba(129, 140, 248, 0.13), transparent 28rem),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.10), transparent 24rem),
+    var(--bg);
+}
+
+.premium-filterbar {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(18px);
+}
+
+.crm-modal-overlay,
+.slide-panel-overlay {
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.dark .crm-modal-overlay,
+.dark .slide-panel-overlay {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.crm-modal,
+.slide-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-xl);
+}
+
+.slide-panel-header,
+.slide-panel-footer {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+}
+
+.crm-avatar,
+.crm-avatar-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-weight: 850;
+  letter-spacing: -0.05em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), var(--shadow-xs);
+}
+
+.crm-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  font-size: 17px;
+}
+
+.crm-avatar-sm {
+  width: 34px;
+  height: 34px;
+  border-radius: 13px;
+  font-size: 14px;
+}
+
+.badge-cyan {
+  background: rgba(6, 182, 212, 0.12);
+  border-color: rgba(6, 182, 212, 0.24);
+  color: #0891b2;
+}
+
+.dark .badge-cyan {
+  background: rgba(34, 211, 238, 0.13);
+  border-color: rgba(34, 211, 238, 0.26);
+  color: #67e8f9;
+}
+
+@media (max-width: 768px) {
+  .premium-page header,
+  .premium-page main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .premium-filterbar .btn-premium {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .slide-panel {
+    width: min(100vw, 100%) !important;
+    border-radius: 22px 22px 0 0;
+  }
+}
