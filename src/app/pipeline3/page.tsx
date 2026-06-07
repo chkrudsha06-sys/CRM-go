@@ -788,7 +788,11 @@ function DetailPanel({
             <NotesTab customer={customer} composerOpen={noteComposerOpen} />
           ) : null}
           {tab === "ads" ? (
-            <AdsTab customer={customer} onOpenAdRequest={onOpenAdRequest} />
+            <AdsTab
+              customer={customer}
+              onOpenAdRequest={onOpenAdRequest}
+              onDeleteCustomer={onDeleteCustomer}
+            />
           ) : null}
         </div>
 
