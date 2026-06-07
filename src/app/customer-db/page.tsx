@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowRightCircle,
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
   ClipboardList,
   Database,
   FileText,
-  Filter,
   MessageCircle,
   Phone,
   Plus,
+  RefreshCcw,
   Save,
   Search,
   Send,
+  Sparkles,
   Trash2,
   UserRound,
   X,
@@ -27,150 +30,175 @@ import {
   type GradeAssessmentForm,
 } from "@/lib/customerGrade";
 
+type ActivityType = "TM" | "콜드톡";
+
+type CustomerDbNote = {
+  id: number;
+  noteDate: string;
+  activityType: ActivityType;
+  content: string;
+  author: string;
+  createdAt: string;
+};
+
 type RawCustomerRecord = {
   id: number;
   name: string;
   title: string;
   phone: string;
-  intake_route: string;
+  intake_route: "TM DB" | "콜드톡 DB";
   company: string;
+  activity_type: ActivityType;
   memo: string;
-  activity_notes: ActivityNote[];
+  notes: CustomerDbNote[];
   created_at: string;
   updated_at: string;
 };
 
-type ActivityType = "TM" | "콜드톡";
-
-type ActivityNote = {
-  id: number;
-  type: ActivityType;
-  content: string;
-  created_at: string;
+type RawCustomerForm = {
+  name: string;
+  title: string;
+  phone: string;
+  intake_route: "" | "TM DB" | "콜드톡 DB";
+  company: string;
+  activity_type: "" | ActivityType;
+  memo: string;
+  first_note: string;
 };
 
-type CustomerFormState = {
+type VipRecord = {
+  id: number;
   name: string;
   title: string;
   phone: string;
   intake_route: string;
   company: string;
+  management_stage: string;
+  customer_grade: string;
   memo: string;
+  created_at: string;
+  updated_at: string;
 };
 
-type ActivityFormState = {
-  type: ActivityType;
-  content: string;
-};
-
-const RAW_CUSTOMER_STORAGE_KEY = "crm_go_raw_customer_db_local_v1";
-const VIP_CUSTOMER_STORAGE_KEY = "crm_go_customer_db_local_v2";
-
+const RAW_DB_STORAGE_KEY = "crm_go_raw_customer_db_v1";
+const VIP_DB_STORAGE_KEY = "crm_go_customer_db_local_v2";
+const INTAKE_ROUTES: Array<"TM DB" | "콜드톡 DB"> = ["TM DB", "콜드톡 DB"];
+const ACTIVITY_TYPES: ActivityType[] = ["TM", "콜드톡"];
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
-const INTAKE_ROUTE_OPTIONS = [
-  "TM대상DB",
-  "콜드톡대상DB",
-  "분양의신DB",
-  "컨설턴트VIP DB",
-  "완판트럭",
-  "분양라인",
-  "분양회MGM",
-  "대협팀활동",
-  "기타",
-];
 
-const EMPTY_FORM: CustomerFormState = {
+const EMPTY_FORM: RawCustomerForm = {
   name: "",
   title: "",
   phone: "",
   intake_route: "",
   company: "",
+  activity_type: "",
   memo: "",
+  first_note: "",
 };
 
-const EMPTY_ACTIVITY_FORM: ActivityFormState = {
-  type: "TM",
-  content: "",
-};
-
-function nowIso() {
-  return new Date().toISOString();
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
-function formatDate(value?: string | null) {
+function dateLabel(value: string) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}.${String(date.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
-function normalizePhone(value: string) {
-  const digits = value.replace(/[^0-9]/g, "");
-  if (digits.length === 11) {
-    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return value;
+function today() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function makeId() {
-  return Date.now() + Math.floor(Math.random() * 1000);
+function fmt(value?: string | null) {
+  return value && value.trim() ? value : "-";
 }
 
-function safeJsonParse<T>(value: string | null, fallback: T): T {
-  if (!value) return fallback;
+function readJsonArray<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
   try {
-    const parsed = JSON.parse(value) as T;
-    return parsed;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return fallback;
+    return [];
   }
 }
 
-function loadRawCustomers() {
-  if (typeof window === "undefined") return [] as RawCustomerRecord[];
-  const rows = safeJsonParse<RawCustomerRecord[]>(
-    window.localStorage.getItem(RAW_CUSTOMER_STORAGE_KEY),
-    [],
-  );
-  return Array.isArray(rows)
-    ? rows.map((row) => ({
-        ...row,
-        activity_notes: Array.isArray(row.activity_notes)
-          ? row.activity_notes
-          : [],
-      }))
-    : [];
+function writeJsonArray<T>(key: string, value: T[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function saveRawCustomers(rows: RawCustomerRecord[]) {
-  window.localStorage.setItem(RAW_CUSTOMER_STORAGE_KEY, JSON.stringify(rows));
+function buildNoteMemo(notes: CustomerDbNote[]) {
+  if (!notes.length) return "";
+  return notes
+    .map(
+      (note) =>
+        `[${note.activityType}] ${note.noteDate}\n${note.content.trim()}\n- ${note.author}`,
+    )
+    .join("\n\n");
 }
 
-function loadVipCustomers() {
-  if (typeof window === "undefined") return [] as Record<string, unknown>[];
-  const rows = safeJsonParse<Record<string, unknown>[]>(
-    window.localStorage.getItem(VIP_CUSTOMER_STORAGE_KEY),
-    [],
-  );
-  return Array.isArray(rows) ? rows : [];
+function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerRecord {
+  return {
+    id: Number(record.id || Date.now()),
+    name: String(record.name || ""),
+    title: String(record.title || ""),
+    phone: String(record.phone || ""),
+    intake_route:
+      record.intake_route === "콜드톡 DB" || record.intake_route === "TM DB"
+        ? record.intake_route
+        : "TM DB",
+    company: String(record.company || ""),
+    activity_type:
+      record.activity_type === "콜드톡" || record.activity_type === "TM"
+        ? record.activity_type
+        : "TM",
+    memo: stripGradeAssessmentBlock(String(record.memo || "")),
+    notes: Array.isArray(record.notes) ? record.notes : [],
+    created_at: String(record.created_at || new Date().toISOString()),
+    updated_at: String(record.updated_at || new Date().toISOString()),
+  };
 }
 
-function saveVipCustomers(rows: Record<string, unknown>[]) {
-  window.localStorage.setItem(VIP_CUSTOMER_STORAGE_KEY, JSON.stringify(rows));
-}
-
-function FieldLabel({ children }: { children: ReactNode }) {
+function StatCard({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: number | string;
+  description: string;
+}) {
   return (
-    <span className="mb-2 block text-[12px] font-[900] text-slate-500">
-      {children}
-    </span>
+    <div className="premium-card p-4">
+      <p className="crm-meta">{label}</p>
+      <p
+        className="mt-2 text-[28px] font-[950] tracking-[-0.06em]"
+        style={{ color: "var(--text-strong)" }}
+      >
+        {value}
+      </p>
+      <p className="crm-tiny mt-1">{description}</p>
+    </div>
   );
+}
+
+function InputLabel({ children }: { children: React.ReactNode }) {
+  return <span className="crm-meta mb-2 block">{children}</span>;
 }
 
 function TextInput({
@@ -178,32 +206,21 @@ function TextInput({
   value,
   onChange,
   placeholder,
-  icon,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  icon?: ReactNode;
 }) {
   return (
     <label className="block min-w-0">
-      <FieldLabel>{label}</FieldLabel>
-      <div className="relative">
-        {icon ? (
-          <span className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-slate-400">
-            {icon}
-          </span>
-        ) : null}
-        <input
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-          className={`h-12 w-full rounded-[16px] border border-slate-200 bg-white ${
-            icon ? "pl-10" : "pl-4"
-          } pr-4 text-sm font-[800] text-slate-800 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100`}
-        />
-      </div>
+      <InputLabel>{label}</InputLabel>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="crm-search h-11 w-full px-3"
+      />
     </label>
   );
 }
@@ -213,21 +230,23 @@ function SelectInput({
   value,
   options,
   onChange,
+  placeholder = "선택",
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   return (
     <label className="block min-w-0">
-      <FieldLabel>{label}</FieldLabel>
+      <InputLabel>{label}</InputLabel>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-[16px] border border-slate-200 bg-white px-4 text-sm font-[800] text-slate-800 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+        className="crm-search h-11 w-full px-3"
       >
-        <option value="">선택</option>
+        <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -238,865 +257,782 @@ function SelectInput({
   );
 }
 
-function Badge({ children, tone = "slate" }: { children: ReactNode; tone?: string }) {
-  const styles: Record<string, string> = {
-    slate: "border-slate-200 bg-slate-50 text-slate-600",
-    violet: "border-violet-200 bg-violet-50 text-violet-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-  };
+function ActivityTypeSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: ActivityType) => void;
+}) {
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-[900] ${
-        styles[tone] || styles.slate
-      }`}
+    <div>
+      <InputLabel>활동항목</InputLabel>
+      <div className="grid grid-cols-2 gap-2">
+        {ACTIVITY_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onChange(type)}
+            className="rounded-[13px] border px-3 py-3 text-[13px] font-[900] transition"
+            style={{
+              borderColor:
+                value === type ? "var(--accent-border)" : "var(--border)",
+              background:
+                value === type ? "var(--accent-subtle)" : "var(--surface-2)",
+              color: value === type ? "var(--accent-text)" : "var(--text)",
+            }}
+          >
+            {type}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NoteComposer({
+  onAdd,
+  defaultType,
+}: {
+  onAdd: (note: Omit<CustomerDbNote, "id" | "createdAt">) => void;
+  defaultType: ActivityType;
+}) {
+  const [noteDate, setNoteDate] = useState(today());
+  const [activityType, setActivityType] = useState<ActivityType>(defaultType);
+  const [content, setContent] = useState("");
+
+  const handleAdd = () => {
+    if (!content.trim()) return;
+    onAdd({
+      noteDate,
+      activityType,
+      content: content.trim(),
+      author: "현재 사용자",
+    });
+    setContent("");
+    setNoteDate(today());
+  };
+
+  return (
+    <div
+      className="space-y-3 rounded-[16px] border p-4"
+      style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
-      {children}
-    </span>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="crm-card-title">활동노트 작성</p>
+          <p className="crm-tiny mt-1">TM 또는 콜드톡 활동을 기록합니다.</p>
+        </div>
+        <input
+          type="date"
+          value={noteDate}
+          onChange={(event) => setNoteDate(event.target.value)}
+          className="h-10 rounded-[11px] border px-3 text-[12px] font-[800] outline-none"
+          style={{
+            background: "var(--surface)",
+            borderColor: "var(--border-subtle)",
+            color: "var(--text-strong)",
+          }}
+        />
+      </div>
+
+      <ActivityTypeSelector value={activityType} onChange={setActivityType} />
+
+      <textarea
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+        placeholder="활동 내용을 입력하세요."
+        rows={4}
+        className="w-full resize-none rounded-[12px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+        style={{
+          background: "var(--surface)",
+          borderColor: "var(--border-subtle)",
+          color: "var(--text-strong)",
+        }}
+      />
+      <button type="button" onClick={handleAdd} className="btn-premium btn-primary w-full">
+        <Plus size={14} /> 활동노트 저장
+      </button>
+    </div>
+  );
+}
+
+function NotesList({ notes }: { notes: CustomerDbNote[] }) {
+  if (!notes.length) {
+    return (
+      <div
+        className="rounded-[16px] border px-4 py-8 text-center"
+        style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+      >
+        <p className="crm-card-title">등록된 활동노트가 없습니다.</p>
+        <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 후 기록을 남겨주세요.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {notes.map((note) => (
+        <article
+          key={note.id}
+          className="rounded-[16px] border p-4"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+        >
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                style={{
+                  background: "var(--accent-subtle)",
+                  border: "1px solid var(--accent-border)",
+                  color: "var(--accent-text)",
+                }}
+              >
+                {note.activityType}
+              </span>
+              <p className="crm-meta">{note.noteDate}</p>
+            </div>
+            <p className="crm-tiny">{note.author}</p>
+          </div>
+          <p
+            className="whitespace-pre-wrap text-[13px] font-[700] leading-7"
+            style={{ color: "var(--text)" }}
+          >
+            {note.content}
+          </p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function TransferModal({
+  customer,
+  assessment,
+  onAssessmentChange,
+  onClose,
+  onConfirm,
+  error,
+}: {
+  customer: RawCustomerRecord;
+  assessment: GradeAssessmentForm;
+  onAssessmentChange: (value: GradeAssessmentForm) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  error: string;
+}) {
+  const result = calculateCustomerGrade(assessment, customer.title);
+
+  return (
+    <div className="crm-modal-overlay z-[80]">
+      <div className="crm-modal max-h-[92vh] w-full max-w-[1180px] overflow-y-auto p-5 md:p-6">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <div
+              className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--accent-border)",
+                color: "var(--accent-text)",
+              }}
+            >
+              <Sparkles size={14} /> VIP활동 DB 이관 심사
+            </div>
+            <h2 className="crm-title">{customer.name} 고객 심사 진행</h2>
+            <p className="crm-subtitle mt-2">
+              고객등급 자동판정을 완료하면 VIP활동DB로 이관되고, 고객DB에서는 삭제됩니다.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="btn-premium btn-ghost h-10 w-10 p-0">
+            <X size={17} />
+          </button>
+        </div>
+
+        <CustomerGradeAssessment
+          value={assessment}
+          title={customer.title}
+          onChange={onAssessmentChange}
+        />
+
+        {error ? (
+          <p
+            className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+            style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              borderColor: "rgba(239, 68, 68, 0.28)",
+              color: "#ef4444",
+            }}
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+          <button type="button" onClick={onClose} className="btn-premium btn-ghost">
+            취소
+          </button>
+          <button type="button" onClick={onConfirm} className="btn-premium btn-primary">
+            <CheckCircle2 size={15} /> {result.customerGrade} 등급으로 VIP활동DB 이관
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 export default function CustomerDbPage() {
   const [records, setRecords] = useState<RawCustomerRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
+  const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<CustomerFormState>({ ...EMPTY_FORM });
-  const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(
-    null,
-  );
-  const [activityForm, setActivityForm] = useState<ActivityFormState>({
-    ...EMPTY_ACTIVITY_FORM,
-  });
-  const [transferRecord, setTransferRecord] = useState<RawCustomerRecord | null>(
-    null,
-  );
-  const [showGradeModal, setShowGradeModal] = useState(false);
-  const [gradeAssessment, setGradeAssessment] = useState<GradeAssessmentForm>({
+  const [formError, setFormError] = useState("");
+  const [toast, setToast] = useState("");
+  const [transferTarget, setTransferTarget] = useState<RawCustomerRecord | null>(null);
+  const [transferAssessment, setTransferAssessment] = useState<GradeAssessmentForm>({
     ...EMPTY_GRADE_ASSESSMENT,
   });
-  const [toast, setToast] = useState("");
-  const [error, setError] = useState("");
+  const [transferError, setTransferError] = useState("");
 
   useEffect(() => {
-    setRecords(loadRawCustomers());
+    setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
     setLoaded(true);
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    saveRawCustomers(records);
-  }, [records, loaded]);
+    writeJsonArray(RAW_DB_STORAGE_KEY, records);
+  }, [loaded, records]);
 
   const showToast = (message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(""), 2200);
+    window.setTimeout(() => setToast(""), 2400);
   };
+
+  const stats = useMemo(() => {
+    const tm = records.filter((record) => record.intake_route === "TM DB").length;
+    const cold = records.filter((record) => record.intake_route === "콜드톡 DB").length;
+    const notes = records.reduce((sum, record) => sum + record.notes.length, 0);
+    return { total: records.length, tm, cold, notes };
+  }, [records]);
 
   const filteredRecords = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
-      const matchesKeyword = keyword
-        ? [
+      const matchesKeyword = !keyword
+        ? true
+        : [
             record.name,
             record.title,
             record.phone,
             record.intake_route,
             record.company,
+            record.activity_type,
             record.memo,
+            ...record.notes.map((note) => note.content),
           ]
             .join(" ")
             .toLowerCase()
-            .includes(keyword)
-        : true;
-      const matchesRoute = filterRoute
-        ? record.intake_route === filterRoute
-        : true;
-      return matchesKeyword && matchesRoute;
+            .includes(keyword);
+
+      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute);
     });
   }, [records, search, filterRoute]);
 
-  const dashboard = useMemo(() => {
-    const total = records.length;
-    const tm = records.filter((record) =>
-      record.activity_notes.some((note) => note.type === "TM"),
-    ).length;
-    const coldtalk = records.filter((record) =>
-      record.activity_notes.some((note) => note.type === "콜드톡"),
-    ).length;
-    const ready = records.filter((record) => record.activity_notes.length > 0)
-      .length;
-    return { total, tm, coldtalk, ready };
-  }, [records]);
-
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
-    setEditingId(null);
-    setError("");
+    setFormError("");
+    setShowForm(false);
   };
 
-  const openCreateForm = () => {
-    resetForm();
-    setShowForm(true);
-  };
-
-  const openEditForm = (record: RawCustomerRecord) => {
-    setForm({
-      name: record.name,
-      title: record.title,
-      phone: record.phone,
-      intake_route: record.intake_route,
-      company: record.company,
-      memo: stripGradeAssessmentBlock(record.memo),
-    });
-    setEditingId(record.id);
-    setError("");
-    setShowForm(true);
-  };
-
-  const handleSaveCustomer = () => {
+  const handleSave = () => {
     if (!form.name.trim()) {
-      setError("고객명을 입력해주세요.");
+      setFormError("고객명을 입력해주세요.");
       return;
     }
     if (!form.phone.trim()) {
-      setError("연락처를 입력해주세요.");
+      setFormError("연락처를 입력해주세요.");
+      return;
+    }
+    if (!form.intake_route) {
+      setFormError("유입경로를 선택해주세요.");
+      return;
+    }
+    if (!form.activity_type) {
+      setFormError("활동항목을 선택해주세요.");
       return;
     }
 
-    const cleanMemo = stripGradeAssessmentBlock(form.memo).trim();
-    const phone = normalizePhone(form.phone.trim());
+    const now = new Date().toISOString();
+    const firstNote = form.first_note.trim()
+      ? [
+          {
+            id: Date.now() + 1,
+            noteDate: today(),
+            activityType: form.activity_type,
+            content: form.first_note.trim(),
+            author: "현재 사용자",
+            createdAt: now,
+          },
+        ]
+      : [];
 
-    if (editingId) {
-      setRecords((prev) =>
-        prev.map((record) =>
-          record.id === editingId
-            ? {
-                ...record,
-                name: form.name.trim(),
-                title: form.title,
-                phone,
-                intake_route: form.intake_route,
-                company: form.company.trim(),
-                memo: cleanMemo,
-                updated_at: nowIso(),
-              }
-            : record,
-        ),
-      );
-      setSelectedRecord((prev) =>
-        prev && prev.id === editingId
-          ? {
-              ...prev,
-              name: form.name.trim(),
-              title: form.title,
-              phone,
-              intake_route: form.intake_route,
-              company: form.company.trim(),
-              memo: cleanMemo,
-              updated_at: nowIso(),
-            }
-          : prev,
-      );
-      showToast("고객DB가 수정되었습니다.");
-    } else {
-      const record: RawCustomerRecord = {
-        id: makeId(),
-        name: form.name.trim(),
-        title: form.title,
-        phone,
-        intake_route: form.intake_route,
-        company: form.company.trim(),
-        memo: cleanMemo,
-        activity_notes: [],
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      };
-      setRecords((prev) => [record, ...prev]);
-      showToast("고객DB가 등록되었습니다.");
-    }
-
-    setShowForm(false);
-    resetForm();
-  };
-
-  const handleDeleteCustomer = (record: RawCustomerRecord) => {
-    const ok = window.confirm("고객DB에서 해당 데이터를 삭제하시겠습니까?");
-    if (!ok) return;
-    setRecords((prev) => prev.filter((item) => item.id !== record.id));
-    if (selectedRecord?.id === record.id) setSelectedRecord(null);
-    showToast("고객DB가 삭제되었습니다.");
-  };
-
-  const handleSaveActivityNote = () => {
-    if (!selectedRecord) return;
-    if (!activityForm.content.trim()) {
-      showToast("활동노트 내용을 입력해주세요.");
-      return;
-    }
-
-    const note: ActivityNote = {
-      id: makeId(),
-      type: activityForm.type,
-      content: activityForm.content.trim(),
-      created_at: nowIso(),
+    const record: RawCustomerRecord = {
+      id: Date.now(),
+      name: form.name.trim(),
+      title: form.title.trim(),
+      phone: form.phone.trim(),
+      intake_route: form.intake_route,
+      company: form.company.trim(),
+      activity_type: form.activity_type,
+      memo: form.memo.trim(),
+      notes: firstNote,
+      created_at: now,
+      updated_at: now,
     };
 
-    setRecords((prev) =>
-      prev.map((record) =>
-        record.id === selectedRecord.id
+    setRecords((items) => [record, ...items]);
+    setSelectedRecord(record);
+    resetForm();
+    showToast("고객DB에 등록되었습니다.");
+  };
+
+  const handleAddNote = (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
+    const createdAt = new Date().toISOString();
+    const newNote: CustomerDbNote = {
+      id: Date.now(),
+      createdAt,
+      ...note,
+    };
+
+    setRecords((items) =>
+      items.map((record) =>
+        record.id === customerId
           ? {
               ...record,
-              activity_notes: [note, ...record.activity_notes],
-              updated_at: nowIso(),
+              notes: [newNote, ...record.notes],
+              updated_at: createdAt,
             }
           : record,
       ),
     );
-    setSelectedRecord((prev) =>
-      prev
-        ? {
-            ...prev,
-            activity_notes: [note, ...prev.activity_notes],
-            updated_at: nowIso(),
-          }
-        : prev,
-    );
-    setActivityForm({ ...EMPTY_ACTIVITY_FORM });
-    showToast("활동노트가 저장되었습니다.");
+
+    if (selectedRecord?.id === customerId) {
+      setSelectedRecord((current) =>
+        current
+          ? {
+              ...current,
+              notes: [newNote, ...current.notes],
+              updated_at: createdAt,
+            }
+          : current,
+      );
+    }
   };
 
-  const startTransfer = (record: RawCustomerRecord) => {
-    const ok = window.confirm("VIP활동 DB로 이관하겠습니까?");
-    if (!ok) return;
-
-    const reviewOk = window.confirm("심사를 진행하겠습니까?");
-    if (!reviewOk) return;
-
-    setTransferRecord(record);
-    setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
-    setShowGradeModal(true);
+  const requestTransfer = (record: RawCustomerRecord) => {
+    const first = window.confirm("VIP활동 DB로 이관하겠습니까?");
+    if (!first) return;
+    const second = window.confirm("심사를 진행하겠습니까?");
+    if (!second) return;
+    setTransferTarget(record);
+    setTransferAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+    setTransferError("");
   };
 
-  const completeTransfer = () => {
-    if (!transferRecord) return;
-    if (!hasGradeAssessmentInput(gradeAssessment)) {
-      setError("VIP활동 DB 이관 전 고객등급 자동판정을 입력해주세요.");
+  const confirmTransfer = () => {
+    if (!transferTarget) return;
+    if (!hasGradeAssessmentInput(transferAssessment)) {
+      setTransferError("VIP활동DB 이관 전 고객등급 심사값을 1개 이상 입력해주세요.");
       return;
     }
 
-    const result = calculateCustomerGrade(
-      gradeAssessment,
-      transferRecord.title || "팀장",
-    );
-    const cleanMemo = stripGradeAssessmentBlock(transferRecord.memo).trim();
-    const noteSummary = transferRecord.activity_notes
-      .map(
-        (note) =>
-          `[${note.type}] ${formatDate(note.created_at)} ${note.content}`,
-      )
-      .join("\n");
-    const vipMemoBase = [cleanMemo, noteSummary ? `[고객DB 활동노트]\n${noteSummary}` : ""]
+    const result = calculateCustomerGrade(transferAssessment, transferTarget.title);
+    const now = new Date().toISOString();
+    const noteMemo = buildNoteMemo(transferTarget.notes);
+    const baseMemo = [
+      stripGradeAssessmentBlock(transferTarget.memo),
+      noteMemo ? `[고객DB 활동노트]\n${noteMemo}` : "",
+      `[고객DB 이관 정보]\n유입경로: ${transferTarget.intake_route}\n활동항목: ${transferTarget.activity_type}\n소속회사: ${fmt(transferTarget.company)}`,
+    ]
       .filter(Boolean)
       .join("\n\n");
-    const memoWithAssessment = appendGradeAssessmentBlock(
-      vipMemoBase,
-      gradeAssessment,
-      result,
-    );
 
-    const vipRecord = {
-      id: makeId(),
-      name: transferRecord.name,
-      title: transferRecord.title,
-      phone: transferRecord.phone,
-      intake_route: transferRecord.intake_route,
-      company: transferRecord.company,
+    const vipMemo = appendGradeAssessmentBlock(baseMemo, transferAssessment, result);
+    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
+    const nextVipRecord: VipRecord = {
+      id: Date.now(),
+      name: transferTarget.name,
+      title: transferTarget.title,
+      phone: transferTarget.phone,
+      intake_route: transferTarget.intake_route,
+      company: transferTarget.company,
       management_stage: "리드",
       customer_grade: result.customerGrade,
-      memo: memoWithAssessment,
-      created_at: nowIso(),
-      updated_at: nowIso(),
+      memo: vipMemo,
+      created_at: now,
+      updated_at: now,
     };
 
-    const vipRows = loadVipCustomers();
-    saveVipCustomers([vipRecord, ...vipRows]);
+    writeJsonArray(VIP_DB_STORAGE_KEY, [nextVipRecord, ...vipRecords]);
+    setRecords((items) => items.filter((record) => record.id !== transferTarget.id));
+    if (selectedRecord?.id === transferTarget.id) setSelectedRecord(null);
+    setTransferTarget(null);
+    setTransferError("");
+    showToast("VIP활동DB로 이관되었습니다.");
+  };
 
-    setRecords((prev) => prev.filter((record) => record.id !== transferRecord.id));
-    if (selectedRecord?.id === transferRecord.id) setSelectedRecord(null);
-    setTransferRecord(null);
-    setShowGradeModal(false);
-    setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
-    setError("");
-    showToast("VIP활동 DB로 이관되었습니다.");
+  const deleteRecord = (record: RawCustomerRecord) => {
+    if (!window.confirm(`${record.name} 고객을 고객DB에서 삭제하시겠습니까?`)) return;
+    setRecords((items) => items.filter((item) => item.id !== record.id));
+    if (selectedRecord?.id === record.id) setSelectedRecord(null);
+    showToast("고객DB에서 삭제되었습니다.");
   };
 
   return (
-    <main className="customer-db-page min-h-screen px-5 py-6 md:px-8">
-      <style jsx global>{`
-        .customer-db-page {
-          background: var(--bg);
-          color: var(--text);
-        }
-        .customer-db-page .bg-white {
-          background: var(--surface) !important;
-        }
-        .customer-db-page .bg-slate-50 {
-          background: var(--surface-2) !important;
-        }
-        .customer-db-page .bg-slate-950 {
-          background: var(--text-strong) !important;
-          color: var(--surface) !important;
-        }
-        .customer-db-page .border-slate-100,
-        .customer-db-page .border-slate-200 {
-          border-color: var(--border) !important;
-        }
-        .customer-db-page .text-slate-950,
-        .customer-db-page .text-slate-900,
-        .customer-db-page .text-slate-800,
-        .customer-db-page .text-slate-700 {
-          color: var(--text-strong) !important;
-        }
-        .customer-db-page .text-slate-600,
-        .customer-db-page .text-slate-500,
-        .customer-db-page .text-slate-400 {
-          color: var(--text-subtle) !important;
-        }
-        .customer-db-page input,
-        .customer-db-page select,
-        .customer-db-page textarea {
-          background: var(--surface-2) !important;
-          border-color: var(--border) !important;
-          color: var(--text) !important;
-        }
-        .customer-db-page input::placeholder,
-        .customer-db-page textarea::placeholder {
-          color: var(--text-muted) !important;
-        }
-        .customer-db-page input:focus,
-        .customer-db-page select:focus,
-        .customer-db-page textarea:focus {
-          border-color: var(--accent-border) !important;
-          box-shadow: 0 0 0 4px var(--accent-bg) !important;
-        }
-        .customer-db-page .hover\:bg-slate-50:hover {
-          background: var(--surface-3) !important;
-        }
-        .customer-db-page .shadow-sm {
-          box-shadow: var(--shadow-sm) !important;
-        }
-        .customer-db-page .shadow-xl,
-        .customer-db-page .shadow-2xl {
-          box-shadow: var(--shadow-lg) !important;
-        }
-        .customer-db-page .bg-violet-50 {
-          background: var(--accent-bg) !important;
-        }
-        .customer-db-page .border-violet-200,
-        .customer-db-page .border-violet-300 {
-          border-color: var(--accent-border) !important;
-        }
-        .customer-db-page .text-violet-600,
-        .customer-db-page .text-violet-700 {
-          color: var(--accent-text) !important;
-        }
-        .customer-db-page .bg-blue-50 {
-          background: rgba(59, 130, 246, 0.12) !important;
-        }
-        .customer-db-page .border-blue-200 {
-          border-color: rgba(59, 130, 246, 0.28) !important;
-        }
-        .customer-db-page .text-blue-500,
-        .customer-db-page .text-blue-700 {
-          color: #3b82f6 !important;
-        }
-        .customer-db-page .bg-emerald-50 {
-          background: rgba(16, 185, 129, 0.12) !important;
-        }
-        .customer-db-page .border-emerald-200 {
-          border-color: rgba(16, 185, 129, 0.28) !important;
-        }
-        .customer-db-page .text-emerald-500,
-        .customer-db-page .text-emerald-700 {
-          color: #10b981 !important;
-        }
-        .customer-db-page .bg-amber-50 {
-          background: rgba(245, 158, 11, 0.14) !important;
-        }
-        .customer-db-page .border-amber-200 {
-          border-color: rgba(245, 158, 11, 0.3) !important;
-        }
-        .customer-db-page .text-amber-500,
-        .customer-db-page .text-amber-600,
-        .customer-db-page .text-amber-700 {
-          color: #f59e0b !important;
-        }
-        .customer-db-page .bg-red-50 {
-          background: rgba(239, 68, 68, 0.12) !important;
-        }
-        .customer-db-page .border-red-200 {
-          border-color: rgba(239, 68, 68, 0.28) !important;
-        }
-        .customer-db-page .text-red-600 {
-          color: #ef4444 !important;
-        }
-      `}</style>
-      {toast ? (
-        <div className="fixed right-5 top-5 z-[80] rounded-[16px] bg-slate-950 px-4 py-3 text-sm font-[900] text-white shadow-xl">
-          {toast}
-        </div>
-      ) : null}
-
-      <section className="mb-5 rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm md:p-7">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <main className="premium-page min-h-screen px-4 py-5 md:px-6 xl:px-8">
+      <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-[900] text-violet-700">
-              <Database size={14} /> 고객DB
+            <div
+              className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
+              style={{
+                background: "var(--accent-subtle)",
+                border: "1px solid var(--accent-border)",
+                color: "var(--accent-text)",
+              }}
+            >
+              <Database size={14} /> VIP활동DB 발굴용 원천 DB
             </div>
-            <h1 className="text-3xl font-[950] tracking-[-0.05em] text-slate-950">
-              고객DB
-            </h1>
-            <p className="mt-2 text-sm font-[700] text-slate-500">
-              TM·콜드톡 대상 DB를 등록하고 활동 후 VIP활동 DB로 이관하는
-              전처리 공간입니다.
+            <h1 className="crm-title">고객DB</h1>
+            <p className="crm-subtitle mt-2 max-w-[820px]">
+              TM과 콜드톡 활동으로 확보한 원천 고객을 등록하고, 심사 후 VIP활동DB로 이관합니다.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex items-center justify-center gap-2 rounded-[16px] bg-gradient-to-r from-violet-500 to-blue-500 px-5 py-3 text-sm font-[950] text-white shadow-lg shadow-violet-200/70 transition hover:-translate-y-0.5"
-          >
-            <Plus size={16} /> 고객DB 등록
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setShowForm(true)} className="btn-premium btn-primary">
+              <Plus size={16} /> 신규고객등록
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
+                showToast("고객DB를 새로고침했습니다.");
+              }}
+              className="btn-premium btn-ghost"
+            >
+              <RefreshCcw size={15} /> 새로고침
+            </button>
+          </div>
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 md:grid-cols-4">
-        <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-[900] text-slate-400">전체 DB</p>
-          <p className="mt-2 text-3xl font-[950] text-slate-950">{dashboard.total}</p>
-        </div>
-        <div className="rounded-[20px] border border-blue-200 bg-blue-50 p-4 shadow-sm">
-          <p className="text-xs font-[900] text-blue-500">TM 활동</p>
-          <p className="mt-2 text-3xl font-[950] text-blue-700">{dashboard.tm}</p>
-        </div>
-        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-          <p className="text-xs font-[900] text-emerald-500">콜드톡 활동</p>
-          <p className="mt-2 text-3xl font-[950] text-emerald-700">
-            {dashboard.coldtalk}
-          </p>
-        </div>
-        <div className="rounded-[20px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
-          <p className="text-xs font-[900] text-amber-600">이관 준비</p>
-          <p className="mt-2 text-3xl font-[950] text-amber-700">{dashboard.ready}</p>
-        </div>
+      <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="전체 고객DB" value={stats.total} description="VIP활동DB 이관 대기" />
+        <StatCard label="TM DB" value={stats.tm} description="TM 활동으로 확보" />
+        <StatCard label="콜드톡 DB" value={stats.cold} description="콜드톡 활동으로 확보" />
+        <StatCard label="활동노트" value={stats.notes} description="누적 활동 기록" />
       </section>
 
-      <section className="mb-5 rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+      <section className="premium-card mb-5 p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
           <label className="relative block">
             <Search
               size={16}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: "var(--text-faint)" }}
             />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              type="search"
-              placeholder="고객명, 연락처, 회사, 메모 검색"
-              className="h-12 w-full rounded-[16px] border border-slate-200 bg-white pl-11 pr-4 text-sm font-[800] text-slate-800 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+              placeholder="고객명, 연락처, 소속회사, 메모, 활동노트 검색"
+              className="crm-search h-11 w-full pl-9 pr-3"
             />
           </label>
-          <label className="relative block">
-            <Filter
-              size={16}
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <select
-              value={filterRoute}
-              onChange={(event) => setFilterRoute(event.target.value)}
-              className="h-12 w-full rounded-[16px] border border-slate-200 bg-white pl-11 pr-4 text-sm font-[800] text-slate-700 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
-            >
-              <option value="">전체 유입경로</option>
-              {INTAKE_ROUTE_OPTIONS.map((route) => (
-                <option key={route} value={route}>
-                  {route}
-                </option>
-              ))}
-            </select>
-          </label>
+          <select
+            value={filterRoute}
+            onChange={(event) => setFilterRoute(event.target.value)}
+            className="crm-search h-11 w-full px-3"
+          >
+            <option value="">전체 유입경로</option>
+            {INTAKE_ROUTES.map((route) => (
+              <option key={route} value={route}>
+                {route}
+              </option>
+            ))}
+          </select>
         </div>
       </section>
 
-      <section className="rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[1.1fr_120px_150px_150px_1.2fr_190px] border-b border-slate-200 px-4 py-3 text-xs font-[950] text-slate-400">
-          <span>고객명</span>
-          <span>직급</span>
-          <span>연락처</span>
-          <span>유입경로</span>
-          <span>소속회사</span>
-          <span className="text-center">관리</span>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.65fr)]">
+        <div className="crm-table-wrap overflow-hidden">
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>고객정보</th>
+                <th>유입경로</th>
+                <th>활동항목</th>
+                <th>소속회사</th>
+                <th>활동노트</th>
+                <th>등록일</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRecords.map((record) => (
+                <tr
+                  key={record.id}
+                  data-selected={selectedRecord?.id === record.id}
+                  onClick={() => setSelectedRecord(record)}
+                  className="cursor-pointer"
+                >
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <div className="crm-avatar">{record.name.slice(0, 1) || "고"}</div>
+                      <div>
+                        <p className="crm-row-main">{record.name}</p>
+                        <p className="crm-row-sub">{fmt(record.title)} · {record.phone}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                      style={{
+                        background: "var(--accent-subtle)",
+                        border: "1px solid var(--accent-border)",
+                        color: "var(--accent-text)",
+                      }}
+                    >
+                      {record.intake_route}
+                    </span>
+                  </td>
+                  <td className="crm-row-main">{record.activity_type}</td>
+                  <td className="crm-row-sub">{fmt(record.company)}</td>
+                  <td className="crm-row-main">{record.notes.length}건</td>
+                  <td className="crm-row-sub">{dateLabel(record.created_at)}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => requestTransfer(record)}
+                        className="btn-premium btn-primary h-9 px-3 text-[12px]"
+                      >
+                        <ArrowRight size={13} /> 이관
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteRecord(record)}
+                        className="btn-premium btn-danger h-9 px-3 text-[12px]"
+                      >
+                        <Trash2 size={13} /> 삭제
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filteredRecords.length ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
+                    <p className="crm-tiny mt-1">TM 또는 콜드톡 DB를 등록해주세요.</p>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
-        <div className="max-h-[620px] overflow-y-auto">
-          {filteredRecords.length ? (
-            filteredRecords.map((record) => (
-              <div
-                key={record.id}
-                className="grid grid-cols-[1.1fr_120px_150px_150px_1.2fr_190px] items-center border-b border-slate-100 px-4 py-3 text-sm font-[800] text-slate-700 last:border-b-0 hover:bg-slate-50"
-              >
+
+        <aside className="premium-card p-5">
+          {selectedRecord ? (
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="crm-title">
+                    {selectedRecord.name} <span className="text-[16px] font-[850]">{selectedRecord.title}</span>
+                  </p>
+                  <p className="crm-subtitle mt-2">{selectedRecord.phone}</p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedRecord(record)}
-                  className="text-left font-[950] text-slate-950 hover:text-violet-600"
+                  onClick={() => requestTransfer(selectedRecord)}
+                  className="btn-premium btn-primary"
                 >
-                  {record.name}
+                  <ArrowRight size={15} /> VIP활동DB 이관
                 </button>
-                <span>{record.title || "-"}</span>
-                <span>{record.phone || "-"}</span>
-                <span>
-                  <Badge tone="violet">{record.intake_route || "미지정"}</Badge>
-                </span>
-                <span className="truncate pr-4">{record.company || "-"}</span>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRecord(record)}
-                    className="rounded-[12px] border border-slate-200 px-3 py-2 text-xs font-[900] text-slate-600 hover:bg-slate-50"
-                  >
-                    상세
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startTransfer(record)}
-                    className="rounded-[12px] bg-slate-950 px-3 py-2 text-xs font-[900] text-white hover:bg-violet-600"
-                  >
-                    VIP 이관
-                  </button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                  <p className="crm-meta">유입경로</p>
+                  <p className="crm-card-title mt-2">{selectedRecord.intake_route}</p>
+                </div>
+                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                  <p className="crm-meta">활동항목</p>
+                  <p className="crm-card-title mt-2">{selectedRecord.activity_type}</p>
+                </div>
+                <div className="rounded-[16px] border p-4 md:col-span-2" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                  <p className="crm-meta">소속회사</p>
+                  <p className="crm-card-title mt-2">{fmt(selectedRecord.company)}</p>
                 </div>
               </div>
-            ))
+
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <MessageCircle size={17} style={{ color: "var(--accent)" }} />
+                  <p className="crm-section-title">메모</p>
+                </div>
+                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                  <p className="crm-body whitespace-pre-wrap">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <FileText size={17} style={{ color: "var(--accent)" }} />
+                  <p className="crm-section-title">활동노트</p>
+                </div>
+                <NoteComposer
+                  defaultType={selectedRecord.activity_type}
+                  onAdd={(note) => handleAddNote(selectedRecord.id, note)}
+                />
+                <div className="mt-4">
+                  <NotesList notes={selectedRecord.notes} />
+                </div>
+              </div>
+            </div>
           ) : (
-            <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 text-center">
-              <Database size={34} className="text-slate-300" />
-              <p className="text-sm font-[900] text-slate-500">
-                등록된 고객DB가 없습니다.
-              </p>
-              <button
-                type="button"
-                onClick={openCreateForm}
-                className="rounded-[14px] bg-slate-950 px-4 py-2 text-sm font-[900] text-white"
-              >
-                고객DB 등록하기
-              </button>
+            <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
+              <UserRound size={38} style={{ color: "var(--text-faint)" }} />
+              <p className="crm-card-title mt-4">고객을 선택해주세요.</p>
+              <p className="crm-tiny mt-1">목록에서 고객을 선택하면 메모와 활동노트를 확인할 수 있습니다.</p>
             </div>
           )}
-        </div>
+        </aside>
       </section>
 
       {showForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl">
+        <div className="crm-modal-overlay z-[70]">
+          <div className="crm-modal max-h-[92vh] w-full max-w-[980px] overflow-y-auto p-5 md:p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-[950] tracking-[-0.04em] text-slate-950">
-                  {editingId ? "고객DB 수정" : "고객DB 등록"}
-                </h2>
-                <p className="mt-1 text-sm font-[700] text-slate-500">
-                  VIP활동 DB로 이관하기 전 TM·콜드톡 대상 정보를 정리합니다.
-                </p>
+                <h2 className="crm-title">고객DB 신규등록</h2>
+                <p className="crm-subtitle mt-2">VIP활동DB 발굴을 위한 원천 고객을 등록합니다.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  resetForm();
-                }}
-                className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-              >
-                <X size={18} />
+              <button type="button" onClick={resetForm} className="btn-premium btn-ghost h-10 w-10 p-0">
+                <X size={17} />
               </button>
             </div>
 
-            {error ? (
-              <div className="mb-4 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-[800] text-red-600">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <TextInput
                 label="고객명"
                 value={form.name}
-                onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                onChange={(value) => setForm((current) => ({ ...current, name: value }))}
                 placeholder="고객명 입력"
-                icon={<UserRound size={16} />}
               />
               <SelectInput
                 label="직급"
                 value={form.title}
                 options={TITLE_OPTIONS}
-                onChange={(value) => setForm((prev) => ({ ...prev, title: value }))}
+                onChange={(value) => setForm((current) => ({ ...current, title: value }))}
               />
               <TextInput
                 label="연락처"
                 value={form.phone}
-                onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))}
+                onChange={(value) => setForm((current) => ({ ...current, phone: formatPhoneInput(value) }))}
                 placeholder="010-0000-0000"
-                icon={<Phone size={16} />}
               />
               <SelectInput
                 label="유입경로"
                 value={form.intake_route}
-                options={INTAKE_ROUTE_OPTIONS}
+                options={INTAKE_ROUTES}
                 onChange={(value) =>
-                  setForm((prev) => ({ ...prev, intake_route: value }))
+                  setForm((current) => ({
+                    ...current,
+                    intake_route: value as RawCustomerForm["intake_route"],
+                    activity_type:
+                      value === "TM DB" ? "TM" : value === "콜드톡 DB" ? "콜드톡" : current.activity_type,
+                  }))
                 }
               />
               <TextInput
                 label="소속회사"
                 value={form.company}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, company: value }))
-                }
+                onChange={(value) => setForm((current) => ({ ...current, company: value }))}
                 placeholder="소속회사 입력"
               />
-              <label className="block md:col-span-2">
-                <FieldLabel>메모</FieldLabel>
+              <ActivityTypeSelector
+                value={form.activity_type}
+                onChange={(value) => setForm((current) => ({ ...current, activity_type: value }))}
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <label className="block">
+                <InputLabel>메모</InputLabel>
                 <textarea
                   value={form.memo}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, memo: event.target.value }))
-                  }
-                  placeholder="고객 발굴 과정에서 확인한 메모를 입력하세요."
-                  className="min-h-[130px] w-full resize-none rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-[700] text-slate-800 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
+                  onChange={(event) => setForm((current) => ({ ...current, memo: event.target.value }))}
+                  placeholder="고객 관련 메모를 입력하세요."
+                  rows={6}
+                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
+                />
+              </label>
+              <label className="block">
+                <InputLabel>최초 활동노트</InputLabel>
+                <textarea
+                  value={form.first_note}
+                  onChange={(event) => setForm((current) => ({ ...current, first_note: event.target.value }))}
+                  placeholder="TM 또는 콜드톡 활동내용을 입력하세요."
+                  rows={6}
+                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
                 />
               </label>
             </div>
 
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  resetForm();
-                }}
-                className="rounded-[14px] border border-slate-200 px-4 py-3 text-sm font-[900] text-slate-600 hover:bg-slate-50"
+            {formError ? (
+              <p
+                className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+                style={{ background: "rgba(239, 68, 68, 0.1)", borderColor: "rgba(239, 68, 68, 0.28)", color: "#ef4444" }}
               >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveCustomer}
-                className="inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-5 py-3 text-sm font-[950] text-white hover:bg-violet-600"
-              >
-                <Save size={16} /> 저장
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {selectedRecord ? (
-        <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/35 backdrop-blur-sm">
-          <aside className="h-full w-full max-w-3xl overflow-y-auto bg-white p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h2 className="text-2xl font-[950] tracking-[-0.04em] text-slate-950">
-                    {selectedRecord.name}
-                  </h2>
-                  {selectedRecord.title ? <Badge>{selectedRecord.title}</Badge> : null}
-                  {selectedRecord.intake_route ? (
-                    <Badge tone="violet">{selectedRecord.intake_route}</Badge>
-                  ) : null}
-                </div>
-                <p className="text-sm font-[800] text-slate-500">
-                  {selectedRecord.phone || "연락처 없음"} · {selectedRecord.company || "소속회사 없음"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedRecord(null)}
-                className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="mb-5 grid gap-4 md:grid-cols-2">
-              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-[950] text-slate-900">
-                  <FileText size={16} /> 메모
-                </div>
-                <p className="min-h-[130px] whitespace-pre-wrap rounded-[16px] bg-white p-4 text-sm font-[700] leading-6 text-slate-600">
-                  {stripGradeAssessmentBlock(selectedRecord.memo) || "등록된 메모가 없습니다."}
-                </p>
-              </section>
-
-              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-[950] text-slate-900">
-                  <ClipboardList size={16} /> 활동노트
-                </div>
-                <div className="space-y-2">
-                  {selectedRecord.activity_notes.length ? (
-                    selectedRecord.activity_notes.map((note) => (
-                      <div key={note.id} className="rounded-[16px] bg-white p-3">
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <Badge tone={note.type === "TM" ? "blue" : "emerald"}>
-                            {note.type}
-                          </Badge>
-                          <span className="text-[11px] font-[800] text-slate-400">
-                            {formatDate(note.created_at)}
-                          </span>
-                        </div>
-                        <p className="whitespace-pre-wrap text-sm font-[700] leading-6 text-slate-600">
-                          {note.content}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="rounded-[16px] bg-white p-4 text-sm font-[800] text-slate-400">
-                      등록된 활동노트가 없습니다.
-                    </p>
-                  )}
-                </div>
-              </section>
-            </div>
-
-            <section className="mb-5 rounded-[22px] border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-[950] text-slate-900">
-                <MessageCircle size={16} /> 활동노트 작성
-              </div>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {(["TM", "콜드톡"] as ActivityType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() =>
-                      setActivityForm((prev) => ({ ...prev, type }))
-                    }
-                    className={`rounded-full border px-4 py-2 text-sm font-[950] transition ${
-                      activityForm.type === type
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={activityForm.content}
-                onChange={(event) =>
-                  setActivityForm((prev) => ({ ...prev, content: event.target.value }))
-                }
-                placeholder="TM 또는 콜드톡 활동 내용을 입력하세요."
-                className="min-h-[110px] w-full resize-none rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-[700] text-slate-800 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-100"
-              />
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSaveActivityNote}
-                  className="inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-4 py-3 text-sm font-[950] text-white hover:bg-violet-600"
-                >
-                  <Send size={15} /> 활동노트 저장
-                </button>
-              </div>
-            </section>
-
-            <div className="flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-4">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openEditForm(selectedRecord)}
-                  className="rounded-[14px] border border-slate-200 px-4 py-3 text-sm font-[900] text-slate-600 hover:bg-slate-50"
-                >
-                  고객정보 수정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCustomer(selectedRecord)}
-                  className="inline-flex items-center gap-2 rounded-[14px] border border-red-200 px-4 py-3 text-sm font-[900] text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 size={15} /> 삭제
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => startTransfer(selectedRecord)}
-                className="inline-flex items-center gap-2 rounded-[14px] bg-gradient-to-r from-violet-500 to-blue-500 px-5 py-3 text-sm font-[950] text-white shadow-lg shadow-violet-200/70"
-              >
-                <ArrowRightCircle size={16} /> VIP활동 DB 이관
-              </button>
-            </div>
-          </aside>
-        </div>
-      ) : null}
-
-      {showGradeModal && transferRecord ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-[950] tracking-[-0.04em] text-slate-950">
-                  VIP활동 DB 이관 심사
-                </h2>
-                <p className="mt-1 text-sm font-[700] text-slate-500">
-                  {transferRecord.name} {transferRecord.title ? `· ${transferRecord.title}` : ""} 고객의 등급을 심사한 뒤 VIP활동 DB로 이관합니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowGradeModal(false);
-                  setTransferRecord(null);
-                  setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
-                  setError("");
-                }}
-                className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {error ? (
-              <div className="mb-4 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-[800] text-red-600">
-                {error}
-              </div>
+                {formError}
+              </p>
             ) : null}
 
-            <CustomerGradeAssessment
-              value={gradeAssessment}
-              title={transferRecord.title || "팀장"}
-              onChange={setGradeAssessment}
-            />
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowGradeModal(false);
-                  setTransferRecord(null);
-                  setGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
-                  setError("");
-                }}
-                className="rounded-[14px] border border-slate-200 px-4 py-3 text-sm font-[900] text-slate-600 hover:bg-slate-50"
-              >
+            <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+              <button type="button" onClick={resetForm} className="btn-premium btn-ghost">
                 취소
               </button>
-              <button
-                type="button"
-                onClick={completeTransfer}
-                className="inline-flex items-center gap-2 rounded-[14px] bg-slate-950 px-5 py-3 text-sm font-[950] text-white hover:bg-violet-600"
-              >
-                <ArrowRightCircle size={16} /> 심사 완료 후 이관
+              <button type="button" onClick={handleSave} className="btn-premium btn-primary">
+                <Save size={15} /> 고객DB 등록
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {transferTarget ? (
+        <TransferModal
+          customer={transferTarget}
+          assessment={transferAssessment}
+          onAssessmentChange={setTransferAssessment}
+          onClose={() => setTransferTarget(null)}
+          onConfirm={confirmTransfer}
+          error={transferError}
+        />
+      ) : null}
+
+      {toast ? (
+        <div
+          className="fixed bottom-5 right-5 z-[90] rounded-[16px] border px-4 py-3 text-[13px] font-[900] shadow-xl"
+          style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-strong)" }}
+        >
+          {toast}
         </div>
       ) : null}
     </main>
