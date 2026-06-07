@@ -636,12 +636,12 @@ function WorkItemsEditor({
 }) {
   return (
     <div
-      className="rounded-[16px] border p-4"
+      className="flex h-full min-h-[340px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="crm-section-title">당일활동목표</p>
+          <p className="crm-section-title">특발성활동목표</p>
           <p className="crm-tiny mt-1">오늘 처리해야 할 업무를 텍스트로 정리합니다.</p>
         </div>
         <button
@@ -653,7 +653,7 @@ function WorkItemsEditor({
           <PlusCircle size={14} /> 칸추가
         </button>
       </div>
-      <div className="space-y-2">
+      <div className="flex-1 space-y-2">
         {items.map((item, index) => (
           <div key={item.id} className="flex items-center gap-2">
             <span
@@ -698,20 +698,20 @@ function WorkItemsResultChecklist({
   const visibleItems = items.length > 0 ? items : createEmptyWorkItems();
   return (
     <div
-      className="rounded-[16px] border p-4"
+      className="flex h-full min-h-[340px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
-        <p className="crm-section-title">당일활동목표 완료체크</p>
+        <p className="crm-section-title">퇴근 전 활동결과</p>
         <p className="crm-tiny mt-1">완료한 업무를 체크하면 중간선으로 완료 표시됩니다.</p>
       </div>
-      <div className="space-y-2">
+      <div className="flex-1 space-y-2">
         {visibleItems.map((item, index) => {
           const hasText = item.text.trim().length > 0;
           return (
             <label
               key={item.id}
-              className="flex cursor-pointer items-center gap-3 rounded-[13px] border px-3 py-3"
+              className="flex h-[42px] cursor-pointer items-center gap-3 rounded-[13px] border px-3"
               style={{ borderColor: "var(--border)", background: "var(--surface)" }}
             >
               <input
@@ -735,10 +735,44 @@ function WorkItemsResultChecklist({
 }
 
 
+function GoalInputPanel({
+  goal,
+  disabled,
+  onChange,
+}: {
+  goal: FormValues;
+  disabled?: boolean;
+  onChange: (key: ActivityKey, value: number) => void;
+}) {
+  return (
+    <div
+      className="flex h-full min-h-[228px] flex-col rounded-[16px] border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+    >
+      <div className="mb-3">
+        <p className="crm-section-title">당일 활동목표</p>
+        <p className="crm-tiny mt-1">목표는 앞쪽, 달성은 뒤쪽 기준으로 집계됩니다.</p>
+      </div>
+      <div className="grid flex-1 content-start gap-3 sm:grid-cols-2">
+        {ACTIVITY_FIELDS.map((field) => (
+          <NumberInput
+            key={field.key}
+            label={field.goalLabel}
+            value={goal[field.key]}
+            unit={field.unit}
+            disabled={disabled}
+            onChange={(value) => onChange(field.key, value)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AutoResultNotice({ result }: { result: FormValues }) {
   return (
     <div
-      className="rounded-[16px] border p-4"
+      className="flex h-full min-h-[228px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
@@ -747,7 +781,7 @@ function AutoResultNotice({ result }: { result: FormValues }) {
           TM·콜드톡·DB 확보 달성값은 관련 데이터 입력 시 자동으로 집계됩니다.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid flex-1 content-start gap-2 sm:grid-cols-2">
         {ACTIVITY_FIELDS.map((field) => (
           <div
             key={field.key}
@@ -1340,28 +1374,28 @@ export default function DailyActivityPage() {
             icon={Users}
             label="목표 입력"
             value={`${enteredGoals}/4`}
-            sub="실행파트 기준"
+            sub="앞 숫자 입력 인원 / 전체 인원"
             tone="info"
           />
           <StatCard
             icon={CheckCircle2}
             label="결과 입력"
             value={`${enteredResults}/4`}
-            sub="퇴근 전 입력 기준"
+            sub="앞 숫자 입력 인원 / 전체 인원"
             tone="success"
           />
           <StatCard
             icon={Clock3}
             label="총 TM"
             value={`${totalGoalTm}/${totalResultTm}`}
-            sub={`달성율 ${percent(totalResultTm, totalGoalTm)}%`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultTm, totalGoalTm)}%`}
             tone="warning"
           />
           <StatCard
             icon={CalendarDays}
             label="전체 활동"
             value={`${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + goalValue(item.row, field.key), 0), 0)}/${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + resultValue(item.row, field.key), 0), 0)}`}
-            sub="4개 항목 합산"
+            sub="목표/달성 · 4개 항목 합산"
             tone="purple"
           />
         </section>
@@ -1432,33 +1466,18 @@ export default function DailyActivityPage() {
                 </div>
 
                 <div className="space-y-5 p-5">
-                  <div className="grid gap-5 xl:grid-cols-2">
-                    <div>
-                      <div className="mb-4 flex items-center gap-2">
-                        <Flag size={17} style={{ color: "var(--info-text)" }} />
-                        <p className="crm-section-title">당일 활동목표</p>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {ACTIVITY_FIELDS.map((field) => (
-                          <NumberInput
-                            key={field.key}
-                            label={field.goalLabel}
-                            value={goal[field.key]}
-                            unit={field.unit}
-                            disabled={isOutsideMeeting}
-                            onChange={(value) =>
-                              setGoal((prev) => ({ ...prev, [field.key]: value }))
-                            }
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="xl:pt-[37px]">
-                      <AutoResultNotice result={result} />
-                    </div>
+                  <div className="grid items-stretch gap-5 xl:grid-cols-2">
+                    <GoalInputPanel
+                      goal={goal}
+                      disabled={isOutsideMeeting}
+                      onChange={(key, value) =>
+                        setGoal((prev) => ({ ...prev, [key]: value }))
+                      }
+                    />
+                    <AutoResultNotice result={result} />
                   </div>
 
-                  <div className="grid gap-5 xl:grid-cols-2">
+                  <div className="grid items-stretch gap-5 xl:grid-cols-2">
                     <WorkItemsEditor
                       items={workItems}
                       disabled={isOutsideMeeting}
@@ -1466,20 +1485,11 @@ export default function DailyActivityPage() {
                       onAdd={addWorkItem}
                       onRemove={removeWorkItem}
                     />
-                    <div>
-                      <div className="mb-4 flex items-center gap-2">
-                        <TrendingUp
-                          size={17}
-                          style={{ color: "var(--success-text)" }}
-                        />
-                        <p className="crm-section-title">퇴근 전 활동결과</p>
-                      </div>
-                      <WorkItemsResultChecklist
-                        items={workItems}
-                        disabled={isOutsideMeeting}
-                        onToggle={toggleWorkItemDone}
-                      />
-                    </div>
+                    <WorkItemsResultChecklist
+                      items={workItems}
+                      disabled={isOutsideMeeting}
+                      onToggle={toggleWorkItemDone}
+                    />
                   </div>
                 </div>
 
@@ -1621,7 +1631,7 @@ export default function DailyActivityPage() {
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[980px] table-fixed text-center [&_td]:!text-center [&_td]:align-middle [&_th]:!text-center [&_th]:align-middle">
+                <table className="crm-table min-w-[980px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
                     <col className="w-[13%]" />
                     <col className="w-[15%]" />
@@ -1718,4 +1728,3 @@ export default function DailyActivityPage() {
     </div>
   );
 }
-
