@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
+import { Avatar, Badge } from "@/components/ui";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -848,7 +849,63 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card overflow-hidden">
-        <div className="crm-table-wrap overflow-hidden">
+        <div className="grid gap-3 p-3 lg:hidden">
+          {pagedRecords.map((record) => {
+            const latestNote = record.notes[0];
+            return (
+              <article
+                key={record.id}
+                onClick={() => setSelectedRecord(record)}
+                className="rounded-[18px] border p-4 transition active:scale-[0.99]"
+                style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar name={record.name} size="md" />
+                    <div className="min-w-0">
+                      <p className="crm-row-main truncate">{record.name}</p>
+                      <p className="crm-row-sub truncate">{fmt(record.title)} · {record.phone}</p>
+                    </div>
+                  </div>
+                  <Badge tone="accent">{record.activity_type}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                  <div className="rounded-[14px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <p className="crm-tiny">유입경로</p>
+                    <p className="crm-row-main mt-1 truncate">{record.intake_route}</p>
+                  </div>
+                  <div className="rounded-[14px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <p className="crm-tiny">소속회사</p>
+                    <p className="crm-row-main mt-1 truncate">{fmt(record.company)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 rounded-[14px] border px-3 py-3 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                  <p className="crm-tiny">최근 활동노트</p>
+                  <p className="crm-row-main mt-1 line-clamp-2">{latestNote?.content || "활동노트 없음"}</p>
+                  <p className="crm-row-sub mt-1">
+                    {latestNote ? `${latestNote.activityType} · ${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : dateLabel(record.created_at)}
+                  </p>
+                </div>
+                <div className="mt-3 flex justify-center gap-2" onClick={(event) => event.stopPropagation()}>
+                  <button type="button" onClick={() => requestTransfer(record)} className="btn-premium btn-primary h-9 flex-1 px-3 text-[12px]">
+                    <ArrowRight size={13} /> 이관
+                  </button>
+                  <button type="button" onClick={() => deleteRecord(record)} className="btn-premium btn-danger h-9 flex-1 px-3 text-[12px]">
+                    <Trash2 size={13} /> 삭제
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+          {!filteredRecords.length ? (
+            <div className="py-12 text-center">
+              <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
+              <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 고객을 등록해주세요.</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="crm-table-wrap hidden overflow-hidden lg:block">
           <table className="crm-table text-center">
             <thead>
               <tr>
@@ -873,7 +930,7 @@ export default function CustomerDbPage() {
                   >
                     <td className="text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <div className="crm-avatar">{record.name.slice(0, 1) || "고"}</div>
+                        <Avatar name={record.name} size="md" />
                         <div className="text-center">
                           <p className="crm-row-main">{record.name}</p>
                           <p className="crm-row-sub">{fmt(record.title)} · {record.phone}</p>
@@ -881,16 +938,7 @@ export default function CustomerDbPage() {
                       </div>
                     </td>
                     <td className="text-center">
-                      <span
-                        className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
-                        style={{
-                          background: "var(--accent-subtle)",
-                          border: "1px solid var(--accent-border)",
-                          color: "var(--accent-text)",
-                        }}
-                      >
-                        {record.intake_route}
-                      </span>
+                      <Badge tone="accent">{record.intake_route}</Badge>
                     </td>
                     <td className="crm-row-main text-center">{record.activity_type}</td>
                     <td className="crm-row-sub text-center">{fmt(record.company)}</td>
@@ -991,7 +1039,9 @@ export default function CustomerDbPage() {
             `}</style>
 
             <div className="slide-panel-header flex items-start justify-between gap-4">
-              <div className="min-w-0">
+              <div className="flex min-w-0 items-start gap-4">
+                <Avatar name={selectedRecord.name} size="lg" className="mt-1 shrink-0" />
+                <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <span
                     className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
@@ -1020,6 +1070,7 @@ export default function CustomerDbPage() {
                 <p className="mt-2 text-sm font-[720]" style={{ color: "var(--text-muted)" }}>
                   {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
                 </p>
+                </div>
               </div>
 
               <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-10 w-10 shrink-0 p-0">
