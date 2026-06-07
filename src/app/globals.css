@@ -1196,256 +1196,330 @@ aside span {
 }
 
 /* =========================================================
-   DARK MODE HARD FIX V2 - 전체 메뉴 강제 보정
-   목적: 페이지별 Tailwind 라이트 클래스(bg-white/text-slate)를 다크모드에서 일괄 치환
+   CRM DARK MODE STABILITY PATCH
+   - 기존 파이프라인/칸반/메뉴 CSS를 보존한 상태에서
+   - 다크모드에서 흰 배경/흐린 텍스트만 강제 보정
+   - 절대 단독 사용 금지: 이 파일은 원본 globals.css 전체 + 보정 코드입니다.
    ========================================================= */
 
+:root:not([data-theme="light"]),
+html.dark,
 html[data-theme="dark"],
+body.dark,
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #08090b;
+  --bg-2: #0b0d10;
+  --bg-3: #0f1116;
+  --surface: #101114;
+  --surface-2: #14161b;
+  --surface-3: #191c22;
+  --surface-4: #20242c;
+  --surface-hover: #171a20;
+  --surface-selected: #1b2030;
+  --border-subtle: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.095);
+  --border-2: rgba(255, 255, 255, 0.14);
+  --text-strong: #fafafa;
+  --text: #f4f4f5;
+  --text-muted: #c7cbd4;
+  --text-subtle: #9ca3af;
+  --text-faint: #747b88;
+}
+
+html:not([data-theme="light"]),
+html.dark,
+html[data-theme="dark"] {
+  background: #08090b !important;
+}
+
+html:not([data-theme="light"]) body,
+html.dark body,
 html[data-theme="dark"] body,
-html[data-theme="dark"] #__next,
-html[data-theme="dark"] main,
-html[data-theme="dark"] .crm-main-shell {
+body.dark,
+body[data-theme="dark"] {
   background:
-    radial-gradient(circle at 18% 0%, rgba(139, 92, 246, 0.12), transparent 34%),
-    radial-gradient(circle at 92% 8%, rgba(59, 130, 246, 0.10), transparent 30%),
-    linear-gradient(180deg, #07090d 0%, #0a0d12 48%, #050608 100%) !important;
-  color: #f8fafc !important;
+    radial-gradient(circle at 18% 0%, rgba(139, 124, 246, 0.10), transparent 30%),
+    radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.07), transparent 28%),
+    linear-gradient(180deg, #08090b 0%, #0b0d10 52%, #08090b 100%) !important;
+  color: #f4f4f5 !important;
 }
 
-/* page containers */
-html[data-theme="dark"] :where(.min-h-screen, .premium-page, .crm-page, .page, [class*="min-h-screen"]) {
+/* 메인 컨텐츠 배경 */
+html:not([data-theme="light"]) .crm-main-shell,
+html.dark .crm-main-shell,
+html[data-theme="dark"] .crm-main-shell,
+html:not([data-theme="light"]) main,
+html.dark main,
+html[data-theme="dark"] main {
   background:
-    radial-gradient(circle at 15% 0%, rgba(139, 92, 246, 0.10), transparent 32%),
-    linear-gradient(180deg, #080a0f, #050608) !important;
-  color: #f8fafc !important;
+    radial-gradient(circle at 22% 0%, rgba(139, 124, 246, 0.10), transparent 32%),
+    radial-gradient(circle at 84% 4%, rgba(59, 130, 246, 0.07), transparent 30%),
+    linear-gradient(180deg, #08090b 0%, #0b0d10 100%) !important;
+  color: #f4f4f5 !important;
 }
 
-/* 라이트 배경 강제 다크화 */
-html[data-theme="dark"] :where(
-  .bg-white,
-  .bg-slate-50,
-  .bg-gray-50,
-  .bg-zinc-50,
-  .bg-neutral-50,
-  .bg-stone-50,
-  .bg-white\/80,
-  .bg-white\/90,
-  .bg-white\/95,
-  .bg-\[\#F1F5F9\],
-  .bg-\[\#f8fafc\],
-  .bg-\[\#ffffff\],
-  .bg-\[white\]
-) {
-  background: rgba(15, 18, 25, 0.94) !important;
-  color: #f8fafc !important;
+/* 페이지/섹션 래퍼 */
+html:not([data-theme="light"]) .premium-page,
+html.dark .premium-page,
+html[data-theme="dark"] .premium-page,
+html:not([data-theme="light"]) [class*="page"],
+html.dark [class*="page"],
+html[data-theme="dark"] [class*="page"] {
+  color: #f4f4f5;
 }
 
-html[data-theme="dark"] :where(.bg-slate-100, .bg-gray-100, .bg-zinc-100, .bg-neutral-100) {
-  background: rgba(24, 28, 38, 0.96) !important;
-  color: #f8fafc !important;
+/* 라이트 배경 Tailwind 클래스 강제 보정 */
+html:not([data-theme="light"]) .bg-white,
+html:not([data-theme="light"]) .bg-slate-50,
+html:not([data-theme="light"]) .bg-slate-100,
+html:not([data-theme="light"]) .bg-gray-50,
+html:not([data-theme="light"]) .bg-gray-100,
+html.dark .bg-white,
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-gray-50,
+html.dark .bg-gray-100,
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-100,
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100 {
+  background-color: #101114 !important;
+  color: #f4f4f5 !important;
 }
 
-html[data-theme="dark"] :where(.bg-slate-200, .bg-gray-200, .bg-zinc-200) {
-  background: rgba(34, 39, 52, 0.96) !important;
-  color: #f8fafc !important;
+/* 카드/패널/테이블 컨테이너 */
+html:not([data-theme="light"]) .rounded-2xl,
+html:not([data-theme="light"]) .rounded-3xl,
+html:not([data-theme="light"]) .crm-card,
+html:not([data-theme="light"]) .premium-card,
+html:not([data-theme="light"]) .data-card,
+html:not([data-theme="light"]) .dashboard-card,
+html:not([data-theme="light"]) .stat-card,
+html.dark .rounded-2xl,
+html.dark .rounded-3xl,
+html.dark .crm-card,
+html.dark .premium-card,
+html.dark .data-card,
+html.dark .dashboard-card,
+html.dark .stat-card,
+html[data-theme="dark"] .rounded-2xl,
+html[data-theme="dark"] .rounded-3xl,
+html[data-theme="dark"] .crm-card,
+html[data-theme="dark"] .premium-card,
+html[data-theme="dark"] .data-card,
+html[data-theme="dark"] .dashboard-card,
+html[data-theme="dark"] .stat-card {
+  border-color: rgba(255, 255, 255, 0.09) !important;
 }
 
-/* 카드/패널/섹션 */
-html[data-theme="dark"] :where(
-  .premium-card,
-  .premium-panel,
-  .premium-section,
-  .crm-card,
-  .crm-panel,
-  .card,
-  .panel,
-  .rounded-xl,
-  .rounded-2xl,
-  .rounded-3xl
-):where(.border, [class*="shadow"], [class*="bg-"]) {
-  background: linear-gradient(180deg, rgba(18, 22, 31, 0.98), rgba(12, 15, 22, 0.98)) !important;
-  border-color: rgba(255, 255, 255, 0.10) !important;
-  color: #f8fafc !important;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.38) !important;
+html:not([data-theme="light"]) .crm-card,
+html:not([data-theme="light"]) .premium-card,
+html:not([data-theme="light"]) .data-card,
+html:not([data-theme="light"]) .dashboard-card,
+html:not([data-theme="light"]) .stat-card,
+html.dark .crm-card,
+html.dark .premium-card,
+html.dark .data-card,
+html.dark .dashboard-card,
+html.dark .stat-card,
+html[data-theme="dark"] .crm-card,
+html[data-theme="dark"] .premium-card,
+html[data-theme="dark"] .data-card,
+html[data-theme="dark"] .dashboard-card,
+html[data-theme="dark"] .stat-card {
+  background: linear-gradient(180deg, rgba(20,22,27,0.96), rgba(16,17,20,0.96)) !important;
+  color: #f4f4f5 !important;
 }
 
-/* 상단 히어로/헤더는 어두운 프리미엄 톤 */
-html[data-theme="dark"] :where(.premium-hero, .crm-hero, .page-hero, header[class*="rounded"], section[class*="rounded"]) {
-  color: #f8fafc !important;
+/* 텍스트 대비 복구 */
+html:not([data-theme="light"]) .text-white,
+html:not([data-theme="light"]) .text-slate-50,
+html:not([data-theme="light"]) .text-slate-100,
+html:not([data-theme="light"]) .text-slate-200,
+html:not([data-theme="light"]) .text-slate-300,
+html:not([data-theme="light"]) .text-slate-400,
+html:not([data-theme="light"]) .text-slate-500,
+html:not([data-theme="light"]) .text-slate-600,
+html:not([data-theme="light"]) .text-slate-700,
+html:not([data-theme="light"]) .text-slate-800,
+html:not([data-theme="light"]) .text-slate-900,
+html:not([data-theme="light"]) .text-gray-500,
+html:not([data-theme="light"]) .text-gray-600,
+html:not([data-theme="light"]) .text-gray-700,
+html:not([data-theme="light"]) .text-gray-800,
+html:not([data-theme="light"]) .text-gray-900,
+html.dark .text-slate-50,
+html.dark .text-slate-100,
+html.dark .text-slate-200,
+html.dark .text-slate-300,
+html.dark .text-slate-400,
+html.dark .text-slate-500,
+html.dark .text-slate-600,
+html.dark .text-slate-700,
+html.dark .text-slate-800,
+html.dark .text-slate-900,
+html.dark .text-gray-500,
+html.dark .text-gray-600,
+html.dark .text-gray-700,
+html.dark .text-gray-800,
+html.dark .text-gray-900,
+html[data-theme="dark"] .text-slate-50,
+html[data-theme="dark"] .text-slate-100,
+html[data-theme="dark"] .text-slate-200,
+html[data-theme="dark"] .text-slate-300,
+html[data-theme="dark"] .text-slate-400,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-800,
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-gray-700,
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-gray-900 {
+  color: #f4f4f5 !important;
 }
 
-html[data-theme="dark"] :where(.premium-hero, .crm-hero, .page-hero) {
-  background:
-    radial-gradient(circle at 8% 0%, rgba(139, 92, 246, 0.25), transparent 36%),
-    linear-gradient(135deg, #1a1f2e 0%, #111827 52%, #0b0f17 100%) !important;
-  border-color: rgba(255,255,255,0.12) !important;
-}
-
-/* 텍스트 대비 보정 */
-html[data-theme="dark"] :where(.text-white) { color: #ffffff !important; }
-html[data-theme="dark"] :where(.text-black, .text-slate-950, .text-slate-900, .text-slate-800, .text-gray-900, .text-gray-800, .text-zinc-900, .text-zinc-800) {
-  color: #f8fafc !important;
-}
-html[data-theme="dark"] :where(.text-slate-700, .text-gray-700, .text-zinc-700, .text-neutral-700) {
-  color: #e5e7eb !important;
-}
-html[data-theme="dark"] :where(.text-slate-600, .text-gray-600, .text-zinc-600, .text-neutral-600) {
-  color: #cbd5e1 !important;
-}
-html[data-theme="dark"] :where(.text-slate-500, .text-gray-500, .text-zinc-500, .text-neutral-500) {
-  color: #aeb8c8 !important;
-}
-html[data-theme="dark"] :where(.text-slate-400, .text-gray-400, .text-zinc-400, .text-neutral-400, .text-slate-300, .text-gray-300) {
-  color: #8f9aad !important;
-}
-
-/* 흐릿해진 제목/숫자 강제 복구 */
-html[data-theme="dark"] :where(h1, h2, h3, h4, h5, h6, strong, b, th, .font-bold, .font-extrabold, .font-black, .font-\[700\], .font-\[750\], .font-\[800\]) {
-  color: #f8fafc !important;
-}
-
-html[data-theme="dark"] :where(p, span, div, label, td, li) {
-  border-color: rgba(255,255,255,0.08);
-}
-
-/* border */
-html[data-theme="dark"] :where(
-  .border,
-  .border-t,
-  .border-r,
-  .border-b,
-  .border-l,
-  .border-slate-50,
-  .border-slate-100,
-  .border-slate-200,
-  .border-gray-100,
-  .border-gray-200,
-  .border-zinc-100,
-  .border-zinc-200
-) {
-  border-color: rgba(255, 255, 255, 0.10) !important;
-}
-
-/* 입력창/검색/셀렉트 */
-html[data-theme="dark"] :where(input, textarea, select, button[role="combobox"]) {
-  background: #0d1117 !important;
-  color: #f8fafc !important;
-  border-color: rgba(255, 255, 255, 0.13) !important;
-  box-shadow: none !important;
-}
-html[data-theme="dark"] :where(input::placeholder, textarea::placeholder) {
-  color: #7f8a9b !important;
-}
-html[data-theme="dark"] :where(option) {
-  background: #0d1117 !important;
-  color: #f8fafc !important;
+html:not([data-theme="light"]) .text-muted,
+html:not([data-theme="light"]) .text-slate-400,
+html:not([data-theme="light"]) .text-slate-500,
+html:not([data-theme="light"]) .text-gray-400,
+html:not([data-theme="light"]) .text-gray-500,
+html.dark .text-muted,
+html.dark .text-slate-400,
+html.dark .text-slate-500,
+html.dark .text-gray-400,
+html.dark .text-gray-500,
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] .text-slate-400,
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-gray-400,
+html[data-theme="dark"] .text-gray-500 {
+  color: #aeb5c2 !important;
 }
 
 /* 테이블 */
-html[data-theme="dark"] :where(table, .crm-table-wrap) {
-  background: #0e1118 !important;
-  border-color: rgba(255,255,255,0.10) !important;
-  color: #f8fafc !important;
+html:not([data-theme="light"]) table,
+html.dark table,
+html[data-theme="dark"] table {
+  color: #f4f4f5 !important;
 }
-html[data-theme="dark"] :where(thead, thead tr, .crm-table thead th) {
+html:not([data-theme="light"]) thead,
+html.dark thead,
+html[data-theme="dark"] thead {
   background: #111827 !important;
-  color: #dbeafe !important;
-  border-color: rgba(255,255,255,0.10) !important;
+  color: #f4f4f5 !important;
 }
-html[data-theme="dark"] :where(tbody, tbody tr) {
-  background: #0e1118 !important;
-  color: #f8fafc !important;
+html:not([data-theme="light"]) tbody tr,
+html.dark tbody tr,
+html[data-theme="dark"] tbody tr {
+  background: #101114 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
-html[data-theme="dark"] :where(tbody tr:hover) {
-  background: #151b26 !important;
+html:not([data-theme="light"]) tbody tr:hover,
+html.dark tbody tr:hover,
+html[data-theme="dark"] tbody tr:hover {
+  background: #171a20 !important;
 }
-html[data-theme="dark"] :where(td) {
-  color: #e5e7eb !important;
-  border-color: rgba(255,255,255,0.07) !important;
-}
-
-/* 필터바 */
-html[data-theme="dark"] :where(.premium-filterbar, .filterbar, .filter-bar, [class*="filter"]) {
-  background: rgba(17, 24, 39, 0.96) !important;
-  border-color: rgba(255,255,255,0.10) !important;
-  color: #f8fafc !important;
-}
-
-/* 빈 상태 박스 */
-html[data-theme="dark"] :where(.empty-state, [class*="empty"], [class*="Empty"]) {
-  background: rgba(17, 24, 39, 0.96) !important;
-  color: #cbd5e1 !important;
-  border-color: rgba(255,255,255,0.10) !important;
+html:not([data-theme="light"]) th,
+html:not([data-theme="light"]) td,
+html.dark th,
+html.dark td,
+html[data-theme="dark"] th,
+html[data-theme="dark"] td {
+  color: #f4f4f5 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-/* 슬라이드 패널/모달/드롭다운 */
-html[data-theme="dark"] :where(.slide-panel, .crm-modal, .modal, [role="dialog"], [data-radix-popper-content-wrapper] > *) {
-  background: linear-gradient(180deg, #121722, #0d1117) !important;
-  color: #f8fafc !important;
-  border-color: rgba(255,255,255,0.12) !important;
+/* 입력/셀렉트/검색바 */
+html:not([data-theme="light"]) input,
+html:not([data-theme="light"]) textarea,
+html:not([data-theme="light"]) select,
+html.dark input,
+html.dark textarea,
+html.dark select,
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  background-color: #0f1116 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f4f4f5 !important;
 }
-html[data-theme="dark"] :where(.slide-panel-header, .slide-panel-footer) {
-  background: rgba(17, 24, 39, 0.96) !important;
-  color: #f8fafc !important;
-  border-color: rgba(255,255,255,0.10) !important;
-}
-html[data-theme="dark"] :where(.slide-panel-body) {
-  background: #090d13 !important;
-}
-
-/* 흰색/연한 그라데이션 직접 지정된 영역 보정 */
-html[data-theme="dark"] [style*="background: white"],
-html[data-theme="dark"] [style*="background:#fff"],
-html[data-theme="dark"] [style*="background: #fff"],
-html[data-theme="dark"] [style*="background-color: white"],
-html[data-theme="dark"] [style*="background-color:#fff"],
-html[data-theme="dark"] [style*="background-color: #fff"] {
-  background: #111827 !important;
-  color: #f8fafc !important;
+html:not([data-theme="light"]) input::placeholder,
+html:not([data-theme="light"]) textarea::placeholder,
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #747b88 !important;
 }
 
-/* 버튼 */
-html[data-theme="dark"] :where(button) {
-  border-color: rgba(255,255,255,0.11);
+/* 필터바/빈 상태 */
+html:not([data-theme="light"]) .crm-filterbar,
+html:not([data-theme="light"]) .premium-filterbar,
+html:not([data-theme="light"]) .filter-bar,
+html.dark .crm-filterbar,
+html.dark .premium-filterbar,
+html.dark .filter-bar,
+html[data-theme="dark"] .crm-filterbar,
+html[data-theme="dark"] .premium-filterbar,
+html[data-theme="dark"] .filter-bar {
+  background: rgba(20, 22, 27, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: #f4f4f5 !important;
 }
-html[data-theme="dark"] :where(.btn-secondary, .btn-ghost) {
-  background: rgba(17, 24, 39, 0.92) !important;
-  color: #e5e7eb !important;
-  border-color: rgba(255,255,255,0.12) !important;
+
+html:not([data-theme="light"]) .empty-state,
+html.dark .empty-state,
+html[data-theme="dark"] .empty-state {
+  background: rgba(16, 17, 20, 0.96) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  color: #f4f4f5 !important;
 }
-html[data-theme="dark"] :where(.bg-violet-600, .bg-purple-600, .bg-indigo-600, .bg-blue-600) {
+
+/* 과도하게 흐려진 제목/숫자 복구 */
+html:not([data-theme="light"]) h1,
+html:not([data-theme="light"]) h2,
+html:not([data-theme="light"]) h3,
+html:not([data-theme="light"]) h4,
+html:not([data-theme="light"]) .font-bold,
+html:not([data-theme="light"]) .font-semibold,
+html:not([data-theme="light"]) .font-extrabold,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark .font-bold,
+html.dark .font-semibold,
+html.dark .font-extrabold,
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] .font-bold,
+html[data-theme="dark"] .font-semibold,
+html[data-theme="dark"] .font-extrabold {
   color: #ffffff !important;
 }
 
-/* 배지: 너무 밝은 배경만 톤 다운 */
-html[data-theme="dark"] :where(.bg-blue-50, .bg-indigo-50, .bg-violet-50, .bg-purple-50) {
-  background: rgba(129, 140, 248, 0.16) !important;
-  color: #c7d2fe !important;
-  border-color: rgba(129,140,248,0.28) !important;
-}
-html[data-theme="dark"] :where(.bg-emerald-50, .bg-green-50, .bg-teal-50) {
-  background: rgba(16, 185, 129, 0.14) !important;
-  color: #a7f3d0 !important;
-  border-color: rgba(16,185,129,0.28) !important;
-}
-html[data-theme="dark"] :where(.bg-amber-50, .bg-yellow-50, .bg-orange-50) {
-  background: rgba(245, 158, 11, 0.14) !important;
-  color: #fde68a !important;
-  border-color: rgba(245,158,11,0.28) !important;
-}
-html[data-theme="dark"] :where(.bg-red-50, .bg-rose-50, .bg-pink-50) {
-  background: rgba(244, 63, 94, 0.14) !important;
-  color: #fecdd3 !important;
-  border-color: rgba(244,63,94,0.28) !important;
+/* 파이프라인/칸반 보존 + 다크톤 보정 */
+html:not([data-theme="light"]) [class*="kanban"],
+html:not([data-theme="light"]) [class*="pipeline"],
+html.dark [class*="kanban"],
+html.dark [class*="pipeline"],
+html[data-theme="dark"] [class*="kanban"],
+html[data-theme="dark"] [class*="pipeline"] {
+  color: #f4f4f5;
 }
 
-/* 검은 카드 안 텍스트 */
-html[data-theme="dark"] :where(.bg-black, .bg-gray-950, .bg-slate-950, .bg-zinc-950, .bg-neutral-950) {
-  background: #0b0f17 !important;
-  color: #f8fafc !important;
+html:not([data-theme="light"]) [class*="kanban"] .bg-white,
+html:not([data-theme="light"]) [class*="pipeline"] .bg-white,
+html.dark [class*="kanban"] .bg-white,
+html.dark [class*="pipeline"] .bg-white,
+html[data-theme="dark"] [class*="kanban"] .bg-white,
+html[data-theme="dark"] [class*="pipeline"] .bg-white {
+  background-color: #14161b !important;
 }
-
-/* 스크롤바 */
-html[data-theme="dark"] ::-webkit-scrollbar-track { background: #07090d; }
-html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #323b4d; border-radius: 999px; }
-html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #4b5568; }
