@@ -196,6 +196,33 @@ function totalTmResult(row: DailyActivityRow | undefined) {
   return resultValue(row, "new_tm");
 }
 
+function totalFieldGoal(rows: Array<{ row?: DailyActivityRow }>, key: ActivityKey) {
+  return rows.reduce((sum, item) => sum + goalValue(item.row, key), 0);
+}
+
+function totalFieldResult(rows: Array<{ row?: DailyActivityRow }>, key: ActivityKey) {
+  return rows.reduce((sum, item) => sum + resultValue(item.row, key), 0);
+}
+
+function totalSpecialGoal(rows: Array<{ row?: DailyActivityRow }>) {
+  return rows.reduce(
+    (sum, item) =>
+      sum + activeWorkItems(normalizeWorkItems(item.row?.goal_work_items)).length,
+    0,
+  );
+}
+
+function totalSpecialResult(rows: Array<{ row?: DailyActivityRow }>) {
+  return rows.reduce(
+    (sum, item) =>
+      sum +
+      activeWorkItems(normalizeWorkItems(item.row?.goal_work_items)).filter(
+        (task) => task.done,
+      ).length,
+    0,
+  );
+}
+
 function isGoalEntered(row: DailyActivityRow | undefined) {
   if (!row) return false;
   if (row.is_outside_meeting) return true;
@@ -1316,6 +1343,14 @@ export default function DailyActivityPage() {
     (sum, item) => sum + resultValue(item.row, "meeting_confirmed"),
     0,
   );
+  const totalGoalColdtalk = totalFieldGoal(dailyMemberRows, "coldtalk");
+  const totalResultColdtalk = totalFieldResult(dailyMemberRows, "coldtalk");
+  const totalGoalBronzeDb = totalFieldGoal(dailyMemberRows, "consultant_db");
+  const totalResultBronzeDb = totalFieldResult(dailyMemberRows, "consultant_db");
+  const totalGoalOnePercentDb = totalFieldGoal(dailyMemberRows, "second_touch");
+  const totalResultOnePercentDb = totalFieldResult(dailyMemberRows, "second_touch");
+  const totalGoalSpecial = totalSpecialGoal(dailyMemberRows);
+  const totalResultSpecial = totalSpecialResult(dailyMemberRows);
 
   return (
     <div className="premium-page h-full overflow-y-auto">
@@ -1369,34 +1404,41 @@ export default function DailyActivityPage() {
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard
-            icon={Users}
-            label="목표 입력"
-            value={`${enteredGoals}/4`}
-            sub="앞 숫자 입력 인원 / 전체 인원"
-            tone="info"
-          />
-          <StatCard
-            icon={CheckCircle2}
-            label="결과 입력"
-            value={`${enteredResults}/4`}
-            sub="앞 숫자 입력 인원 / 전체 인원"
-            tone="success"
-          />
+        <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-5">
           <StatCard
             icon={Clock3}
-            label="총 TM"
+            label="당일 TM 목표 달성율"
             value={`${totalGoalTm}/${totalResultTm}`}
             sub={`목표/달성 · 달성율 ${percent(totalResultTm, totalGoalTm)}%`}
             tone="warning"
           />
           <StatCard
+            icon={CheckCircle2}
+            label="당일 콜드톡 목표 달성율"
+            value={`${totalGoalColdtalk}/${totalResultColdtalk}`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultColdtalk, totalGoalColdtalk)}%`}
+            tone="success"
+          />
+          <StatCard
+            icon={Users}
+            label="당일 브론즈DB 확보 달성율"
+            value={`${totalGoalBronzeDb}/${totalResultBronzeDb}`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultBronzeDb, totalGoalBronzeDb)}%`}
+            tone="info"
+          />
+          <StatCard
             icon={CalendarDays}
-            label="전체 활동"
-            value={`${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + goalValue(item.row, field.key), 0), 0)}/${ACTIVITY_FIELDS.reduce((sum, field) => sum + dailyMemberRows.reduce((rowSum, item) => rowSum + resultValue(item.row, field.key), 0), 0)}`}
-            sub="목표/달성 · 4개 항목 합산"
+            label="1% DB 확보 달성율"
+            value={`${totalGoalOnePercentDb}/${totalResultOnePercentDb}`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultOnePercentDb, totalGoalOnePercentDb)}%`}
             tone="purple"
+          />
+          <StatCard
+            icon={Flag}
+            label="특발성목표 달성율"
+            value={`${totalGoalSpecial}/${totalResultSpecial}`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultSpecial, totalGoalSpecial)}%`}
+            tone="danger"
           />
         </section>
 
