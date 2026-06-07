@@ -2024,6 +2024,27 @@ table td {
   background-clip: padding-box;
 }
 
+.vip-member-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (max-width: 768px) {
+  .crm-modern-header {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .crm-modern-main {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .crm-modern-header .crm-title {
+    font-size: 24px !important;
+    line-height: 1.15 !important;
+  }
+}
+
 /* =========================================================
    CRM UI STEP 6 - Global App Shell / Light & Dark Background Polish
    적용 위치: src/app/globals.css 맨 아래 추가
@@ -2171,23 +2192,317 @@ table.crm-table tbody tr:hover,
   }
 }
 
-.vip-member-table-scroll::-webkit-scrollbar-track {
-  background: transparent;
+/* =========================================================
+   CRM UI Step 7 - Attio style global page polish
+   Purpose: unify all menu backgrounds, cards, tables, lists,
+   forms and mobile readability without touching page logic.
+   ========================================================= */
+
+html,
+body {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(79, 70, 229, 0.13), transparent 30rem),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 28rem),
+    var(--bg);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  letter-spacing: -0.018em;
+  color: var(--text);
+}
+
+[data-theme="light"] html,
+[data-theme="light"] body,
+.light html,
+.light body {
+  background:
+    radial-gradient(circle at top left, rgba(79, 70, 229, 0.08), transparent 34rem),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30rem),
+    #f7f8fb;
+  color: #111827;
+}
+
+.crm-main-shell {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), transparent 340px),
+    var(--bg);
+}
+
+[data-theme="light"] .crm-main-shell,
+.light .crm-main-shell {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.88), rgba(247,248,251,0.98) 360px),
+    #f7f8fb;
+}
+
+/* Universal menu page shell */
+.crm-page,
+main > div[class*="space-y"],
+main > section[class*="space-y"] {
+  width: 100%;
+}
+
+.crm-page-shell,
+.crm-page,
+.crm-attio-page {
+  padding: clamp(18px, 2vw, 30px);
 }
 
 @media (max-width: 768px) {
-  .crm-modern-header {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
+  .crm-page-shell,
+  .crm-page,
+  .crm-attio-page {
+    padding: 14px;
+  }
+}
+
+/* Stronger SaaS card style across old pages */
+.crm-card,
+.crm-stat-card,
+.crm-panel,
+.crm-section,
+.card,
+[class*="rounded-2xl"][class*="border"],
+[class*="rounded-3xl"][class*="border"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.018)), var(--surface) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow-card, 0 18px 45px rgba(0,0,0,0.22));
+}
+
+[data-theme="light"] .crm-card,
+[data-theme="light"] .crm-stat-card,
+[data-theme="light"] .crm-panel,
+[data-theme="light"] .crm-section,
+[data-theme="light"] .card,
+[data-theme="light"] [class*="rounded-2xl"][class*="border"],
+[data-theme="light"] [class*="rounded-3xl"][class*="border"],
+.light .crm-card,
+.light .crm-stat-card,
+.light .crm-panel,
+.light .crm-section,
+.light .card,
+.light [class*="rounded-2xl"][class*="border"],
+.light [class*="rounded-3xl"][class*="border"] {
+  background: linear-gradient(180deg, #ffffff, #fbfcff) !important;
+  border-color: rgba(17, 24, 39, 0.08) !important;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* Page header consistency */
+h1,
+.crm-page-title {
+  font-size: var(--fs-page-title) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.045em !important;
+  color: var(--text-strong) !important;
+}
+
+h2,
+.crm-section-title {
+  font-size: var(--fs-section-title) !important;
+  font-weight: 760 !important;
+  letter-spacing: -0.035em !important;
+  color: var(--text-strong) !important;
+}
+
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] .crm-page-title,
+[data-theme="light"] .crm-section-title,
+.light h1,
+.light h2,
+.light .crm-page-title,
+.light .crm-section-title {
+  color: #0f172a !important;
+}
+
+/* Universal table alignment and readability */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+thead th,
+tbody td,
+.crm-table th,
+.crm-table td,
+.data-table th,
+.data-table td {
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap;
+}
+
+thead th,
+.crm-table th,
+.data-table th {
+  height: 46px;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+  letter-spacing: -0.02em;
+  color: var(--text-subtle) !important;
+  background: rgba(255,255,255,0.026);
+  border-bottom: 1px solid var(--border) !important;
+}
+
+tbody td,
+.crm-table td,
+.data-table td {
+  height: 54px;
+  font-size: 13.5px !important;
+  font-weight: 560;
+  color: var(--text) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+tbody tr,
+.crm-table tr,
+.data-table tr {
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+tbody tr:hover,
+.crm-table tr:hover,
+.data-table tr:hover {
+  background: var(--surface-hover) !important;
+}
+
+[data-theme="light"] thead th,
+[data-theme="light"] .crm-table th,
+[data-theme="light"] .data-table th,
+.light thead th,
+.light .crm-table th,
+.light .data-table th {
+  color: #667085 !important;
+  background: #f8fafc !important;
+  border-bottom-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+[data-theme="light"] tbody td,
+[data-theme="light"] .crm-table td,
+[data-theme="light"] .data-table td,
+.light tbody td,
+.light .crm-table td,
+.light .data-table td {
+  color: #172033 !important;
+  border-bottom-color: rgba(15, 23, 42, 0.065) !important;
+}
+
+[data-theme="light"] tbody tr:hover,
+[data-theme="light"] .crm-table tr:hover,
+[data-theme="light"] .data-table tr:hover,
+.light tbody tr:hover,
+.light .crm-table tr:hover,
+.light .data-table tr:hover {
+  background: #f8fafc !important;
+}
+
+/* Form controls */
+input,
+select,
+textarea,
+.crm-search,
+.crm-input,
+.crm-select,
+.crm-textarea {
+  border-radius: 14px !important;
+  border: 1px solid var(--border) !important;
+  background: rgba(255,255,255,0.035) !important;
+  color: var(--text) !important;
+  outline: none !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.crm-search:focus,
+.crm-input:focus,
+.crm-select:focus,
+.crm-textarea:focus {
+  border-color: rgba(99, 102, 241, 0.62) !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.13) !important;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea,
+[data-theme="light"] .crm-search,
+[data-theme="light"] .crm-input,
+[data-theme="light"] .crm-select,
+[data-theme="light"] .crm-textarea,
+.light input,
+.light select,
+.light textarea,
+.light .crm-search,
+.light .crm-input,
+.light .crm-select,
+.light .crm-textarea {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: rgba(15, 23, 42, 0.11) !important;
+}
+
+/* Buttons */
+button,
+.crm-button,
+.crm-btn {
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+/* Avatar unification */
+.crm-avatar,
+[class*="avatar"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+/* Mobile: keep old tables usable and move toward card-like readability */
+@media (max-width: 768px) {
+  h1,
+  .crm-page-title {
+    font-size: 22px !important;
   }
 
-  .crm-modern-main {
-    padding-left: 14px !important;
-    padding-right: 14px !important;
+  table {
+    min-width: 760px;
   }
 
-  .crm-modern-header .crm-title {
-    font-size: 24px !important;
-    line-height: 1.15 !important;
+  .crm-table-wrap,
+  .crm-table-container,
+  [class*="overflow-x-auto"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  thead th,
+  tbody td,
+  .crm-table th,
+  .crm-table td,
+  .data-table th,
+  .data-table td {
+    height: 48px;
+    font-size: 12.5px !important;
+  }
+
+  input,
+  select,
+  textarea,
+  .crm-search,
+  .crm-input,
+  .crm-select,
+  .crm-textarea {
+    min-height: 44px;
+    font-size: 14px !important;
   }
 }
