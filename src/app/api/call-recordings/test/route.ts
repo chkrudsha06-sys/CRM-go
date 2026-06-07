@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -166,6 +167,48 @@ async function testGemini() {
   };
 }
 
+async function testSupabaseTables() {
+  const contacts = await supabase
+    .from("contacts")
+    .select("id,name,phone,assigned_to,created_at")
+    .order("id", { ascending: false })
+    .limit(3);
+
+  const contactNotes = await supabase
+    .from("contact_notes")
+    .select("id,contact_id,note_date,author,created_at")
+    .order("id", { ascending: false })
+    .limit(3);
+
+  const callRecordingLogs = await supabase
+    .from("call_recording_logs")
+    .select("id,drive_file_id,drive_file_name,status,processed_at,created_at")
+    .order("id", { ascending: false })
+    .limit(3);
+
+  return {
+    ok: !contacts.error && !contactNotes.error && !callRecordingLogs.error,
+    contacts: {
+      ok: !contacts.error,
+      count: contacts.data?.length || 0,
+      sample: contacts.data || [],
+      error: contacts.error?.message || null,
+    },
+    contact_notes: {
+      ok: !contactNotes.error,
+      count: contactNotes.data?.length || 0,
+      sample: contactNotes.data || [],
+      error: contactNotes.error?.message || null,
+    },
+    call_recording_logs: {
+      ok: !callRecordingLogs.error,
+      count: callRecordingLogs.data?.length || 0,
+      sample: callRecordingLogs.data || [],
+      error: callRecordingLogs.error?.message || null,
+    },
+  };
+}
+
 export async function GET() {
   try {
     const envStatus = {
@@ -224,7 +267,10 @@ export async function GET() {
       })
     );
 
-    const gemini = await testGemini();
+    const [gemini, supabaseTables] = await Promise.all([
+      testGemini(),
+      testSupabaseTables(),
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -233,6 +279,7 @@ export async function GET() {
       envStatus,
       driveResults,
       gemini,
+      supabaseTables,
     });
   } catch (error) {
     return NextResponse.json(
