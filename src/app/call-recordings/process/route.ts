@@ -22,6 +22,13 @@ type ManagerFolder = {
 
 type ContactRow = Record<string, unknown>;
 
+type MatchSource = "customer_db" | "vip_db";
+
+type MatchedContact = ReturnType<typeof simplifyContact> & {
+  matchSource: MatchSource;
+  matchSourceLabel: string;
+};
+
 function getRequiredEnv(name: string) {
   const value = process.env[name];
 
@@ -82,6 +89,35 @@ function normalizeGeminiMimeType(mimeType: string) {
   if (mimeType === "audio/x-m4a") return "audio/mp4";
   if (mimeType === "audio/m4a") return "audio/mp4";
   return mimeType || "audio/mp4";
+}
+
+
+function getSyncStartAt() {
+  const raw = process.env.CALL_RECORDING_SYNC_START_AT;
+
+  if (!raw) return null;
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(
+      `Invalid CALL_RECORDING_SYNC_START_AT value. Use ISO format, for example 2026-06-05T00:00:00+09:00. Current value: ${raw}`
+    );
+  }
+
+  return parsed;
+}
+
+function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
+  if (!syncStartAt) return true;
+
+  const baseTime = file.createdTime || file.modifiedTime;
+  if (!baseTime) return false;
+
+  const fileTime = new Date(baseTime);
+  if (Number.isNaN(fileTime.getTime())) return false;
+
+  return fileTime.getTime() >= syncStartAt.getTime();
 }
 
 function extractPhoneFromFileName(fileName: string) {
@@ -235,6 +271,7 @@ async function summarizeAudioWithGemini(params: {
   fileName: string;
   managerName: string;
   extractedPhone: string | null;
+  matchSourceLabel?: string | null;
 }) {
   const apiKey = getRequiredEnv("GEMINI_API_KEY");
 
@@ -324,19 +361,20 @@ AI 판단:
   };
 }
 
-async function findContactsByPhone(phone: string | null) {
-  if (!phone) {
-    return {
-      status: "no_phone",
-      message: "파일명에서 연락처를 추출하지 못했습니다.",
-      normalizedPhone: null,
-      matchedCount: 0,
-      contacts: [],
-    };
-  }
+function isVipLikeContact(contact: ContactRow) {
+  const meetingResult = getStringField(contact, "meeting_result");
+  const managementStage = getStringField(contact, "management_stage");
+  const prospectType = getStringField(contact, "prospect_type");
+  const customerGrade = getStringField(contact, "customer_grade");
 
-  const normalizedPhone = normalizePhone(phone);
+  return [meetingResult, managementStage, prospectType, customerGrade].some((value) =>
+    ["계약완료", "예약완료", "VIP", "VIP활동DB", "리텐션", "마스터", "챌린저", "브론즈"].includes(
+      String(value || "").trim()
+    )
+  );
+}
 
+async function loadContactsTable() {
   const { data, error } = await supabase
     .from("contacts")
     .select("*")
@@ -347,39 +385,97 @@ async function findContactsByPhone(phone: string | null) {
     throw new Error(`Supabase contacts query failed: ${error.message}`);
   }
 
-  const contacts = ((data || []) as ContactRow[])
-    .filter(
-      (contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone
-    )
-    .map(simplifyContact);
+  return (data || []) as ContactRow[];
+}
 
-  if (contacts.length === 1) {
+function matchContactsByPhone(rows: ContactRow[], normalizedPhone: string) {
+  return rows.filter(
+    (contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone
+  );
+}
+
+async function findContactsByPhone(phone: string | null) {
+  if (!phone) {
     return {
-      status: "matched",
-      message: "CRM 고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
-      normalizedPhone,
-      matchedCount: contacts.length,
-      contacts,
+      status: "no_phone",
+      message: "파일명에서 연락처를 추출하지 못했습니다.",
+      normalizedPhone: null,
+      matchedCount: 0,
+      contacts: [] as MatchedContact[],
+      matchSource: null as MatchSource | null,
+      matchSourceLabel: null as string | null,
     };
   }
 
-  if (contacts.length > 1) {
+  const normalizedPhone = normalizePhone(phone);
+  const rows = await loadContactsTable();
+  const matchedRows = matchContactsByPhone(rows, normalizedPhone);
+
+  const customerDbRows = matchedRows.filter((contact) => !isVipLikeContact(contact));
+  const vipDbRows = matchedRows.filter((contact) => isVipLikeContact(contact));
+
+  const toMatchedContact = (source: MatchSource, label: string) => (contact: ContactRow) => ({
+    ...simplifyContact(contact),
+    matchSource: source,
+    matchSourceLabel: label,
+  });
+
+  if (customerDbRows.length === 1) {
+    return {
+      status: "matched",
+      message: "고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
+      normalizedPhone,
+      matchedCount: 1,
+      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
+      matchSource: "customer_db" as MatchSource,
+      matchSourceLabel: "고객DB",
+    };
+  }
+
+  if (customerDbRows.length > 1) {
     return {
       status: "duplicate",
-      message:
-        "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      message: "고객DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
       normalizedPhone,
-      matchedCount: contacts.length,
-      contacts,
+      matchedCount: customerDbRows.length,
+      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
+      matchSource: "customer_db" as MatchSource,
+      matchSourceLabel: "고객DB",
+    };
+  }
+
+  if (vipDbRows.length === 1) {
+    return {
+      status: "matched",
+      message: "고객DB에는 없고 VIP활동DB에서 정확히 1명의 고객이 매칭되었습니다.",
+      normalizedPhone,
+      matchedCount: 1,
+      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
+      matchSource: "vip_db" as MatchSource,
+      matchSourceLabel: "VIP활동DB",
+    };
+  }
+
+  if (vipDbRows.length > 1) {
+    return {
+      status: "duplicate",
+      message: "VIP활동DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      normalizedPhone,
+      matchedCount: vipDbRows.length,
+      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
+      matchSource: "vip_db" as MatchSource,
+      matchSourceLabel: "VIP활동DB",
     };
   }
 
   return {
     status: "not_found",
-    message: "CRM 고객DB에서 일치하는 연락처를 찾지 못했습니다.",
+    message: "고객DB와 VIP활동DB 모두에서 일치하는 연락처를 찾지 못했습니다.",
     normalizedPhone,
     matchedCount: 0,
-    contacts: [],
+    contacts: [] as MatchedContact[],
+    matchSource: null as MatchSource | null,
+    matchSourceLabel: null as string | null,
   };
 }
 
@@ -464,6 +560,7 @@ async function saveAiSummaryToContactNote(params: {
   driveFileUrl?: string;
   managerName: string;
   extractedPhone: string | null;
+  matchSourceLabel?: string | null;
 }) {
   if (!params.contactId) {
     return {
@@ -507,6 +604,7 @@ async function saveAiSummaryToContactNote(params: {
 
 [AI 처리 정보]
 담당자: ${params.managerName}
+매칭 메뉴: ${params.matchSourceLabel || "확인 필요"}
 추출 연락처: ${params.extractedPhone || "없음"}
 녹음파일명: ${params.driveFileName}
 녹음파일 링크: ${params.driveFileUrl || "없음"}
@@ -556,6 +654,17 @@ async function processAudioFile(params: {
     };
   }
 
+  if (existingLog?.status === "duplicate") {
+    return {
+      driveFileId: file.id,
+      fileName: file.name,
+      manager: file.manager,
+      status: "skipped_duplicate",
+      message: "이미 중복 처리된 녹음파일입니다.",
+      log: existingLog,
+    };
+  }
+
   await upsertLog({
     driveFileId: file.id,
     driveFileName: file.name,
@@ -569,7 +678,10 @@ async function processAudioFile(params: {
 
   const customerMatch = await findContactsByPhone(file.extractedPhone);
 
-  if (customerMatch.status !== "matched" || customerMatch.contacts.length !== 1) {
+  if (
+    customerMatch.status !== "matched" ||
+    customerMatch.contacts.length !== 1
+  ) {
     const log = await upsertLog({
       driveFileId: file.id,
       driveFileName: file.name,
@@ -603,6 +715,7 @@ async function processAudioFile(params: {
     fileName: file.name,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
+    matchSourceLabel: customerMatch.matchSourceLabel,
   });
 
   const noteSave = await saveAiSummaryToContactNote({
@@ -614,6 +727,7 @@ async function processAudioFile(params: {
     driveFileUrl: file.webViewLink,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
+    matchSourceLabel: customerMatch.matchSourceLabel,
   });
 
   const finalStatus =
@@ -647,7 +761,7 @@ async function processAudioFile(params: {
     status: finalStatus,
     message:
       finalStatus === "processed"
-        ? "AI 통화요약이 활동노트에 저장되었습니다."
+        ? `AI 통화요약이 ${customerMatch.matchSourceLabel || "고객"} 활동노트에 저장되었습니다.`
         : "이미 저장된 활동노트가 있어 중복 저장하지 않았습니다.",
     customerMatch,
     audioSummary,
@@ -657,6 +771,29 @@ async function processAudioFile(params: {
 }
 
 export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get("authorization");
+
+  if (!cronSecret) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "CRON_SECRET is not configured.",
+      },
+      { status: 500 }
+    );
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Unauthorized call recording process request.",
+      },
+      { status: 401 }
+    );
+  }
+
   try {
     const url = new URL(request.url);
     const limit = Math.max(
@@ -696,16 +833,27 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    const syncStartAt = getSyncStartAt();
+
     const audioFiles = folderResults
       .flatMap((result) => result.files)
-      .filter((file) => file.mimeType?.startsWith("audio/"));
+      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => isFileAfterSyncStart(file, syncStartAt));
+
+    const skippedOldFileCount = folderResults
+      .flatMap((result) => result.files)
+      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => !isFileAfterSyncStart(file, syncStartAt)).length;
 
     const processTargets = [];
 
     for (const file of audioFiles) {
       const existingLog = await getExistingLog(file.id);
 
-      if (existingLog?.status === "processed") {
+      if (
+        existingLog?.status === "processed" ||
+        existingLog?.status === "duplicate"
+      ) {
         continue;
       }
 
@@ -755,7 +903,9 @@ export async function GET(request: NextRequest) {
       ok: true,
       message: "Call recording process completed.",
       limit,
+      syncStartAt: syncStartAt?.toISOString() || null,
       foundAudioFileCount: audioFiles.length,
+      skippedOldFileCount,
       processedCount: results.length,
       results,
       folderResults: folderResults.map((folder) => ({
