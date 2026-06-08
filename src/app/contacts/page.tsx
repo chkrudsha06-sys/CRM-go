@@ -17,8 +17,8 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
-import { Avatar } from "@/components/ui";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -55,6 +55,40 @@ type FormState = {
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
+
+function normalizePhoneDigits(value?: string | null) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function mergeRecordsByPhone(
+  localRecords: CustomerDbRecord[],
+  remoteRecords: CustomerDbRecord[],
+) {
+  const merged = new Map<string, CustomerDbRecord>();
+
+  [...localRecords, ...remoteRecords].forEach((record) => {
+    const normalized = normalizeRecordGrade(record);
+    const key = normalizePhoneDigits(normalized.phone) || String(normalized.id);
+    const previous = merged.get(key);
+
+    if (!previous) {
+      merged.set(key, normalized);
+      return;
+    }
+
+    const previousTime = new Date(previous.updated_at || previous.created_at).getTime();
+    const currentTime = new Date(normalized.updated_at || normalized.created_at).getTime();
+
+    merged.set(key, currentTime >= previousTime ? normalized : previous);
+  });
+
+  return Array.from(merged.values()).sort(
+    (a, b) =>
+      new Date(b.updated_at || b.created_at).getTime() -
+      new Date(a.updated_at || a.created_at).getTime(),
+  );
+}
+
 
 const INTAKE_ROUTES = [
   "분양의신DB",
@@ -280,17 +314,54 @@ export default function ContactsPage() {
   const [filterGrade, setFilterGrade] = useState("");
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as CustomerDbRecord[];
-        if (Array.isArray(parsed)) setRecords(parsed.map(normalizeRecordGrade));
+    let alive = true;
+
+    const loadRecords = async () => {
+      let localRecords: CustomerDbRecord[] = [];
+
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as CustomerDbRecord[];
+          if (Array.isArray(parsed)) {
+            localRecords = parsed.map(normalizeRecordGrade);
+          }
+        }
+      } catch {
+        localRecords = [];
       }
-    } catch {
-      setRecords([]);
-    } finally {
-      setLoaded(true);
-    }
+
+      if (alive) setRecords(localRecords);
+
+      try {
+        const { data, error } = await supabase
+          .from("contacts")
+          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at")
+          .order("updated_at", { ascending: false });
+
+        if (error) throw error;
+
+        const remoteRecords = Array.isArray(data)
+          ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
+          : [];
+        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
+
+        if (!alive) return;
+
+        setRecords(merged);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch (error) {
+        console.warn("VIP활동DB Supabase 불러오기 실패. localStorage 데이터로 표시합니다.", error);
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    };
+
+    loadRecords();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -824,7 +895,15 @@ export default function ContactsPage() {
                       >
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <Avatar name={record.name} size="md" className="shrink-0" />
+                            <div
+                              className="flex h-10 w-10 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
+                              style={{
+                                background:
+                                  "linear-gradient(135deg, var(--accent), var(--accent-3))",
+                              }}
+                            >
+                              {record.name.slice(0, 1)}
+                            </div>
                             <div>
                               <p
                                 className="font-[900]"
@@ -917,7 +996,15 @@ export default function ContactsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <Avatar name={record.name} size="md" className="shrink-0" />
+                        <div
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
+                          style={{
+                            background:
+                              "linear-gradient(135deg, var(--accent), var(--accent-3))",
+                          }}
+                        >
+                          {record.name.slice(0, 1)}
+                        </div>
                         <div className="min-w-0">
                           <p
                             className="truncate text-base font-[900]"
@@ -1240,10 +1327,8 @@ function CustomerDetailPanel({
         `}</style>
 
         <div className="slide-panel-header flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <Avatar name={record.name} size="lg" className="shrink-0" />
-            <div className="min-w-0">
-              <div className="mb-3 flex flex-wrap gap-2">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap gap-2">
               <span className={`badge-premium ${badgeClass(visibleGrade)}`}>
                 {fmt(visibleGrade)}
               </span>
@@ -1264,13 +1349,12 @@ function CustomerDetailPanel({
             >
               {fmt(record.name)}
             </h2>
-              <p
-                className="mt-2 text-sm font-[720]"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {fmt(record.title)} · {fmt(record.phone)}
-              </p>
-            </div>
+            <p
+              className="mt-2 text-sm font-[720]"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {fmt(record.title)} · {fmt(record.phone)}
+            </p>
           </div>
 
           <button
