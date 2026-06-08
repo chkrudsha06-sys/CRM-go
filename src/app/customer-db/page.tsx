@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  Edit3,
   FileText,
   MessageCircle,
   Phone,
@@ -219,6 +220,8 @@ async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
     management_stage: "리드",
     customer_grade: "심사미진행",
     memo: buildContactMemo(record),
+    has_tm: record.activity_type === "TM",
+    tm_date: record.activity_type === "TM" ? today() : null,
     updated_at: now,
   };
 
@@ -726,6 +729,9 @@ export default function CustomerDbPage() {
   const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
+  const [editTarget, setEditTarget] = useState<RawCustomerRecord | null>(null);
+  const [editForm, setEditForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
+  const [editError, setEditError] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
@@ -899,6 +905,76 @@ export default function CustomerDbPage() {
     showToast("고객DB에 등록되었습니다.");
   };
 
+
+  const openEdit = (record: RawCustomerRecord) => {
+    setEditTarget(record);
+    setEditForm({
+      name: record.name || "",
+      title: record.title || "",
+      phone: record.phone || "",
+      intake_route: record.intake_route || "",
+      company: record.company || "",
+      activity_type: record.activity_type || "",
+      memo: record.memo || "",
+      first_note: "",
+    });
+    setEditError("");
+  };
+
+  const closeEdit = () => {
+    setEditTarget(null);
+    setEditForm({ ...EMPTY_FORM });
+    setEditError("");
+  };
+
+  const handleUpdate = async () => {
+    if (!editTarget) return;
+    if (!editForm.name.trim()) {
+      setEditError("고객명을 입력해주세요.");
+      return;
+    }
+    if (!editForm.phone.trim()) {
+      setEditError("연락처를 입력해주세요.");
+      return;
+    }
+    if (!editForm.intake_route) {
+      setEditError("유입경로를 선택해주세요.");
+      return;
+    }
+    if (!editForm.activity_type) {
+      setEditError("활동항목을 선택해주세요.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const updatedRecord: RawCustomerRecord = {
+      ...editTarget,
+      name: editForm.name.trim(),
+      title: editForm.title.trim(),
+      phone: formatPhoneInput(editForm.phone.trim()),
+      intake_route: editForm.intake_route,
+      company: editForm.company.trim(),
+      activity_type: editForm.activity_type,
+      memo: editForm.memo.trim(),
+      updated_at: now,
+    };
+
+    try {
+      await saveCustomerDbRecordToContacts(updatedRecord);
+    } catch (error) {
+      console.error("고객정보 Supabase 수정 실패", error);
+      setEditError("Supabase 수정 실패입니다. 권한 또는 컬럼 상태를 확인해주세요.");
+      return;
+    }
+
+    setRecords((items) =>
+      items.map((item) => (item.id === editTarget.id ? updatedRecord : item)),
+    );
+    if (selectedRecord?.id === editTarget.id) setSelectedRecord(updatedRecord);
+    closeEdit();
+    showToast("고객정보가 수정되었습니다.");
+  };
+
   const handleAddNote = async (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
     const createdAt = new Date().toISOString();
     const newNote: CustomerDbNote = {
@@ -1046,10 +1122,20 @@ export default function CustomerDbPage() {
     showToast("VIP활동DB로 이관되었습니다.");
   };
 
-  const deleteRecord = (record: RawCustomerRecord) => {
+  const deleteRecord = async (record: RawCustomerRecord) => {
     if (!window.confirm(`${record.name} 고객을 고객DB에서 삭제하시겠습니까?`)) return;
+    try {
+      const contactId = await findContactIdByPhone(record.phone);
+      if (contactId) {
+        await supabase.from("contact_notes").delete().eq("contact_id", contactId);
+        await supabase.from("contacts").delete().eq("id", contactId);
+      }
+    } catch (error) {
+      console.warn("Supabase 고객 삭제 실패. 로컬 고객DB에서는 삭제합니다.", error);
+    }
     setRecords((items) => items.filter((item) => item.id !== record.id));
     if (selectedRecord?.id === record.id) setSelectedRecord(null);
+    if (editTarget?.id === record.id) closeEdit();
     showToast("고객DB에서 삭제되었습니다.");
   };
 
@@ -1338,6 +1424,13 @@ export default function CustomerDbPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => openEdit(record)}
+                          className="btn-premium btn-secondary h-9 px-3 text-[12px]"
+                        >
+                          <Edit3 size={13} /> 수정
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => deleteRecord(record)}
                           className="btn-premium btn-danger h-9 px-3 text-[12px]"
                         >
@@ -1450,6 +1543,9 @@ export default function CustomerDbPage() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary">
                       <ArrowRight size={14} /> VIP활동DB 이관
+                    </button>
+                    <button type="button" onClick={() => openEdit(selectedRecord)} className="btn-premium btn-secondary">
+                      <Edit3 size={14} /> 수정
                     </button>
                     <button
                       type="button"
@@ -1604,6 +1700,99 @@ export default function CustomerDbPage() {
         </div>
       ) : null}
 
+
+      {editTarget ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="고객 수정 닫기"
+            onClick={closeEdit}
+            className="absolute inset-0 cursor-default backdrop-blur-[2px]"
+            style={{ background: "var(--overlay)" }}
+          />
+          <div className="premium-card relative z-10 w-full max-w-5xl overflow-hidden rounded-[24px]">
+            <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
+              <div>
+                <p className="crm-title text-[22px]">고객정보 수정</p>
+                <p className="crm-subtitle mt-1">활동항목을 TM으로 변경하면 녹음 자동요약 매칭 대상 고객으로 저장됩니다.</p>
+              </div>
+              <button type="button" onClick={closeEdit} className="btn-premium btn-secondary h-10 w-10 p-0">
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="max-h-[calc(90vh-150px)] overflow-y-auto p-5">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <TextInput
+                  label="고객명"
+                  value={editForm.name}
+                  onChange={(value) => setEditForm((current) => ({ ...current, name: value }))}
+                  placeholder="고객명 입력"
+                />
+                <SelectInput
+                  label="직급"
+                  value={editForm.title}
+                  options={TITLE_OPTIONS}
+                  onChange={(value) => setEditForm((current) => ({ ...current, title: value }))}
+                />
+                <TextInput
+                  label="연락처"
+                  value={editForm.phone}
+                  onChange={(value) => setEditForm((current) => ({ ...current, phone: formatPhoneInput(value) }))}
+                  placeholder="010-0000-0000"
+                />
+                <SelectInput
+                  label="유입경로"
+                  value={editForm.intake_route}
+                  options={INTAKE_ROUTES}
+                  onChange={(value) => setEditForm((current) => ({ ...current, intake_route: value }))}
+                />
+                <TextInput
+                  label="소속회사"
+                  value={editForm.company}
+                  onChange={(value) => setEditForm((current) => ({ ...current, company: value }))}
+                  placeholder="소속회사 입력"
+                />
+                <ActivityTypeSelector
+                  value={editForm.activity_type}
+                  onChange={(value) => setEditForm((current) => ({ ...current, activity_type: value }))}
+                />
+              </div>
+
+              <label className="mt-4 block">
+                <InputLabel>메모</InputLabel>
+                <textarea
+                  value={editForm.memo}
+                  onChange={(event) => setEditForm((current) => ({ ...current, memo: event.target.value }))}
+                  placeholder="고객 관련 메모를 입력하세요."
+                  rows={6}
+                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
+                />
+              </label>
+
+              {editError ? (
+                <p
+                  className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+                  style={{ background: "rgba(239, 68, 68, 0.1)", borderColor: "rgba(239, 68, 68, 0.28)", color: "#ef4444" }}
+                >
+                  {editError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t p-5 md:flex-row md:justify-end" style={{ borderColor: "var(--border)" }}>
+              <button type="button" onClick={closeEdit} className="btn-premium btn-ghost">
+                취소
+              </button>
+              <button type="button" onClick={handleUpdate} className="btn-premium btn-primary">
+                <Save size={15} /> 수정 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {transferTarget ? (
         <TransferModal
           customer={transferTarget}
@@ -1626,4 +1815,3 @@ export default function CustomerDbPage() {
     </main>
   );
 }
-
