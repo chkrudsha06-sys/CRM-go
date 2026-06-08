@@ -164,6 +164,96 @@ function mergeVipRecordsByPhone(records: VipRecord[], nextRecord: VipRecord) {
   );
 }
 
+
+type ContactPhoneRecord = {
+  id: number;
+  phone?: string | null;
+  mobile?: string | null;
+  contact_phone?: string | null;
+  customer_phone?: string | null;
+  tel?: string | null;
+};
+
+function buildContactMemo(record: RawCustomerRecord) {
+  const cleanMemo = stripGradeAssessmentBlock(record.memo);
+  const registerInfo = `[고객DB 등록 정보]\n유입경로: ${record.intake_route}\n활동항목: ${record.activity_type}\n소속회사: ${fmt(record.company)}`;
+  if (cleanMemo.includes("[고객DB 등록 정보]")) return cleanMemo;
+  return [cleanMemo, registerInfo].filter(Boolean).join("\n\n");
+}
+
+async function findContactIdByPhone(phone: string) {
+  const phoneDigits = normalizePhoneDigits(phone);
+  if (!phoneDigits) return null;
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, phone, mobile, contact_phone, customer_phone, tel")
+    .limit(2000);
+
+  if (error) throw error;
+
+  const matched = (data || []).find((item: ContactPhoneRecord) => {
+    const phones = [
+      item.phone,
+      item.mobile,
+      item.contact_phone,
+      item.customer_phone,
+      item.tel,
+    ];
+    return phones.some((value) => normalizePhoneDigits(value) === phoneDigits);
+  });
+
+  return matched?.id || null;
+}
+
+async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
+  const now = new Date().toISOString();
+  const existingId = await findContactIdByPhone(record.phone);
+  const payload = {
+    name: record.name,
+    title: record.title,
+    phone: record.phone,
+    customer_phone: record.phone,
+    intake_route: record.intake_route,
+    company: record.company || "-",
+    management_stage: "리드",
+    customer_grade: "심사미진행",
+    memo: buildContactMemo(record),
+    updated_at: now,
+  };
+
+  if (existingId) {
+    const { error } = await supabase
+      .from("contacts")
+      .update(payload)
+      .eq("id", existingId);
+    if (error) throw error;
+    return existingId;
+  }
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .insert({ ...payload, created_at: record.created_at || now })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return data?.id || null;
+}
+
+async function saveCustomerDbNoteToSupabase(contactId: number | null, note: CustomerDbNote) {
+  if (!contactId) return;
+  const { error } = await supabase.from("contact_notes").insert({
+    contact_id: contactId,
+    note_date: note.noteDate,
+    content: `[${note.activityType}] ${note.content}`,
+    author: note.author || "현재 사용자",
+    created_at: note.createdAt,
+    updated_at: note.createdAt,
+  });
+  if (error) throw error;
+}
+
 function fmt(value?: string | null) {
   return value && value.trim() ? value : "-";
 }
@@ -659,6 +749,33 @@ export default function CustomerDbPage() {
     writeJsonArray(RAW_DB_STORAGE_KEY, records);
   }, [loaded, records]);
 
+
+  useEffect(() => {
+    if (!loaded || records.length === 0) return;
+
+    let cancelled = false;
+
+    const syncLocalCustomerDbToSupabase = async () => {
+      for (const record of records) {
+        if (cancelled) return;
+        try {
+          const contactId = await saveCustomerDbRecordToContacts(record);
+          for (const note of record.notes || []) {
+            await saveCustomerDbNoteToSupabase(contactId, note);
+          }
+        } catch (error) {
+          console.warn("기존 고객DB Supabase 동기화 실패", record.name, error);
+        }
+      }
+    };
+
+    syncLocalCustomerDbToSupabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded]);
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
@@ -719,7 +836,7 @@ export default function CustomerDbPage() {
     setShowForm(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) {
       setFormError("고객명을 입력해주세요.");
       return;
@@ -738,7 +855,7 @@ export default function CustomerDbPage() {
     }
 
     const now = new Date().toISOString();
-    const firstNote = form.first_note.trim()
+    const firstNote: CustomerDbNote[] = form.first_note.trim()
       ? [
           {
             id: Date.now() + 1,
@@ -765,19 +882,42 @@ export default function CustomerDbPage() {
       updated_at: now,
     };
 
+    try {
+      const contactId = await saveCustomerDbRecordToContacts(record);
+      for (const note of firstNote) {
+        await saveCustomerDbNoteToSupabase(contactId, note);
+      }
+    } catch (error) {
+      console.error("고객DB Supabase 저장 실패", error);
+      setFormError("Supabase 저장 실패로 고객을 등록하지 못했습니다. Vercel 로그 또는 Supabase 권한을 확인해주세요.");
+      return;
+    }
+
     setRecords((items) => [record, ...items]);
     setSelectedRecord(record);
     resetForm();
     showToast("고객DB에 등록되었습니다.");
   };
 
-  const handleAddNote = (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
+  const handleAddNote = async (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
     const createdAt = new Date().toISOString();
     const newNote: CustomerDbNote = {
       id: Date.now(),
       createdAt,
       ...note,
     };
+
+    const targetRecord = records.find((record) => record.id === customerId);
+    if (targetRecord) {
+      try {
+        const contactId = await saveCustomerDbRecordToContacts(targetRecord);
+        await saveCustomerDbNoteToSupabase(contactId, newNote);
+      } catch (error) {
+        console.error("활동노트 Supabase 저장 실패", error);
+        showToast("활동노트 저장 실패");
+        return;
+      }
+    }
 
     setRecords((items) =>
       items.map((record) =>
@@ -1486,3 +1626,4 @@ export default function CustomerDbPage() {
     </main>
   );
 }
+
