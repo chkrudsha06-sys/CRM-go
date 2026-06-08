@@ -20,6 +20,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
 import {
   appendGradeAssessmentBlock,
@@ -136,6 +137,31 @@ function timeLabel(value: string) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+
+function normalizePhoneDigits(value?: string | null) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function mergeVipRecordsByPhone(records: VipRecord[], nextRecord: VipRecord) {
+  const nextPhone = normalizePhoneDigits(nextRecord.phone);
+  const existingIndex = records.findIndex(
+    (record) => normalizePhoneDigits(record.phone) === nextPhone,
+  );
+
+  if (existingIndex < 0) return [nextRecord, ...records];
+
+  return records.map((record, index) =>
+    index === existingIndex
+      ? {
+          ...record,
+          ...nextRecord,
+          id: record.id,
+          created_at: record.created_at || nextRecord.created_at,
+        }
+      : record,
+  );
 }
 
 function fmt(value?: string | null) {
@@ -788,7 +814,7 @@ export default function CustomerDbPage() {
     setTransferError("");
   };
 
-  const confirmTransfer = () => {
+  const confirmTransfer = async () => {
     if (!transferTarget) return;
     if (!hasGradeAssessmentInput(transferAssessment)) {
       setTransferError("VIP활동DB 이관 전 고객등급 심사값을 1개 이상 입력해주세요.");
@@ -807,9 +833,7 @@ export default function CustomerDbPage() {
       .join("\n\n");
 
     const vipMemo = appendGradeAssessmentBlock(baseMemo, transferAssessment, result);
-    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
-    const nextVipRecord: VipRecord = {
-      id: Date.now(),
+    const vipPayload = {
       name: transferTarget.name,
       title: transferTarget.title,
       phone: transferTarget.phone,
@@ -818,12 +842,60 @@ export default function CustomerDbPage() {
       management_stage: "리드",
       customer_grade: result.customerGrade,
       memo: vipMemo,
-      created_at: now,
       updated_at: now,
     };
 
-    writeJsonArray(VIP_DB_STORAGE_KEY, [nextVipRecord, ...vipRecords]);
-    setRecords((items) => items.filter((record) => record.id !== transferTarget.id));
+    const phoneDigits = normalizePhoneDigits(transferTarget.phone);
+
+    try {
+      const { data: existingVip, error: findError } = await supabase
+        .from("contacts")
+        .select("id, created_at")
+        .eq("phone", transferTarget.phone)
+        .maybeSingle();
+
+      if (findError) throw findError;
+
+      if (existingVip?.id) {
+        const { error: updateError } = await supabase
+          .from("contacts")
+          .update(vipPayload)
+          .eq("id", existingVip.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase.from("contacts").insert({
+          ...vipPayload,
+          created_at: now,
+        });
+
+        if (insertError) throw insertError;
+      }
+    } catch (error) {
+      console.error("VIP활동DB Supabase 저장 실패", error);
+      setTransferError(
+        "VIP활동DB 저장에 실패했습니다. Supabase contacts 테이블 저장 상태를 확인해주세요.",
+      );
+      return;
+    }
+
+    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
+    const nextVipRecord: VipRecord = {
+      id: Date.now(),
+      ...vipPayload,
+      created_at: now,
+    };
+
+    writeJsonArray(VIP_DB_STORAGE_KEY, mergeVipRecordsByPhone(vipRecords, nextVipRecord));
+
+    setRecords((items) => {
+      const nextItems = items.filter(
+        (record) => normalizePhoneDigits(record.phone) !== phoneDigits,
+      );
+      writeJsonArray(RAW_DB_STORAGE_KEY, nextItems);
+      return nextItems;
+    });
+
     if (selectedRecord?.id === transferTarget.id) setSelectedRecord(null);
     setTransferTarget(null);
     setTransferError("");
