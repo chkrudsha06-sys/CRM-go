@@ -1187,19 +1187,6 @@ export default function CustomerDbPage() {
               boxShadow: "var(--shadow-lg)",
             }}
           >
-            <style jsx global>{`
-              @keyframes crmSlideIn {
-                from {
-                  transform: translateX(100%);
-                  opacity: 0.72;
-                }
-                to {
-                  transform: translateX(0);
-                  opacity: 1;
-                }
-              }
-            `}</style>
-
             <div className="slide-panel-header flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap gap-2">
