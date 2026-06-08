@@ -381,6 +381,42 @@ function normalizeSearchText(value?: string | null) {
   return String(value || "").trim().toLowerCase().replace(/[\s-]/g, "");
 }
 
+function normalizePhoneKey(value?: string | null) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function mergeRecordsByPhone(
+  localRecords: CustomerDbRecord[],
+  remoteRecords: CustomerDbRecord[],
+) {
+  const map = new Map<string, CustomerDbRecord>();
+
+  for (const record of localRecords) {
+    const key = normalizePhoneKey(record.phone) || `local-${record.id}`;
+    map.set(key, normalizeRecordGrade(record));
+  }
+
+  for (const record of remoteRecords) {
+    const key = normalizePhoneKey(record.phone) || `remote-${record.id}`;
+    const previous = map.get(key);
+
+    if (!previous) {
+      map.set(key, normalizeRecordGrade(record));
+      continue;
+    }
+
+    const previousTime = new Date(previous.updated_at || previous.created_at || 0).getTime();
+    const remoteTime = new Date(record.updated_at || record.created_at || 0).getTime();
+    map.set(key, normalizeRecordGrade(remoteTime >= previousTime ? record : previous));
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+    const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
 function getWeekday(date: string) {
   if (!date) return "";
   return WEEKDAYS[new Date(`${date}T00:00:00`).getDay()];
@@ -2139,29 +2175,64 @@ export default function Pipeline3Page() {
   const [stageFilter, setStageFilter] = useState<FilterValue>("전체");
 
   useEffect(() => {
-    try {
-      LEGACY_STORAGE_KEYS.forEach((key) => {
-        window.localStorage.removeItem(key);
-      });
+    let alive = true;
 
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as CustomerDbRecord[];
-        if (Array.isArray(parsed)) {
-          const normalized = parsed.map(normalizeRecordGrade);
-          setRecords(normalized);
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-          setLoadedFromDb(true);
-          return;
+    const loadPipelineRecords = async () => {
+      let localRecords: CustomerDbRecord[] = [];
+
+      try {
+        LEGACY_STORAGE_KEYS.forEach((key) => {
+          window.localStorage.removeItem(key);
+        });
+
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as CustomerDbRecord[];
+          if (Array.isArray(parsed)) {
+            localRecords = parsed.map(normalizeRecordGrade);
+          }
         }
+      } catch {
+        localRecords = [];
       }
 
-      setRecords([]);
-      setLoadedFromDb(false);
-    } catch {
-      setRecords([]);
-      setLoadedFromDb(false);
-    }
+      if (alive) {
+        setRecords(localRecords);
+        setLoadedFromDb(localRecords.length > 0);
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("contacts")
+          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at")
+          .order("updated_at", { ascending: false });
+
+        if (error) throw error;
+
+        const remoteRecords = Array.isArray(data)
+          ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
+          : [];
+
+        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
+
+        if (!alive) return;
+
+        setRecords(merged);
+        setLoadedFromDb(true);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch (error) {
+        console.warn("파이프라인3 VIP활동DB 데이터 불러오기 실패. localStorage 데이터로 표시합니다.", error);
+        if (!alive) return;
+        setRecords(localRecords);
+        setLoadedFromDb(localRecords.length > 0);
+      }
+    };
+
+    loadPipelineRecords();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const customers = useMemo(() => records.map(toPipelineCustomer), [records]);
@@ -2231,17 +2302,46 @@ export default function Pipeline3Page() {
 
   const updateRecord = (id: number, patch: Partial<CustomerDbRecord>) => {
     const now = new Date().toISOString();
-    persistRecords(
-      records.map((record) =>
-        record.id === id
-          ? {
-              ...record,
-              ...patch,
-              updated_at: now,
-            }
-          : record,
-      ),
-    );
+    let nextRecord: CustomerDbRecord | null = null;
+    const nextRecords = records.map((record) => {
+      if (record.id !== id) return record;
+
+      nextRecord = {
+        ...record,
+        ...patch,
+        updated_at: now,
+      };
+
+      return nextRecord;
+    });
+
+    persistRecords(nextRecords);
+
+    if (nextRecord) {
+      supabase
+        .from("contacts")
+        .upsert(
+          {
+            id: nextRecord.id,
+            name: nextRecord.name,
+            title: nextRecord.title,
+            phone: nextRecord.phone,
+            intake_route: nextRecord.intake_route,
+            company: nextRecord.company,
+            management_stage: nextRecord.management_stage,
+            customer_grade: nextRecord.customer_grade,
+            memo: nextRecord.memo,
+            created_at: nextRecord.created_at,
+            updated_at: nextRecord.updated_at,
+          },
+          { onConflict: "id" },
+        )
+        .then(({ error }) => {
+          if (error) {
+            console.warn("파이프라인3 변경사항 Supabase 저장 실패:", error.message);
+          }
+        });
+    }
   };
   const deleteRecord = async (customer: PipelineCustomer) => {
     const confirmed = window.confirm(
