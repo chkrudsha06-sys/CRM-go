@@ -770,27 +770,49 @@ async function processAudioFile(params: {
   };
 }
 
-export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
+function isAuthorizedCallRecordingRequest(request: NextRequest) {
+  const url = new URL(request.url);
+  const configuredSecret =
+    process.env.CALL_RECORDINGS_PROCESS_SECRET || process.env.CRON_SECRET || "";
 
-  if (!cronSecret) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "CRON_SECRET is not configured.",
-      },
-      { status: 500 }
-    );
+  const querySecret =
+    url.searchParams.get("secret") || url.searchParams.get("token") || "";
+  const authHeader = request.headers.get("authorization") || "";
+  const bearerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
+
+  if (!configuredSecret) {
+    return {
+      ok: false,
+      status: 500,
+      message:
+        "CALL_RECORDINGS_PROCESS_SECRET or CRON_SECRET is not configured.",
+    };
   }
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (querySecret === configuredSecret || bearerToken === configuredSecret) {
+    return { ok: true, status: 200, message: "Authorized" };
+  }
+
+  return {
+    ok: false,
+    status: 401,
+    message: "Unauthorized call recording process request.",
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const auth = isAuthorizedCallRecordingRequest(request);
+
+  if (!auth.ok) {
     return NextResponse.json(
       {
         ok: false,
-        message: "Unauthorized call recording process request.",
+        message: auth.message,
+        hint: "Use ?secret=YOUR_SECRET or Authorization: Bearer YOUR_SECRET",
       },
-      { status: 401 }
+      { status: auth.status }
     );
   }
 
@@ -931,3 +953,9 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+
+export async function POST(request: NextRequest) {
+  return GET(request);
+}
+
