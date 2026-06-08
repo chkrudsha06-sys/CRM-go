@@ -907,19 +907,30 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card overflow-hidden">
-        <div className="crm-table-wrap max-h-[690px] overflow-auto">
-          <table className="crm-table text-center">
+        <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
+          <table className="crm-table customer-db-centered-table min-w-[1540px] table-fixed text-center">
+            <colgroup>
+              <col className="w-[170px]" />
+              <col className="w-[110px]" />
+              <col className="w-[165px]" />
+              <col className="w-[190px]" />
+              <col className="w-[140px]" />
+              <col className="w-[160px]" />
+              <col className="w-[230px]" />
+              <col className="w-[170px]" />
+              <col className="w-[245px]" />
+            </colgroup>
             <thead>
               <tr>
-                <th className="sticky top-0 z-10 text-center">고객명</th>
-                <th className="sticky top-0 z-10 text-center">직급</th>
-                <th className="sticky top-0 z-10 text-center">연락처</th>
-                <th className="sticky top-0 z-10 text-center">유입경로</th>
-                <th className="sticky top-0 z-10 text-center">활동항목</th>
-                <th className="sticky top-0 z-10 text-center">소속회사</th>
-                <th className="sticky top-0 z-10 text-center">최근 활동</th>
-                <th className="sticky top-0 z-10 text-center">등록일</th>
-                <th className="sticky top-0 z-10 text-center">관리</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">고객명</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">직급</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">연락처</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">유입경로</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">활동항목</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">소속회사</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">최근 활동</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">등록일</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">관리</th>
               </tr>
             </thead>
             <tbody>
@@ -930,20 +941,20 @@ export default function CustomerDbPage() {
                     key={record.id}
                     data-selected={selectedRecord?.id === record.id}
                     onClick={() => setSelectedRecord(record)}
-                    className="cursor-pointer"
+                    className="customer-db-row cursor-pointer"
                   >
-                    <td className="text-center align-middle">
-                      <p className="crm-row-main">{record.name}</p>
+                    <td className="customer-db-td text-center align-middle">
+                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{record.name}</p>
                     </td>
-                    <td className="text-center align-middle">
-                      <p className="crm-row-main">{fmt(record.title)}</p>
+                    <td className="customer-db-td text-center align-middle">
+                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{fmt(record.title)}</p>
                     </td>
-                    <td className="text-center align-middle">
-                      <p className="crm-row-main tabular-nums">{fmt(record.phone)}</p>
+                    <td className="customer-db-td text-center align-middle">
+                      <p className="crm-row-main customer-db-cell-main mx-auto text-center tabular-nums">{fmt(record.phone)}</p>
                     </td>
-                    <td className="text-center align-middle">
+                    <td className="customer-db-td text-center align-middle">
                       <span
-                        className="inline-flex justify-center rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                        className="customer-db-badge inline-flex min-w-[92px] justify-center rounded-full px-3.5 py-1.5 text-[12px] font-[950]"
                         style={{
                           background: "var(--accent-subtle)",
                           border: "1px solid var(--accent-border)",
@@ -953,9 +964,9 @@ export default function CustomerDbPage() {
                         {record.intake_route}
                       </span>
                     </td>
-                    <td className="text-center align-middle">
+                    <td className="customer-db-td text-center align-middle">
                       <span
-                        className="inline-flex justify-center rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                        className="customer-db-badge inline-flex min-w-[92px] justify-center rounded-full px-3.5 py-1.5 text-[12px] font-[950]"
                         style={{
                           background: "var(--surface-2)",
                           border: "1px solid var(--border)",
@@ -965,15 +976,15 @@ export default function CustomerDbPage() {
                         {record.activity_type}
                       </span>
                     </td>
-                    <td className="crm-row-sub text-center align-middle">{fmt(record.company)}</td>
-                    <td className="text-center align-middle">
-                      <p className="crm-row-main">{latestNote ? latestNote.activityType : "-"}</p>
+                    <td className="customer-db-td crm-row-sub text-center align-middle">{fmt(record.company)}</td>
+                    <td className="customer-db-td text-center align-middle">
+                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{latestNote ? latestNote.activityType : "-"}</p>
                       <p className="crm-row-sub">
                         {latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
                       </p>
                     </td>
-                    <td className="crm-row-sub text-center align-middle">{dateLabel(record.created_at)}</td>
-                    <td className="text-center align-middle">
+                    <td className="customer-db-td crm-row-sub text-center align-middle">{dateLabel(record.created_at)}</td>
+                    <td className="customer-db-td text-center align-middle">
                       <div className="flex flex-wrap justify-center gap-2" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
