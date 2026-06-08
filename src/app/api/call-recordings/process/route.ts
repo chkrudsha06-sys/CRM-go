@@ -121,13 +121,24 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
 }
 
 function extractPhoneFromFileName(fileName: string) {
-  const candidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
+  const normalizedFileName = fileName.replace(/[^0-9]/g, " ");
 
-  if (!candidates || candidates.length === 0) {
+  const candidates = [
+    ...fileName.matchAll(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g),
+    ...fileName.matchAll(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g),
+    ...normalizedFileName.matchAll(/0\d{8,10}/g),
+  ]
+    .map((match) => normalizePhone(match[0]))
+    .filter((value) => value.length >= 10 && value.length <= 11);
+
+  if (candidates.length === 0) {
     return null;
   }
 
-  return normalizePhone(candidates[0]);
+  const mobile = candidates.find((value) => /^01[016789]\d{7,8}$/.test(value));
+  if (mobile) return mobile;
+
+  return candidates[0];
 }
 
 function extractDateFromFileName(fileName: string) {
@@ -958,4 +969,3 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return GET(request);
 }
-
