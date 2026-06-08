@@ -54,6 +54,16 @@ type FormState = {
   memo: string;
 };
 
+type ContactNote = {
+  id: number;
+  contact_id: number;
+  note_date: string | null;
+  content: string;
+  author: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
 
 function normalizePhoneDigits(value?: string | null) {
@@ -1294,6 +1304,39 @@ function CustomerDetailPanel({
   const hasAssessment = hasGradeAssessmentInput(assessment);
   const visibleGrade = displayCustomerGrade(record);
   const isUnreviewed = visibleGrade === UNREVIEWED_GRADE;
+  const [assessmentOpen, setAssessmentOpen] = useState(false);
+  const [notes, setNotes] = useState<ContactNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadNotes = async () => {
+      setNotesLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("contact_notes")
+          .select("id,contact_id,note_date,content,author,created_at,updated_at")
+          .eq("contact_id", record.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+        if (alive) setNotes(Array.isArray(data) ? (data as ContactNote[]) : []);
+      } catch (error) {
+        console.warn("VIP활동DB 활동노트 불러오기 실패", error);
+        if (alive) setNotes([]);
+      } finally {
+        if (alive) setNotesLoading(false);
+      }
+    };
+
+    loadNotes();
+
+    return () => {
+      alive = false;
+    };
+  }, [record.id]);
 
   return (
     <div className="fixed inset-0 z-40">
@@ -1475,82 +1518,110 @@ function CustomerDetailPanel({
           </section>
 
           <section className="premium-card mt-4 p-5">
-            <p className="crm-card-title">등급 판정 입력값</p>
-            <p className="crm-tiny mt-1">
-              고객등급 자동 설정에 사용된 세부 항목입니다.
-            </p>
+            <button
+              type="button"
+              onClick={() => setAssessmentOpen((value) => !value)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div>
+                <p className="crm-card-title">등급 판정 입력값</p>
+                <p className="crm-tiny mt-1">
+                  세부 입력값은 필요할 때만 열어서 확인합니다.
+                </p>
+              </div>
+              <span
+                className="inline-flex h-9 shrink-0 items-center gap-1 rounded-full border px-3 text-[12px] font-[850]"
+                style={{
+                  color: "var(--text-subtle)",
+                  background: "var(--surface-2)",
+                  borderColor: "var(--border)",
+                }}
+              >
+                {assessmentOpen ? "닫기" : "열기"}
+                <ChevronDown
+                  size={15}
+                  style={{
+                    transform: assessmentOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 160ms ease",
+                  }}
+                />
+              </span>
+            </button>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <DetailItem
-                label="1년간 진행 현장 수"
-                value={
-                  assessment.annual_site_count
-                    ? `${assessment.annual_site_count}개`
-                    : "-"
-                }
-              />
-              <DetailItem
-                label="주 운영 물건 종류"
-                value={assessment.property_type}
-              />
-              <DetailItem
-                label="직접 양성 상담사 수"
-                value={
-                  assessment.trained_consultants
-                    ? `${assessment.trained_consultants}명`
-                    : "-"
-                }
-              />
-              <DetailItem
-                label="현장 셋팅 가능 인원수"
-                value={
-                  assessment.setup_people ? `${assessment.setup_people}명` : "-"
-                }
-              />
-              <DetailItem
-                label="지속 운영 팀원수"
-                value={
-                  assessment.steady_team_members
-                    ? `${assessment.steady_team_members}명`
-                    : "-"
-                }
-              />
-              <DetailItem
-                label="소속회사 규모"
-                value={assessment.company_scale}
-              />
-              <DetailItem
-                label="본인 PR 플랫폼"
-                value={assessment.pr_platform}
-              />
-              <DetailItem label="네트워킹 활동" value={assessment.networking} />
-              <DetailItem
-                label="월 평균 광고비"
-                value={
-                  assessment.monthly_ad_budget
-                    ? `${assessment.monthly_ad_budget}만원`
-                    : "-"
-                }
-              />
-              <DetailItem
-                label="광고 셋팅 운영"
-                value={assessment.ad_operation}
-              />
-              <DetailItem
-                label="광고비 지원 가능 여부"
-                value={assessment.ad_budget_support}
-              />
-              <DetailItem
-                label="판정 기준"
-                value={`${result.roleBasis} 기준`}
-              />
-            </div>
+            {assessmentOpen ? (
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <DetailItem
+                  label="1년간 진행 현장 수"
+                  value={
+                    assessment.annual_site_count
+                      ? `${assessment.annual_site_count}개`
+                      : "-"
+                  }
+                />
+                <DetailItem
+                  label="주 운영 물건 종류"
+                  value={assessment.property_type}
+                />
+                <DetailItem
+                  label="직접 양성 상담사 수"
+                  value={
+                    assessment.trained_consultants
+                      ? `${assessment.trained_consultants}명`
+                      : "-"
+                  }
+                />
+                <DetailItem
+                  label="현장 셋팅 가능 인원수"
+                  value={
+                    assessment.setup_people ? `${assessment.setup_people}명` : "-"
+                  }
+                />
+                <DetailItem
+                  label="지속 운영 팀원수"
+                  value={
+                    assessment.steady_team_members
+                      ? `${assessment.steady_team_members}명`
+                      : "-"
+                  }
+                />
+                <DetailItem
+                  label="소속회사 규모"
+                  value={assessment.company_scale}
+                />
+                <DetailItem
+                  label="본인 PR 플랫폼"
+                  value={assessment.pr_platform}
+                />
+                <DetailItem label="네트워킹 활동" value={assessment.networking} />
+                <DetailItem
+                  label="월 평균 광고비"
+                  value={
+                    assessment.monthly_ad_budget
+                      ? `${assessment.monthly_ad_budget}만원`
+                      : "-"
+                  }
+                />
+                <DetailItem
+                  label="광고 셋팅 운영"
+                  value={assessment.ad_operation}
+                />
+                <DetailItem
+                  label="광고비 지원 가능 여부"
+                  value={assessment.ad_budget_support}
+                />
+                <DetailItem
+                  label="판정 기준"
+                  value={`${result.roleBasis} 기준`}
+                />
+              </div>
+            ) : null}
           </section>
 
           <section className="premium-card mt-4 p-5">
             <p className="crm-card-title">메모</p>
+            <p className="crm-tiny mt-1">고객DB에서 이관된 메모 내용입니다.</p>
             <div
-              className="mt-4 min-h-[120px] whitespace-pre-wrap rounded-[16px] border px-4 py-4 text-sm font-[650] leading-7"
+              className="mt-4 min-h-[104px] whitespace-pre-wrap rounded-[16px] border px-4 py-4 text-sm font-[650] leading-7"
               style={{
                 color: "var(--text-subtle)",
                 background: "var(--surface-2)",
@@ -1558,6 +1629,76 @@ function CustomerDetailPanel({
               }}
             >
               {cleanMemo || "등록된 메모가 없습니다."}
+            </div>
+          </section>
+
+          <section className="premium-card mt-4 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="crm-card-title">활동노트</p>
+                <p className="crm-tiny mt-1">
+                  고객DB/파이프라인3에서 작성된 활동노트 내역입니다.
+                </p>
+              </div>
+              <span className="badge-premium badge-muted">읽기전용</span>
+            </div>
+
+            <div className="mt-4 max-h-[360px] space-y-3 overflow-y-auto pr-1">
+              {notesLoading ? (
+                <div
+                  className="rounded-[16px] border px-4 py-5 text-center text-sm font-[780]"
+                  style={{
+                    color: "var(--text-muted)",
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  활동노트를 불러오는 중입니다.
+                </div>
+              ) : notes.length > 0 ? (
+                notes.map((note) => (
+                  <article
+                    key={note.id}
+                    className="rounded-[16px] border px-4 py-4"
+                    style={{
+                      background: "var(--surface-2)",
+                      borderColor: "var(--border)",
+                    }}
+                  >
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <span className="badge-premium badge-info">
+                        {note.content.includes("활동항목: 콜드톡")
+                          ? "콜드톡"
+                          : note.content.includes("활동항목: TM") ||
+                              note.content.includes("[AI 통화요약]")
+                            ? "TM"
+                            : "활동노트"}
+                      </span>
+                      <p className="crm-tiny">
+                        {fmt(note.note_date || dateLabel(note.created_at))}
+                        {note.author ? ` · ${note.author}` : ""}
+                      </p>
+                    </div>
+                    <p
+                      className="whitespace-pre-wrap text-sm font-[650] leading-7"
+                      style={{ color: "var(--text-subtle)" }}
+                    >
+                      {note.content || "내용 없음"}
+                    </p>
+                  </article>
+                ))
+              ) : (
+                <div
+                  className="rounded-[16px] border px-4 py-5 text-center text-sm font-[780]"
+                  style={{
+                    color: "var(--text-muted)",
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  등록된 활동노트가 없습니다.
+                </div>
+              )}
             </div>
           </section>
         </div>
@@ -1741,3 +1882,4 @@ function RowActions({
     </div>
   );
 }
+
