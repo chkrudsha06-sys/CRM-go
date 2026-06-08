@@ -727,6 +727,7 @@ export default function CustomerDbPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
   const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
+  const [selectedRemoteNotes, setSelectedRemoteNotes] = useState<CustomerDbNote[]>([]);
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
   const [filterActivity, setFilterActivity] = useState("");
@@ -781,6 +782,51 @@ export default function CustomerDbPage() {
     window.setTimeout(() => setToast(""), 2400);
   };
 
+  const loadRemoteNotesForRecord = async (record: RawCustomerRecord | null) => {
+    if (!record?.phone) {
+      setSelectedRemoteNotes([]);
+      return;
+    }
+
+    try {
+      const contactId = await findContactIdByPhone(record.phone);
+      if (!contactId) {
+        setSelectedRemoteNotes([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("contact_notes")
+        .select("id, note_date, content, author, created_at, updated_at")
+        .eq("contact_id", contactId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const notes: CustomerDbNote[] = (data || []).map((note: any) => {
+        const content = String(note.content || "");
+        const isTm =
+          content.includes("활동항목: TM") ||
+          content.startsWith("[TM]") ||
+          String(note.author || "").includes("AI 통화요약");
+
+        return {
+          id: Number(note.id || Date.now()),
+          noteDate: String(note.note_date || new Date().toISOString().slice(0, 10)),
+          activityType: isTm ? "TM" : "콜드톡",
+          content,
+          author: String(note.author || "AI 통화요약"),
+          createdAt: String(note.created_at || note.updated_at || new Date().toISOString()),
+        };
+      });
+
+      setSelectedRemoteNotes(notes);
+    } catch (error) {
+      console.error("활동노트 조회 실패", error);
+      setSelectedRemoteNotes([]);
+    }
+  };
+
   const stats = useMemo(() => {
     const tm = records.filter((record) => record.activity_type === "TM").length;
     const cold = records.filter((record) => record.activity_type === "콜드톡").length;
@@ -829,6 +875,25 @@ export default function CustomerDbPage() {
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
+
+
+  useEffect(() => {
+    loadRemoteNotesForRecord(selectedRecord);
+  }, [selectedRecord?.id, selectedRecord?.phone]);
+
+  const selectedDisplayNotes = useMemo(() => {
+    if (!selectedRecord) return [];
+
+    const map = new Map<string, CustomerDbNote>();
+    [...selectedRemoteNotes, ...(selectedRecord.notes || [])].forEach((note) => {
+      const key = `${note.author}|${note.noteDate}|${note.content}`;
+      if (!map.has(key)) map.set(key, note);
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [selectedRecord, selectedRemoteNotes]);
 
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
@@ -912,6 +977,7 @@ export default function CustomerDbPage() {
       try {
         const contactId = await saveCustomerDbRecordToContacts(targetRecord);
         await saveCustomerDbNoteToSupabase(contactId, newNote);
+        if (selectedRecord?.id === customerId) await loadRemoteNotesForRecord(targetRecord);
       } catch (error) {
         console.error("활동노트 Supabase 저장 실패", error);
         showToast("활동노트 저장 실패");
@@ -1495,7 +1561,7 @@ export default function CustomerDbPage() {
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
                 <div className="mt-4">
-                  <NotesList notes={selectedRecord.notes} />
+                  <NotesList notes={selectedDisplayNotes} />
                 </div>
               </section>
             </div>
