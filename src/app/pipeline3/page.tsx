@@ -2318,21 +2318,23 @@ export default function Pipeline3Page() {
     persistRecords(nextRecords);
 
     if (nextRecord) {
+      const recordToSave = nextRecord as CustomerDbRecord;
+
       supabase
         .from("contacts")
         .upsert(
           {
-            id: nextRecord.id,
-            name: nextRecord.name,
-            title: nextRecord.title,
-            phone: nextRecord.phone,
-            intake_route: nextRecord.intake_route,
-            company: nextRecord.company,
-            management_stage: nextRecord.management_stage,
-            customer_grade: nextRecord.customer_grade,
-            memo: nextRecord.memo,
-            created_at: nextRecord.created_at,
-            updated_at: nextRecord.updated_at,
+            id: recordToSave.id,
+            name: recordToSave.name,
+            title: recordToSave.title,
+            phone: recordToSave.phone,
+            intake_route: recordToSave.intake_route,
+            company: recordToSave.company,
+            management_stage: recordToSave.management_stage,
+            customer_grade: recordToSave.customer_grade,
+            memo: recordToSave.memo,
+            created_at: recordToSave.created_at,
+            updated_at: recordToSave.updated_at,
           },
           { onConflict: "id" },
         )
