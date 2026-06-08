@@ -123,12 +123,14 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
 function extractPhoneFromFileName(fileName: string) {
   const normalizedFileName = fileName.replace(/[^0-9]/g, " ");
 
-  const candidates = [
-    ...fileName.matchAll(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g),
-    ...fileName.matchAll(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g),
-    ...normalizedFileName.matchAll(/0\d{8,10}/g),
-  ]
-    .map((match) => normalizePhone(match[0]))
+  const candidates = Array.from(
+    [
+      fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g) || [],
+      fileName.match(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g) || [],
+      normalizedFileName.match(/0\d{8,10}/g) || [],
+    ].flat(),
+  )
+    .map((value) => normalizePhone(value))
     .filter((value) => value.length >= 10 && value.length <= 11);
 
   if (candidates.length === 0) {
