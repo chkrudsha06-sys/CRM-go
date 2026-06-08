@@ -533,56 +533,72 @@ function TransferModal({
   const result = calculateCustomerGrade(assessment, customer.title);
 
   return (
-    <div className="crm-modal-overlay z-[80]">
-      <div className="crm-modal max-h-[92vh] w-full max-w-[1180px] overflow-y-auto p-5 md:p-6">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <div
-              className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
-              style={{
-                background: "var(--accent-subtle)",
-                border: "1px solid var(--accent-border)",
-                color: "var(--accent-text)",
-              }}
-            >
-              <Sparkles size={14} /> VIP활동 DB 이관 심사
+    <div className="crm-modal-overlay z-[80] p-3 md:p-5">
+      <div className="crm-modal flex max-h-[92vh] w-full max-w-[1180px] flex-col overflow-hidden p-0">
+        <div
+          className="shrink-0 px-5 py-5 md:px-6"
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div
+                className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
+                style={{
+                  background: "var(--accent-subtle)",
+                  border: "1px solid var(--accent-border)",
+                  color: "var(--accent-text)",
+                }}
+              >
+                <Sparkles size={14} /> VIP활동 DB 이관 심사
+              </div>
+              <h2 className="crm-title">{customer.name} 고객 심사 진행</h2>
+              <p className="crm-subtitle mt-2">
+                고객등급 자동판정을 완료하면 VIP활동DB로 이관되고, 고객DB에서는 삭제됩니다.
+              </p>
             </div>
-            <h2 className="crm-title">{customer.name} 고객 심사 진행</h2>
-            <p className="crm-subtitle mt-2">
-              고객등급 자동판정을 완료하면 VIP활동DB로 이관되고, 고객DB에서는 삭제됩니다.
-            </p>
+            <button type="button" onClick={onClose} className="btn-premium btn-ghost h-10 w-10 shrink-0 p-0">
+              <X size={17} />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="btn-premium btn-ghost h-10 w-10 p-0">
-            <X size={17} />
-          </button>
         </div>
 
-        <CustomerGradeAssessment
-          value={assessment}
-          title={customer.title}
-          onChange={onAssessmentChange}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-6">
+          <CustomerGradeAssessment
+            value={assessment}
+            title={customer.title}
+            onChange={onAssessmentChange}
+          />
+        </div>
 
-        {error ? (
-          <p
-            className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
-            style={{
-              background: "rgba(239, 68, 68, 0.1)",
-              borderColor: "rgba(239, 68, 68, 0.28)",
-              color: "#ef4444",
-            }}
-          >
-            {error}
-          </p>
-        ) : null}
+        <div
+          className="shrink-0 px-5 py-4 md:px-6"
+          style={{
+            background: "var(--surface)",
+            borderTop: "1px solid var(--border-subtle)",
+            boxShadow: "0 -18px 34px rgba(15, 23, 42, 0.08)",
+          }}
+        >
+          {error ? (
+            <p
+              className="mb-3 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+              style={{
+                background: "rgba(239, 68, 68, 0.1)",
+                borderColor: "rgba(239, 68, 68, 0.28)",
+                color: "#ef4444",
+              }}
+            >
+              {error}
+            </p>
+          ) : null}
 
-        <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
-          <button type="button" onClick={onClose} className="btn-premium btn-ghost">
-            취소
-          </button>
-          <button type="button" onClick={onConfirm} className="btn-premium btn-primary">
-            <CheckCircle2 size={15} /> {result.customerGrade} 등급으로 VIP활동DB 이관
-          </button>
+          <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+            <button type="button" onClick={onClose} className="btn-premium btn-ghost">
+              취소
+            </button>
+            <button type="button" onClick={onConfirm} className="btn-premium btn-primary">
+              <CheckCircle2 size={15} /> {result.customerGrade} 등급으로 VIP활동DB 이관
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -823,6 +839,97 @@ export default function CustomerDbPage() {
 
   return (
     <main className="premium-page min-h-screen px-4 py-5 md:px-6 xl:px-8">
+    <style jsx global>{`
+      .customer-db-force-center {
+        width: 100% !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        table-layout: fixed !important;
+      }
+
+      .customer-db-force-center thead th,
+      .customer-db-force-center tbody td,
+      .customer-db-force-center th.customer-db-th,
+      .customer-db-force-center td.customer-db-td {
+        text-align: center !important;
+        vertical-align: middle !important;
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+      }
+
+      .customer-db-force-center thead th {
+        height: 54px !important;
+        background: var(--surface-2) !important;
+        color: var(--text-muted) !important;
+        font-size: 13px !important;
+        font-weight: 950 !important;
+        letter-spacing: -0.02em !important;
+        white-space: nowrap !important;
+      }
+
+      .customer-db-force-center tbody td {
+        height: 72px !important;
+        color: var(--text-strong) !important;
+        font-size: 14px !important;
+        font-weight: 850 !important;
+        white-space: nowrap !important;
+      }
+
+      .customer-db-force-center .customer-db-center-cell {
+        width: 100% !important;
+        min-height: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        gap: 6px !important;
+      }
+
+      .customer-db-force-center .customer-db-two-line-cell {
+        width: 100% !important;
+        min-height: 42px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        gap: 3px !important;
+      }
+
+      .customer-db-force-center .customer-db-cell-text {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        letter-spacing: -0.035em !important;
+      }
+
+      .customer-db-force-center .customer-db-badge {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 104px !important;
+        min-height: 30px !important;
+        padding: 0 14px !important;
+        font-size: 13px !important;
+        font-weight: 950 !important;
+        line-height: 1 !important;
+        text-align: center !important;
+      }
+
+      .customer-db-force-center .customer-db-action-wrap {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        width: 100% !important;
+      }
+    `}</style>
       <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -908,7 +1015,7 @@ export default function CustomerDbPage() {
 
       <section className="premium-card overflow-hidden">
         <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
-          <table className="crm-table customer-db-centered-table min-w-[1540px] table-fixed text-center">
+          <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1540px] table-fixed text-center">
             <colgroup>
               <col className="w-[170px]" />
               <col className="w-[110px]" />
@@ -943,18 +1050,25 @@ export default function CustomerDbPage() {
                     onClick={() => setSelectedRecord(record)}
                     className="customer-db-row cursor-pointer"
                   >
-                    <td className="customer-db-td text-center align-middle">
-                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{record.name}</p>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text">{record.name}</span>
+                      </div>
                     </td>
-                    <td className="customer-db-td text-center align-middle">
-                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{fmt(record.title)}</p>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text">{fmt(record.title)}</span>
+                      </div>
                     </td>
-                    <td className="customer-db-td text-center align-middle">
-                      <p className="crm-row-main customer-db-cell-main mx-auto text-center tabular-nums">{fmt(record.phone)}</p>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text tabular-nums">{fmt(record.phone)}</span>
+                      </div>
                     </td>
-                    <td className="customer-db-td text-center align-middle">
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
                       <span
-                        className="customer-db-badge inline-flex min-w-[92px] justify-center rounded-full px-3.5 py-1.5 text-[12px] font-[950]"
+                        className="customer-db-badge rounded-full"
                         style={{
                           background: "var(--accent-subtle)",
                           border: "1px solid var(--accent-border)",
@@ -963,10 +1077,12 @@ export default function CustomerDbPage() {
                       >
                         {record.intake_route}
                       </span>
+                      </div>
                     </td>
-                    <td className="customer-db-td text-center align-middle">
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
                       <span
-                        className="customer-db-badge inline-flex min-w-[92px] justify-center rounded-full px-3.5 py-1.5 text-[12px] font-[950]"
+                        className="customer-db-badge rounded-full"
                         style={{
                           background: "var(--surface-2)",
                           border: "1px solid var(--border)",
@@ -975,17 +1091,28 @@ export default function CustomerDbPage() {
                       >
                         {record.activity_type}
                       </span>
+                      </div>
                     </td>
-                    <td className="customer-db-td crm-row-sub text-center align-middle">{fmt(record.company)}</td>
-                    <td className="customer-db-td text-center align-middle">
-                      <p className="crm-row-main customer-db-cell-main mx-auto text-center">{latestNote ? latestNote.activityType : "-"}</p>
-                      <p className="crm-row-sub">
-                        {latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
-                      </p>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text">{fmt(record.company)}</span>
+                      </div>
                     </td>
-                    <td className="customer-db-td crm-row-sub text-center align-middle">{dateLabel(record.created_at)}</td>
-                    <td className="customer-db-td text-center align-middle">
-                      <div className="flex flex-wrap justify-center gap-2" onClick={(event) => event.stopPropagation()}>
+                    <td className="customer-db-td">
+                      <div className="customer-db-two-line-cell">
+                        <span className="customer-db-cell-text">{latestNote ? latestNote.activityType : "-"}</span>
+                        <span className="crm-row-sub customer-db-cell-text">
+                          {latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text">{dateLabel(record.created_at)}</span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-action-wrap" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => requestTransfer(record)}
