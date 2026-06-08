@@ -113,7 +113,14 @@ type AdRequestForm = {
   region3: string;
 };
 
-const STORAGE_KEY = "crm_go_customer_db_local_v2";
+const STORAGE_KEY = "crm_go_pipeline3_clean_v1";
+const LEGACY_STORAGE_KEYS = [
+  "crm_go_customer_db_local_v2",
+  "crm_go_customer_db_local_v1",
+  "pipeline3Customers",
+  "pipeline3_customers",
+  "crm_pipeline3_customers",
+];
 const TODAY = new Date().toISOString().slice(0, 10);
 const UNREVIEWED_GRADE = "심사미진행";
 
@@ -243,73 +250,8 @@ const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "ads", label: "Ads >" },
 ];
 
-const SAMPLE_RECORDS: CustomerDbRecord[] = [
-  {
-    id: 12488,
-    name: "조효숙",
-    title: "팀장",
-    phone: "010-2455-1709",
-    intake_route: "컨설턴트 고객DB",
-    company: "-",
-    management_stage: "리드",
-    customer_grade: "리드",
-    memo: "초기 유입 고객입니다. 상세한 상담 내용은 카드가 아닌 상세 패널에서 관리합니다.",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 12835,
-    name: "주해랑",
-    title: "팀장",
-    phone: "010-3520-3365",
-    intake_route: "컨설턴트 VIP DB",
-    company: "-",
-    management_stage: "프로스펙팅",
-    customer_grade: "프로스펙팅",
-    memo: "대형 현장 운영 경험이 있고 계약 조건 검토 단계로 진입 가능.",
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    updated_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 12836,
-    name: "박중필",
-    title: "본부장",
-    phone: "010-3349-6953",
-    intake_route: "컨설턴트 VIP DB",
-    company: "-",
-    management_stage: "딜크로징",
-    customer_grade: "딜크로징",
-    memo: "계약 의향이 높아 최종 조건 정리 필요.",
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-    updated_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-  {
-    id: 12837,
-    name: "이소영",
-    title: "본부장",
-    phone: "010-2777-4586",
-    intake_route: "컨설턴트 VIP DB",
-    company: "-",
-    management_stage: "리텐션",
-    customer_grade: "리텐션",
-    memo: "계약 전환 완료. 계약관리 메뉴 이관 전 확인 상태로 표시합니다.",
-    created_at: new Date(Date.now() - 345600000).toISOString(),
-    updated_at: new Date(Date.now() - 345600000).toISOString(),
-  },
-  {
-    id: 12838,
-    name: "김소이",
-    title: "팀장",
-    phone: "010-2755-6981",
-    intake_route: "컨설턴트 고객DB",
-    company: "-",
-    management_stage: "보류/이탈",
-    customer_grade: "보류",
-    memo: "초기 응답 이후 추가 답변 없음. 이탈 가능성 있음.",
-    created_at: new Date(Date.now() - 604800000).toISOString(),
-    updated_at: new Date(Date.now() - 604800000).toISOString(),
-  },
-];
+const SAMPLE_RECORDS: CustomerDbRecord[] = [];
+
 
 function fmt(value?: string | null) {
   return value && value.trim() ? value : "-";
@@ -2198,17 +2140,26 @@ export default function Pipeline3Page() {
 
   useEffect(() => {
     try {
+      LEGACY_STORAGE_KEYS.forEach((key) => {
+        window.localStorage.removeItem(key);
+      });
+
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as CustomerDbRecord[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           const normalized = parsed.map(normalizeRecordGrade);
           setRecords(normalized);
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
           setLoadedFromDb(true);
+          return;
         }
       }
+
+      setRecords([]);
+      setLoadedFromDb(false);
     } catch {
+      setRecords([]);
       setLoadedFromDb(false);
     }
   }, []);
@@ -2406,8 +2357,8 @@ export default function Pipeline3Page() {
           <p className="crm-subtitle mt-1">
             고객DB 기본정보를 기반으로 계약 전환 전 영업 활동을 관리합니다.
             {loadedFromDb
-              ? " 고객DB 로컬 데이터와 연동 중입니다."
-              : " 현재는 샘플 데이터가 표시됩니다."}
+              ? " 새로운 파이프라인 데이터 기준으로 표시 중입니다."
+              : " 기존 샘플 데이터는 제거되었으며, 등록된 고객만 표시됩니다."}
           </p>
         </div>
       </div>
