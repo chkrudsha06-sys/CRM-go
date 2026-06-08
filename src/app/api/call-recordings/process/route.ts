@@ -22,13 +22,6 @@ type ManagerFolder = {
 
 type ContactRow = Record<string, unknown>;
 
-type MatchSource = "customer_db" | "vip_db";
-
-type MatchedContact = ReturnType<typeof simplifyContact> & {
-  matchSource: MatchSource;
-  matchSourceLabel: string;
-};
-
 function getRequiredEnv(name: string) {
   const value = process.env[name];
 
@@ -121,26 +114,32 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
 }
 
 function extractPhoneFromFileName(fileName: string) {
-  const normalizedFileName = fileName.replace(/[^0-9]/g, " ");
+  const normalizedFileName = normalizePhone(fileName);
 
-  const candidates = Array.from(
-    [
-      fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g) || [],
-      fileName.match(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g) || [],
-      normalizedFileName.match(/0\d{8,10}/g) || [],
-    ].flat(),
-  )
-    .map((value) => normalizePhone(value))
-    .filter((value) => value.length >= 10 && value.length <= 11);
+  const patterns = [
+    /01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g,
+    /0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g,
+  ];
 
-  if (candidates.length === 0) {
-    return null;
+  const candidates: string[] = [];
+
+  for (const pattern of patterns) {
+    const matches = fileName.match(pattern);
+    if (matches) {
+      candidates.push(...matches.map(normalizePhone));
+    }
   }
 
-  const mobile = candidates.find((value) => /^01[016789]\d{7,8}$/.test(value));
-  if (mobile) return mobile;
+  const numberMatches = normalizedFileName.match(/0\d{8,10}/g);
+  if (numberMatches) {
+    candidates.push(...numberMatches.map(normalizePhone));
+  }
 
-  return candidates[0];
+  const uniqueCandidates = Array.from(new Set(candidates))
+    .filter((value) => value.length >= 9 && value.length <= 11)
+    .sort((a, b) => b.length - a.length);
+
+  return uniqueCandidates[0] || null;
 }
 
 function extractDateFromFileName(fileName: string) {
@@ -284,7 +283,6 @@ async function summarizeAudioWithGemini(params: {
   fileName: string;
   managerName: string;
   extractedPhone: string | null;
-  matchSourceLabel?: string | null;
 }) {
   const apiKey = getRequiredEnv("GEMINI_API_KEY");
 
@@ -374,20 +372,21 @@ AI 판단:
   };
 }
 
-function isVipLikeContact(contact: ContactRow) {
-  const meetingResult = getStringField(contact, "meeting_result");
-  const managementStage = getStringField(contact, "management_stage");
-  const prospectType = getStringField(contact, "prospect_type");
-  const customerGrade = getStringField(contact, "customer_grade");
+async function findContactsByPhone(phone: string | null) {
+  if (!phone) {
+    return {
+      status: "no_phone",
+      message: "파일명에서 연락처를 추출하지 못했습니다.",
+      normalizedPhone: null,
+      matchedCount: 0,
+      contacts: [],
+      matchSource: null,
+      matchSourceLabel: null,
+    };
+  }
 
-  return [meetingResult, managementStage, prospectType, customerGrade].some((value) =>
-    ["계약완료", "예약완료", "VIP", "VIP활동DB", "리텐션", "마스터", "챌린저", "브론즈"].includes(
-      String(value || "").trim()
-    )
-  );
-}
+  const normalizedPhone = normalizePhone(phone);
 
-async function loadContactsTable() {
   const { data, error } = await supabase
     .from("contacts")
     .select("*")
@@ -398,97 +397,62 @@ async function loadContactsTable() {
     throw new Error(`Supabase contacts query failed: ${error.message}`);
   }
 
-  return (data || []) as ContactRow[];
-}
+  const matchedRows = ((data || []) as ContactRow[]).filter((contact) => {
+    const numbers = [
+      getStringField(contact, "phone"),
+      getStringField(contact, "mobile"),
+      getStringField(contact, "contact_phone"),
+      getStringField(contact, "customer_phone"),
+      getStringField(contact, "tel"),
+    ].map(normalizePhone);
 
-function matchContactsByPhone(rows: ContactRow[], normalizedPhone: string) {
-  return rows.filter(
-    (contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone
-  );
-}
-
-async function findContactsByPhone(phone: string | null) {
-  if (!phone) {
-    return {
-      status: "no_phone",
-      message: "파일명에서 연락처를 추출하지 못했습니다.",
-      normalizedPhone: null,
-      matchedCount: 0,
-      contacts: [] as MatchedContact[],
-      matchSource: null as MatchSource | null,
-      matchSourceLabel: null as string | null,
-    };
-  }
-
-  const normalizedPhone = normalizePhone(phone);
-  const rows = await loadContactsTable();
-  const matchedRows = matchContactsByPhone(rows, normalizedPhone);
-
-  const customerDbRows = matchedRows.filter((contact) => !isVipLikeContact(contact));
-  const vipDbRows = matchedRows.filter((contact) => isVipLikeContact(contact));
-
-  const toMatchedContact = (source: MatchSource, label: string) => (contact: ContactRow) => ({
-    ...simplifyContact(contact),
-    matchSource: source,
-    matchSourceLabel: label,
+    return numbers.includes(normalizedPhone);
   });
 
-  if (customerDbRows.length === 1) {
+  const tmRows = matchedRows.filter((contact) => contact.has_tm === true);
+  const pipelineRows = matchedRows.filter((contact) => {
+    const stage = getStringField(contact, "management_stage");
+    return ["리드", "프로스펙팅", "딜크로징", "딜클로징", "리텐션"].includes(stage);
+  });
+
+  const selectedRows = tmRows.length > 0 ? tmRows : pipelineRows.length > 0 ? pipelineRows : matchedRows;
+  const contacts = selectedRows.map(simplifyContact);
+
+  if (contacts.length === 1) {
+    const matchSource = tmRows.length > 0 ? "customer_db_tm" : "pipeline3";
     return {
       status: "matched",
-      message: "고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
+      message: tmRows.length > 0
+        ? "고객DB TM 고객이 정확히 1명 매칭되었습니다."
+        : "파이프라인3 고객이 정확히 1명 매칭되었습니다.",
       normalizedPhone,
-      matchedCount: 1,
-      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
-      matchSource: "customer_db" as MatchSource,
-      matchSourceLabel: "고객DB",
+      matchedCount: contacts.length,
+      contacts,
+      matchSource,
+      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM)" : "파이프라인3",
     };
   }
 
-  if (customerDbRows.length > 1) {
+  if (contacts.length > 1) {
     return {
       status: "duplicate",
-      message: "고객DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      message: "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
       normalizedPhone,
-      matchedCount: customerDbRows.length,
-      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
-      matchSource: "customer_db" as MatchSource,
-      matchSourceLabel: "고객DB",
-    };
-  }
-
-  if (vipDbRows.length === 1) {
-    return {
-      status: "matched",
-      message: "고객DB에는 없고 VIP활동DB에서 정확히 1명의 고객이 매칭되었습니다.",
-      normalizedPhone,
-      matchedCount: 1,
-      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
-      matchSource: "vip_db" as MatchSource,
-      matchSourceLabel: "VIP활동DB",
-    };
-  }
-
-  if (vipDbRows.length > 1) {
-    return {
-      status: "duplicate",
-      message: "VIP활동DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
-      normalizedPhone,
-      matchedCount: vipDbRows.length,
-      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
-      matchSource: "vip_db" as MatchSource,
-      matchSourceLabel: "VIP활동DB",
+      matchedCount: contacts.length,
+      contacts,
+      matchSource: null,
+      matchSourceLabel: null,
     };
   }
 
   return {
     status: "not_found",
-    message: "고객DB와 VIP활동DB 모두에서 일치하는 연락처를 찾지 못했습니다.",
+    message: "고객DB TM 고객과 파이프라인3 고객 모두에서 일치하는 연락처를 찾지 못했습니다.",
     normalizedPhone,
     matchedCount: 0,
-    contacts: [] as MatchedContact[],
-    matchSource: null as MatchSource | null,
-    matchSourceLabel: null as string | null,
+    contacts: [],
+    matchSource: null,
+    matchSourceLabel: null,
   };
 }
 
@@ -573,7 +537,6 @@ async function saveAiSummaryToContactNote(params: {
   driveFileUrl?: string;
   managerName: string;
   extractedPhone: string | null;
-  matchSourceLabel?: string | null;
 }) {
   if (!params.contactId) {
     return {
@@ -611,13 +574,15 @@ async function saveAiSummaryToContactNote(params: {
     };
   }
 
-  const content = `${params.summary}
+  const content = `[AI 통화요약]
+활동항목: TM
+
+${params.summary}
 
 ---
 
 [AI 처리 정보]
 담당자: ${params.managerName}
-매칭 메뉴: ${params.matchSourceLabel || "확인 필요"}
 추출 연락처: ${params.extractedPhone || "없음"}
 녹음파일명: ${params.driveFileName}
 녹음파일 링크: ${params.driveFileUrl || "없음"}
@@ -728,7 +693,6 @@ async function processAudioFile(params: {
     fileName: file.name,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
-    matchSourceLabel: customerMatch.matchSourceLabel,
   });
 
   const noteSave = await saveAiSummaryToContactNote({
@@ -740,7 +704,6 @@ async function processAudioFile(params: {
     driveFileUrl: file.webViewLink,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
-    matchSourceLabel: customerMatch.matchSourceLabel,
   });
 
   const finalStatus =
@@ -774,7 +737,7 @@ async function processAudioFile(params: {
     status: finalStatus,
     message:
       finalStatus === "processed"
-        ? `AI 통화요약이 ${customerMatch.matchSourceLabel || "고객"} 활동노트에 저장되었습니다.`
+        ? "AI 통화요약이 활동노트에 저장되었습니다."
         : "이미 저장된 활동노트가 있어 중복 저장하지 않았습니다.",
     customerMatch,
     audioSummary,
@@ -783,54 +746,34 @@ async function processAudioFile(params: {
   };
 }
 
-function isAuthorizedCallRecordingRequest(request: NextRequest) {
-  const url = new URL(request.url);
-  const configuredSecret =
-    process.env.CALL_RECORDINGS_PROCESS_SECRET || process.env.CRON_SECRET || "";
-
-  const querySecret =
-    url.searchParams.get("secret") || url.searchParams.get("token") || "";
-  const authHeader = request.headers.get("authorization") || "";
-  const bearerToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : "";
-
-  if (!configuredSecret) {
-    return {
-      ok: false,
-      status: 500,
-      message:
-        "CALL_RECORDINGS_PROCESS_SECRET or CRON_SECRET is not configured.",
-    };
-  }
-
-  if (querySecret === configuredSecret || bearerToken === configuredSecret) {
-    return { ok: true, status: 200, message: "Authorized" };
-  }
-
-  return {
-    ok: false,
-    status: 401,
-    message: "Unauthorized call recording process request.",
-  };
-}
-
 export async function GET(request: NextRequest) {
-  const auth = isAuthorizedCallRecordingRequest(request);
+  const url = new URL(request.url);
+  const processSecret = process.env.CALL_RECORDINGS_PROCESS_SECRET || process.env.CRON_SECRET;
+  const secretFromQuery = url.searchParams.get("secret") || url.searchParams.get("token");
+  const authHeader = request.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!auth.ok) {
+  if (!processSecret) {
     return NextResponse.json(
       {
         ok: false,
-        message: auth.message,
-        hint: "Use ?secret=YOUR_SECRET or Authorization: Bearer YOUR_SECRET",
+        message: "CALL_RECORDINGS_PROCESS_SECRET is not configured.",
       },
-      { status: auth.status }
+      { status: 500 }
+    );
+  }
+
+  if (secretFromQuery !== processSecret && bearerToken !== processSecret) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Unauthorized call recording process request.",
+      },
+      { status: 401 }
     );
   }
 
   try {
-    const url = new URL(request.url);
     const limit = Math.max(
       1,
       Math.min(Number(url.searchParams.get("limit") || "1"), 5)
@@ -965,9 +908,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-
-export async function POST(request: NextRequest) {
-  return GET(request);
 }
