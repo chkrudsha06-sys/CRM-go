@@ -76,6 +76,15 @@ type PipelineCustomer = {
   raw: CustomerDbRecord;
 };
 
+type ContactNote = {
+  id: number;
+  contact_id: number;
+  note_date: string | null;
+  content: string;
+  author: string | null;
+  created_at: string | null;
+};
+
 type DetailTab = "summary" | "notes" | "ads";
 type FilterValue = "전체" | string;
 
@@ -1085,29 +1094,99 @@ function NotesTab({
 }) {
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newContent, setNewContent] = useState("");
-  const [notes, setNotes] = useState([
-    {
-      id: 1,
-      noteDate: customer.registeredAt,
-      content: customer.noteSummary,
-      author: "고객DB 메모",
-    },
-  ]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [notes, setNotes] = useState<ContactNote[]>([]);
 
-  const handleAdd = () => {
+  useEffect(() => {
+    let alive = true;
+
+    const loadNotes = async () => {
+      setLoadingNotes(true);
+      try {
+        const { data, error } = await supabase
+          .from("contact_notes")
+          .select("id,contact_id,note_date,content,author,created_at")
+          .eq("contact_id", customer.id)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (!alive) return;
+        setNotes(Array.isArray(data) ? (data as ContactNote[]) : []);
+      } catch (error) {
+        console.warn("파이프라인3 활동노트 불러오기 실패", error);
+        if (alive) setNotes([]);
+      } finally {
+        if (alive) setLoadingNotes(false);
+      }
+    };
+
+    loadNotes();
+
+    return () => {
+      alive = false;
+    };
+  }, [customer.id]);
+
+  const handleAdd = async () => {
     if (!newContent.trim()) return;
-    setNotes((items) => [
-      {
-        id: Date.now(),
-        noteDate: newDate,
-        content: newContent.trim(),
-        author: "현재 사용자",
-      },
-      ...items,
-    ]);
+
+    const optimisticNote: ContactNote = {
+      id: Date.now(),
+      contact_id: customer.id,
+      note_date: newDate,
+      content: `[TM] 활동완료\n\n${newContent.trim()}`,
+      author: "현재 사용자",
+      created_at: new Date().toISOString(),
+    };
+
+    setNotes((items) => [optimisticNote, ...items]);
     setNewContent("");
     setNewDate(new Date().toISOString().slice(0, 10));
+
+    try {
+      const { data, error } = await supabase
+        .from("contact_notes")
+        .insert({
+          contact_id: customer.id,
+          note_date: optimisticNote.note_date,
+          content: optimisticNote.content,
+          author: "현재 사용자",
+        })
+        .select("id,contact_id,note_date,content,author,created_at")
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setNotes((items) =>
+          items.map((item) =>
+            item.id === optimisticNote.id ? (data as ContactNote) : item,
+          ),
+        );
+      }
+    } catch (error) {
+      console.warn("파이프라인3 활동노트 저장 실패", error);
+      alert("활동노트 저장에 실패했습니다. Supabase 권한과 contact_notes 테이블을 확인해 주세요.");
+      setNotes((items) => items.filter((item) => item.id !== optimisticNote.id));
+    }
   };
+
+  const visibleNotes = notes.length > 0
+    ? notes
+    : customer.noteSummary && customer.noteSummary !== "등록된 메모가 없습니다. 상담 내용은 활동노트에서 관리하세요."
+      ? [
+          {
+            id: -1,
+            contact_id: customer.id,
+            note_date: customer.registeredAt,
+            content: customer.noteSummary,
+            author: "고객DB 메모",
+            created_at: customer.raw.created_at,
+          },
+        ]
+      : [];
 
   return (
     <section className="premium-card mt-4 p-5">
@@ -1115,7 +1194,7 @@ function NotesTab({
         <FileText size={17} style={{ color: "var(--accent)" }} />
         <div>
           <p className="crm-section-title">Notes</p>
-          <p className="crm-tiny">활동노트 작성과 상담 기록</p>
+          <p className="crm-tiny">Supabase contact_notes 기준 활동노트</p>
         </div>
       </div>
 
@@ -1166,41 +1245,55 @@ function NotesTab({
             <Plus size={14} />
             활동노트 저장
           </button>
-          <p className="crm-tiny">
-            현재 화면에서는 패널 내 임시 작성이며, 실제 Supabase 저장은 후속
-            작업에서 연결합니다.
-          </p>
         </div>
       ) : null}
 
-      <div className="space-y-3">
-        {notes.map((note) => (
-          <article
-            key={note.id}
-            className="rounded-[16px] border p-4"
-            style={{
-              background: "var(--surface-2)",
-              borderColor: "var(--border)",
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
+      {loadingNotes ? (
+        <div
+          className="rounded-[16px] border p-4 text-sm font-[760]"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-muted)" }}
+        >
+          활동노트를 불러오는 중입니다.
+        </div>
+      ) : visibleNotes.length === 0 ? (
+        <div
+          className="rounded-[16px] border p-4 text-sm font-[760]"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-muted)" }}
+        >
+          등록된 활동노트가 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleNotes.map((note) => (
+            <article
+              key={note.id}
+              className="rounded-[16px] border p-4"
+              style={{
+                background: "var(--surface-2)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p
+                  className="text-[12px] font-[900]"
+                  style={{ color: "var(--text-subtle)" }}
+                >
+                  {note.note_date ? formatShortDate(note.note_date) : formatShortDate(note.created_at)}
+                </p>
+                <span className="badge-premium badge-muted">
+                  {note.author || "활동노트"}
+                </span>
+              </div>
               <p
-                className="text-[12px] font-[900]"
+                className="whitespace-pre-wrap text-sm font-[760] leading-7"
                 style={{ color: "var(--text-subtle)" }}
               >
-                {note.noteDate}
+                {note.content}
               </p>
-              <span className="badge-premium badge-muted">{note.author}</span>
-            </div>
-            <p
-              className="whitespace-pre-wrap text-sm font-[760] leading-7"
-              style={{ color: "var(--text-subtle)" }}
-            >
-              {note.content}
-            </p>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
