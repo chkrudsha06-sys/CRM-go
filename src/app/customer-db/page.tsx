@@ -243,11 +243,33 @@ async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
 
 async function saveCustomerDbNoteToSupabase(contactId: number | null, note: CustomerDbNote) {
   if (!contactId) return;
+
+  const cleanContent = String(note.content || "")
+    .replace(/^\[(TM|콜드톡)\]\s*/g, "")
+    .trim();
+
+  if (!cleanContent) return;
+
+  const author = note.author || "현재 사용자";
+  const noteDate = note.noteDate || today();
+
+  const { data: existing, error: findError } = await supabase
+    .from("contact_notes")
+    .select("id")
+    .eq("contact_id", contactId)
+    .eq("note_date", noteDate)
+    .eq("author", author)
+    .eq("content", cleanContent)
+    .limit(1);
+
+  if (findError) throw findError;
+  if (existing && existing.length > 0) return;
+
   const { error } = await supabase.from("contact_notes").insert({
     contact_id: contactId,
-    note_date: note.noteDate,
-    content: `[${note.activityType}] ${note.content}`,
-    author: note.author || "현재 사용자",
+    note_date: noteDate,
+    content: cleanContent,
+    author,
     created_at: note.createdAt,
     updated_at: note.createdAt,
   });
@@ -504,19 +526,19 @@ function NoteComposer({
 
   return (
     <div
-      className="space-y-3 rounded-[16px] border p-4"
+      className="space-y-2 rounded-[14px] border p-3"
       style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="crm-card-title">활동노트 작성</p>
-          <p className="crm-tiny mt-1">TM 또는 콜드톡 활동을 기록합니다.</p>
+          <p className="crm-card-title text-[14px]">활동노트 작성</p>
+          <p className="crm-tiny mt-0.5">TM 또는 콜드톡 활동을 기록합니다.</p>
         </div>
         <input
           type="date"
           value={noteDate}
           onChange={(event) => setNoteDate(event.target.value)}
-          className="h-10 rounded-[11px] border px-3 text-[12px] font-[800] outline-none"
+          className="h-9 rounded-[10px] border px-3 text-[12px] font-[800] outline-none"
           style={{
             background: "var(--surface)",
             borderColor: "var(--border-subtle)",
@@ -531,8 +553,8 @@ function NoteComposer({
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="활동 내용을 입력하세요."
-        rows={4}
-        className="w-full resize-none rounded-[12px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+        rows={2}
+        className="w-full resize-none rounded-[11px] border px-3 py-2 text-[13px] font-semibold leading-6 outline-none"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border-subtle)",
@@ -560,14 +582,14 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
   }
 
   return (
-    <div className="max-h-[456px] space-y-3 overflow-y-auto pr-1">
+    <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
       {notes.map((note) => (
         <article
           key={note.id}
-          className="rounded-[16px] border p-4"
+          className="rounded-[14px] border p-3"
           style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
         >
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span
                 className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
@@ -584,7 +606,7 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
             <p className="crm-tiny">{note.author}</p>
           </div>
           <p
-            className="whitespace-pre-wrap text-[13px] font-[700] leading-7"
+            className="whitespace-pre-wrap text-[12.5px] font-[700] leading-6"
             style={{ color: "var(--text)" }}
           >
             {note.content}
@@ -609,7 +631,7 @@ function DetailBlock({
 
   return (
     <div
-      className="rounded-[16px] border p-4"
+      className="rounded-[14px] border p-3"
       style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
       <p className="crm-meta">{label}</p>
@@ -804,7 +826,8 @@ export default function CustomerDbPage() {
       if (error) throw error;
 
       const notes: CustomerDbNote[] = (data || []).map((note: any) => {
-        const content = String(note.content || "");
+        const rawContent = String(note.content || "");
+        const content = rawContent.replace(/^\[(TM|콜드톡)\]\s*/g, "").trim();
         const isTm =
           content.includes("활동항목: TM") ||
           content.startsWith("[TM]") ||
@@ -886,8 +909,12 @@ export default function CustomerDbPage() {
 
     const map = new Map<string, CustomerDbNote>();
     [...selectedRemoteNotes, ...(selectedRecord.notes || [])].forEach((note) => {
-      const key = `${note.author}|${note.noteDate}|${note.content}`;
-      if (!map.has(key)) map.set(key, note);
+      const normalizedContent = String(note.content || "")
+        .replace(/^\[(TM|콜드톡)\]\s*/g, "")
+        .trim();
+      const normalizedAuthor = String(note.author || "").trim();
+      const key = `${normalizedAuthor}|${note.noteDate}|${normalizedContent}`;
+      if (!map.has(key)) map.set(key, { ...note, content: normalizedContent });
     });
 
     return Array.from(map.values()).sort(
@@ -1469,9 +1496,9 @@ export default function CustomerDbPage() {
               boxShadow: "var(--shadow-lg)",
             }}
           >
-            <div className="slide-panel-header flex items-start justify-between gap-4">
+            <div className="slide-panel-header compact-customer-detail flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="mb-3 flex flex-wrap gap-2">
+                <div className="mb-2 flex flex-wrap gap-2">
                   <span
                     className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
                     style={{
@@ -1493,10 +1520,10 @@ export default function CustomerDbPage() {
                     {selectedRecord.activity_type}
                   </span>
                 </div>
-                <h2 className="truncate text-[30px] font-[930] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
+                <h2 className="truncate text-[24px] font-[930] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
                   {fmt(selectedRecord.name)}
                 </h2>
-                <p className="mt-2 text-sm font-[720]" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-[13px] font-[720]" style={{ color: "var(--text-muted)" }}>
                   {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
                 </p>
               </div>
@@ -1506,9 +1533,9 @@ export default function CustomerDbPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              <section className="premium-card p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <section className="premium-card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="crm-card-title">고객 기본정보</p>
                     <p className="crm-tiny mt-1">최근 활동노트와 이관 전 원천 고객 정보를 확인합니다.</p>
@@ -1532,7 +1559,7 @@ export default function CustomerDbPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <DetailBlock label="고객명" value={selectedRecord.name} />
                   <DetailBlock label="직급" value={selectedRecord.title} />
                   <DetailBlock label="연락처" value={selectedRecord.phone} />
@@ -1544,23 +1571,23 @@ export default function CustomerDbPage() {
                 </div>
               </section>
 
-              <section className="premium-card mt-4 p-5">
-                <div className="mb-3 flex items-center gap-2">
+              <section className="premium-card mt-3 p-4">
+                <div className="mb-2 flex items-center gap-2">
                   <MessageCircle size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">메모</p>
                 </div>
-                <div className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                <div className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
                   <p className="crm-body whitespace-pre-wrap">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
                 </div>
               </section>
 
-              <section className="premium-card mt-4 p-5">
-                <div className="mb-3 flex items-center gap-2">
+              <section className="premium-card mt-3 p-4">
+                <div className="mb-2 flex items-center gap-2">
                   <FileText size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">활동노트</p>
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
-                <div className="mt-4">
+                <div className="mt-2">
                   <NotesList notes={selectedDisplayNotes} />
                 </div>
               </section>
