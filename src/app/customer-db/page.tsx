@@ -847,6 +847,23 @@ export default function CustomerDbPage() {
 
     const phoneDigits = normalizePhoneDigits(transferTarget.phone);
 
+    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
+    const existingLocal = vipRecords.find(
+      (item) => normalizePhoneDigits(item.phone) === phoneDigits,
+    );
+
+    const nextVipRecord: VipRecord = {
+      id: existingLocal?.id || Date.now(),
+      ...vipPayload,
+      created_at: existingLocal?.created_at || now,
+    };
+
+    // 1순위: VIP활동DB 화면이 실제로 읽는 localStorage에 먼저 영구 저장합니다.
+    // 이렇게 해야 메뉴 이동/새로고침 후에도 즉시 유지됩니다.
+    writeJsonArray(VIP_DB_STORAGE_KEY, mergeVipRecordsByPhone(vipRecords, nextVipRecord));
+
+    // 2순위: Supabase contacts 테이블에도 best-effort로 저장합니다.
+    // Supabase 컬럼/권한 문제로 실패하더라도 localStorage 이관은 되돌리지 않습니다.
     try {
       const { data: existingVip, error: findError } = await supabase
         .from("contacts")
@@ -872,21 +889,8 @@ export default function CustomerDbPage() {
         if (insertError) throw insertError;
       }
     } catch (error) {
-      console.error("VIP활동DB Supabase 저장 실패", error);
-      setTransferError(
-        "VIP활동DB 저장에 실패했습니다. Supabase contacts 테이블 저장 상태를 확인해주세요.",
-      );
-      return;
+      console.warn("VIP활동DB Supabase 저장은 실패했지만 localStorage 이관은 완료되었습니다.", error);
     }
-
-    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
-    const nextVipRecord: VipRecord = {
-      id: Date.now(),
-      ...vipPayload,
-      created_at: now,
-    };
-
-    writeJsonArray(VIP_DB_STORAGE_KEY, mergeVipRecordsByPhone(vipRecords, nextVipRecord));
 
     setRecords((items) => {
       const nextItems = items.filter(
