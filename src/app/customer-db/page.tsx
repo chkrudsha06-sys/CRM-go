@@ -21,7 +21,6 @@ import {
   X,
 } from "lucide-react";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
-import { Avatar, Badge } from "@/components/ui";
 import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
@@ -191,25 +190,82 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
   };
 }
 
-function StatCard({
-  label,
-  value,
-  description,
+function RouteSummaryCard({
+  items,
+  total,
 }: {
-  label: string;
-  value: number | string;
-  description: string;
+  items: { label: string; value: number }[];
+  total: number;
 }) {
+  const visibleItems = items.filter((item) => item.value > 0);
+  const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
+
   return (
-    <div className="premium-card p-4">
-      <p className="crm-meta">{label}</p>
-      <p
-        className="mt-2 text-[28px] font-[950] tracking-[-0.06em]"
-        style={{ color: "var(--text-strong)" }}
-      >
-        {value}
-      </p>
-      <p className="crm-tiny mt-1">{description}</p>
+    <div className="premium-card p-4 md:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="crm-card-title">유입경로별 현황</p>
+          <p className="crm-tiny mt-1">전체 {total}건 기준</p>
+        </div>
+        <span
+          className="rounded-full px-3 py-1 text-[12px] font-[900]"
+          style={{
+            background: "var(--accent-subtle)",
+            border: "1px solid var(--accent-border)",
+            color: "var(--accent-text)",
+          }}
+        >
+          {total}건
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {displayItems.map((item) => {
+          const percent = total ? Math.round((item.value / total) * 100) : 0;
+          return (
+            <div key={item.label} className="rounded-[15px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="crm-row-main truncate">{item.label}</p>
+                <p className="crm-row-sub shrink-0">{item.value}건</p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${percent}%`, background: "var(--accent)" }}
+                />
+              </div>
+              <p className="crm-tiny mt-1 text-right">{percent}%</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ActivitySummaryCard({ tm, cold }: { tm: number; cold: number }) {
+  return (
+    <div className="premium-card p-4 md:p-5">
+      <div className="mb-4">
+        <p className="crm-card-title">활동항목 현황</p>
+        <p className="crm-tiny mt-1">TM과 콜드톡만 표시합니다.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
+            <Phone size={17} />
+          </div>
+          <p className="crm-meta">TM</p>
+          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{tm}건</p>
+        </div>
+        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}>
+            <MessageCircle size={17} />
+          </div>
+          <p className="crm-meta">콜드톡</p>
+          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{cold}건</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -569,8 +625,12 @@ export default function CustomerDbPage() {
   const stats = useMemo(() => {
     const tm = records.filter((record) => record.activity_type === "TM").length;
     const cold = records.filter((record) => record.activity_type === "콜드톡").length;
-    const notes = records.reduce((sum, record) => sum + record.notes.length, 0);
-    return { total: records.length, tm, cold, notes };
+    const routeCounts = INTAKE_ROUTES.map((route) => ({
+      label: route,
+      value: records.filter((record) => record.intake_route === route).length,
+    }));
+
+    return { total: records.length, tm, cold, routeCounts };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -799,11 +859,9 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="전체 고객DB" value={stats.total} description="VIP활동DB 이관 대기" />
-        <StatCard label="TM DB" value={stats.tm} description="TM 활동으로 확보" />
-        <StatCard label="콜드톡 DB" value={stats.cold} description="콜드톡 활동으로 확보" />
-        <StatCard label="활동노트" value={stats.notes} description="누적 활동 기록" />
+      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
+        <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
       </section>
 
       <section className="premium-card mb-5 p-4">
@@ -849,73 +907,19 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card overflow-hidden">
-        <div className="grid gap-3 p-3 lg:hidden">
-          {pagedRecords.map((record) => {
-            const latestNote = record.notes[0];
-            return (
-              <article
-                key={record.id}
-                onClick={() => setSelectedRecord(record)}
-                className="rounded-[18px] border p-4 transition active:scale-[0.99]"
-                style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Avatar name={record.name} size="md" />
-                    <div className="min-w-0">
-                      <p className="crm-row-main truncate">{record.name}</p>
-                      <p className="crm-row-sub truncate">{fmt(record.title)} · {record.phone}</p>
-                    </div>
-                  </div>
-                  <Badge tone="accent">{record.activity_type}</Badge>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-                  <div className="rounded-[14px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <p className="crm-tiny">유입경로</p>
-                    <p className="crm-row-main mt-1 truncate">{record.intake_route}</p>
-                  </div>
-                  <div className="rounded-[14px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <p className="crm-tiny">소속회사</p>
-                    <p className="crm-row-main mt-1 truncate">{fmt(record.company)}</p>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-[14px] border px-3 py-3 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                  <p className="crm-tiny">최근 활동노트</p>
-                  <p className="crm-row-main mt-1 line-clamp-2">{latestNote?.content || "활동노트 없음"}</p>
-                  <p className="crm-row-sub mt-1">
-                    {latestNote ? `${latestNote.activityType} · ${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : dateLabel(record.created_at)}
-                  </p>
-                </div>
-                <div className="mt-3 flex justify-center gap-2" onClick={(event) => event.stopPropagation()}>
-                  <button type="button" onClick={() => requestTransfer(record)} className="btn-premium btn-primary h-9 flex-1 px-3 text-[12px]">
-                    <ArrowRight size={13} /> 이관
-                  </button>
-                  <button type="button" onClick={() => deleteRecord(record)} className="btn-premium btn-danger h-9 flex-1 px-3 text-[12px]">
-                    <Trash2 size={13} /> 삭제
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-          {!filteredRecords.length ? (
-            <div className="py-12 text-center">
-              <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
-              <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 고객을 등록해주세요.</p>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="crm-table-wrap hidden overflow-hidden lg:block">
+        <div className="crm-table-wrap max-h-[690px] overflow-auto">
           <table className="crm-table text-center">
             <thead>
               <tr>
-                <th className="text-center">고객정보</th>
-                <th className="text-center">유입경로</th>
-                <th className="text-center">활동항목</th>
-                <th className="text-center">소속회사</th>
-                <th className="text-center">최근 활동노트</th>
-                <th className="text-center">등록일</th>
-                <th className="text-center">관리</th>
+                <th className="sticky top-0 z-10 text-center">고객명</th>
+                <th className="sticky top-0 z-10 text-center">직급</th>
+                <th className="sticky top-0 z-10 text-center">연락처</th>
+                <th className="sticky top-0 z-10 text-center">유입경로</th>
+                <th className="sticky top-0 z-10 text-center">활동항목</th>
+                <th className="sticky top-0 z-10 text-center">소속회사</th>
+                <th className="sticky top-0 z-10 text-center">최근 활동</th>
+                <th className="sticky top-0 z-10 text-center">등록일</th>
+                <th className="sticky top-0 z-10 text-center">관리</th>
               </tr>
             </thead>
             <tbody>
@@ -928,35 +932,55 @@ export default function CustomerDbPage() {
                     onClick={() => setSelectedRecord(record)}
                     className="cursor-pointer"
                   >
-                    <td className="text-center">
-                      <div className="flex items-center justify-center gap-3">
-                        <Avatar name={record.name} size="md" />
-                        <div className="text-center">
-                          <p className="crm-row-main">{record.name}</p>
-                          <p className="crm-row-sub">{fmt(record.title)} · {record.phone}</p>
-                        </div>
-                      </div>
+                    <td className="text-center align-middle">
+                      <p className="crm-row-main">{record.name}</p>
                     </td>
-                    <td className="text-center">
-                      <Badge tone="accent">{record.intake_route}</Badge>
+                    <td className="text-center align-middle">
+                      <p className="crm-row-main">{fmt(record.title)}</p>
                     </td>
-                    <td className="crm-row-main text-center">{record.activity_type}</td>
-                    <td className="crm-row-sub text-center">{fmt(record.company)}</td>
-                    <td className="max-w-[280px] text-center">
-                      <p className="truncate crm-row-main">{latestNote?.content || "-"}</p>
+                    <td className="text-center align-middle">
+                      <p className="crm-row-main tabular-nums">{fmt(record.phone)}</p>
+                    </td>
+                    <td className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                        style={{
+                          background: "var(--accent-subtle)",
+                          border: "1px solid var(--accent-border)",
+                          color: "var(--accent-text)",
+                        }}
+                      >
+                        {record.intake_route}
+                      </span>
+                    </td>
+                    <td className="text-center align-middle">
+                      <span
+                        className="inline-flex justify-center rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                        style={{
+                          background: "var(--surface-2)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text-strong)",
+                        }}
+                      >
+                        {record.activity_type}
+                      </span>
+                    </td>
+                    <td className="crm-row-sub text-center align-middle">{fmt(record.company)}</td>
+                    <td className="text-center align-middle">
+                      <p className="crm-row-main">{latestNote ? latestNote.activityType : "-"}</p>
                       <p className="crm-row-sub">
-                        {latestNote ? `${latestNote.activityType} · ${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
+                        {latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}
                       </p>
                     </td>
-                    <td className="crm-row-sub text-center">{dateLabel(record.created_at)}</td>
-                    <td className="text-center">
+                    <td className="crm-row-sub text-center align-middle">{dateLabel(record.created_at)}</td>
+                    <td className="text-center align-middle">
                       <div className="flex flex-wrap justify-center gap-2" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => requestTransfer(record)}
                           className="btn-premium btn-primary h-9 px-3 text-[12px]"
                         >
-                          <ArrowRight size={13} /> 이관
+                          <ArrowRight size={13} /> VIP DB이관
                         </button>
                         <button
                           type="button"
@@ -972,7 +996,7 @@ export default function CustomerDbPage() {
               })}
               {!filteredRecords.length ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center">
+                  <td colSpan={9} className="py-12 text-center">
                     <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
                     <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 고객을 등록해주세요.</p>
                   </td>
@@ -1039,9 +1063,7 @@ export default function CustomerDbPage() {
             `}</style>
 
             <div className="slide-panel-header flex items-start justify-between gap-4">
-              <div className="flex min-w-0 items-start gap-4">
-                <Avatar name={selectedRecord.name} size="lg" className="mt-1 shrink-0" />
-                <div className="min-w-0">
+              <div className="min-w-0">
                 <div className="mb-3 flex flex-wrap gap-2">
                   <span
                     className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
@@ -1070,7 +1092,6 @@ export default function CustomerDbPage() {
                 <p className="mt-2 text-sm font-[720]" style={{ color: "var(--text-muted)" }}>
                   {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
                 </p>
-                </div>
               </div>
 
               <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-10 w-10 shrink-0 p-0">
