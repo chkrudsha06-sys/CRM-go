@@ -11,6 +11,7 @@ import {
   type GradeAssessmentForm,
 } from "@/lib/customerGrade";
 import {
+  Award,
   CalendarDays,
   Edit3,
   FileText,
@@ -53,6 +54,9 @@ type CustomerDbRecord = {
   management_stage: string;
   customer_grade: string;
   memo: string;
+  meeting_result: string | null;
+  reservation_date: string | null;
+  contract_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -65,6 +69,9 @@ type PipelineCustomer = {
   intakeRoute: string;
   company: string;
   grade: string;
+  meetingResult: string;
+  reservationDate: string;
+  contractDate: string;
   stage: StageKey;
   lastActivity: string;
   registeredAt: string;
@@ -87,6 +94,7 @@ type ContactNote = {
 
 type DetailTab = "summary" | "notes" | "ads";
 type FilterValue = "전체" | string;
+type ContractConversionResult = "예약완료" | "계약완료";
 
 type EditForm = {
   name: string;
@@ -380,6 +388,16 @@ function normalizeStage(value?: string | null): StageKey {
   return "리드";
 }
 
+function getPipelineStage(record: CustomerDbRecord): StageKey {
+  if (record.meeting_result === "계약완료") return "리텐션";
+  if (record.meeting_result === "예약완료") return "딜크로징";
+  return normalizeStage(record.management_stage);
+}
+
+function isContractConversionResult(value?: string | null): value is ContractConversionResult {
+  return value === "예약완료" || value === "계약완료";
+}
+
 function stageLabel(value: StageKey) {
   if (value === "딜크로징") return "딜클로징";
   if (value === "리텐션") return "리텐션";
@@ -473,6 +491,7 @@ function badgeClass(value: string) {
   if (value === "리드") return "badge-danger";
   if (value === "프로스펙팅") return "badge-warning";
   if (value === "딜크로징" || value === "딜클로징") return "badge-success";
+  if (value === "예약완료") return "badge-info";
   if (value === "리텐션" || value === "계약완료") return "badge-purple";
   if (value === "보류" || value === "보류/이탈") return "badge-muted";
   if (value === "분양의신DB") return "badge-purple";
@@ -541,7 +560,7 @@ function toneClass(tone: Stage["tone"]) {
 
 function getStageButtonLabel(target: StageKey) {
   if (target === "딜크로징") return "딜클로징 전환";
-  if (target === "리텐션") return "리텐션 전환";
+  if (target === "리텐션") return "계약전환";
   return `${target} 전환`;
 }
 
@@ -569,12 +588,12 @@ function getFollowUpByStage(stage: StageKey) {
   if (stage === "딜크로징")
     return "계약 전환을 위해 마지막 클로징을 진행하세요.";
   if (stage === "리텐션")
-    return "계약관리 메뉴 이관 후 정산, 사후관리, MGM 관리를 진행하세요.";
+    return "계약완료 고객입니다. 분양회 입회자 메뉴와 정산/사후관리 흐름을 확인하세요.";
   return "재접점 필요 여부를 확인하고 리드 또는 프로스펙팅으로 복귀하세요.";
 }
 
 function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
-  const stage = normalizeStage(record.management_stage);
+  const stage = getPipelineStage(record);
   const memo = stripGradeAssessmentBlock(record.memo);
   return {
     id: record.id,
@@ -584,6 +603,9 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     intakeRoute: fmt(record.intake_route),
     company: fmt(record.company),
     grade: displayCustomerGrade(record),
+    meetingResult: isContractConversionResult(record.meeting_result) ? record.meeting_result : "",
+    reservationDate: formatShortDate(record.reservation_date),
+    contractDate: formatShortDate(record.contract_date),
     stage,
     lastActivity: formatShortDate(record.updated_at || record.created_at),
     registeredAt: formatShortDate(record.created_at),
@@ -614,15 +636,24 @@ function PipelineCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p
-            className="truncate text-[14px] font-[900]"
-            style={{ color: "var(--text-strong)" }}
-          >
-            {customer.name}{" "}
-            <span className="font-[760]" style={{ color: "var(--text-muted)" }}>
-              · {customer.title}
-            </span>
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p
+              className="truncate text-[14px] font-[900]"
+              style={{ color: "var(--text-strong)" }}
+            >
+              {customer.name}{" "}
+              <span className="font-[760]" style={{ color: "var(--text-muted)" }}>
+                · {customer.title}
+              </span>
+            </p>
+            {customer.meetingResult ? (
+              <span
+                className={`badge-premium shrink-0 px-2 py-1 text-[10.5px] ${badgeClass(customer.meetingResult)}`}
+              >
+                {customer.meetingResult}
+              </span>
+            ) : null}
+          </div>
           <p className="crm-tiny mt-1 flex items-center gap-1 truncate">
             <Phone size={12} />
             {customer.phone}
@@ -662,6 +693,7 @@ function DetailPanel({
   onTab,
   onClose,
   onStageChange,
+  onContractConvert,
   onMeetingSave,
   onOpenNoteComposer,
   onOpenEdit,
@@ -674,6 +706,7 @@ function DetailPanel({
   onTab: (tab: DetailTab) => void;
   onClose: () => void;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
+  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -716,6 +749,13 @@ function DetailPanel({
               >
                 {customer.intakeRoute}
               </span>
+              {customer.meetingResult ? (
+                <span
+                  className={`badge-premium ${badgeClass(customer.meetingResult)}`}
+                >
+                  {customer.meetingResult}
+                </span>
+              ) : null}
             </div>
             <h2
               className="truncate text-[30px] font-[930] tracking-[-0.06em]"
@@ -767,6 +807,7 @@ function DetailPanel({
             <SummaryTab
               customer={customer}
               onStageChange={onStageChange}
+              onContractConvert={onContractConvert}
               onMeetingSave={onMeetingSave}
               onOpenNoteComposer={onOpenNoteComposer}
             />
@@ -831,11 +872,13 @@ function DetailPanel({
 function SummaryTab({
   customer,
   onStageChange,
+  onContractConvert,
   onMeetingSave,
   onOpenNoteComposer,
 }: {
   customer: PipelineCustomer;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
+  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -862,6 +905,9 @@ function SummaryTab({
           <InfoItem label="유입경로" value={customer.intakeRoute} badge />
           <InfoItem label="자동등급" value={customer.grade} badge />
           <InfoItem label="관리단계" value={stageLabel(customer.stage)} badge />
+          <InfoItem label="심사결과" value={customer.meetingResult || "미전환"} badge={!!customer.meetingResult} />
+          <InfoItem label="예약완료일" value={customer.reservationDate} />
+          <InfoItem label="계약완료일" value={customer.contractDate} />
           <InfoItem label="등록일" value={customer.registeredAt} />
         </div>
       </section>
@@ -932,6 +978,7 @@ function SummaryTab({
       <QuickActions
         customer={customer}
         onStageChange={onStageChange}
+        onContractConvert={onContractConvert}
         onMeetingSave={onMeetingSave}
         onOpenNoteComposer={onOpenNoteComposer}
       />
@@ -942,11 +989,13 @@ function SummaryTab({
 function QuickActions({
   customer,
   onStageChange,
+  onContractConvert,
   onMeetingSave,
   onOpenNoteComposer,
 }: {
   customer: PipelineCustomer;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
+  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -956,6 +1005,7 @@ function QuickActions({
   onOpenNoteComposer: () => void;
 }) {
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [contractOpen, setContractOpen] = useState(false);
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingAddress, setMeetingAddress] = useState("");
   const [meetingMemo, setMeetingMemo] = useState("");
@@ -985,15 +1035,27 @@ function QuickActions({
 
       <div className="grid gap-2 md:grid-cols-3">
         {targets.map((target) => (
-          <button
-            key={target}
-            type="button"
-            onClick={() => onStageChange(customer, target)}
-            className="btn-premium btn-primary w-full"
-          >
-            {getStageButtonIcon(target)}
-            {getStageButtonLabel(target)}
-          </button>
+          target === "리텐션" ? (
+            <button
+              key={target}
+              type="button"
+              onClick={() => setContractOpen((value) => !value)}
+              className="btn-premium btn-primary w-full"
+            >
+              {getStageButtonIcon(target)}
+              계약전환
+            </button>
+          ) : (
+            <button
+              key={target}
+              type="button"
+              onClick={() => onStageChange(customer, target)}
+              className="btn-premium btn-primary w-full"
+            >
+              {getStageButtonIcon(target)}
+              {getStageButtonLabel(target)}
+            </button>
+          )
         ))}
         <button
           type="button"
@@ -1012,6 +1074,43 @@ function QuickActions({
           활동노트 작성
         </button>
       </div>
+
+      {contractOpen ? (
+        <div
+          className="mt-4 grid gap-3 rounded-[16px] border p-4 md:grid-cols-2"
+          style={{
+            background: "var(--surface-2)",
+            borderColor: "var(--border-subtle)",
+          }}
+        >
+          <div className="md:col-span-2">
+            <p className="crm-section-title">계약전환 상태 선택</p>
+            <p className="crm-tiny mt-1">예약완료는 클로징 구간, 계약완료는 리텐션 구간으로 자동 이동합니다.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onContractConvert(customer, "예약완료");
+              setContractOpen(false);
+            }}
+            className="btn-premium btn-secondary h-11 w-full"
+          >
+            <Award size={14} />
+            예약완료
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onContractConvert(customer, "계약완료");
+              setContractOpen(false);
+            }}
+            className="btn-premium btn-primary h-11 w-full"
+          >
+            <UserCheck size={14} />
+            계약완료
+          </button>
+        </div>
+      ) : null}
 
       {meetingOpen ? (
         <div
@@ -2297,7 +2396,7 @@ export default function Pipeline3Page() {
       try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at")
+          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,reservation_date,contract_date,created_at,updated_at")
           .order("updated_at", { ascending: false });
 
         if (error) throw error;
@@ -2426,6 +2525,9 @@ export default function Pipeline3Page() {
             management_stage: recordToSave.management_stage,
             customer_grade: recordToSave.customer_grade,
             memo: recordToSave.memo,
+            meeting_result: recordToSave.meeting_result || null,
+            reservation_date: recordToSave.reservation_date || null,
+            contract_date: recordToSave.contract_date || null,
             created_at: recordToSave.created_at,
             updated_at: recordToSave.updated_at,
           },
@@ -2477,6 +2579,35 @@ export default function Pipeline3Page() {
         cleanMemo || getFollowUpByStage(target),
         customer.raw.memo,
       ),
+    });
+  };
+
+  const handleContractConvert = (
+    customer: PipelineCustomer,
+    result: ContractConversionResult,
+  ) => {
+    const isReservation = result === "예약완료";
+    const nextStage: StageKey = isReservation ? "딜크로징" : "리텐션";
+    const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
+    const conversionMemo = [
+      cleanMemo,
+      "",
+      `[계약전환] ${result} 처리 (${TODAY})`,
+      isReservation
+        ? "예약완료 고객으로 클로징 구간에 자동 배치되었습니다."
+        : "계약완료 고객으로 리텐션 구간에 자동 배치되었습니다.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    updateRecord(customer.id, {
+      management_stage: nextStage,
+      meeting_result: result,
+      reservation_date: isReservation
+        ? TODAY
+        : customer.raw.reservation_date || null,
+      contract_date: isReservation ? null : TODAY,
+      memo: mergeMemoWithExistingGradeBlock(conversionMemo, customer.raw.memo),
     });
   };
 
@@ -2718,6 +2849,7 @@ export default function Pipeline3Page() {
           }}
           onClose={() => setSelectedCustomerId(null)}
           onStageChange={handleStageChange}
+          onContractConvert={handleContractConvert}
           onMeetingSave={handleMeetingSave}
           onOpenNoteComposer={handleOpenNoteComposer}
           onOpenEdit={() => setEditCustomerId(selectedCustomer.id)}
@@ -2744,3 +2876,4 @@ export default function Pipeline3Page() {
     </div>
   );
 }
+
