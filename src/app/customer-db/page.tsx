@@ -355,7 +355,7 @@ function RouteSummaryCard({
           <p className="crm-tiny mt-1">전체 {total}건 기준</p>
         </div>
         <span
-          className="rounded-full px-3 py-1 text-[12px] font-[900]"
+          className="rounded-full px-3 py-1 text-[12px] font-[650]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -403,14 +403,14 @@ function ActivitySummaryCard({ tm, cold }: { tm: number; cold: number }) {
             <Phone size={17} />
           </div>
           <p className="crm-meta">TM</p>
-          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{tm}건</p>
+          <p className="mt-1 text-[26px] font-[700] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{tm}건</p>
         </div>
         <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}>
             <MessageCircle size={17} />
           </div>
           <p className="crm-meta">콜드톡</p>
-          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{cold}건</p>
+          <p className="mt-1 text-[26px] font-[700] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{cold}건</p>
         </div>
       </div>
     </div>
@@ -493,7 +493,7 @@ function ActivityTypeSelector({
             key={type}
             type="button"
             onClick={() => onChange(type)}
-            className="rounded-[13px] border px-3 py-3 text-[13px] font-[900] transition"
+            className="rounded-[13px] border px-3 py-3 text-[13px] font-[650] transition"
             style={{
               borderColor:
                 value === type ? "var(--accent-border)" : "var(--border)",
@@ -540,14 +540,14 @@ function NoteComposer({
     >
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-[13px] font-[900]" style={{ color: "var(--text-strong)" }}>활동노트 작성</p>
+          <p className="text-[13px] font-[650]" style={{ color: "var(--text-strong)" }}>활동노트 작성</p>
           <p className="crm-tiny mt-0.5">TM 또는 콜드톡 활동을 기록합니다.</p>
         </div>
         <input
           type="date"
           value={noteDate}
           onChange={(event) => setNoteDate(event.target.value)}
-          className="h-8 rounded-[9px] border px-2.5 text-[12px] font-[800] outline-none"
+          className="h-8 rounded-[9px] border px-2.5 text-[12px] font-[550] outline-none"
           style={{
             background: "var(--surface)",
             borderColor: "var(--border-subtle)",
@@ -618,7 +618,7 @@ function NotesList({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className="rounded-full px-2.5 py-1 text-[11px] font-[950]"
+                    className="rounded-full px-2.5 py-1 text-[11px] font-[700]"
                     style={{
                       background:
                         note.activityType === "TM"
@@ -636,14 +636,14 @@ function NotesList({
                   >
                     {note.activityType}
                   </span>
-                  <span className="text-[12px] font-[900]" style={{ color: "var(--text-muted)" }}>
+                  <span className="text-[12px] font-[650]" style={{ color: "var(--text-muted)" }}>
                     {note.noteDate} · {timeLabel(note.createdAt)}
                   </span>
-                  <span className="text-[11px] font-[900]" style={{ color: "var(--text-faint)" }}>
+                  <span className="text-[11px] font-[650]" style={{ color: "var(--text-faint)" }}>
                     {note.author}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-[12.5px] font-[760]" style={{ color: "var(--text-strong)" }}>
+                <p className="mt-1 truncate text-[12.5px] font-[500]" style={{ color: "var(--text-strong)" }}>
                   {preview || "내용 없음"}
                 </p>
               </button>
@@ -652,7 +652,7 @@ function NotesList({
                 <button
                   type="button"
                   onClick={() => setExpandedId(isExpanded ? null : note.id)}
-                  className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[900]"
+                  className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[650]"
                   style={{
                     background: "var(--surface)",
                     borderColor: "var(--border)",
@@ -665,7 +665,7 @@ function NotesList({
                   <button
                     type="button"
                     onClick={() => onDelete(note)}
-                    className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[900]"
+                    className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[650]"
                     style={{
                       background: "rgba(239, 68, 68, 0.1)",
                       borderColor: "rgba(239, 68, 68, 0.28)",
@@ -706,7 +706,7 @@ function MemoPreview({ memo }: { memo?: string | null }) {
     <div className="rounded-[12px] border" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3 px-2.5 py-2">
         <p
-          className={`${open ? "whitespace-pre-wrap" : "line-clamp-2"} text-[12.5px] font-[720] leading-5`}
+          className={`${open ? "whitespace-pre-wrap" : "line-clamp-2"} memo-body-text text-[12.5px] leading-5`}
           style={{ color: memo?.trim() ? "var(--text)" : "var(--text-faint)" }}
         >
           {text}
@@ -715,7 +715,7 @@ function MemoPreview({ memo }: { memo?: string | null }) {
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
-            className="shrink-0 rounded-[8px] border px-2 py-1 text-[11px] font-[900]"
+            className="shrink-0 rounded-[8px] border px-2 py-1 text-[11px] font-[650]"
             style={{
               background: "var(--surface)",
               borderColor: "var(--border)",
@@ -750,7 +750,7 @@ function DetailBlock({
       <p className="crm-meta">{label}</p>
       {badge ? (
         <span
-          className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[900]"
+          className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[650]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -760,7 +760,7 @@ function DetailBlock({
           {display}
         </span>
       ) : (
-        <p className="mt-1 truncate text-[13.5px] font-[900] leading-5" style={{ color: "var(--text-strong)" }}>{display}</p>
+        <p className="mt-1 truncate text-[13.5px] font-[650] leading-5" style={{ color: "var(--text-strong)" }}>{display}</p>
       )}
     </div>
   );
@@ -793,7 +793,7 @@ function TransferModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <div
-                className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
+                className="mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[650]"
                 style={{
                   background: "var(--accent-subtle)",
                   border: "1px solid var(--accent-border)",
@@ -831,7 +831,7 @@ function TransferModal({
         >
           {error ? (
             <p
-              className="mb-3 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+              className="mb-3 rounded-[14px] border px-4 py-3 text-[13px] font-[550]"
               style={{
                 background: "rgba(239, 68, 68, 0.1)",
                 borderColor: "rgba(239, 68, 68, 0.28)",
@@ -1379,7 +1379,7 @@ export default function CustomerDbPage() {
   };
 
   return (
-    <main className="premium-page min-h-screen px-4 py-5 md:px-6 xl:px-8">
+    <main className="premium-page customer-db-typography min-h-screen px-4 py-5 md:px-6 xl:px-8">
     <style jsx global>{`
       .customer-db-force-center {
         width: 100% !important;
@@ -1470,12 +1470,78 @@ export default function CustomerDbPage() {
         gap: 6px !important;
         width: 100% !important;
       }
+
+      .customer-db-typography,
+      .customer-db-typography * {
+        letter-spacing: -0.015em;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      .customer-db-typography .crm-title {
+        font-weight: 700 !important;
+        letter-spacing: -0.045em !important;
+      }
+
+      .customer-db-typography .crm-subtitle,
+      .customer-db-typography .crm-tiny,
+      .customer-db-typography .crm-meta,
+      .customer-db-typography .crm-row-sub {
+        font-weight: 450 !important;
+        letter-spacing: -0.015em !important;
+      }
+
+      .customer-db-typography .crm-card-title,
+      .customer-db-typography .crm-section-title,
+      .customer-db-typography .crm-row-main {
+        font-weight: 650 !important;
+        letter-spacing: -0.025em !important;
+      }
+
+      .customer-db-typography button,
+      .customer-db-typography .btn-premium {
+        font-weight: 600 !important;
+        letter-spacing: -0.015em !important;
+      }
+
+      .customer-db-typography input,
+      .customer-db-typography select,
+      .customer-db-typography textarea {
+        font-weight: 500 !important;
+      }
+
+      .customer-db-typography .customer-db-force-center thead th {
+        font-size: 12.5px !important;
+        font-weight: 650 !important;
+      }
+
+      .customer-db-typography .customer-db-force-center tbody td {
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+      }
+
+      .customer-db-typography .customer-db-cell-text {
+        font-weight: 500 !important;
+      }
+
+      .customer-db-typography .customer-db-badge {
+        font-size: 12px !important;
+        font-weight: 600 !important;
+      }
+
+      .customer-db-typography .note-body-text,
+      .customer-db-typography .memo-body-text {
+        font-weight: 400 !important;
+        line-height: 1.65 !important;
+        letter-spacing: -0.008em !important;
+      }
+
     `}</style>
       <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div
-              className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[900]"
+              className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[650]"
               style={{
                 background: "var(--accent-subtle)",
                 border: "1px solid var(--accent-border)",
@@ -1739,7 +1805,7 @@ export default function CustomerDbPage() {
               <div className="min-w-0">
                 <div className="mb-1.5 flex flex-wrap gap-1.5">
                   <span
-                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[650]"
                     style={{
                       background: "var(--accent-subtle)",
                       border: "1px solid var(--accent-border)",
@@ -1749,7 +1815,7 @@ export default function CustomerDbPage() {
                     {selectedRecord.intake_route}
                   </span>
                   <span
-                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[650]"
                     style={{
                       background: "var(--surface-2)",
                       border: "1px solid var(--border)",
@@ -1759,10 +1825,10 @@ export default function CustomerDbPage() {
                     {selectedRecord.activity_type}
                   </span>
                 </div>
-                <h2 className="truncate text-[20px] font-[930] tracking-[-0.055em]" style={{ color: "var(--text-strong)" }}>
+                <h2 className="truncate text-[20px] font-[700] tracking-[-0.055em]" style={{ color: "var(--text-strong)" }}>
                   {fmt(selectedRecord.name)}
                 </h2>
-                <p className="mt-0.5 text-[12px] font-[720]" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-0.5 text-[12px] font-[450]" style={{ color: "var(--text-muted)" }}>
                   {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
                 </p>
               </div>
@@ -1776,7 +1842,7 @@ export default function CustomerDbPage() {
               <section className="premium-card p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-[14px] font-[900]" style={{ color: "var(--text-strong)" }}>고객 기본정보</p>
+                    <p className="text-[14px] font-[650]" style={{ color: "var(--text-strong)" }}>고객 기본정보</p>
                     <p className="crm-tiny mt-0.5">원천 고객 정보</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1921,7 +1987,7 @@ export default function CustomerDbPage() {
 
             {formError ? (
               <p
-                className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[800]"
+                className="mt-4 rounded-[14px] border px-4 py-3 text-[13px] font-[550]"
                 style={{ background: "rgba(239, 68, 68, 0.1)", borderColor: "rgba(239, 68, 68, 0.28)", color: "#ef4444" }}
               >
                 {formError}
@@ -1953,7 +2019,7 @@ export default function CustomerDbPage() {
 
       {toast ? (
         <div
-          className="fixed bottom-5 right-5 z-[90] rounded-[16px] border px-4 py-3 text-[13px] font-[900] shadow-xl"
+          className="fixed bottom-5 right-5 z-[90] rounded-[16px] border px-4 py-3 text-[13px] font-[650] shadow-xl"
           style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-strong)" }}
         >
           {toast}
