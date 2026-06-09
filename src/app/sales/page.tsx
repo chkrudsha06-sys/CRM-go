@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Search,
   TrendingUp,
+  Trash2,
   UploadCloud,
   User,
   Wallet,
@@ -421,7 +422,7 @@ function InputLabel({ children }: { children: ReactNode }) {
   return <label className="mb-1.5 block text-[12px] font-bold" style={{ color: "var(--text-muted)" }}>{children}</label>;
 }
 
-function SalesMobileCard({ item, selected, onClick }: { item: AdExecution; selected: boolean; onClick: () => void }) {
+function SalesMobileCard({ item, selected, onClick, onDelete }: { item: AdExecution; selected: boolean; onClick: () => void; onDelete: (id: number) => void }) {
   return (
     <button
       type="button"
@@ -444,11 +445,28 @@ function SalesMobileCard({ item, selected, onClick }: { item: AdExecution; selec
         <div><p className="crm-tiny">환불</p><p className="mt-1 text-[13px] font-bold" style={{ color: item.refund_amount ? "var(--danger-text)" : "var(--text)" }}>{money(item.refund_amount)}</p></div>
         <div><p className="crm-tiny">실매출</p><p className="mt-1 text-[13px] font-bold" style={{ color: "var(--success-text)" }}>{money(effectiveSales(item))}</p></div>
       </div>
+      <div className="mt-3 flex justify-end">
+        <span
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete(item.id);
+          }}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] border px-3 text-[12px] font-black"
+          style={{
+            color: "var(--danger-text)",
+            background: "var(--danger-bg)",
+            borderColor: "var(--danger-border)",
+          }}
+        >
+          <Trash2 size={13} />
+          삭제
+        </span>
+      </div>
     </button>
   );
 }
 
-function DetailSlidePanel({ item, tab, onTab, onClose, onEdit }: { item: AdExecution; tab: DetailTab; onTab: (tab: DetailTab) => void; onClose: () => void; onEdit: (item: AdExecution) => void }) {
+function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { item: AdExecution; tab: DetailTab; onTab: (tab: DetailTab) => void; onClose: () => void; onEdit: (item: AdExecution) => void; onDelete: (id: number) => void }) {
   return (
     <>
       <div className="slide-panel-overlay" onClick={onClose} />
@@ -517,7 +535,23 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit }: { item: AdExecu
             </section>
           )}
         </div>
-        <div className="slide-panel-footer"><button type="button" onClick={() => onEdit(item)} className="btn-premium btn-primary w-full"><Edit2 size={14} />매출 정보 수정</button></div>
+        <div className="slide-panel-footer">
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => onEdit(item)} className="btn-premium btn-primary w-full"><Edit2 size={14} />매출 정보 수정</button>
+            <button
+              type="button"
+              onClick={() => onDelete(item.id)}
+              className="btn-premium w-full"
+              style={{
+                color: "var(--danger-text)",
+                background: "var(--danger-bg)",
+                border: "1px solid var(--danger-border)",
+              }}
+            >
+              <Trash2 size={14} />삭제
+            </button>
+          </div>
+        </div>
       </aside>
     </>
   );
@@ -838,6 +872,37 @@ export default function SalesPage() {
   };
 
 
+  const handleDeleteSalesRecord = async (recordId: number) => {
+    const ok = window.confirm("해당 매출 기록을 삭제하시겠습니까?");
+    if (!ok) return;
+
+    const target = rows.find((row) => row.id === recordId);
+
+    const { error } = await supabase
+      .from("ad_executions")
+      .delete()
+      .eq("id", recordId);
+
+    if (error) {
+      alert(`삭제 실패: ${error.message}`);
+      return;
+    }
+
+    setRows((prev) => prev.filter((row) => row.id !== recordId));
+
+    if (selectedItem?.id === recordId) {
+      setSelectedItem(null);
+    }
+
+    if (editItem?.id === recordId) {
+      setEditItem(null);
+      setShowModal(false);
+    }
+
+    alert(`${target?.member_name || "매출 기록"} 삭제가 완료되었습니다.`);
+  };
+
+
   const updateHyosungSummary = (nextRows: HyosungCmsPreviewRow[], extra?: Partial<HyosungImportSummary>) => {
     const total = nextRows.length;
     const paid = nextRows.filter((row) => row.isPaid).length;
@@ -1033,7 +1098,7 @@ export default function SalesPage() {
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_310px]">
             <section className="min-h-0 overflow-hidden">
               <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
-                <table className="crm-table min-w-[1380px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[120px]">채널</th><th className="w-[120px]">계약경로</th><th className="w-[150px]">집행금액</th><th className="w-[150px]">VAT금액</th><th className="w-[140px]">환불금액</th><th className="w-[160px]">실매출</th><th className="w-[120px]">담당자</th><th className="w-[120px]">컨설턴트</th><th className="w-[80px]"></th></tr></thead><tbody>
+                <table className="crm-table min-w-[1480px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[120px]">채널</th><th className="w-[120px]">계약경로</th><th className="w-[150px]">집행금액</th><th className="w-[150px]">VAT금액</th><th className="w-[140px]">환불금액</th><th className="w-[160px]">실매출</th><th className="w-[120px]">담당자</th><th className="w-[120px]">컨설턴트</th><th className="w-[170px]">관리</th></tr></thead><tbody>
                   {filteredRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td><div className="crm-row-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0"><div className="crm-row-main truncate">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate">ID {row.id}</div></div></div></td>
                     <td><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
@@ -1045,18 +1110,37 @@ export default function SalesPage() {
                     <td><span className="text-[14px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(row))}</span></td>
                     <td><Badge tone="info">{row.team_member || "-"}</Badge></td>
                     <td><Badge tone="purple">{row.consultant || "-"}</Badge></td>
-                    <td><button type="button" onClick={(e) => { e.stopPropagation(); openEdit(row); }} className="btn-premium btn-secondary h-8 w-8 p-0"><Edit2 size={13} /></button></td>
+                    <td>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(row); }} className="btn-premium btn-secondary h-8 px-2.5 text-[12px]"><Edit2 size={13} />수정</button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSalesRecord(row.id);
+                          }}
+                          className="btn-premium h-8 px-2.5 text-[12px]"
+                          style={{
+                            color: "var(--danger-text)",
+                            background: "var(--danger-bg)",
+                            border: "1px solid var(--danger-border)",
+                          }}
+                        >
+                          <Trash2 size={13} />삭제
+                        </button>
+                      </div>
+                    </td>
                   </tr>)}
                 </tbody></table>
               </div>
-              <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{filteredRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} />)}</div></div>
+              <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{filteredRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
             </section>
             <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">계약경로별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
           </div>
         )}
       </main>
 
-      {selectedItem && <DetailSlidePanel item={selectedItem} tab={detailTab} onTab={setDetailTab} onClose={() => setSelectedItem(null)} onEdit={openEdit} />}
+      {selectedItem && <DetailSlidePanel item={selectedItem} tab={detailTab} onTab={setDetailTab} onClose={() => setSelectedItem(null)} onEdit={openEdit} onDelete={handleDeleteSalesRecord} />}
 
       {showHyosungModal && (
         <HyosungUploadModal
