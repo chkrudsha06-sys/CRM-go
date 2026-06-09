@@ -253,23 +253,31 @@ async function saveCustomerDbNoteToSupabase(contactId: number | null, note: Cust
 
   const author = note.author || "현재 사용자";
   const noteDate = note.noteDate || today();
+  const typedContent = `[${note.activityType}] ${cleanContent}`;
 
   const { data: existing, error: findError } = await supabase
     .from("contact_notes")
-    .select("id")
+    .select("id, content")
     .eq("contact_id", contactId)
     .eq("note_date", noteDate)
     .eq("author", author)
-    .eq("content", cleanContent)
-    .limit(1);
+    .limit(100);
 
   if (findError) throw findError;
-  if (existing && existing.length > 0) return;
+
+  const duplicated = (existing || []).some((item: any) => {
+    const existingClean = String(item.content || "")
+      .replace(/^\[(TM|콜드톡)\]\s*/g, "")
+      .trim();
+    return existingClean === cleanContent;
+  });
+
+  if (duplicated) return;
 
   const { error } = await supabase.from("contact_notes").insert({
     contact_id: contactId,
     note_date: noteDate,
-    content: cleanContent,
+    content: typedContent,
     author,
     created_at: note.createdAt,
     updated_at: note.createdAt,
@@ -336,17 +344,18 @@ function RouteSummaryCard({
   items: { label: string; value: number }[];
   total: number;
 }) {
+  const visibleItems = items.filter((item) => item.value > 0);
+  const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
+
   return (
-    <div className="premium-card p-3 md:p-3.5">
-      <div className="mb-2 flex items-center justify-between gap-3">
+    <div className="premium-card p-4 md:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[14px] font-[950] leading-none" style={{ color: "var(--text-strong)" }}>
-            유입경로별 현황
-          </p>
-          <p className="crm-tiny mt-1">고정 항목 기준 · 전체 {total}건</p>
+          <p className="crm-card-title">유입경로별 현황</p>
+          <p className="crm-tiny mt-1">전체 {total}건 기준</p>
         </div>
         <span
-          className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+          className="rounded-full px-3 py-1 text-[12px] font-[900]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -357,30 +366,22 @@ function RouteSummaryCard({
         </span>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => {
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {displayItems.map((item) => {
           const percent = total ? Math.round((item.value / total) * 100) : 0;
           return (
-            <div
-              key={item.label}
-              className="rounded-[12px] border px-2.5 py-2"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[12px] font-[900]" style={{ color: "var(--text-strong)" }}>
-                  {item.label}
-                </p>
-                <p className="shrink-0 text-[12px] font-[950]" style={{ color: "var(--text-strong)" }}>
-                  {item.value}건
-                </p>
+            <div key={item.label} className="rounded-[15px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="crm-row-main truncate">{item.label}</p>
+                <p className="crm-row-sub shrink-0">{item.value}건</p>
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+              <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${percent}%`, background: "var(--accent)" }}
                 />
               </div>
-              <p className="crm-tiny mt-0.5 text-right">{percent}%</p>
+              <p className="crm-tiny mt-1 text-right">{percent}%</p>
             </div>
           );
         })}
@@ -391,43 +392,25 @@ function RouteSummaryCard({
 
 function ActivitySummaryCard({ tm, cold }: { tm: number; cold: number }) {
   return (
-    <div className="premium-card p-3 md:p-3.5">
-      <div className="mb-2">
-        <p className="text-[14px] font-[950] leading-none" style={{ color: "var(--text-strong)" }}>
-          활동항목 현황
-        </p>
+    <div className="premium-card p-4 md:p-5">
+      <div className="mb-4">
+        <p className="crm-card-title">활동항목 현황</p>
         <p className="crm-tiny mt-1">TM과 콜드톡만 표시합니다.</p>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div
-          className="rounded-[14px] border px-3 py-3 text-center"
-          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-        >
-          <div
-            className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
-          >
-            <Phone size={15} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
+            <Phone size={17} />
           </div>
           <p className="crm-meta">TM</p>
-          <p className="mt-0.5 text-[22px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
-            {tm}건
-          </p>
+          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{tm}건</p>
         </div>
-        <div
-          className="rounded-[14px] border px-3 py-3 text-center"
-          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-        >
-          <div
-            className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full"
-            style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}
-          >
-            <MessageCircle size={15} />
+        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}>
+            <MessageCircle size={17} />
           </div>
           <p className="crm-meta">콜드톡</p>
-          <p className="mt-0.5 text-[22px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
-            {cold}건
-          </p>
+          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{cold}건</p>
         </div>
       </div>
     </div>
@@ -579,8 +562,8 @@ function NoteComposer({
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="활동 내용을 입력하세요."
-        rows={1}
-        className="w-full resize-none rounded-[10px] border px-3 py-2 text-[12.5px] font-semibold leading-5 outline-none"
+        rows={3}
+        className="min-h-[92px] w-full resize-none rounded-[10px] border px-3 py-2.5 text-[12.5px] font-semibold leading-5 outline-none"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border-subtle)",
@@ -594,7 +577,13 @@ function NoteComposer({
   );
 }
 
-function NotesList({ notes }: { notes: CustomerDbNote[] }) {
+function NotesList({
+  notes,
+  onDelete,
+}: {
+  notes: CustomerDbNote[];
+  onDelete?: (note: CustomerDbNote) => void;
+}) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   if (!notes.length) {
@@ -617,23 +606,32 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
 
         return (
           <article
-            key={note.id}
+            key={`${note.id}-${note.createdAt}`}
             className="overflow-hidden rounded-[13px] border"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           >
-            <button
-              type="button"
-              onClick={() => setExpandedId(isExpanded ? null : note.id)}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:opacity-90"
-            >
-              <div className="min-w-0 flex-1">
+            <div className="flex w-full items-stretch justify-between gap-2 px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => setExpandedId(isExpanded ? null : note.id)}
+                className="min-w-0 flex-1 text-left transition hover:opacity-90"
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className="rounded-full px-2.5 py-1 text-[11px] font-[950]"
                     style={{
-                      background: "var(--accent-subtle)",
-                      border: "1px solid var(--accent-border)",
-                      color: "var(--accent-text)",
+                      background:
+                        note.activityType === "TM"
+                          ? "var(--accent-subtle)"
+                          : "rgba(14, 165, 233, 0.12)",
+                      border:
+                        note.activityType === "TM"
+                          ? "1px solid var(--accent-border)"
+                          : "1px solid rgba(14, 165, 233, 0.28)",
+                      color:
+                        note.activityType === "TM"
+                          ? "var(--accent-text)"
+                          : "#0284c7",
                     }}
                   >
                     {note.activityType}
@@ -641,18 +639,44 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
                   <span className="text-[12px] font-[900]" style={{ color: "var(--text-muted)" }}>
                     {note.noteDate} · {timeLabel(note.createdAt)}
                   </span>
-                  <span className="ml-auto text-[11px] font-[900]" style={{ color: "var(--text-faint)" }}>
+                  <span className="text-[11px] font-[900]" style={{ color: "var(--text-faint)" }}>
                     {note.author}
                   </span>
                 </div>
                 <p className="mt-1 truncate text-[12.5px] font-[760]" style={{ color: "var(--text-strong)" }}>
                   {preview || "내용 없음"}
                 </p>
+              </button>
+
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : note.id)}
+                  className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[900]"
+                  style={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    color: "var(--accent-text)",
+                  }}
+                >
+                  {isExpanded ? "닫기" : "보기"}
+                </button>
+                {onDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(note)}
+                    className="h-8 rounded-[9px] border px-2.5 text-[11px] font-[900]"
+                    style={{
+                      background: "rgba(239, 68, 68, 0.1)",
+                      borderColor: "rgba(239, 68, 68, 0.28)",
+                      color: "#ef4444",
+                    }}
+                  >
+                    삭제
+                  </button>
+                ) : null}
               </div>
-              <span className="shrink-0 text-[11px] font-[900]" style={{ color: "var(--accent-text)" }}>
-                {isExpanded ? "닫기" : "보기"}
-              </span>
-            </button>
+            </div>
 
             {isExpanded ? (
               <div
@@ -670,6 +694,38 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
           </article>
         );
       })}
+    </div>
+  );
+}
+
+function MemoPreview({ memo }: { memo?: string | null }) {
+  const [open, setOpen] = useState(false);
+  const text = memo?.trim() || "등록된 메모가 없습니다.";
+
+  return (
+    <div className="rounded-[12px] border" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+      <div className="flex items-start justify-between gap-3 px-2.5 py-2">
+        <p
+          className={`${open ? "whitespace-pre-wrap" : "line-clamp-2"} text-[12.5px] font-[720] leading-5`}
+          style={{ color: memo?.trim() ? "var(--text)" : "var(--text-faint)" }}
+        >
+          {text}
+        </p>
+        {memo?.trim() ? (
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className="shrink-0 rounded-[8px] border px-2 py-1 text-[11px] font-[900]"
+            style={{
+              background: "var(--surface)",
+              borderColor: "var(--border)",
+              color: "var(--accent-text)",
+            }}
+          >
+            {open ? "닫기" : "보기"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -886,15 +942,18 @@ export default function CustomerDbPage() {
       const notes: CustomerDbNote[] = (data || []).map((note: any) => {
         const rawContent = String(note.content || "");
         const content = rawContent.replace(/^\[(TM|콜드톡)\]\s*/g, "").trim();
+        const isColdTalk =
+          rawContent.startsWith("[콜드톡]") ||
+          rawContent.includes("활동항목: 콜드톡");
         const isTm =
-          content.includes("활동항목: TM") ||
-          content.startsWith("[TM]") ||
+          rawContent.startsWith("[TM]") ||
+          rawContent.includes("활동항목: TM") ||
           String(note.author || "").includes("AI 통화요약");
 
         return {
           id: Number(note.id || Date.now()),
           noteDate: String(note.note_date || new Date().toISOString().slice(0, 10)),
-          activityType: isTm ? "TM" : "콜드톡",
+          activityType: isTm && !isColdTalk ? "TM" : "콜드톡",
           content,
           author: String(note.author || "AI 통화요약"),
           createdAt: String(note.created_at || note.updated_at || new Date().toISOString()),
@@ -966,7 +1025,7 @@ export default function CustomerDbPage() {
     if (!selectedRecord) return [];
 
     const map = new Map<string, CustomerDbNote>();
-    [...selectedRemoteNotes, ...(selectedRecord.notes || [])].forEach((note) => {
+    [...(selectedRecord.notes || []), ...selectedRemoteNotes].forEach((note) => {
       const normalizedContent = String(note.content || "")
         .replace(/^\[(TM|콜드톡)\]\s*/g, "")
         .trim();
@@ -1143,6 +1202,71 @@ export default function CustomerDbPage() {
           : current,
       );
     }
+  };
+
+  const handleDeleteNote = async (customerId: number, note: CustomerDbNote) => {
+    if (!window.confirm("해당 활동노트를 삭제하시겠습니까?")) return;
+
+    try {
+      const contactId = await findContactIdByPhone(selectedRecord?.phone || "");
+      if (contactId && note.id < 1000000000000) {
+        const { error } = await supabase
+          .from("contact_notes")
+          .delete()
+          .eq("id", note.id)
+          .eq("contact_id", contactId);
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error("활동노트 Supabase 삭제 실패", error);
+      showToast("활동노트 삭제 실패");
+      return;
+    }
+
+    setRecords((items) =>
+      items.map((record) =>
+        record.id === customerId
+          ? {
+              ...record,
+              notes: record.notes.filter(
+                (item) =>
+                  !(
+                    item.id === note.id ||
+                    (
+                      item.noteDate === note.noteDate &&
+                      item.author === note.author &&
+                      item.content.trim() === note.content.trim()
+                    )
+                  ),
+              ),
+              updated_at: new Date().toISOString(),
+            }
+          : record,
+      ),
+    );
+
+    setSelectedRecord((current) =>
+      current?.id === customerId
+        ? {
+            ...current,
+            notes: current.notes.filter(
+              (item) =>
+                !(
+                  item.id === note.id ||
+                  (
+                    item.noteDate === note.noteDate &&
+                    item.author === note.author &&
+                    item.content.trim() === note.content.trim()
+                  )
+                ),
+            ),
+          }
+        : current,
+    );
+
+    setSelectedRemoteNotes((items) => items.filter((item) => item.id !== note.id));
+    showToast("활동노트가 삭제되었습니다.");
   };
 
   const requestTransfer = (record: RawCustomerRecord) => {
@@ -1347,7 +1471,7 @@ export default function CustomerDbPage() {
         width: 100% !important;
       }
     `}</style>
-      <section className="premium-hero mb-3 overflow-hidden p-4 md:p-4">
+      <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div
@@ -1383,12 +1507,12 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-3 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
         <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
       </section>
 
-      <section className="premium-card mb-3 p-3">
+      <section className="premium-card mb-5 p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
           <label className="relative block">
             <Search
@@ -1431,7 +1555,7 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card overflow-hidden">
-        <div className="crm-table-wrap max-h-[760px] overflow-auto rounded-[18px]">
+        <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
           <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1540px] table-fixed text-center">
             <colgroup>
               <col className="w-[170px]" />
@@ -1694,9 +1818,7 @@ export default function CustomerDbPage() {
                   <MessageCircle size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">메모</p>
                 </div>
-                <div className="rounded-[12px] border px-2.5 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="max-h-[86px] overflow-y-auto whitespace-pre-wrap text-[12.5px] font-[720] leading-5">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
-                </div>
+                <MemoPreview memo={selectedRecord.memo} />
               </section>
 
               <section className="premium-card mt-3 p-4">
@@ -1706,7 +1828,10 @@ export default function CustomerDbPage() {
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
                 <div className="mt-1.5">
-                  <NotesList notes={selectedDisplayNotes} />
+                  <NotesList
+                    notes={selectedDisplayNotes}
+                    onDelete={(note) => handleDeleteNote(selectedRecord.id, note)}
+                  />
                 </div>
               </section>
             </div>
