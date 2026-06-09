@@ -867,6 +867,20 @@ export default function SalesPage() {
     const { error } = editItem ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id) : await supabase.from("ad_executions").insert(payload);
     setSaving(false);
     if (error) return alert(`저장 실패: ${error.message}`);
+
+    // 신규 매출 등록 시에만 카카오워크 매출방 게시 (실패해도 저장은 유지)
+    if (!editItem) {
+      try {
+        await fetch("/api/kakaowork/send-sales-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        console.error("카카오워크 매출방 게시 실패:", e);
+      }
+    }
+
     setShowModal(false);
     setEditItem(null);
     fetchRows();
