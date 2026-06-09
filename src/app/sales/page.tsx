@@ -57,6 +57,14 @@ type FormState = {
   memo: string;
 };
 
+type MemberOption = {
+  id: number;
+  name: string | null;
+  title: string | null;
+  bunyanghoe_number: string | null;
+  phone: string | null;
+};
+
 type HyosungCmsPreviewRow = {
   rowIndex: number;
   externalPaymentId: string;
@@ -112,8 +120,8 @@ const EMPTY_FORM: FormState = {
   memo: "",
 };
 
-const CHANNELS = ["사이다페이", "효성CMS", "LMS", "호갱노노", "네이버", "카카오", "구글", "메타", "유튜브", "기타"];
-const CONTRACT_ROUTES = ["분양회", "연계매출", "광고매출", "기타"];
+const CHANNELS = ["사이다페이", "효성CMS", "광고인입금", "카드결제"];
+const CONTRACT_ROUTES = ["분양회 회비", "LMS", "호갱노노"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
 const HYOSUNG_PROVIDER = "HYOSUNG_CMS";
@@ -303,12 +311,15 @@ function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
     .filter((row) => row.memberName || row.memberPhone || row.memberNumber || row.paidAmount > 0);
 }
 
+function normalizePaymentItem(value?: string | null) {
+  if (!value || value === "분양회") return "분양회 회비";
+  return value;
+}
+
 function effectiveSales(row: AdExecution) {
   const execution = row.execution_amount || 0;
-  const vat = row.vat_amount || 0;
   const refund = row.refund_amount || 0;
-  const base = vat && vat !== execution ? vat : execution;
-  return Math.max(base - refund, 0);
+  return Math.max(execution - refund, 0);
 }
 
 function avatarBg(name?: string | null) {
@@ -339,17 +350,17 @@ function toneStyle(tone: string) {
 }
 
 function routeTone(value?: string | null) {
-  if (value === "분양회") return "success";
+  if (value === "분양회" || value === "분양회 회비") return "success";
   if (value === "연계매출") return "cyan";
   if (value === "광고매출") return "purple";
   return "muted";
 }
 
 function channelTone(value?: string | null) {
-  if (value === "LMS") return "info";
-  if (value === "호갱노노") return "purple";
-  if (value === "네이버" || value === "카카오") return "success";
-  if (value === "구글" || value === "메타" || value === "유튜브") return "warning";
+  if (value === "사이다페이") return "info";
+  if (value === "효성CMS") return "purple";
+  if (value === "광고인입금") return "success";
+  if (value === "카드결제") return "warning";
   return "muted";
 }
 
@@ -435,7 +446,7 @@ function SalesMobileCard({ item, selected, onClick, onDelete }: { item: AdExecut
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <p className="crm-row-main truncate">{item.member_name || "고객명 없음"}</p>
-            <Badge tone={routeTone(item.contract_route)}>{item.contract_route || "-"}</Badge>
+            <Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge>
           </div>
           <p className="crm-row-sub mt-0.5 truncate">{item.channel || "-"} · {formatFullDate(item.payment_date)}</p>
         </div>
@@ -478,13 +489,13 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <h2 className="truncate text-[22px] font-[780] tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{item.member_name || "고객명 없음"}</h2>
-                  <Badge tone={routeTone(item.contract_route)}>{item.contract_route || "-"}</Badge>
+                  <Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge>
                 </div>
                 <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>ID {item.id} · {item.channel || "채널 없음"} · {formatFullDate(item.payment_date)}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge tone={channelTone(item.channel)} icon={CreditCard}>{item.channel || "채널 없음"}</Badge>
                   <Badge tone="info" icon={User}>{item.team_member || "-"}</Badge>
-                  <Badge tone="purple">{item.consultant || "-"}</Badge>
+                  
                 </div>
               </div>
             </div>
@@ -504,10 +515,9 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                 <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={ReceiptText} tone="success" /><div><p className="crm-section-title">매출 기본정보</p><p className="crm-tiny">거래 경로와 결제 기준 정보</p></div></div>
                 <Field label="고객명">{item.member_name || "-"}</Field>
                 <Field label="결제일">{formatFullDate(item.payment_date)}</Field>
-                <Field label="채널"><Badge tone={channelTone(item.channel)}>{item.channel || "-"}</Badge></Field>
-                <Field label="계약경로"><Badge tone={routeTone(item.contract_route)}>{item.contract_route || "-"}</Badge></Field>
+                <Field label="결제채널"><Badge tone={channelTone(item.channel)}>{item.channel || "-"}</Badge></Field>
+                <Field label="결제항목"><Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge></Field>
                 <Field label="담당자"><Badge tone="info" icon={User}>{item.team_member || "-"}</Badge></Field>
-                <Field label="컨설턴트"><Badge tone="purple">{item.consultant || "-"}</Badge></Field>
               </section>
               <section className="premium-card p-4">
                 <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={TrendingUp} tone="cyan" /><div><p className="crm-section-title">실매출 요약</p><p className="crm-tiny">집행금액, VAT, 환불 반영 기준</p></div></div>
@@ -522,7 +532,6 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
             <section className="premium-card p-4">
               <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">금액 상세</p><p className="crm-tiny">매출 계산에 사용되는 금액 구조</p></div></div>
               <Field label="집행금액">{money(item.execution_amount)}</Field>
-              <Field label="VAT금액">{money(item.vat_amount)}</Field>
               <Field label="환불금액"><span style={{ color: item.refund_amount ? "var(--danger-text)" : "var(--text)" }}>{money(item.refund_amount)}</span></Field>
               <Field label="실매출"><span className="text-[15px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(item))}</span></Field>
               <div className="mt-4 rounded-[12px] p-4 text-[13px] font-semibold leading-relaxed" style={{ background: "var(--info-bg)", border: "1px solid var(--info-border)", color: "var(--info-text)" }}>VAT 금액이 있고 집행금액과 다른 경우 VAT 금액을 기준으로 계산하며, 환불금액을 차감해 실매출을 산정합니다.</div>
@@ -760,6 +769,8 @@ export default function SalesPage() {
   const [hyosungRows, setHyosungRows] = useState<HyosungCmsPreviewRow[]>([]);
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
+  const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
+  const [memberSearch, setMemberSearch] = useState("");
   const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
   const [ciderpayFullSyncing, setCiderpayFullSyncing] = useState(false);
   const [editItem, setEditItem] = useState<AdExecution | null>(null);
@@ -769,7 +780,6 @@ export default function SalesPage() {
   const [fRoute, setFRoute] = useState("");
   const [fChannel, setFChannel] = useState("");
   const [fTeam, setFTeam] = useState("");
-  const [fConsultant, setFConsultant] = useState("");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const inputClass = "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
@@ -792,26 +802,56 @@ export default function SalesPage() {
 
   useEffect(() => { fetchRows(); }, [fetchRows]);
 
+  const fetchMemberOptions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id,name,title,bunyanghoe_number,phone")
+      .not("name", "is", null)
+      .order("name", { ascending: true })
+      .limit(2000);
+
+    if (error) {
+      console.error("분양회 입회자 조회 실패:", error.message);
+      setMemberOptions([]);
+      return;
+    }
+
+    setMemberOptions((data || []) as MemberOption[]);
+  }, []);
+
+  useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
+
+
   const filteredRows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return rows.filter((row) => {
       const matchSearch = !keyword || [row.member_name, row.channel, row.contract_route, row.team_member, row.consultant, row.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword);
-      return matchSearch && (!fRoute || row.contract_route === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam) && (!fConsultant || row.consultant === fConsultant);
+      return matchSearch && (!fRoute || normalizePaymentItem(row.contract_route) === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam);
     });
-  }, [rows, search, fRoute, fChannel, fTeam, fConsultant]);
+  }, [rows, search, fRoute, fChannel, fTeam]);
 
   const stats = useMemo(() => {
-    const total = filteredRows.reduce((sum, row) => sum + effectiveSales(row), 0);
-    const execution = filteredRows.reduce((sum, row) => sum + (row.execution_amount || 0), 0);
-    const vat = filteredRows.reduce((sum, row) => sum + (row.vat_amount || 0), 0);
-    const refund = filteredRows.reduce((sum, row) => sum + (row.refund_amount || 0), 0);
-    const bunyanghoe = filteredRows.filter((row) => row.contract_route === "분양회").reduce((sum, row) => sum + effectiveSales(row), 0);
-    const linked = filteredRows.filter((row) => row.contract_route === "연계매출").reduce((sum, row) => sum + effectiveSales(row), 0);
-    return { count: filteredRows.length, total, execution, vat, refund, bunyanghoe, linked };
+    const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
+    const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
+    const membershipGross = filteredRows.filter(isMembership).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const adBenefitGross = filteredRows.filter(isAdBenefit).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const membershipRefund = filteredRows.filter(isMembership).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+    const adBenefitRefund = filteredRows.filter(isAdBenefit).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+    const refund = membershipRefund + adBenefitRefund;
+    const total = membershipGross + adBenefitGross - refund;
+    return {
+      count: filteredRows.length,
+      total,
+      membershipGross,
+      adBenefitGross,
+      refund,
+      membershipRefund,
+      adBenefitRefund,
+    };
   }, [filteredRows]);
 
   const routeStats = useMemo(() => CONTRACT_ROUTES.map((route) => {
-    const list = filteredRows.filter((row) => row.contract_route === route);
+    const list = filteredRows.filter((row) => normalizePaymentItem(row.contract_route) === route);
     return { route, count: list.length, amount: list.reduce((sum, row) => sum + effectiveSales(row), 0) };
   }).filter((item) => item.count > 0 || item.amount > 0), [filteredRows]);
 
@@ -826,20 +866,21 @@ export default function SalesPage() {
     return Object.values(map).sort((a, b) => b.amount - a.amount).slice(0, 8);
   }, [filteredRows]);
 
-  const activeFilters = [search, fRoute, fChannel, fTeam, fConsultant].filter(Boolean).length;
-  const resetFilters = () => { setSearch(""); setFRoute(""); setFChannel(""); setFTeam(""); setFConsultant(""); };
+  const activeFilters = [search, fRoute, fChannel, fTeam].filter(Boolean).length;
+  const resetFilters = () => { setSearch(""); setFRoute(""); setFChannel(""); setFTeam(""); };
   const setFormValue = (key: keyof FormState, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const openAdd = () => { setEditItem(null); setForm({ ...EMPTY_FORM, payment_date: new Date().toISOString().slice(0, 10) }); setShowModal(true); };
+  const openAdd = () => { setEditItem(null); setMemberSearch(""); setForm({ ...EMPTY_FORM, payment_date: new Date().toISOString().slice(0, 10) }); setShowModal(true); };
   const openEdit = (item: AdExecution) => {
     setEditItem(item);
+    setMemberSearch(item.member_name || "");
     setForm({
       member_name: item.member_name || "",
       execution_amount: item.execution_amount ? item.execution_amount.toLocaleString() : "",
       vat_amount: item.vat_amount ? item.vat_amount.toLocaleString() : "",
       refund_amount: item.refund_amount ? item.refund_amount.toLocaleString() : "",
       channel: item.channel || "",
-      contract_route: item.contract_route || "",
+      contract_route: normalizePaymentItem(item.contract_route) || "",
       payment_date: item.payment_date?.slice(0, 10) || "",
       team_member: item.team_member || "",
       consultant: item.consultant || "",
@@ -854,33 +895,19 @@ export default function SalesPage() {
     const payload = {
       member_name: form.member_name || null,
       execution_amount: parseNumber(form.execution_amount),
-      vat_amount: parseNumber(form.vat_amount),
+      vat_amount: parseNumber(form.execution_amount),
       refund_amount: parseNumber(form.refund_amount),
       channel: form.channel || null,
       contract_route: form.contract_route || null,
       payment_date: form.payment_date || null,
       team_member: form.team_member || null,
-      consultant: form.consultant || null,
+      consultant: null,
       memo: form.memo || null,
     };
     setSaving(true);
     const { error } = editItem ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id) : await supabase.from("ad_executions").insert(payload);
     setSaving(false);
     if (error) return alert(`저장 실패: ${error.message}`);
-
-    // 신규 매출 등록 시에만 카카오워크 매출방 게시 (실패해도 저장은 유지)
-    if (!editItem) {
-      try {
-        await fetch("/api/kakaowork/send-sales-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } catch (e) {
-        console.error("카카오워크 매출방 게시 실패:", e);
-      }
-    }
-
     setShowModal(false);
     setEditItem(null);
     fetchRows();
@@ -1144,8 +1171,8 @@ export default function SalesPage() {
   };
 
   const exportCsv = () => {
-    const headers = ["ID", "고객명", "결제일", "채널", "계약경로", "집행금액", "VAT금액", "환불금액", "실매출", "담당자", "컨설턴트", "메모"];
-    const lines = filteredRows.map((row) => [row.id, row.member_name || "", row.payment_date || "", row.channel || "", row.contract_route || "", row.execution_amount || 0, row.vat_amount || 0, row.refund_amount || 0, effectiveSales(row), row.team_member || "", row.consultant || "", row.memo || ""]);
+    const headers = ["ID", "고객명", "결제일", "결제채널", "결제항목", "집행금액", "환불금액", "담당자", "메모"];
+    const lines = filteredRows.map((row) => [row.id, row.member_name || "", row.payment_date || "", row.channel || "", normalizePaymentItem(row.contract_route), row.execution_amount || 0, row.refund_amount || 0, row.team_member || "", row.memo || ""]);
     const csv = [headers, ...lines].map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -1190,23 +1217,20 @@ export default function SalesPage() {
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-          <StatCard label="실매출" value={money(stats.total)} icon={TrendingUp} tone="success" sub={`${stats.count}건`} />
-          <StatCard label="집행금액" value={money(stats.execution)} icon={CreditCard} tone="info" />
-          <StatCard label="VAT금액" value={money(stats.vat)} icon={ReceiptText} tone="cyan" />
-          <StatCard label="환불금액" value={money(stats.refund)} icon={ArrowDownRight} tone="danger" />
-          <StatCard label="분양회" value={money(stats.bunyanghoe)} icon={BadgeCheck} tone="purple" />
-          <StatCard label="연계매출" value={money(stats.linked)} icon={ArrowUpRight} tone="warning" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard label="총매출" value={money(stats.total)} icon={TrendingUp} tone="success" sub={`${stats.count}건 · 환불 차감`} />
+          <StatCard label="분양회 월회비" value={money(stats.membershipGross)} icon={BadgeCheck} tone="purple" sub="분양회 회비 합산" />
+          <StatCard label="광고특전" value={money(stats.adBenefitGross)} icon={ReceiptText} tone="cyan" sub="LMS + 호갱노노" />
+          <StatCard label="환불금액" value={money(stats.refund)} icon={ArrowDownRight} tone="danger" sub={`월회비 ${money(stats.membershipRefund)} · 광고특전 ${money(stats.adBenefitRefund)}`} />
         </div>
       </div>
 
       <div className="premium-filterbar sales-modern-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-full border px-3 text-[13px] font-bold outline-none" style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }} />
-        <div className="relative w-full sm:w-[340px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="고객명, 채널, 담당자, 메모 검색..." className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none" /></div>
-        <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="계약경로" />
-        <SelectChip value={fChannel} onChange={setFChannel} options={CHANNELS} placeholder="채널" />
+        <div className="relative w-full sm:w-[340px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="고객명, 결제채널, 담당자, 메모 검색..." className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none" /></div>
+        <SelectChip value={fChannel} onChange={setFChannel} options={CHANNELS} placeholder="결제채널" />
+        <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="결제항목" />
         <SelectChip value={fTeam} onChange={setFTeam} options={TEAM} placeholder="담당자" />
-        <SelectChip value={fConsultant} onChange={setFConsultant} options={CONSULTANTS} placeholder="컨설턴트" />
         {activeFilters > 0 && <button type="button" onClick={resetFilters} className="btn-premium btn-danger h-8">초기화</button>}
         <span className="ml-auto hidden text-[12px] font-bold md:block" style={{ color: "var(--text-faint)" }}>{filteredRows.length.toLocaleString()} / {rows.length.toLocaleString()}건</span>
       </div>
@@ -1216,18 +1240,15 @@ export default function SalesPage() {
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_310px]">
             <section className="min-h-0 overflow-hidden">
               <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
-                <table className="crm-table min-w-[1480px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[120px]">채널</th><th className="w-[120px]">계약경로</th><th className="w-[150px]">집행금액</th><th className="w-[150px]">VAT금액</th><th className="w-[140px]">환불금액</th><th className="w-[160px]">실매출</th><th className="w-[120px]">담당자</th><th className="w-[120px]">컨설턴트</th><th className="w-[170px]">관리</th></tr></thead><tbody>
+                <table className="crm-table min-w-[1260px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[130px]">결제채널</th><th className="w-[130px]">결제항목</th><th className="w-[150px]">집행금액</th><th className="w-[140px]">환불금액</th><th className="w-[130px]">담당자</th><th className="w-[170px]">관리</th></tr></thead><tbody>
                   {filteredRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td><div className="crm-row-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0"><div className="crm-row-main truncate">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate">ID {row.id}</div></div></div></td>
                     <td><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
-                    <td><Badge tone={routeTone(row.contract_route)}>{row.contract_route || "-"}</Badge></td>
+                    <td><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
                     <td><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.execution_amount)}</span></td>
-                    <td><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.vat_amount)}</span></td>
                     <td><span className="font-bold" style={{ color: row.refund_amount ? "var(--danger-text)" : "var(--text-muted)" }}>{money(row.refund_amount)}</span></td>
-                    <td><span className="text-[14px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(row))}</span></td>
                     <td><Badge tone="info">{row.team_member || "-"}</Badge></td>
-                    <td><Badge tone="purple">{row.consultant || "-"}</Badge></td>
                     <td>
                       <div className="flex items-center justify-center gap-1.5">
                         <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(row); }} className="btn-premium btn-secondary h-8 px-2.5 text-[12px]"><Edit2 size={13} />수정</button>
@@ -1253,7 +1274,7 @@ export default function SalesPage() {
               </div>
               <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{filteredRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
             </section>
-            <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">계약경로별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
+            <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">결제항목별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
           </div>
         )}
       </main>
@@ -1274,17 +1295,31 @@ export default function SalesPage() {
       {showModal && (
         <div className="crm-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="crm-modal flex max-w-2xl flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}><div><h2 className="crm-section-title">{editItem ? "매출 정보 수정" : "매출 등록"}</h2><p className="crm-subtitle mt-1">광고 집행 및 매출 금액 정보를 입력합니다.</p></div><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
+            <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}><div><h2 className="crm-section-title">{editItem ? "매출 정보 수정" : "매출 등록"}</h2><p className="crm-subtitle mt-1">분양회 입회자 기준으로 매출 금액 정보를 입력합니다.</p></div><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div><InputLabel>고객명 *</InputLabel><input className={inputClass} value={form.member_name} onChange={(e) => setFormValue("member_name", e.target.value)} placeholder="고객명" /></div>
+              <div className="md:col-span-2"><InputLabel>고객명 *</InputLabel><input className={inputClass} value={memberSearch} onChange={(e) => { setMemberSearch(e.target.value); setFormValue("member_name", e.target.value); }} placeholder="분양회 입회자 이름 검색" />
+                <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[12px] border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                  {memberOptions
+                    .filter((member) => {
+                      const keyword = memberSearch.trim().toLowerCase();
+                      if (!keyword) return true;
+                      return [member.name, member.title, member.bunyanghoe_number, member.phone].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                    })
+                    .slice(0, 80)
+                    .map((member) => (
+                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setFormValue("member_name", member.name || ""); }} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
+                        <span className="truncate">{member.name || "이름 없음"}</span>
+                        <span className="flex-shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>{member.bunyanghoe_number || member.title || member.phone || "-"}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
               <div><InputLabel>결제일 *</InputLabel><input type="date" className={inputClass} value={form.payment_date} onChange={(e) => setFormValue("payment_date", e.target.value)} /></div>
-              <div><InputLabel>채널</InputLabel><select className={inputClass} value={form.channel} onChange={(e) => setFormValue("channel", e.target.value)}><option value="">선택</option>{CHANNELS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-              <div><InputLabel>계약경로</InputLabel><select className={inputClass} value={form.contract_route} onChange={(e) => setFormValue("contract_route", e.target.value)}><option value="">선택</option>{CONTRACT_ROUTES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+              <div><InputLabel>결제채널</InputLabel><select className={inputClass} value={form.channel} onChange={(e) => setFormValue("channel", e.target.value)}><option value="">선택</option>{CHANNELS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+              <div><InputLabel>결제항목</InputLabel><select className={inputClass} value={form.contract_route} onChange={(e) => setFormValue("contract_route", e.target.value)}><option value="">선택</option>{CONTRACT_ROUTES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
               <div><InputLabel>집행금액</InputLabel><input className={inputClass} value={form.execution_amount} onChange={(e) => setFormValue("execution_amount", formatInputAmount(e.target.value))} placeholder="0" /></div>
-              <div><InputLabel>VAT금액</InputLabel><input className={inputClass} value={form.vat_amount} onChange={(e) => setFormValue("vat_amount", formatInputAmount(e.target.value))} placeholder="0" /></div>
               <div><InputLabel>환불금액</InputLabel><input className={inputClass} value={form.refund_amount} onChange={(e) => setFormValue("refund_amount", formatInputAmount(e.target.value))} placeholder="0" /></div>
               <div><InputLabel>담당자</InputLabel><select className={inputClass} value={form.team_member} onChange={(e) => setFormValue("team_member", e.target.value)}><option value="">선택</option>{TEAM.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-              <div><InputLabel>컨설턴트</InputLabel><select className={inputClass} value={form.consultant} onChange={(e) => setFormValue("consultant", e.target.value)}><option value="">선택</option>{CONSULTANTS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
               <div className="md:col-span-2"><InputLabel>메모</InputLabel><textarea className={textareaClass} value={form.memo} onChange={(e) => setFormValue("memo", e.target.value)} placeholder="매출 관련 특이사항을 입력하세요" /></div>
             </div></div>
             <div className="flex justify-end gap-2 px-6 py-4" style={{ borderTop: "1px solid var(--border-subtle)" }}><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary">취소</button><button type="button" onClick={handleSave} disabled={saving} className="btn-premium btn-primary disabled:opacity-50"><ReceiptText size={14} />{saving ? "저장 중..." : editItem ? "수정 완료" : "등록"}</button></div>
