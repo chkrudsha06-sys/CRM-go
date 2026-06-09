@@ -1,15 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "crons": [
     {
       "path": "/api/call-recordings/process?limit=1",
       "schedule": "0 0 * * *"
-    }
-  ]
-}
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
+    },
     {
       "path": "/api/payment-imports/ciderpay/sync",
       "schedule": "0 2,5,7,9 * * *"
