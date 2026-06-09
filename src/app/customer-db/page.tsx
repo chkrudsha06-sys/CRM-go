@@ -84,6 +84,9 @@ type VipRecord = {
 
 const RAW_DB_STORAGE_KEY = "crm_go_raw_customer_db_v1";
 const VIP_DB_STORAGE_KEY = "crm_go_customer_db_local_v2";
+const CUSTOMER_DB_SOURCE = "customer_db";
+const VIP_DB_SOURCE = "vip_activity";
+const DEFAULT_ASSIGNED_TO = "조계현";
 const INTAKE_ROUTES = [
   "분양의신DB",
   "컨설턴트VIP DB",
@@ -220,6 +223,8 @@ async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
     management_stage: "리드",
     customer_grade: "심사미진행",
     memo: buildContactMemo(record),
+    crm_db_source: CUSTOMER_DB_SOURCE,
+    assigned_to: DEFAULT_ASSIGNED_TO,
     updated_at: now,
   };
 
@@ -1307,28 +1312,19 @@ export default function CustomerDbPage() {
       management_stage: "리드",
       customer_grade: result.customerGrade,
       memo: vipMemo,
+      crm_db_source: VIP_DB_SOURCE,
+      vip_transferred_at: now,
+      assigned_to: DEFAULT_ASSIGNED_TO,
       updated_at: now,
     };
 
     const phoneDigits = normalizePhoneDigits(transferTarget.phone);
 
-    const vipRecords = readJsonArray<VipRecord>(VIP_DB_STORAGE_KEY);
-    const existingLocal = vipRecords.find(
-      (item) => normalizePhoneDigits(item.phone) === phoneDigits,
-    );
+    // 이전 버전은 VIP활동DB localStorage에도 저장했기 때문에
+    // Supabase에서 삭제한 고객이 다시 살아나는 문제가 있었습니다.
+    // 이제 VIP활동DB는 Supabase contacts.crm_db_source = 'vip_activity' 값만 기준으로 표시합니다.
+    window.localStorage.removeItem(VIP_DB_STORAGE_KEY);
 
-    const nextVipRecord: VipRecord = {
-      id: existingLocal?.id || Date.now(),
-      ...vipPayload,
-      created_at: existingLocal?.created_at || now,
-    };
-
-    // 1순위: VIP활동DB 화면이 실제로 읽는 localStorage에 먼저 영구 저장합니다.
-    // 이렇게 해야 메뉴 이동/새로고침 후에도 즉시 유지됩니다.
-    writeJsonArray(VIP_DB_STORAGE_KEY, mergeVipRecordsByPhone(vipRecords, nextVipRecord));
-
-    // 2순위: Supabase contacts 테이블에도 best-effort로 저장합니다.
-    // Supabase 컬럼/권한 문제로 실패하더라도 localStorage 이관은 되돌리지 않습니다.
     try {
       const { data: existingVip, error: findError } = await supabase
         .from("contacts")
@@ -1354,7 +1350,9 @@ export default function CustomerDbPage() {
         if (insertError) throw insertError;
       }
     } catch (error) {
-      console.warn("VIP활동DB Supabase 저장은 실패했지만 localStorage 이관은 완료되었습니다.", error);
+      console.error("VIP활동DB 이관 저장 실패", error);
+      setTransferError("VIP활동DB 이관 저장 실패: Supabase SQL 적용 여부와 contacts 컬럼을 확인해주세요.");
+      return;
     }
 
     setRecords((items) => {
@@ -2028,3 +2026,4 @@ export default function CustomerDbPage() {
     </main>
   );
 }
+
