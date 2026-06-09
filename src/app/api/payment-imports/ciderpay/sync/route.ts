@@ -5,15 +5,32 @@ import { supabase } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const CIDERPAY_PAYMENTS_URL =
-  "https://my.ciderpay.com/se/regularPayment/payments?paySubMethod=BILLING_RP&orderVal=&orderAsc=false&state=COMPLETE&keyword=&startDate=&endDate=&dateRange=&minTotalPrice=&maxTotalPrice=&cardNum=";
+const TARGET_PRODUCT = "분양회(얼리버드)";
+const DAYS_BACK = 7;
+
+function cleanText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
 
 function onlyNumber(value: string) {
   return Number(value.replace(/[^0-9]/g, "")) || 0;
 }
 
-function cleanText(value: string) {
-  return value.replace(/\s+/g, " ").trim();
+function formatDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getKoreaDateRange() {
+  const now = new Date();
+  const koreaNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const end = new Date(koreaNow);
+  const start = new Date(koreaNow);
+  start.setDate(start.getDate() - DAYS_BACK);
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  };
 }
 
 function getPaymentIdFromHref(href: string) {
@@ -24,6 +41,26 @@ function getPaymentIdFromHref(href: string) {
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function buildPaymentsUrl() {
+  const { startDate, endDate } = getKoreaDateRange();
+
+  const params = new URLSearchParams({
+    paySubMethod: "BILLING_RP",
+    orderVal: "totalStatus.completeDate",
+    orderAsc: "false",
+    state: "",
+    keyword: "",
+    startDate,
+    endDate,
+    dateRange: "",
+    minTotalPrice: "",
+    maxTotalPrice: "",
+    cardNum: "",
+  });
+
+  return `https://my.ciderpay.com/se/regularPayment/payments?${params.toString()}`;
 }
 
 export async function GET() {
@@ -37,7 +74,9 @@ export async function GET() {
       );
     }
 
-    const response = await fetch(CIDERPAY_PAYMENTS_URL, {
+    const url = buildPaymentsUrl();
+
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Cookie: cookie,
@@ -73,7 +112,7 @@ export async function GET() {
     }
 
     const $ = cheerio.load(html);
-    const rows = $("tr.success_tr");
+    const rows = $("tr.success_tr, tr.cancel_tr");
     const results: Array<Record<string, unknown>> = [];
 
     for (const row of rows.toArray()) {
@@ -91,7 +130,7 @@ export async function GET() {
       const productAnchor = $row.find('a[href^="/se/payment/view/"]').first();
       const productName = cleanText(productAnchor.text());
       const href = productAnchor.attr("href") || "";
-      const externalPaymentId = getPaymentIdFromHref(href);
+      const paymentViewId = getPaymentIdFromHref(href);
 
       const statusText = cleanText($row.find("td").eq(4).text());
       const amount = onlyNumber($row.find(".price_txt strong").first().text());
@@ -105,14 +144,26 @@ export async function GET() {
           .text()
       );
 
-      if (
-        !externalPaymentId ||
-        !buyerName ||
-        !amount ||
-        !statusText.includes("결제완료")
-      ) {
-        continue;
-      }
+      const canceledAtText = cleanText(
+        $row
+          .find(".multiTd_Li")
+          .filter((_, el) => $(el).text().includes("취소완료일시"))
+          .find(".multiTd_LiDd")
+          .first()
+          .text()
+      );
+
+      if (!paymentViewId || !buyerName || !amount) continue;
+      if (productName !== TARGET_PRODUCT) continue;
+
+      const isCancel = statusText.includes("결제취소");
+      const isComplete = statusText.includes("결제완료");
+
+      if (!isCancel && !isComplete) continue;
+
+      const externalPaymentId = isCancel
+        ? `${paymentViewId}_CANCEL`
+        : `${paymentViewId}_COMPLETE`;
 
       const { data: existing, error: existingError } = await supabase
         .from("external_payment_records")
@@ -129,39 +180,66 @@ export async function GET() {
           productName,
           amount,
           status: "duplicate",
+          paymentStatus: isCancel ? "결제취소" : "결제완료",
           salesRecordId: existing.sales_record_id,
         });
         continue;
       }
 
+      const paymentDate = (isCancel ? canceledAtText : paidAtText).slice(0, 10);
+
       const memo = [
-        "사이다페이 정기결제 실제 데이터 자동반영",
-        `거래번호: ${externalPaymentId}`,
+        isCancel
+          ? "사이다페이 정기결제 취소 자동반영"
+          : "사이다페이 정기결제 완료 자동반영",
+        `거래번호: ${paymentViewId}`,
         `구매자명: ${buyerName}`,
         `상품명: ${productName}`,
-        `결제금액: ${amount.toLocaleString()}원`,
-        `결제완료일시: ${paidAtText}`,
+        `상태: ${isCancel ? "결제취소" : "결제완료"}`,
+        `금액: ${amount.toLocaleString()}원`,
+        `결제완료일시: ${paidAtText || "-"}`,
+        `취소완료일시: ${canceledAtText || "-"}`,
       ].join("\n");
+
+      const salesPayload = isCancel
+        ? {
+            member_name: buyerName,
+            bunyanghoe_number: "",
+            execution_amount: 0,
+            vat_amount: 0,
+            refund_amount: amount,
+            channel: "사이다페이",
+            contract_route: "분양회",
+            payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+            team_member: "주식회사광고인",
+            consultant: "",
+            hightarget_mileage: 0,
+            hightarget_reward: 0,
+            hogaengnono_reward: 0,
+            lms_reward: 0,
+            memo,
+          }
+        : {
+            member_name: buyerName,
+            bunyanghoe_number: "",
+            execution_amount: amount,
+            vat_amount: amount,
+            refund_amount: 0,
+            channel: "사이다페이",
+            contract_route: "분양회",
+            payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+            team_member: "주식회사광고인",
+            consultant: "",
+            hightarget_mileage: 0,
+            hightarget_reward: 0,
+            hogaengnono_reward: 0,
+            lms_reward: 0,
+            memo,
+          };
 
       const { data: salesRecord, error: salesError } = await supabase
         .from("ad_executions")
-        .insert({
-          member_name: buyerName,
-          bunyanghoe_number: "",
-          execution_amount: amount,
-          vat_amount: amount,
-          refund_amount: 0,
-          channel: "사이다페이",
-          contract_route: "분양회",
-          payment_date: paidAtText.slice(0, 10),
-          team_member: "주식회사광고인",
-          consultant: "",
-          hightarget_mileage: 0,
-          hightarget_reward: 0,
-          hogaengnono_reward: 0,
-          lms_reward: 0,
-          memo,
-        })
+        .insert(salesPayload)
         .select("*")
         .single();
 
@@ -176,22 +254,28 @@ export async function GET() {
             member_name: buyerName,
             member_phone: "",
             product_name: productName,
-            payment_status: "결제완료",
+            payment_status: isCancel ? "결제취소" : "결제완료",
             payment_method: "정기결제",
-            paid_at: paidAtText,
-            paid_amount: amount,
+            paid_at: paidAtText || null,
+            completed_at: isCancel ? canceledAtText || null : paidAtText || null,
+            paid_amount: isCancel ? 0 : amount,
             billing_amount: amount,
+            refund_amount: isCancel ? amount : 0,
             match_status: "matched",
             sales_record_id: Number(salesRecord.id),
-            import_status: "sales_created",
-            import_message:
-              "사이다페이 실제 결제내역을 통합매출로 생성했습니다.",
+            import_status: isCancel ? "cancel_created" : "sales_created",
+            import_message: isCancel
+              ? "사이다페이 결제취소 내역을 통합매출 환불 기록으로 생성했습니다."
+              : "사이다페이 결제완료 내역을 통합매출로 생성했습니다.",
             raw_data: {
               buyerName,
               productName,
               amount,
               paidAtText,
+              canceledAtText,
+              paymentViewId,
               externalPaymentId,
+              statusText,
             },
           },
           { onConflict: "provider,external_payment_id" }
@@ -203,15 +287,25 @@ export async function GET() {
         buyerName,
         productName,
         amount,
-        status: "sales_created",
+        paymentStatus: isCancel ? "결제취소" : "결제완료",
+        status: isCancel ? "cancel_created" : "sales_created",
         salesRecordId: salesRecord.id,
       });
     }
 
+    const created = results.filter((item) => item.status === "sales_created").length;
+    const canceled = results.filter((item) => item.status === "cancel_created").length;
+    const duplicated = results.filter((item) => item.status === "duplicate").length;
+
     return NextResponse.json({
       ok: true,
-      message: "사이다페이 결제내역 동기화 완료",
+      message: "사이다페이 최근 7일 결제내역 동기화 완료",
+      dateRange: getKoreaDateRange(),
+      targetProduct: TARGET_PRODUCT,
       totalFound: rows.length,
+      created,
+      canceled,
+      duplicated,
       results,
     });
   } catch (error) {
