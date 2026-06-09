@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const TARGET_PRODUCT = "분양회(얼리버드)";
-const DAYS_BACK = 7;
+
+const CIDERPAY_PAYMENTS_URL =
+  "https://my.ciderpay.com/se/regularPayment/payments?paySubMethod=BILLING_RP&orderVal=totalStatus.completeDate&orderAsc=false&state=&keyword=&startDate=&endDate=&dateRange=&minTotalPrice=&maxTotalPrice=&cardNum=";
 
 function cleanText(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -14,23 +16,6 @@ function cleanText(value: string) {
 
 function onlyNumber(value: string) {
   return Number(value.replace(/[^0-9]/g, "")) || 0;
-}
-
-function formatDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function getKoreaDateRange() {
-  const now = new Date();
-  const koreaNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const end = new Date(koreaNow);
-  const start = new Date(koreaNow);
-  start.setDate(start.getDate() - DAYS_BACK);
-
-  return {
-    startDate: formatDate(start),
-    endDate: formatDate(end),
-  };
 }
 
 function getPaymentIdFromHref(href: string) {
@@ -41,26 +26,6 @@ function getPaymentIdFromHref(href: string) {
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-function buildPaymentsUrl() {
-  const { startDate, endDate } = getKoreaDateRange();
-
-  const params = new URLSearchParams({
-    paySubMethod: "BILLING_RP",
-    orderVal: "totalStatus.completeDate",
-    orderAsc: "false",
-    state: "",
-    keyword: "",
-    startDate,
-    endDate,
-    dateRange: "",
-    minTotalPrice: "",
-    maxTotalPrice: "",
-    cardNum: "",
-  });
-
-  return `https://my.ciderpay.com/se/regularPayment/payments?${params.toString()}`;
 }
 
 export async function GET() {
@@ -74,9 +39,7 @@ export async function GET() {
       );
     }
 
-    const url = buildPaymentsUrl();
-
-    const response = await fetch(url, {
+    const response = await fetch(CIDERPAY_PAYMENTS_URL, {
       method: "GET",
       headers: {
         Cookie: cookie,
@@ -179,14 +142,16 @@ export async function GET() {
           buyerName,
           productName,
           amount,
-          status: "duplicate",
           paymentStatus: isCancel ? "결제취소" : "결제완료",
+          status: "duplicate",
           salesRecordId: existing.sales_record_id,
         });
         continue;
       }
 
-      const paymentDate = (isCancel ? canceledAtText : paidAtText).slice(0, 10);
+      const paymentDate = isCancel
+        ? canceledAtText.slice(0, 10)
+        : paidAtText.slice(0, 10);
 
       const memo = [
         isCancel
@@ -296,16 +261,17 @@ export async function GET() {
     const created = results.filter((item) => item.status === "sales_created").length;
     const canceled = results.filter((item) => item.status === "cancel_created").length;
     const duplicated = results.filter((item) => item.status === "duplicate").length;
+    const skipped = rows.length - results.length;
 
     return NextResponse.json({
       ok: true,
-      message: "사이다페이 최근 7일 결제내역 동기화 완료",
-      dateRange: getKoreaDateRange(),
+      message: "사이다페이 전체 결제내역 동기화 완료",
       targetProduct: TARGET_PRODUCT,
       totalFound: rows.length,
       created,
       canceled,
       duplicated,
+      skipped,
       results,
     });
   } catch (error) {
