@@ -21,6 +21,11 @@ function getPaymentIdFromHref(href: string) {
   return match?.[1] || "";
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export async function GET() {
   try {
     const cookie = process.env.CIDERPAY_COOKIE;
@@ -45,11 +50,23 @@ export async function GET() {
 
     const html = await response.text();
 
+    if (!response.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "사이다페이 결제내역 페이지 요청 실패",
+          status: response.status,
+        },
+        { status: 500 }
+      );
+    }
+
     if (html.includes("로그인") && !html.includes("결제내역")) {
       return NextResponse.json(
         {
           ok: false,
-          message: "사이다페이 로그인이 만료되었습니다. CIDERPAY_COOKIE를 새로 넣어야 합니다.",
+          message:
+            "사이다페이 로그인이 만료되었습니다. CIDERPAY_COOKIE를 새로 넣어야 합니다.",
         },
         { status: 401 }
       );
@@ -57,8 +74,7 @@ export async function GET() {
 
     const $ = cheerio.load(html);
     const rows = $("tr.success_tr");
-
-    const results: any[] = [];
+    const results: Array<Record<string, unknown>> = [];
 
     for (const row of rows.toArray()) {
       const $row = $(row);
@@ -89,16 +105,23 @@ export async function GET() {
           .text()
       );
 
-      if (!externalPaymentId || !buyerName || !amount || !statusText.includes("결제완료")) {
+      if (
+        !externalPaymentId ||
+        !buyerName ||
+        !amount ||
+        !statusText.includes("결제완료")
+      ) {
         continue;
       }
 
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from("external_payment_records")
         .select("id, sales_record_id")
         .eq("provider", "CIDERPAY")
         .eq("external_payment_id", externalPaymentId)
         .maybeSingle();
+
+      if (existingError) throw existingError;
 
       if (existing?.sales_record_id) {
         results.push({
@@ -106,6 +129,7 @@ export async function GET() {
           productName,
           amount,
           status: "duplicate",
+          salesRecordId: existing.sales_record_id,
         });
         continue;
       }
@@ -160,7 +184,8 @@ export async function GET() {
             match_status: "matched",
             sales_record_id: Number(salesRecord.id),
             import_status: "sales_created",
-            import_message: "사이다페이 실제 결제내역을 통합매출로 생성했습니다.",
+            import_message:
+              "사이다페이 실제 결제내역을 통합매출로 생성했습니다.",
             raw_data: {
               buyerName,
               productName,
@@ -194,7 +219,7 @@ export async function GET() {
       {
         ok: false,
         message: "사이다페이 결제내역 동기화 실패",
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       },
       { status: 500 }
     );
