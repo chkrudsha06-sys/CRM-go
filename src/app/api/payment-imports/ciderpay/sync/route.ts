@@ -55,6 +55,45 @@ function buildPaymentsUrl(page: number) {
   return `https://my.ciderpay.com/se/regularPayment/payments?${params.toString()}`;
 }
 
+async function ciderpayLogin() {
+  const id = process.env.CIDERPAY_ID;
+  const password = process.env.CIDERPAY_PASSWORD;
+
+  if (!id || !password) {
+    throw new Error("CIDERPAY_ID 또는 CIDERPAY_PASSWORD 환경변수가 없습니다.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("user_id", id);
+  form.set("user_pass", password);
+
+  const response = await fetch("https://my.ciderpay.com/login", {
+    method: "POST",
+    headers: {
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      Origin: "https://my.ciderpay.com",
+      Referer: "https://my.ciderpay.com/login",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36",
+    },
+    body: form.toString(),
+    cache: "no-store",
+    redirect: "manual",
+  });
+
+  const setCookie = response.headers.get("set-cookie") || "";
+  const jsessionMatch = setCookie.match(/JSESSIONID=([^;]+)/);
+
+  if (!jsessionMatch?.[1]) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`사이다페이 로그인 실패 또는 쿠키 발급 실패: ${text.slice(0, 300)}`);
+  }
+
+  return `JSESSIONID=${jsessionMatch[1]}`;
+}
+
 async function salesRecordExists(id: unknown) {
   const numericId = Number(id);
   if (!numericId) return false;
@@ -88,9 +127,7 @@ async function fetchCiderpayPage(page: number, cookie: string) {
   }
 
   if (html.includes("로그인") && !html.includes("결제내역")) {
-    const error = new Error("사이다페이 로그인이 만료되었습니다. CIDERPAY_COOKIE를 새로 넣어야 합니다.");
-    error.name = "CIDERPAY_LOGIN_EXPIRED";
-    throw error;
+    throw new Error("사이다페이 자동 로그인 세션이 유효하지 않습니다.");
   }
 
   return html;
@@ -283,14 +320,7 @@ async function processPaymentRow($: cheerio.CheerioAPI, row: any) {
 
 export async function GET() {
   try {
-    const cookie = process.env.CIDERPAY_COOKIE;
-
-    if (!cookie) {
-      return NextResponse.json(
-        { ok: false, message: "CIDERPAY_COOKIE 환경변수가 없습니다." },
-        { status: 500 }
-      );
-    }
+    const cookie = await ciderpayLogin();
 
     const results: Array<Record<string, unknown>> = [];
     let totalFound = 0;
