@@ -3,7 +3,7 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/call-recordings/process?limit=1",
+      "path": "/api/call-recordings/process",
       "schedule": "0 0 * * *"
     },
     {
