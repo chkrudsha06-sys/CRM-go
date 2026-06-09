@@ -25,6 +25,15 @@ function getPaymentIdFromHref(href: string) {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
+
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
+  }
+
   return String(error);
 }
 
@@ -205,7 +214,7 @@ export async function GET() {
       const { data: salesRecord, error: salesError } = await supabase
         .from("ad_executions")
         .insert(salesPayload)
-        .select("*")
+        .select("id")
         .single();
 
       if (salesError) throw salesError;
@@ -225,7 +234,6 @@ export async function GET() {
             completed_at: isCancel ? canceledAtText || null : paidAtText || null,
             paid_amount: isCancel ? 0 : amount,
             billing_amount: amount,
-            refund_amount: isCancel ? amount : 0,
             match_status: "matched",
             sales_record_id: Number(salesRecord.id),
             import_status: isCancel ? "cancel_created" : "sales_created",
