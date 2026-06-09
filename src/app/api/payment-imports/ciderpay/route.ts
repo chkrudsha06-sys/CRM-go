@@ -1,248 +1,341 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import * as cheerio from "cheerio";
 import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type CiderpayBody = Record<string, unknown>;
+const TARGET_PRODUCT = "분양회(얼리버드)";
+const MAX_PAGES = 2;
 
-function stringifyError(error: unknown) {
+function cleanText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function onlyNumber(value: string) {
+  return Number(value.replace(/[^0-9]/g, "")) || 0;
+}
+
+function getPaymentIdFromHref(href: string) {
+  const match = href.match(/\/se\/payment\/view\/([^"']+)/);
+  return match?.[1] || "";
+}
+
+function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-
-  if (typeof error === "object" && error !== null) {
-    const value = error as { message?: string; details?: string; hint?: string; code?: string };
-    return [value.message, value.details, value.hint, value.code].filter(Boolean).join(" / ");
+  if (error && typeof error === "object") {
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
   }
-
   return String(error);
 }
 
-function toText(value: unknown) {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-}
-
-function toNumber(value: unknown) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const cleaned = toText(value).replace(/[^0-9.-]/g, "");
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function normalizePhone(value: unknown) {
-  const digits = toText(value).replace(/\D/g, "");
-  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-  return toText(value);
-}
-
-function normalizeDate(value: unknown) {
-  const text = toText(value);
-  if (!text) return new Date().toISOString().slice(0, 10);
-
-  const match = text.match(/(20\d{2})[-./년\s]+(\d{1,2})[-./월\s]+(\d{1,2})/);
-  if (match) {
-    return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getValue(body: CiderpayBody, keys: string[]) {
-  for (const key of keys) {
-    const value = body[key];
-    if (value !== undefined && value !== null && value !== "") return value;
-  }
-  return "";
-}
-
-function isAuthorized(request: NextRequest, body: CiderpayBody) {
-  const configuredSecret = process.env.CIDERPAY_WEBHOOK_SECRET;
-  if (!configuredSecret) return true;
-
-  const headerSecret = request.headers.get("x-ciderpay-secret") || "";
-  const bodySecret = toText(getValue(body, ["secret", "webhookSecret", "ciderpaySecret"]));
-
-  return headerSecret === configuredSecret || bodySecret === configuredSecret;
-}
-
-function isPaidStatus(status: string) {
-  if (!status) return true;
-  const upper = status.toUpperCase();
-  return ["PAID", "SUCCESS", "DONE", "APPROVED", "COMPLETE", "COMPLETED", "결제완료", "승인", "완료"].some((word) =>
-    upper.includes(word)
-  );
-}
-
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    message: "CiderPay payment endpoint is ready.",
-    endpoint: "/api/payment-imports/ciderpay",
+function buildPaymentsUrl(page: number) {
+  const params = new URLSearchParams({
+    page: String(page),
+    paySubMethod: "BILLING_RP",
+    orderVal: "",
+    orderAsc: "false",
+    state: "",
+    keyword: "",
+    startDate: "",
+    endDate: "",
+    dateRange: "",
+    minTotalPrice: "",
+    maxTotalPrice: "",
+    cardNum: "",
   });
+
+  return `https://my.ciderpay.com/se/regularPayment/payments?${params.toString()}`;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = (await request.json()) as CiderpayBody;
+async function ciderpayLogin() {
+  const id = process.env.CIDERPAY_ID;
+  const password = process.env.CIDERPAY_PASSWORD;
 
-    if (!isAuthorized(request, body)) {
-      return NextResponse.json({ ok: false, message: "Unauthorized CiderPay request." }, { status: 401 });
+  if (!id || !password) {
+    throw new Error("CIDERPAY_ID 또는 CIDERPAY_PASSWORD 환경변수가 없습니다.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("user_id", id);
+  form.set("user_pass", password);
+
+  const response = await fetch("https://my.ciderpay.com/login", {
+    method: "POST",
+    headers: {
+      Accept: "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      Origin: "https://my.ciderpay.com",
+      Referer: "https://my.ciderpay.com/login",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36",
+    },
+    body: form.toString(),
+    cache: "no-store",
+    redirect: "manual",
+  });
+
+  const setCookie = response.headers.get("set-cookie") || "";
+  const jsessionMatch = setCookie.match(/JSESSIONID=([^;]+)/);
+
+  if (!jsessionMatch?.[1]) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`사이다페이 로그인 실패 또는 쿠키 발급 실패: ${text.slice(0, 300)}`);
+  }
+
+  return `JSESSIONID=${jsessionMatch[1]}`;
+}
+
+async function syncCiderpay(maxPages: number) {
+  const cookie = await ciderpayLogin();
+
+  const results: Array<Record<string, unknown>> = [];
+  let totalRows = 0;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await fetch(buildPaymentsUrl(page), {
+      method: "GET",
+      headers: {
+        Cookie: cookie,
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      cache: "no-store",
+    });
+
+    const html = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`사이다페이 결제내역 페이지 요청 실패: ${response.status}`);
     }
 
-    const externalPaymentId = toText(
-      getValue(body, ["transactionId", "tid", "paymentId", "payId", "orderNo", "ordNo", "moid", "approvalNo"])
-    );
-    const memberName = toText(getValue(body, ["memberName", "buyerName", "customerName", "name", "userName"]));
-    const memberPhone = normalizePhone(getValue(body, ["memberPhone", "buyerPhone", "customerPhone", "phone", "mobile", "tel"]));
-    const productName = toText(getValue(body, ["productName", "goodsName", "itemName", "serviceName"])) || "분양회 월회비";
-    const paymentStatus = toText(getValue(body, ["status", "paymentStatus", "resultStatus", "payStatus"])) || "결제완료";
-    const paymentMethod = toText(getValue(body, ["paymentMethod", "payMethod", "method", "cardName"])) || "신용카드";
-    const paidAmount = toNumber(getValue(body, ["amount", "payAmount", "paidAmount", "totalAmount", "amt", "price"]));
-    const paidAt = normalizeDate(getValue(body, ["paidAt", "paymentDate", "payDate", "approvedAt", "approvalDate"]));
-
-    if (!externalPaymentId) {
-      return NextResponse.json({ ok: false, message: "사이다페이 거래번호가 없습니다." }, { status: 400 });
+    if (html.includes("로그인") && !html.includes("결제내역")) {
+      throw new Error("사이다페이 자동 로그인 세션이 유효하지 않습니다.");
     }
 
-    if (!paidAmount || paidAmount <= 0) {
-      return NextResponse.json({ ok: false, message: "사이다페이 결제금액이 없습니다." }, { status: 400 });
-    }
+    const $ = cheerio.load(html);
+    const rows = $("tr.success_tr, tr.cancel_tr");
+    totalRows += rows.length;
 
-    const { data: existing, error: existingError } = await supabase
-      .from("external_payment_records")
-      .select("id,sales_record_id,import_status")
-      .eq("provider", "CIDERPAY")
-      .eq("external_payment_id", externalPaymentId)
-      .maybeSingle();
+    if (rows.length === 0) break;
 
-    if (existingError) throw existingError;
+    for (const row of rows.toArray()) {
+      const $row = $(row);
 
-    if (existing?.sales_record_id) {
-      return NextResponse.json({
-        ok: true,
-        status: "duplicate",
-        message: "이미 통합매출관리로 반영된 사이다페이 결제건입니다.",
-        salesRecordId: existing.sales_record_id,
-      });
-    }
+      const buyerName = cleanText(
+        $row
+          .find(".multiTd_Li")
+          .filter((_, el) => $(el).text().includes("구매자명"))
+          .find("strong")
+          .first()
+          .text()
+      );
 
-    const baseLogPayload = {
-      provider: "CIDERPAY",
-      external_payment_id: externalPaymentId,
-      member_number: null,
-      contract_number: null,
-      member_name: memberName || null,
-      member_phone: memberPhone || null,
-      billing_month: null,
-      product_name: productName || null,
-      collection_status: isPaidStatus(paymentStatus) ? "완납" : null,
-      payment_status: paymentStatus || null,
-      payment_type: "정기결제",
-      payment_method: paymentMethod || null,
-      promised_at: null,
-      paid_at: paidAt,
-      completed_at: paidAt,
-      billing_amount: paidAmount,
-      paid_amount: paidAmount,
-      unpaid_amount: 0,
-      result_message: paymentStatus || null,
-      member_type: "분양회",
-      manager_name: "주식회사광고인",
-      match_status: memberPhone || memberName ? "matched" : "pending",
-      raw_data: body,
-    };
+      const productAnchor = $row.find('a[href^="/se/payment/view/"]').first();
+      const productName = cleanText(productAnchor.text());
+      const href = productAnchor.attr("href") || "";
+      const paymentViewId = getPaymentIdFromHref(href);
 
-    if (!isPaidStatus(paymentStatus)) {
-      const { data: paymentLog, error: logError } = await supabase
+      const statusText = cleanText($row.find("td").eq(4).text());
+      const amount = onlyNumber($row.find(".price_txt strong").first().text());
+
+      const paidAtText = cleanText(
+        $row
+          .find(".multiTd_Li")
+          .filter((_, el) => $(el).text().includes("결제완료일시"))
+          .find(".multiTd_LiDd")
+          .first()
+          .text()
+      );
+
+      const canceledAtText = cleanText(
+        $row
+          .find(".multiTd_Li")
+          .filter((_, el) => $(el).text().includes("취소완료일시"))
+          .find(".multiTd_LiDd")
+          .first()
+          .text()
+      );
+
+      if (!paymentViewId || !buyerName || !amount) continue;
+      if (productName !== TARGET_PRODUCT) continue;
+
+      const isCancel = statusText.includes("결제취소");
+      const isComplete = statusText.includes("결제완료");
+
+      if (!isCancel && !isComplete) continue;
+
+      const externalPaymentId = isCancel
+        ? `${paymentViewId}_CANCEL`
+        : `${paymentViewId}_COMPLETE`;
+
+      const { data: existing, error: existingError } = await supabase
         .from("external_payment_records")
-        .upsert(
-          {
-            ...baseLogPayload,
-            import_status: "logged_only",
-            import_message: "결제완료 상태가 아니어서 매출로 생성하지 않고 로그만 저장했습니다.",
-          },
-          { onConflict: "provider,external_payment_id" }
-        )
+        .select("id, sales_record_id")
+        .eq("provider", "CIDERPAY")
+        .eq("external_payment_id", externalPaymentId)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+
+      if (existing?.sales_record_id) {
+        results.push({
+          buyerName,
+          productName,
+          amount,
+          paymentStatus: isCancel ? "결제취소" : "결제완료",
+          status: "duplicate",
+          salesRecordId: existing.sales_record_id,
+        });
+        continue;
+      }
+
+      const paymentDate = isCancel
+        ? canceledAtText.slice(0, 10)
+        : paidAtText.slice(0, 10);
+
+      const memo = [
+        isCancel ? "사이다페이 정기결제 취소 자동반영" : "사이다페이 정기결제 완료 자동반영",
+        `거래번호: ${paymentViewId}`,
+        `구매자명: ${buyerName}`,
+        `상품명: ${productName}`,
+        `상태: ${isCancel ? "결제취소" : "결제완료"}`,
+        `금액: ${amount.toLocaleString()}원`,
+        `결제완료일시: ${paidAtText || "-"}`,
+        `취소완료일시: ${canceledAtText || "-"}`,
+      ].join("\n");
+
+      const salesPayload = isCancel
+        ? {
+            member_name: buyerName,
+            bunyanghoe_number: "",
+            execution_amount: 0,
+            vat_amount: 0,
+            refund_amount: amount,
+            channel: "사이다페이",
+            contract_route: "분양회",
+            payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+            team_member: "주식회사광고인",
+            consultant: "",
+            hightarget_mileage: 0,
+            hightarget_reward: 0,
+            hogaengnono_reward: 0,
+            lms_reward: 0,
+            memo,
+          }
+        : {
+            member_name: buyerName,
+            bunyanghoe_number: "",
+            execution_amount: amount,
+            vat_amount: amount,
+            refund_amount: 0,
+            channel: "사이다페이",
+            contract_route: "분양회",
+            payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+            team_member: "주식회사광고인",
+            consultant: "",
+            hightarget_mileage: 0,
+            hightarget_reward: 0,
+            hogaengnono_reward: 0,
+            lms_reward: 0,
+            memo,
+          };
+
+      const { data: salesRecord, error: salesError } = await supabase
+        .from("ad_executions")
+        .insert(salesPayload)
         .select("id")
         .single();
 
+      if (salesError) throw salesError;
+
+      const { error: logError } = await supabase
+        .from("external_payment_records")
+        .upsert(
+          {
+            provider: "CIDERPAY",
+            external_payment_id: externalPaymentId,
+            member_name: buyerName,
+            member_phone: "",
+            product_name: productName,
+            payment_status: isCancel ? "결제취소" : "결제완료",
+            payment_method: "정기결제",
+            paid_at: paidAtText || null,
+            completed_at: isCancel ? canceledAtText || null : paidAtText || null,
+            paid_amount: isCancel ? 0 : amount,
+            billing_amount: amount,
+            match_status: "matched",
+            sales_record_id: Number(salesRecord.id),
+            import_status: isCancel ? "cancel_created" : "sales_created",
+            import_message: isCancel
+              ? "사이다페이 결제취소 내역을 통합매출 환불 기록으로 생성했습니다."
+              : "사이다페이 결제완료 내역을 통합매출로 생성했습니다.",
+            raw_data: {
+              buyerName,
+              productName,
+              amount,
+              paidAtText,
+              canceledAtText,
+              paymentViewId,
+              externalPaymentId,
+              statusText,
+              page,
+            },
+          },
+          { onConflict: "provider,external_payment_id" }
+        );
+
       if (logError) throw logError;
 
-      return NextResponse.json({
-        ok: true,
-        status: "logged_only",
-        message: "결제완료 상태가 아니어서 로그만 저장했습니다.",
-        paymentLogId: paymentLog?.id,
+      results.push({
+        buyerName,
+        productName,
+        amount,
+        paymentStatus: isCancel ? "결제취소" : "결제완료",
+        status: isCancel ? "cancel_created" : "sales_created",
+        salesRecordId: salesRecord.id,
       });
     }
+  }
 
-    const memo = [
-      "사이다페이 정기결제 자동반영",
-      `거래번호: ${externalPaymentId}`,
-      `회원명: ${memberName || "-"}`,
-      `연락처: ${memberPhone || "-"}`,
-      `상품명: ${productName || "-"}`,
-      `결제수단: ${paymentMethod || "-"}`,
-      `결제상태: ${paymentStatus || "-"}`,
-      `결제금액: ${paidAmount.toLocaleString()}원`,
-    ].join("\n");
+  return {
+    totalRows,
+    results,
+  };
+}
 
-    const { data: salesRow, error: salesError } = await supabase
-      .from("ad_executions")
-      .insert({
-        member_name: memberName || null,
-        bunyanghoe_number: null,
-        execution_amount: paidAmount,
-        vat_amount: paidAmount,
-        refund_amount: 0,
-        channel: "사이다페이",
-        contract_route: "분양회",
-        payment_date: paidAt,
-        team_member: "주식회사광고인",
-        consultant: memberPhone || null,
-        hightarget_mileage: 0,
-        hightarget_reward: 0,
-        hogaengnono_reward: 0,
-        lms_reward: 0,
-        memo,
-      })
-      .select("id")
-      .single();
+export async function GET() {
+  try {
+    const { totalRows, results } = await syncCiderpay(MAX_PAGES);
 
-    if (salesError) throw salesError;
-
-    const { data: paymentLog, error: logError } = await supabase
-      .from("external_payment_records")
-      .upsert(
-        {
-          ...baseLogPayload,
-          sales_record_id: Number(salesRow.id),
-          import_status: "sales_created",
-          import_message: "사이다페이 결제내역을 통합매출관리로 자동 반영했습니다.",
-        },
-        { onConflict: "provider,external_payment_id" }
-      )
-      .select("id")
-      .single();
-
-    if (logError) throw logError;
+    const created = results.filter((item) => item.status === "sales_created").length;
+    const canceled = results.filter((item) => item.status === "cancel_created").length;
+    const duplicated = results.filter((item) => item.status === "duplicate").length;
 
     return NextResponse.json({
       ok: true,
-      status: "sales_created",
-      message: "사이다페이 결제가 통합매출관리로 자동 반영되었습니다.",
-      paymentLogId: paymentLog?.id,
-      salesRecordId: salesRow.id,
+      message: "사이다페이 동기화 완료",
+      mode: "recent",
+      maxPages: MAX_PAGES,
+      targetProduct: TARGET_PRODUCT,
+      totalFound: totalRows,
+      created,
+      canceled,
+      duplicated,
+      results,
     });
   } catch (error) {
     return NextResponse.json(
       {
         ok: false,
-        message: "CiderPay payment import failed.",
-        error: stringifyError(error),
+        message: "사이다페이 동기화 실패",
+        error: getErrorMessage(error),
       },
       { status: 500 }
     );
