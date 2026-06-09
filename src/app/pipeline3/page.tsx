@@ -2876,4 +2876,3 @@ export default function Pipeline3Page() {
     </div>
   );
 }
-
