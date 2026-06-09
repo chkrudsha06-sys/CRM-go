@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  Edit3,
   FileText,
   MessageCircle,
   Phone,
@@ -569,6 +570,8 @@ function NoteComposer({
 }
 
 function NotesList({ notes }: { notes: CustomerDbNote[] }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
   if (!notes.length) {
     return (
       <div
@@ -582,37 +585,66 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
   }
 
   return (
-    <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
-      {notes.map((note) => (
-        <article
-          key={note.id}
-          className="rounded-[12px] border px-2.5 py-2"
-          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-        >
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span
-                className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
-                style={{
-                  background: "var(--accent-subtle)",
-                  border: "1px solid var(--accent-border)",
-                  color: "var(--accent-text)",
-                }}
-              >
-                {note.activityType}
-              </span>
-              <p className="crm-meta">{note.noteDate} · {timeLabel(note.createdAt)}</p>
-            </div>
-            <p className="crm-tiny">{note.author}</p>
-          </div>
-          <p
-            className="whitespace-pre-wrap text-[12.5px] font-[700] leading-6"
-            style={{ color: "var(--text)" }}
+    <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+      {notes.map((note) => {
+        const isExpanded = expandedId === note.id;
+        const preview = note.content.replace(/\s+/g, " ").trim();
+
+        return (
+          <article
+            key={note.id}
+            className="overflow-hidden rounded-[13px] border"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           >
-            {note.content}
-          </p>
-        </article>
-      ))}
+            <button
+              type="button"
+              onClick={() => setExpandedId(isExpanded ? null : note.id)}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:opacity-90"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[11px] font-[950]"
+                    style={{
+                      background: "var(--accent-subtle)",
+                      border: "1px solid var(--accent-border)",
+                      color: "var(--accent-text)",
+                    }}
+                  >
+                    {note.activityType}
+                  </span>
+                  <span className="text-[12px] font-[900]" style={{ color: "var(--text-muted)" }}>
+                    {note.noteDate} · {timeLabel(note.createdAt)}
+                  </span>
+                  <span className="ml-auto text-[11px] font-[900]" style={{ color: "var(--text-faint)" }}>
+                    {note.author}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[12.5px] font-[760]" style={{ color: "var(--text-strong)" }}>
+                  {preview || "내용 없음"}
+                </p>
+              </div>
+              <span className="shrink-0 text-[11px] font-[900]" style={{ color: "var(--accent-text)" }}>
+                {isExpanded ? "닫기" : "보기"}
+              </span>
+            </button>
+
+            {isExpanded ? (
+              <div
+                className="border-t px-3 py-3"
+                style={{ borderColor: "var(--border-subtle)" }}
+              >
+                <p
+                  className="whitespace-pre-wrap text-[12.5px] font-[700] leading-6"
+                  style={{ color: "var(--text)" }}
+                >
+                  {note.content}
+                </p>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -637,7 +669,7 @@ function DetailBlock({
       <p className="crm-meta">{label}</p>
       {badge ? (
         <span
-          className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
+          className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[900]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -647,7 +679,7 @@ function DetailBlock({
           {display}
         </span>
       ) : (
-        <p className="mt-1 truncate text-[13px] font-[900] leading-5" style={{ color: "var(--text-strong)" }}>{display}</p>
+        <p className="mt-1 truncate text-[13.5px] font-[900] leading-5" style={{ color: "var(--text-strong)" }}>{display}</p>
       )}
     </div>
   );
@@ -747,6 +779,7 @@ export default function CustomerDbPage() {
   const [records, setRecords] = useState<RawCustomerRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<RawCustomerRecord | null>(null);
   const [form, setForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
   const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
   const [selectedRemoteNotes, setSelectedRemoteNotes] = useState<CustomerDbNote[]>([]);
@@ -926,6 +959,23 @@ export default function CustomerDbPage() {
     setForm({ ...EMPTY_FORM });
     setFormError("");
     setShowForm(false);
+    setEditingRecord(null);
+  };
+
+  const openEditForm = (record: RawCustomerRecord) => {
+    setEditingRecord(record);
+    setForm({
+      name: record.name || "",
+      title: record.title || "",
+      phone: record.phone || "",
+      intake_route: record.intake_route || "",
+      company: record.company || "",
+      activity_type: record.activity_type || "",
+      memo: record.memo || "",
+      first_note: "",
+    });
+    setFormError("");
+    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -960,6 +1010,38 @@ export default function CustomerDbPage() {
         ]
       : [];
 
+    if (editingRecord) {
+      const updatedRecord: RawCustomerRecord = {
+        ...editingRecord,
+        name: form.name.trim(),
+        title: form.title.trim(),
+        phone: form.phone.trim(),
+        intake_route: form.intake_route,
+        company: form.company.trim(),
+        activity_type: form.activity_type,
+        memo: form.memo.trim(),
+        notes: firstNote.length ? [...firstNote, ...editingRecord.notes] : editingRecord.notes,
+        updated_at: now,
+      };
+
+      try {
+        const contactId = await saveCustomerDbRecordToContacts(updatedRecord);
+        for (const note of firstNote) {
+          await saveCustomerDbNoteToSupabase(contactId, note);
+        }
+      } catch (error) {
+        console.error("고객DB 수정 저장 실패", error);
+        setFormError("Supabase 저장 실패로 고객 정보를 수정하지 못했습니다.");
+        return;
+      }
+
+      setRecords((items) => items.map((item) => (item.id === editingRecord.id ? updatedRecord : item)));
+      setSelectedRecord((current) => (current?.id === editingRecord.id ? updatedRecord : current));
+      resetForm();
+      showToast("고객DB 정보가 수정되었습니다.");
+      return;
+    }
+
     const record: RawCustomerRecord = {
       id: Date.now(),
       name: form.name.trim(),
@@ -990,6 +1072,7 @@ export default function CustomerDbPage() {
     resetForm();
     showToast("고객DB에 등록되었습니다.");
   };
+
 
   const handleAddNote = async (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
     const createdAt = new Date().toISOString();
@@ -1235,7 +1318,7 @@ export default function CustomerDbPage() {
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 8px !important;
+        gap: 6px !important;
         width: 100% !important;
       }
     `}</style>
@@ -1334,7 +1417,7 @@ export default function CustomerDbPage() {
               <col className="w-[160px]" />
               <col className="w-[230px]" />
               <col className="w-[170px]" />
-              <col className="w-[245px]" />
+              <col className="w-[330px]" />
             </colgroup>
             <thead>
               <tr>
@@ -1431,6 +1514,13 @@ export default function CustomerDbPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => openEditForm(record)}
+                          className="btn-premium btn-secondary h-9 px-3 text-[12px]"
+                        >
+                          <Edit3 size={13} /> 수정
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => deleteRecord(record)}
                           className="btn-premium btn-danger h-9 px-3 text-[12px]"
                         >
@@ -1489,7 +1579,7 @@ export default function CustomerDbPage() {
           />
 
           <aside
-            className="absolute right-0 top-0 flex h-full w-full max-w-[720px] animate-[crmSlideIn_220ms_ease-out] flex-col border-l"
+            className="absolute right-0 top-0 flex h-full w-full max-w-[760px] animate-[crmSlideIn_220ms_ease-out] flex-col border-l"
             style={{
               background: "var(--surface)",
               borderColor: "var(--border)",
@@ -1533,8 +1623,8 @@ export default function CustomerDbPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              <section className="premium-card p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <section className="premium-card p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-[14px] font-[900]" style={{ color: "var(--text-strong)" }}>고객 기본정보</p>
@@ -1543,6 +1633,9 @@ export default function CustomerDbPage() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
                       <ArrowRight size={14} /> VIP활동DB 이관
+                    </button>
+                    <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-9 px-3 text-[12px]">
+                      <Edit3 size={14} /> 수정
                     </button>
                     <button
                       type="button"
@@ -1559,7 +1652,7 @@ export default function CustomerDbPage() {
                   </div>
                 </div>
 
-                <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <DetailBlock label="고객명" value={selectedRecord.name} />
                   <DetailBlock label="직급" value={selectedRecord.title} />
                   <DetailBlock label="연락처" value={selectedRecord.phone} />
@@ -1571,24 +1664,24 @@ export default function CustomerDbPage() {
                 </div>
               </section>
 
-              <section className="premium-card mt-2 p-3">
+              <section className="premium-card mt-3 p-4">
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <MessageCircle size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">메모</p>
                 </div>
                 <div className="rounded-[12px] border px-2.5 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="max-h-[54px] overflow-y-auto whitespace-pre-wrap text-[12.5px] font-[720] leading-5">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
+                  <p className="max-h-[86px] overflow-y-auto whitespace-pre-wrap text-[12.5px] font-[720] leading-5">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
                 </div>
               </section>
 
-              <section className="premium-card mt-2 p-3">
+              <section className="premium-card mt-3 p-4">
                 <div className="mb-1.5 flex items-center gap-1.5">
                   <FileText size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">활동노트</p>
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
                 <div className="mt-1.5">
-                  <div className="max-h-[360px] overflow-y-auto pr-1"><NotesList notes={selectedDisplayNotes} /></div>
+                  <NotesList notes={selectedDisplayNotes} />
                 </div>
               </section>
             </div>
@@ -1601,8 +1694,8 @@ export default function CustomerDbPage() {
           <div className="crm-modal max-h-[92vh] w-full max-w-[980px] overflow-y-auto p-5 md:p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 className="crm-title">고객DB 신규등록</h2>
-                <p className="crm-subtitle mt-2">VIP활동DB 발굴을 위한 원천 고객을 등록합니다.</p>
+                <h2 className="crm-title">{editingRecord ? "고객DB 수정" : "고객DB 신규등록"}</h2>
+                <p className="crm-subtitle mt-2">{editingRecord ? "고객 기본정보와 활동항목을 수정합니다." : "VIP활동DB 발굴을 위한 원천 고객을 등록합니다."}</p>
               </div>
               <button type="button" onClick={resetForm} className="btn-premium btn-ghost h-10 w-10 p-0">
                 <X size={17} />
@@ -1664,11 +1757,11 @@ export default function CustomerDbPage() {
                 />
               </label>
               <label className="block">
-                <InputLabel>최초 활동노트</InputLabel>
+                <InputLabel>{editingRecord ? "추가 활동노트" : "최초 활동노트"}</InputLabel>
                 <textarea
                   value={form.first_note}
                   onChange={(event) => setForm((current) => ({ ...current, first_note: event.target.value }))}
-                  placeholder="TM 또는 콜드톡 활동내용을 입력하세요."
+                  placeholder={editingRecord ? "수정하면서 추가할 활동노트가 있으면 입력하세요." : "TM 또는 콜드톡 활동내용을 입력하세요."}
                   rows={6}
                   className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
                   style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
@@ -1690,7 +1783,7 @@ export default function CustomerDbPage() {
                 취소
               </button>
               <button type="button" onClick={handleSave} className="btn-premium btn-primary h-9 px-3 text-[12px]">
-                <Save size={15} /> 고객DB 등록
+                <Save size={15} /> {editingRecord ? "수정 저장" : "고객DB 등록"}
               </button>
             </div>
           </div>
