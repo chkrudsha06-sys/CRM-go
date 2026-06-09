@@ -39,10 +39,12 @@ type CustomerDbRecord = {
   company: string;
   management_stage: string;
   customer_grade: string;
-  assigned_to?: string | null;
   memo: string;
   created_at: string;
   updated_at: string;
+  crm_db_source?: string | null;
+  vip_transferred_at?: string | null;
+  assigned_to?: string | null;
 };
 
 type FormState = {
@@ -66,13 +68,11 @@ type ContactNote = {
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
+const VIP_DB_SOURCE = "vip_activity";
+const ARCHIVED_DB_SOURCE = "archived";
 const DEFAULT_ASSIGNED_TO = "조계현";
-
-function normalizeAssignedTo(value?: string | null) {
-  const allowed = ["조계현", "이세호", "기여운", "최연전"];
-  const normalized = String(value || "").trim();
-  return allowed.includes(normalized) ? normalized : DEFAULT_ASSIGNED_TO;
-}
+const VIP_SELECT_FIELDS =
+  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
 
 function normalizePhoneDigits(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
@@ -263,7 +263,6 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
   if (!hasAssessment) {
     return {
       ...record,
-      assigned_to: normalizeAssignedTo(record.assigned_to),
       customer_grade: UNREVIEWED_GRADE,
       memo: cleanMemo,
     };
@@ -274,7 +273,6 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
 
   return {
     ...record,
-    assigned_to: normalizeAssignedTo(record.assigned_to),
     customer_grade:
       storedGrade && storedGrade !== UNREVIEWED_GRADE
         ? storedGrade
@@ -337,26 +335,15 @@ export default function ContactsPage() {
     let alive = true;
 
     const loadRecords = async () => {
-      let localRecords: CustomerDbRecord[] = [];
-
       try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as CustomerDbRecord[];
-          if (Array.isArray(parsed)) {
-            localRecords = parsed.map(normalizeRecordGrade);
-          }
-        }
-      } catch {
-        localRecords = [];
-      }
+        // 과거 VIP활동DB가 사용하던 브라우저 캐시입니다.
+        // 이 값을 읽으면 Supabase에서 삭제한 고객도 다시 살아나므로 더 이상 사용하지 않습니다.
+        window.localStorage.removeItem(STORAGE_KEY);
 
-      if (alive) setRecords(localRecords);
-
-      try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,assigned_to,memo,created_at,updated_at")
+          .select(VIP_SELECT_FIELDS)
+          .eq("crm_db_source", VIP_DB_SOURCE)
           .order("updated_at", { ascending: false });
 
         if (error) throw error;
@@ -364,14 +351,15 @@ export default function ContactsPage() {
         const remoteRecords = Array.isArray(data)
           ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
           : [];
-        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
 
         if (!alive) return;
-
-        setRecords(merged);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        setRecords(remoteRecords);
       } catch (error) {
-        console.warn("VIP활동DB Supabase 불러오기 실패. localStorage 데이터로 표시합니다.", error);
+        console.error("VIP활동DB Supabase 불러오기 실패", error);
+        if (alive) {
+          setRecords([]);
+          setToast("VIP활동DB 불러오기 실패: Supabase SQL 적용 여부를 확인해주세요.");
+        }
       } finally {
         if (alive) setLoaded(true);
       }
@@ -386,7 +374,9 @@ export default function ContactsPage() {
 
   useEffect(() => {
     if (!loaded) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    // 이전 버전의 localStorage 복원 로직 때문에 삭제한 고객이 되살아나는 문제가 있어
+    // VIP활동DB는 Supabase 단일 기준으로만 운영합니다.
+    window.localStorage.removeItem(STORAGE_KEY);
   }, [loaded, records]);
 
   const showToast = (message: string) => {
@@ -496,7 +486,7 @@ export default function ContactsPage() {
     setShowForm(true);
   };
 
-  const saveRecord = () => {
+  const saveRecord = async () => {
     setFormError("");
 
     if (!form.name.trim()) {
@@ -523,73 +513,91 @@ export default function ContactsPage() {
       ? appendGradeAssessmentBlock(cleanMemo, gradeAssessment, gradeResult)
       : cleanMemo;
 
-    if (editId) {
-      const updatedRecord = records.find((record) => record.id === editId);
-      const nextUpdatedRecord: CustomerDbRecord = {
-        ...(updatedRecord || {
-          id: editId,
-          created_at: now,
-          updated_at: now,
-          name: "",
-          title: "",
-          phone: "",
-          intake_route: "",
-          management_stage: "",
-          company: "",
-          customer_grade: "",
-          assigned_to: DEFAULT_ASSIGNED_TO,
-          memo: "",
-        }),
-        name: form.name.trim(),
-        title: form.title.trim(),
-        phone: form.phone.trim(),
-        intake_route: form.intake_route,
-        management_stage: form.management_stage,
-        company: form.company.trim(),
-        customer_grade: customerGrade,
-        memo: memoWithGrade,
-        updated_at: now,
-      };
-
-      console.log("[고객DB 수정 저장값]", nextUpdatedRecord);
-      setRecords((prev) =>
-        prev.map((record) =>
-          record.id === editId ? nextUpdatedRecord : record,
-        ),
-      );
-      showToast("고객 DB가 수정되었습니다.");
-      resetForm();
-      return;
-    }
-
-    const nextRecord: CustomerDbRecord = {
-      id: Date.now(),
+    const payload = {
       name: form.name.trim(),
       title: form.title.trim(),
       phone: form.phone.trim(),
       intake_route: form.intake_route,
-      management_stage: form.management_stage,
-      company: form.company.trim(),
+      management_stage: form.management_stage || "리드",
+      company: form.company.trim() || "-",
       customer_grade: customerGrade,
       memo: memoWithGrade,
-      created_at: now,
+      crm_db_source: VIP_DB_SOURCE,
+      vip_transferred_at: now,
+      assigned_to: DEFAULT_ASSIGNED_TO,
       updated_at: now,
     };
 
-    console.log("[고객DB 신규 저장값]", nextRecord);
-    setRecords((prev) => [nextRecord, ...prev]);
-    showToast("신규 고객 DB가 등록되었습니다.");
-    resetForm();
+    try {
+      if (editId) {
+        const { data, error } = await supabase
+          .from("contacts")
+          .update(payload)
+          .eq("id", editId)
+          .eq("crm_db_source", VIP_DB_SOURCE)
+          .select(VIP_SELECT_FIELDS)
+          .single();
+
+        if (error) throw error;
+
+        const savedRecord = normalizeRecordGrade(data as CustomerDbRecord);
+        setRecords((prev) =>
+          prev.map((record) => (record.id === editId ? savedRecord : record)),
+        );
+        setSelectedRecord((current) =>
+          current?.id === editId ? savedRecord : current,
+        );
+        showToast("VIP활동DB 정보가 저장되었습니다.");
+        resetForm();
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("contacts")
+        .insert({ ...payload, created_at: now })
+        .select(VIP_SELECT_FIELDS)
+        .single();
+
+      if (error) throw error;
+
+      const savedRecord = normalizeRecordGrade(data as CustomerDbRecord);
+      setRecords((prev) => [savedRecord, ...prev]);
+      setSelectedRecord(savedRecord);
+      showToast("VIP활동DB에 등록되었습니다.");
+      resetForm();
+    } catch (error) {
+      console.error("VIP활동DB 저장 실패", error);
+      const message = "VIP활동DB 저장 실패: Supabase SQL 적용 여부를 확인해주세요.";
+      setFormError(message);
+      showToast(message);
+    }
   };
 
-  const deleteRecord = (id: number) => {
+  const deleteRecord = async (id: number) => {
     const ok = window.confirm(
-      "선택한 고객 DB를 삭제할까요? 현재 화면의 임시 데이터에서만 삭제됩니다.",
+      "선택한 고객을 VIP활동DB에서 삭제할까요? 삭제 후 다시 나타나지 않도록 DB에서 VIP 표시를 제거합니다.",
     );
     if (!ok) return;
-    setRecords((prev) => prev.filter((record) => record.id !== id));
-    if (selectedRecord?.id === id) setSelectedRecord(null);
-    showToast("고객 DB가 삭제되었습니다.");
+
+    try {
+      const { error } = await supabase
+        .from("contacts")
+        .update({
+          crm_db_source: ARCHIVED_DB_SOURCE,
+          vip_transferred_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setRecords((prev) => prev.filter((record) => record.id !== id));
+      if (selectedRecord?.id === id) setSelectedRecord(null);
+      showToast("VIP활동DB에서 삭제되었습니다.");
+    } catch (error) {
+      console.error("VIP활동DB 삭제 실패", error);
+      showToast("VIP활동DB 삭제 실패: Supabase 권한 또는 SQL을 확인해주세요.");
+    }
   };
 
   const resetFilters = () => {
