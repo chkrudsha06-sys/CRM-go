@@ -526,19 +526,19 @@ function NoteComposer({
 
   return (
     <div
-      className="space-y-2 rounded-[14px] border p-3"
+      className="space-y-1.5 rounded-[12px] border px-2.5 py-2"
       style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="crm-card-title text-[14px]">활동노트 작성</p>
+          <p className="text-[13px] font-[900]" style={{ color: "var(--text-strong)" }}>활동노트 작성</p>
           <p className="crm-tiny mt-0.5">TM 또는 콜드톡 활동을 기록합니다.</p>
         </div>
         <input
           type="date"
           value={noteDate}
           onChange={(event) => setNoteDate(event.target.value)}
-          className="h-9 rounded-[10px] border px-3 text-[12px] font-[800] outline-none"
+          className="h-8 rounded-[9px] border px-2.5 text-[12px] font-[800] outline-none"
           style={{
             background: "var(--surface)",
             borderColor: "var(--border-subtle)",
@@ -553,16 +553,16 @@ function NoteComposer({
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="활동 내용을 입력하세요."
-        rows={2}
-        className="w-full resize-none rounded-[11px] border px-3 py-2 text-[13px] font-semibold leading-6 outline-none"
+        rows={1}
+        className="w-full resize-none rounded-[10px] border px-3 py-2 text-[12.5px] font-semibold leading-5 outline-none"
         style={{
           background: "var(--surface)",
           borderColor: "var(--border-subtle)",
           color: "var(--text-strong)",
         }}
       />
-      <button type="button" onClick={handleAdd} className="btn-premium btn-primary w-full">
-        <Plus size={14} /> 활동노트 저장
+      <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-9 w-full text-[12px]">
+        <Plus size={14} /> 저장
       </button>
     </div>
   );
@@ -586,13 +586,13 @@ function NotesList({ notes }: { notes: CustomerDbNote[] }) {
       {notes.map((note) => (
         <article
           key={note.id}
-          className="rounded-[14px] border p-3"
+          className="rounded-[12px] border px-2.5 py-2"
           style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
         >
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span
-                className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
                 style={{
                   background: "var(--accent-subtle)",
                   border: "1px solid var(--accent-border)",
@@ -631,13 +631,13 @@ function DetailBlock({
 
   return (
     <div
-      className="rounded-[14px] border p-3"
+      className="rounded-[12px] border px-2.5 py-2"
       style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
       <p className="crm-meta">{label}</p>
       {badge ? (
         <span
-          className="mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[900]"
+          className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -647,7 +647,7 @@ function DetailBlock({
           {display}
         </span>
       ) : (
-        <p className="crm-card-title mt-2">{display}</p>
+        <p className="mt-1 truncate text-[13px] font-[900] leading-5" style={{ color: "var(--text-strong)" }}>{display}</p>
       )}
     </div>
   );
@@ -733,7 +733,7 @@ function TransferModal({
             <button type="button" onClick={onClose} className="btn-premium btn-ghost">
               취소
             </button>
-            <button type="button" onClick={onConfirm} className="btn-premium btn-primary">
+            <button type="button" onClick={onConfirm} className="btn-premium btn-primary h-9 px-3 text-[12px]">
               <CheckCircle2 size={15} /> {result.customerGrade} 등급으로 VIP활동DB 이관
             </button>
           </div>
@@ -1258,7 +1258,7 @@ export default function CustomerDbPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setShowForm(true)} className="btn-premium btn-primary">
+            <button type="button" onClick={() => setShowForm(true)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
               <Plus size={16} /> 신규고객등록
             </button>
             <button
@@ -1498,9 +1498,9 @@ export default function CustomerDbPage() {
           >
             <div className="slide-panel-header compact-customer-detail flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="mb-2 flex flex-wrap gap-2">
+                <div className="mb-1.5 flex flex-wrap gap-1.5">
                   <span
-                    className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
                     style={{
                       background: "var(--accent-subtle)",
                       border: "1px solid var(--accent-border)",
@@ -1510,7 +1510,7 @@ export default function CustomerDbPage() {
                     {selectedRecord.intake_route}
                   </span>
                   <span
-                    className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-[900]"
                     style={{
                       background: "var(--surface-2)",
                       border: "1px solid var(--border)",
@@ -1520,34 +1520,34 @@ export default function CustomerDbPage() {
                     {selectedRecord.activity_type}
                   </span>
                 </div>
-                <h2 className="truncate text-[24px] font-[930] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
+                <h2 className="truncate text-[20px] font-[930] tracking-[-0.055em]" style={{ color: "var(--text-strong)" }}>
                   {fmt(selectedRecord.name)}
                 </h2>
-                <p className="mt-1 text-[13px] font-[720]" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-0.5 text-[12px] font-[720]" style={{ color: "var(--text-muted)" }}>
                   {fmt(selectedRecord.title)} · {fmt(selectedRecord.phone)}
                 </p>
               </div>
 
-              <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-10 w-10 shrink-0 p-0">
+              <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-8 w-8 shrink-0 p-0">
                 <X size={17} />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <section className="premium-card p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <section className="premium-card p-3">
+                <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="crm-card-title">고객 기본정보</p>
-                    <p className="crm-tiny mt-1">최근 활동노트와 이관 전 원천 고객 정보를 확인합니다.</p>
+                    <p className="text-[14px] font-[900]" style={{ color: "var(--text-strong)" }}>고객 기본정보</p>
+                    <p className="crm-tiny mt-0.5">원천 고객 정보</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary">
+                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
                       <ArrowRight size={14} /> VIP활동DB 이관
                     </button>
                     <button
                       type="button"
                       onClick={() => deleteRecord(selectedRecord)}
-                      className="btn-premium"
+                      className="btn-premium h-9 px-3 text-[12px]"
                       style={{
                         color: "var(--danger-text)",
                         background: "var(--danger-bg)",
@@ -1559,7 +1559,7 @@ export default function CustomerDbPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
                   <DetailBlock label="고객명" value={selectedRecord.name} />
                   <DetailBlock label="직급" value={selectedRecord.title} />
                   <DetailBlock label="연락처" value={selectedRecord.phone} />
@@ -1571,24 +1571,24 @@ export default function CustomerDbPage() {
                 </div>
               </section>
 
-              <section className="premium-card mt-3 p-4">
-                <div className="mb-2 flex items-center gap-2">
+              <section className="premium-card mt-2 p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
                   <MessageCircle size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">메모</p>
                 </div>
-                <div className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-                  <p className="crm-body whitespace-pre-wrap">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
+                <div className="rounded-[12px] border px-2.5 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+                  <p className="max-h-[54px] overflow-y-auto whitespace-pre-wrap text-[12.5px] font-[720] leading-5">{selectedRecord.memo || "등록된 메모가 없습니다."}</p>
                 </div>
               </section>
 
-              <section className="premium-card mt-3 p-4">
-                <div className="mb-2 flex items-center gap-2">
+              <section className="premium-card mt-2 p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
                   <FileText size={17} style={{ color: "var(--accent)" }} />
                   <p className="crm-section-title">활동노트</p>
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
-                <div className="mt-2">
-                  <NotesList notes={selectedDisplayNotes} />
+                <div className="mt-1.5">
+                  <div className="max-h-[360px] overflow-y-auto pr-1"><NotesList notes={selectedDisplayNotes} /></div>
                 </div>
               </section>
             </div>
@@ -1689,7 +1689,7 @@ export default function CustomerDbPage() {
               <button type="button" onClick={resetForm} className="btn-premium btn-ghost">
                 취소
               </button>
-              <button type="button" onClick={handleSave} className="btn-premium btn-primary">
+              <button type="button" onClick={handleSave} className="btn-premium btn-primary h-9 px-3 text-[12px]">
                 <Save size={15} /> 고객DB 등록
               </button>
             </div>
