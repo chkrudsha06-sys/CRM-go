@@ -33,7 +33,10 @@ import {
 interface VipContact {
   id: number;
   name: string;
+  title: string | null;
   phone: string | null;
+  intake_route: string | null;
+  customer_grade: string | null;
   assigned_to: string;
   meeting_result: string;
   contract_date: string | null;
@@ -383,11 +386,10 @@ function VipTable({
 }) {
   const isSuccess = tone === "success";
   const softLine = "rgba(148, 163, 184, 0.16)";
-  const softLineStrong = "rgba(148, 163, 184, 0.22)";
   const softHeader = "color-mix(in srgb, var(--surface-2) 88%, transparent)";
   const softRowAlt = "color-mix(in srgb, var(--surface-2) 68%, transparent)";
   const tableColumns =
-    "62px minmax(116px,1fr) minmax(112px,0.95fr) minmax(88px,0.72fr) minmax(88px,0.72fr) minmax(96px,0.76fr) minmax(144px,1.05fr) 42px";
+    "minmax(128px,1fr) minmax(82px,0.58fr) minmax(128px,0.9fr) minmax(116px,0.82fr) minmax(112px,0.78fr)";
 
   return (
     <section
@@ -423,7 +425,7 @@ function VipTable({
               {title}
             </p>
             <p className="mt-0.5 text-[12px] font-[720]" style={{ color: "var(--text-muted)" }}>
-              분양회 입회 확정 고객 목록
+              고객명 · 직급 · 연락처 · 유입경로 · 심사결과 기준 목록
             </p>
           </div>
         </div>
@@ -440,13 +442,13 @@ function VipTable({
           <EmptyState
             icon="⭐"
             title="입회자가 없습니다"
-            description="계약완료 또는 예약완료 고객이 표시됩니다"
+            description={`${title} 고객이 표시됩니다`}
           />
         </div>
       ) : (
         <>
           <div className="vip-member-table-scroll hidden min-h-0 flex-1 overflow-auto xl:block">
-            <div className="min-w-[820px]">
+            <div className="min-w-[680px]">
               <div
                 className="sticky top-0 z-20 grid h-12 min-h-[48px] items-center justify-items-center gap-1 border-b px-3 text-center text-[12px] font-[720] tracking-[-0.015em] backdrop-blur"
                 style={{
@@ -457,14 +459,11 @@ function VipTable({
                   boxShadow: `0 1px 0 ${softLine}`,
                 }}
               >
-                <span>넘버링</span>
                 <span>고객명</span>
+                <span>직급</span>
                 <span>연락처</span>
-                <span>담당컨설턴트</span>
-                <span>대협팀담당자</span>
-                <span>완료일</span>
-                <span>계좌정보</span>
-                <span>관리</span>
+                <span>유입경로</span>
+                <span>심사결과</span>
               </div>
 
               <div>
@@ -482,19 +481,6 @@ function VipTable({
                           : softRowAlt,
                     }}
                   >
-                    <TableCell>
-                      <span
-                        className="whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-[720]"
-                        style={{
-                          color: "var(--warning-text)",
-                          borderColor: "var(--warning-border)",
-                          background: "var(--warning-bg)",
-                        }}
-                      >
-                        {fmtBun(contact.bunyanghoe_number)}
-                      </span>
-                    </TableCell>
-
                     <TableCell>
                       <div className="flex min-w-0 items-center justify-center gap-2 text-center">
                         <Avatar
@@ -516,6 +502,12 @@ function VipTable({
                     </TableCell>
 
                     <TableCell>
+                      <span className="whitespace-nowrap text-center text-[12px] font-[720]" style={{ color: "var(--text)" }}>
+                        {fmt(contact.title)}
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
                       <span className="flex items-center justify-center gap-1 whitespace-nowrap text-center text-[12px] font-[720]" style={{ color: "var(--text)" }}>
                         <Phone size={13} style={{ color: "var(--text-faint)" }} />
                         {fmt(contact.phone)}
@@ -523,33 +515,15 @@ function VipTable({
                     </TableCell>
 
                     <TableCell>
-                      <span className="whitespace-nowrap text-center text-[12px] font-[720]" style={{ color: "var(--text)" }}>
-                        {fmt(contact.consultant)}
+                      <span className="badge-premium badge-muted text-[10.5px]">
+                        {fmt(contact.intake_route)}
                       </span>
                     </TableCell>
 
                     <TableCell>
-                      <span
-                        className="whitespace-nowrap text-center text-[12px] font-[720]"
-                        style={{ color: "var(--purple-text)" }}
-                      >
-                        {fmt(contact.assigned_to)}
+                      <span className="badge-premium badge-info text-[10.5px]">
+                        {fmt(contact.customer_grade)}
                       </span>
-                    </TableCell>
-
-                    <TableCell>
-                      <span className="flex items-center justify-center gap-1 whitespace-nowrap text-center text-[12px] font-[720]" style={{ color: "var(--text)" }}>
-                        <Calendar size={13} style={{ color: "var(--text-faint)" }} />
-                        {getDoneDate(contact)}
-                      </span>
-                    </TableCell>
-
-                    <TableCell>
-                      <AccountInfoCell contact={contact} onSaved={onSaved} />
-                    </TableCell>
-
-                    <TableCell>
-                      <RemoveMemberButton contact={contact} onSaved={onSaved} />
                     </TableCell>
                   </div>
                 ))}
@@ -598,25 +572,15 @@ function VipTable({
                       background: "var(--warning-bg)",
                     }}
                   >
-                    {fmtBun(contact.bunyanghoe_number)}
+                    {fmt(contact.title)}
                   </span>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 text-center">
-                  <MiniInfo
-                    label="담당컨설턴트"
-                    value={fmt(contact.consultant)}
-                  />
-                  <MiniInfo
-                    label="대협팀담당자"
-                    value={fmt(contact.assigned_to)}
-                  />
-                  <MiniInfo label="완료일" value={getDoneDate(contact)} />
-                </div>
-
-                <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
-                  <AccountInfoCell contact={contact} onSaved={onSaved} />
-                  <RemoveMemberButton contact={contact} onSaved={onSaved} />
+                  <MiniInfo label="직급" value={fmt(contact.title)} />
+                  <MiniInfo label="연락처" value={fmt(contact.phone)} />
+                  <MiniInfo label="유입경로" value={fmt(contact.intake_route)} />
+                  <MiniInfo label="심사결과" value={fmt(contact.customer_grade)} />
                 </div>
               </article>
             ))}
@@ -684,7 +648,7 @@ export default function VipMembersPage() {
     let query = supabase
       .from("contacts")
       .select(
-        "id,name,phone,assigned_to,meeting_result,contract_date,reservation_date,consultant,memo,bunyanghoe_number,bank_holder,bank_code,bank_name,bank_account",
+        "id,name,title,phone,intake_route,customer_grade,assigned_to,meeting_result,contract_date,reservation_date,consultant,memo,bunyanghoe_number,bank_holder,bank_code,bank_name,bank_account",
       )
       .in("meeting_result", ["계약완료", "예약완료"]);
 
@@ -724,7 +688,7 @@ export default function VipMembersPage() {
       const keyword = search.trim().toLowerCase();
       if (keyword) {
         const target =
-          `${contact.name || ""} ${contact.phone || ""} ${contact.bunyanghoe_number || ""} ${contact.assigned_to || ""} ${contact.consultant || ""}`.toLowerCase();
+          `${contact.name || ""} ${contact.title || ""} ${contact.phone || ""} ${contact.intake_route || ""} ${contact.customer_grade || ""} ${contact.bunyanghoe_number || ""} ${contact.assigned_to || ""} ${contact.consultant || ""}`.toLowerCase();
         if (!target.includes(keyword)) return false;
       }
 
@@ -785,8 +749,8 @@ export default function VipMembersPage() {
                 <h1 className="crm-title text-left">분양회 입회자</h1>
               </div>
               <p className="crm-subtitle mt-2 text-left">
-                계약완료 및 예약완료 고객의 넘버링, 계좌정보, 담당자, 완료일을
-                한 화면에서 관리합니다.
+                예약완료 고객은 왼쪽, 계약완료 고객은 오른쪽으로 나누고
+                고객명·직급·연락처·유입경로·심사결과를 한 화면에서 확인합니다.
               </p>
             </div>
 
