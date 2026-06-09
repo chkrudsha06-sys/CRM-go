@@ -4,15 +4,9 @@ export const dynamic = "force-dynamic";
 
 const KAKAO_WORK_API_BASE = "https://api.kakaowork.com/v1";
 
-async function kakaoWorkRequest<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function kakaoWorkRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const appKey = process.env.KAKAO_WORK_APP_KEY;
-
-  if (!appKey) {
-    throw new Error("KAKAO_WORK_APP_KEY 환경변수가 없습니다.");
-  }
+  if (!appKey) throw new Error("KAKAO_WORK_APP_KEY 환경변수가 없습니다.");
 
   const response = await fetch(`${KAKAO_WORK_API_BASE}${path}`, {
     ...options,
@@ -25,7 +19,6 @@ async function kakaoWorkRequest<T>(
   });
 
   const text = await response.text();
-
   let data: any = null;
   try {
     data = text ? JSON.parse(text) : null;
@@ -34,92 +27,98 @@ async function kakaoWorkRequest<T>(
   }
 
   if (!response.ok || data?.success === false) {
-    throw new Error(
-      `카카오워크 API 오류: ${JSON.stringify(data || text)}`
-    );
+    throw new Error(`카카오워크 API 오류: ${JSON.stringify(data || text)}`);
   }
-
   return data as T;
+}
+
+// 이메일 → user_id 조회
+async function findUserIdByEmail(email: string): Promise<number | null> {
+  try {
+    const result = await kakaoWorkRequest<{ user?: { id: number } }>(
+      `/users.find_by_email?email=${encodeURIComponent(email)}`,
+      { method: "GET" }
+    );
+    return result.user?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET() {
   try {
-    const email = process.env.KAKAO_WORK_ROOM_OWNER_EMAIL;
-
-    if (!email) {
+    const ownerEmail = process.env.KAKAO_WORK_ROOM_OWNER_EMAIL;
+    if (!ownerEmail) {
       return NextResponse.json(
-        {
-          ok: false,
-          message: "KAKAO_WORK_ROOM_OWNER_EMAIL 환경변수가 없습니다.",
-          next: "Vercel 환경변수에 카카오워크 로그인 이메일을 등록해주세요.",
-        },
+        { ok: false, message: "KAKAO_WORK_ROOM_OWNER_EMAIL 환경변수가 없습니다." },
         { status: 400 }
       );
     }
 
-    const userResult = await kakaoWorkRequest<{
-      success: boolean;
-      user: {
-        id: number;
-        name?: string;
-        email?: string;
-      };
-    }>(`/users.find_by_email?email=${encodeURIComponent(email)}`, {
-      method: "GET",
-    });
-
-    const userId = userResult.user?.id;
-
-    if (!userId) {
+    // 1. 방장 user_id
+    const ownerId = await findUserIdByEmail(ownerEmail);
+    if (!ownerId) {
       return NextResponse.json(
-        {
-          ok: false,
-          message: "카카오워크 user_id를 찾지 못했습니다.",
-          userResult,
-        },
+        { ok: false, message: `방장 user_id를 찾지 못했습니다: ${ownerEmail}` },
         { status: 404 }
       );
     }
 
-    const roomName =
-      process.env.KAKAO_WORK_SALES_ROOM_NAME || "CRM 매출방";
-
+    // 2. 방 생성 (방장 1인으로 먼저 open)
+    const roomName = process.env.KAKAO_WORK_SALES_ROOM_NAME || "CRM 통합매출방";
     const conversationResult = await kakaoWorkRequest<{
-      success: boolean;
-      conversation: {
-        id: number | string;
-        name?: string;
-        type?: string;
-        users_count?: number;
-      };
+      conversation: { id: number | string; name?: string };
     }>("/conversations.open", {
       method: "POST",
-      body: JSON.stringify({
-        user_ids: [userId],
-        conversation_name: roomName,
-      }),
+      body: JSON.stringify({ user_ids: [ownerId], conversation_name: roomName }),
     });
 
     const conversationId = conversationResult.conversation?.id;
+    if (!conversationId) {
+      return NextResponse.json(
+        { ok: false, message: "방 생성 실패", raw: conversationResult },
+        { status: 500 }
+      );
+    }
+
+    // 3. 팀원 초대
+    const memberEmails = (process.env.KAKAO_WORK_SALES_MEMBER_EMAILS || "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+
+    const inviteResults: { email: string; status: string }[] = [];
+
+    for (const email of memberEmails) {
+      const uid = await findUserIdByEmail(email);
+      if (!uid) {
+        inviteResults.push({ email, status: "user_id 없음 (이메일 확인 필요)" });
+        continue;
+      }
+      try {
+        await kakaoWorkRequest(`/conversations/${conversationId}/invite`, {
+          method: "POST",
+          body: JSON.stringify({ user_ids: [uid] }),
+        });
+        inviteResults.push({ email, status: "초대 완료" });
+      } catch (e: any) {
+        inviteResults.push({ email, status: `초대 실패: ${e?.message}` });
+      }
+    }
 
     return NextResponse.json({
       ok: true,
-      message: "카카오워크 CRM 매출방 생성 완료",
-      ownerEmail: email,
-      ownerUserId: userId,
-      conversationId,
+      message: "카카오워크 CRM 통합매출방 생성 및 팀원 초대 완료",
       roomName,
+      conversationId,
+      ownerEmail,
+      inviteResults,
       envValueToSave: `KAKAO_WORK_SALES_CONVERSATION_ID=${conversationId}`,
-      guide:
-        "위 conversationId 값을 Vercel 환경변수 KAKAO_WORK_SALES_CONVERSATION_ID에 등록하세요.",
-      raw: conversationResult,
+      guide: "위 conversationId 값을 Vercel 환경변수 KAKAO_WORK_SALES_CONVERSATION_ID에 등록하세요.",
     });
   } catch (error: any) {
     return NextResponse.json(
-      {
-        ok: false,
-        message: error?.message || "카카오워크 매출방 생성 실패",
-      },
+      { ok: false, message: error?.message || "매출방 생성 실패" },
       { status: 500 }
     );
   }
