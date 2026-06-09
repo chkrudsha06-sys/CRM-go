@@ -336,18 +336,17 @@ function RouteSummaryCard({
   items: { label: string; value: number }[];
   total: number;
 }) {
-  const visibleItems = items.filter((item) => item.value > 0);
-  const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
-
   return (
-    <div className="premium-card p-4 md:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="premium-card p-3 md:p-3.5">
+      <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <p className="crm-card-title">유입경로별 현황</p>
-          <p className="crm-tiny mt-1">전체 {total}건 기준</p>
+          <p className="text-[14px] font-[950] leading-none" style={{ color: "var(--text-strong)" }}>
+            유입경로별 현황
+          </p>
+          <p className="crm-tiny mt-1">고정 항목 기준 · 전체 {total}건</p>
         </div>
         <span
-          className="rounded-full px-3 py-1 text-[12px] font-[900]"
+          className="rounded-full px-2.5 py-1 text-[11px] font-[900]"
           style={{
             background: "var(--accent-subtle)",
             border: "1px solid var(--accent-border)",
@@ -358,22 +357,30 @@ function RouteSummaryCard({
         </span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {displayItems.map((item) => {
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item) => {
           const percent = total ? Math.round((item.value / total) * 100) : 0;
           return (
-            <div key={item.label} className="rounded-[15px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="crm-row-main truncate">{item.label}</p>
-                <p className="crm-row-sub shrink-0">{item.value}건</p>
+            <div
+              key={item.label}
+              className="rounded-[12px] border px-2.5 py-2"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-[12px] font-[900]" style={{ color: "var(--text-strong)" }}>
+                  {item.label}
+                </p>
+                <p className="shrink-0 text-[12px] font-[950]" style={{ color: "var(--text-strong)" }}>
+                  {item.value}건
+                </p>
               </div>
-              <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${percent}%`, background: "var(--accent)" }}
                 />
               </div>
-              <p className="crm-tiny mt-1 text-right">{percent}%</p>
+              <p className="crm-tiny mt-0.5 text-right">{percent}%</p>
             </div>
           );
         })}
@@ -384,25 +391,43 @@ function RouteSummaryCard({
 
 function ActivitySummaryCard({ tm, cold }: { tm: number; cold: number }) {
   return (
-    <div className="premium-card p-4 md:p-5">
-      <div className="mb-4">
-        <p className="crm-card-title">활동항목 현황</p>
+    <div className="premium-card p-3 md:p-3.5">
+      <div className="mb-2">
+        <p className="text-[14px] font-[950] leading-none" style={{ color: "var(--text-strong)" }}>
+          활동항목 현황
+        </p>
         <p className="crm-tiny mt-1">TM과 콜드톡만 표시합니다.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
-            <Phone size={17} />
+      <div className="grid grid-cols-2 gap-2">
+        <div
+          className="rounded-[14px] border px-3 py-3 text-center"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+        >
+          <div
+            className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
+          >
+            <Phone size={15} />
           </div>
           <p className="crm-meta">TM</p>
-          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{tm}건</p>
+          <p className="mt-0.5 text-[22px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
+            {tm}건
+          </p>
         </div>
-        <div className="rounded-[18px] border p-4 text-center" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}>
-            <MessageCircle size={17} />
+        <div
+          className="rounded-[14px] border px-3 py-3 text-center"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+        >
+          <div
+            className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full"
+            style={{ background: "rgba(14, 165, 233, 0.14)", color: "#38bdf8" }}
+          >
+            <MessageCircle size={15} />
           </div>
           <p className="crm-meta">콜드톡</p>
-          <p className="mt-1 text-[26px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{cold}건</p>
+          <p className="mt-0.5 text-[22px] font-[950] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
+            {cold}건
+          </p>
         </div>
       </div>
     </div>
@@ -1322,7 +1347,7 @@ export default function CustomerDbPage() {
         width: 100% !important;
       }
     `}</style>
-      <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
+      <section className="premium-hero mb-3 overflow-hidden p-4 md:p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <div
@@ -1358,12 +1383,12 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+      <section className="mb-3 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
         <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
         <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
       </section>
 
-      <section className="premium-card mb-5 p-4">
+      <section className="premium-card mb-3 p-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
           <label className="relative block">
             <Search
@@ -1406,7 +1431,7 @@ export default function CustomerDbPage() {
       </section>
 
       <section className="premium-card overflow-hidden">
-        <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
+        <div className="crm-table-wrap max-h-[760px] overflow-auto rounded-[18px]">
           <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1540px] table-fixed text-center">
             <colgroup>
               <col className="w-[170px]" />
