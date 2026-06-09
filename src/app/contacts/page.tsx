@@ -40,6 +40,7 @@ type CustomerDbRecord = {
   management_stage: string;
   customer_grade: string;
   memo: string;
+  meeting_result?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -346,7 +347,7 @@ export default function ContactsPage() {
       try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at")
+          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,created_at,updated_at")
           .order("updated_at", { ascending: false });
 
         if (error) throw error;
@@ -354,7 +355,13 @@ export default function ContactsPage() {
         const remoteRecords = Array.isArray(data)
           ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
           : [];
-        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
+        const activeLocalRecords = localRecords.filter(
+          (record) => record.meeting_result !== "계약완료",
+        );
+        const activeRemoteRecords = remoteRecords.filter(
+          (record) => record.meeting_result !== "계약완료",
+        );
+        const merged = mergeRecordsByPhone(activeLocalRecords, activeRemoteRecords);
 
         if (!alive) return;
 
@@ -429,6 +436,8 @@ export default function ContactsPage() {
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
       const cleanMemo = stripGradeAssessmentBlock(record.memo);
+      if (record.meeting_result === "계약완료") return false;
+
       const matchesKeyword = !keyword
         ? true
         : [
