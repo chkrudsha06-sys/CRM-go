@@ -761,6 +761,7 @@ export default function SalesPage() {
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
   const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
+  const [ciderpayFullSyncing, setCiderpayFullSyncing] = useState(false);
   const [editItem, setEditItem] = useState<AdExecution | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -1055,16 +1056,25 @@ export default function SalesPage() {
     setShowHyosungModal(true);
   };
 
-  const handleCiderpaySync = async () => {
-    if (ciderpaySyncing) return;
+  const runCiderpaySync = async ({
+    endpoint,
+    label,
+    full = false,
+  }: {
+    endpoint: string;
+    label: string;
+    full?: boolean;
+  }) => {
+    if (ciderpaySyncing || ciderpayFullSyncing) return;
 
-    const ok = window.confirm("사이다페이 결제내역을 동기화하시겠습니까?");
+    const ok = window.confirm(`${label}를 실행하시겠습니까?`);
     if (!ok) return;
 
-    setCiderpaySyncing(true);
+    if (full) setCiderpayFullSyncing(true);
+    else setCiderpaySyncing(true);
 
     try {
-      const response = await fetch("/api/payment-imports/ciderpay/sync", {
+      const response = await fetch(endpoint, {
         method: "GET",
         cache: "no-store",
       });
@@ -1072,29 +1082,51 @@ export default function SalesPage() {
       const data = await response.json();
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || data.error || "사이다페이 동기화 실패");
+        throw new Error(data.message || data.error || `${label} 실패`);
       }
 
-      const results = Array.isArray(data.results) ? data.results : [];
-      const created = results.filter((item: Record<string, unknown>) => item.status === "sales_created").length;
-      const duplicated = results.filter((item: Record<string, unknown>) => item.status === "duplicate").length;
+      const created = Number(data.created || 0);
+      const canceled = Number(data.canceled || 0);
+      const duplicated = Number(data.duplicated || 0);
+      const skipped = Number(data.skipped || 0);
+      const totalFound = Number(data.totalFound || 0);
+      const pagesFetched = Number(data.pagesFetched || 0);
 
       alert(
         [
-          "사이다페이 결제내역 동기화 완료",
-          `조회된 결제완료: ${Number(data.totalFound || 0).toLocaleString()}건`,
+          `${label} 완료`,
+          `조회 페이지: ${pagesFetched.toLocaleString()}페이지`,
+          `조회된 결제 행: ${totalFound.toLocaleString()}건`,
           `신규 매출 생성: ${created.toLocaleString()}건`,
+          `취소/환불 생성: ${canceled.toLocaleString()}건`,
           `중복 제외: ${duplicated.toLocaleString()}건`,
+          `대상 외 제외: ${skipped.toLocaleString()}건`,
         ].join("\n")
       );
 
       await fetchRows();
     } catch (error) {
-      console.error("사이다페이 동기화 실패:", error);
-      alert(`사이다페이 동기화 실패: ${getErrorMessage(error)}`);
+      console.error(`${label} 실패:`, error);
+      alert(`${label} 실패: ${getErrorMessage(error)}`);
     } finally {
-      setCiderpaySyncing(false);
+      if (full) setCiderpayFullSyncing(false);
+      else setCiderpaySyncing(false);
     }
+  };
+
+  const handleCiderpayFullSync = () => {
+    runCiderpaySync({
+      endpoint: "/api/payment-imports/ciderpay/sync-all",
+      label: "사이다페이 전체동기화",
+      full: true,
+    });
+  };
+
+  const handleCiderpaySync = () => {
+    runCiderpaySync({
+      endpoint: "/api/payment-imports/ciderpay/sync",
+      label: "사이다페이 동기화",
+    });
   };
 
   const exportCsv = () => {
@@ -1117,8 +1149,16 @@ export default function SalesPage() {
           </button>
           <button
             type="button"
+            onClick={handleCiderpayFullSync}
+            disabled={ciderpaySyncing || ciderpayFullSyncing}
+            className="btn-premium btn-secondary disabled:opacity-60"
+          >
+            <CreditCard size={14} />{ciderpayFullSyncing ? "전체동기화 중..." : "사이다페이 전체동기화"}
+          </button>
+          <button
+            type="button"
             onClick={handleCiderpaySync}
-            disabled={ciderpaySyncing}
+            disabled={ciderpaySyncing || ciderpayFullSyncing}
             className="btn-premium btn-secondary disabled:opacity-60"
           >
             <CreditCard size={14} />{ciderpaySyncing ? "동기화 중..." : "사이다페이 동기화"}
