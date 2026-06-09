@@ -112,7 +112,7 @@ const EMPTY_FORM: FormState = {
   memo: "",
 };
 
-const CHANNELS = ["LMS", "호갱노노", "네이버", "카카오", "구글", "메타", "유튜브", "기타"];
+const CHANNELS = ["사이다페이", "효성CMS", "LMS", "호갱노노", "네이버", "카카오", "구글", "메타", "유튜브", "기타"];
 const CONTRACT_ROUTES = ["분양회", "연계매출", "광고매출", "기타"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
@@ -760,6 +760,7 @@ export default function SalesPage() {
   const [hyosungRows, setHyosungRows] = useState<HyosungCmsPreviewRow[]>([]);
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
+  const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
   const [editItem, setEditItem] = useState<AdExecution | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -1054,6 +1055,48 @@ export default function SalesPage() {
     setShowHyosungModal(true);
   };
 
+  const handleCiderpaySync = async () => {
+    if (ciderpaySyncing) return;
+
+    const ok = window.confirm("사이다페이 결제내역을 동기화하시겠습니까?");
+    if (!ok) return;
+
+    setCiderpaySyncing(true);
+
+    try {
+      const response = await fetch("/api/payment-imports/ciderpay/sync", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || data.error || "사이다페이 동기화 실패");
+      }
+
+      const results = Array.isArray(data.results) ? data.results : [];
+      const created = results.filter((item: Record<string, unknown>) => item.status === "sales_created").length;
+      const duplicated = results.filter((item: Record<string, unknown>) => item.status === "duplicate").length;
+
+      alert(
+        [
+          "사이다페이 결제내역 동기화 완료",
+          `조회된 결제완료: ${Number(data.totalFound || 0).toLocaleString()}건`,
+          `신규 매출 생성: ${created.toLocaleString()}건`,
+          `중복 제외: ${duplicated.toLocaleString()}건`,
+        ].join("\n")
+      );
+
+      await fetchRows();
+    } catch (error) {
+      console.error("사이다페이 동기화 실패:", error);
+      alert(`사이다페이 동기화 실패: ${getErrorMessage(error)}`);
+    } finally {
+      setCiderpaySyncing(false);
+    }
+  };
+
   const exportCsv = () => {
     const headers = ["ID", "고객명", "결제일", "채널", "계약경로", "집행금액", "VAT금액", "환불금액", "실매출", "담당자", "컨설턴트", "메모"];
     const lines = filteredRows.map((row) => [row.id, row.member_name || "", row.payment_date || "", row.channel || "", row.contract_route || "", row.execution_amount || 0, row.vat_amount || 0, row.refund_amount || 0, effectiveSales(row), row.team_member || "", row.consultant || "", row.memo || ""]);
@@ -1068,7 +1111,28 @@ export default function SalesPage() {
     <div className="premium-page sales-modern-page flex h-full flex-col overflow-hidden">
       <div className="premium-header sales-modern-header flex flex-shrink-0 items-center justify-between gap-4 px-5 py-4 md:px-7">
         <div className="min-w-0"><div className="flex items-center gap-2"><CreditCard size={20} style={{ color: "var(--accent-text)" }} /><h1 className="crm-title">통합매출관리</h1></div><p className="crm-subtitle mt-1">광고 집행, 분양회 매출, 연계매출, 환불 반영 실매출을 통합 관리합니다.</p></div>
-        <div className="flex flex-shrink-0 items-center gap-2"><button type="button" onClick={fetchRows} className="btn-premium btn-secondary"><RefreshCw size={14} />새로고침</button><button type="button" onClick={openHyosungModal} className="btn-premium btn-secondary"><UploadCloud size={14} />효성CMS 업로드</button><button type="button" onClick={exportCsv} className="btn-premium btn-secondary"><Download size={14} />CSV</button><button type="button" onClick={openAdd} className="btn-premium btn-primary"><Plus size={14} />매출 등록</button></div>
+        <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={fetchRows} className="btn-premium btn-secondary">
+            <RefreshCw size={14} />새로고침
+          </button>
+          <button
+            type="button"
+            onClick={handleCiderpaySync}
+            disabled={ciderpaySyncing}
+            className="btn-premium btn-secondary disabled:opacity-60"
+          >
+            <CreditCard size={14} />{ciderpaySyncing ? "동기화 중..." : "사이다페이 동기화"}
+          </button>
+          <button type="button" onClick={openHyosungModal} className="btn-premium btn-secondary">
+            <UploadCloud size={14} />효성CMS 업로드
+          </button>
+          <button type="button" onClick={exportCsv} className="btn-premium btn-secondary">
+            <Download size={14} />CSV
+          </button>
+          <button type="button" onClick={openAdd} className="btn-premium btn-primary">
+            <Plus size={14} />매출 등록
+          </button>
+        </div>
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
