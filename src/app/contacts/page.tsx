@@ -39,8 +39,8 @@ type CustomerDbRecord = {
   company: string;
   management_stage: string;
   customer_grade: string;
+  assigned_to?: string | null;
   memo: string;
-  meeting_result?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -66,6 +66,13 @@ type ContactNote = {
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
+const DEFAULT_ASSIGNED_TO = "조계현";
+
+function normalizeAssignedTo(value?: string | null) {
+  const allowed = ["조계현", "이세호", "기여운", "최연전"];
+  const normalized = String(value || "").trim();
+  return allowed.includes(normalized) ? normalized : DEFAULT_ASSIGNED_TO;
+}
 
 function normalizePhoneDigits(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
@@ -256,6 +263,7 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
   if (!hasAssessment) {
     return {
       ...record,
+      assigned_to: normalizeAssignedTo(record.assigned_to),
       customer_grade: UNREVIEWED_GRADE,
       memo: cleanMemo,
     };
@@ -266,6 +274,7 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
 
   return {
     ...record,
+    assigned_to: normalizeAssignedTo(record.assigned_to),
     customer_grade:
       storedGrade && storedGrade !== UNREVIEWED_GRADE
         ? storedGrade
@@ -347,7 +356,7 @@ export default function ContactsPage() {
       try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,created_at,updated_at")
+          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,assigned_to,memo,created_at,updated_at")
           .order("updated_at", { ascending: false });
 
         if (error) throw error;
@@ -355,13 +364,7 @@ export default function ContactsPage() {
         const remoteRecords = Array.isArray(data)
           ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
           : [];
-        const activeLocalRecords = localRecords.filter(
-          (record) => record.meeting_result !== "계약완료",
-        );
-        const activeRemoteRecords = remoteRecords.filter(
-          (record) => record.meeting_result !== "계약완료",
-        );
-        const merged = mergeRecordsByPhone(activeLocalRecords, activeRemoteRecords);
+        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
 
         if (!alive) return;
 
@@ -436,8 +439,6 @@ export default function ContactsPage() {
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
       const cleanMemo = stripGradeAssessmentBlock(record.memo);
-      if (record.meeting_result === "계약완료") return false;
-
       const matchesKeyword = !keyword
         ? true
         : [
@@ -536,6 +537,7 @@ export default function ContactsPage() {
           management_stage: "",
           company: "",
           customer_grade: "",
+          assigned_to: DEFAULT_ASSIGNED_TO,
           memo: "",
         }),
         name: form.name.trim(),
