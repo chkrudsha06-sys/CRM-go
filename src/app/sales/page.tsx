@@ -13,6 +13,7 @@ import {
   CalendarDays,
   ChevronDown,
   CreditCard,
+  Copy,
   Download,
   Edit2,
   FileText,
@@ -73,6 +74,7 @@ type FormState = {
   card_number: string;
   contact_phone: string;
   tax_invoice_status: string;
+  cash_receipt_status: string;
   special_notes: string;
   memo: string;
 };
@@ -157,6 +159,7 @@ const EMPTY_FORM: FormState = {
   card_number: "",
   contact_phone: "",
   tax_invoice_status: "",
+  cash_receipt_status: "",
   special_notes: "",
   memo: "",
 };
@@ -166,7 +169,8 @@ const CONTRACT_ROUTES = ["분양회 회비", "LMS", "호갱노노"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
 const HYOSUNG_PROVIDER = "HYOSUNG_CMS";
-const TAX_INVOICE_OPTIONS = ["O", "X", "X(추후발행)"];
+const TAX_INVOICE_OPTIONS = ["O(세금)", "X", "X추후발행"];
+const CASH_RECEIPT_OPTIONS = ["O(현금)", "X", "X추후발행"];
 const AD_ITEMS = ["LMS", "호갱노노"];
 const FIXED_DEPOSIT_ACCOUNT = "298-122618-04-018";
 const FIXED_DEPOSIT_BANK = "기업은행 (주)광고인";
@@ -209,43 +213,187 @@ function isAdPaymentItem(value?: string | null) {
 
 function buildAdMemo(form: FormState) {
   const item = form.contract_route || "-";
+  const date = form.payment_date ? new Date(`${form.payment_date}T00:00:00`) : new Date();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const team = form.team_member || "-";
+  const paymentAmount = form.execution_amount || "";
+  const totalPaymentAmount = form.total_payment_amount || form.execution_amount || "";
+  const contactPhone = form.contact_phone || "-";
+
   return [
-    `현장명: ${form.site_name || "-"}`,
-    `물건: ${form.property_name || "-"}`,
-    `지역: ${form.region || "-"}`,
+    `#${month}월 ${day}일 B2C매출[${team} CX]`,
+    `●현장명: ${form.site_name || ""}`,
+    `●물건: ${form.property_name || ""}`,
+    `●지역: ${form.region || ""}`,
+    `--------------------------`,
+    `▶분양의신 광고`,
+    `●결제금액(A):`,
+    `●광고기간:`,
     ``,
-    `품목: ${item}`,
-    `결제금액: ${form.execution_amount || "0"}`,
-    `인정매출: X`,
-    `협의마케터: ${form.agreed_marketer || "-"}`,
-    `광고기간: ${form.ad_period || "-"}`,
+    `▶턴키광고`,
+    `●품목 : ${item}`,
+    `●결제금액(B): ${paymentAmount}`,
+    `●인정매출(C)(30%/100%): X`,
+    `●협의마케터: ${form.agreed_marketer || ""}`,
+    `●광고기간: ${form.ad_period || ""}`,
     ``,
-    `총결제금액: ${form.total_payment_amount || form.execution_amount || "0"}`,
-    `초인정매출: X`,
-    ``,
-    `분양회고객: O`,
-    `고객명: ${form.member_name || "-"}`,
-    `고객번호: ${form.customer_number || "-"}`,
-    `업종: ${form.customer_industry || "-"}`,
-    `회사명: ${form.customer_company || "-"}`,
-    `계약경로: ${form.customer_contract_route || "-"}`,
-    ``,
-    `광고지원금액: ${form.ad_support_amount || "-"}`,
-    `광고지원 회사명: ${form.ad_support_company || "-"}`,
-    `광고지원 업종: ${form.ad_support_industry || "-"}`,
-    ``,
-    `입금자명: ${form.depositor_name || "-"}`,
-    `입금계좌: ${FIXED_DEPOSIT_ACCOUNT}`,
+    `▶총결제금액(A+B) : ${totalPaymentAmount}`,
+    `▶총인정매출(A+C) : X`,
+    `-------------------------`,
+    `●분양회고객 : O`,
+    `●고객명: ${form.member_name || ""}`,
+    `●고객번호: ${form.customer_number || ""}`,
+    `●업종 : ${form.customer_industry || ""}`,
+    `●회사명: ${form.customer_company || ""}`,
+    `●계약경로: ${form.customer_contract_route || ""}`,
+    `-------------------------`,
+    `●광고지원 금액 : ${form.ad_support_amount || ""}`,
+    `●광고지원 회사명 : ${form.ad_support_company || ""}`,
+    `●광고지원 업종 : ${form.ad_support_industry || ""}`,
+    `-------------------------`,
+    `●입금자명: ${form.depositor_name || ""}`,
+    `●입금계좌: ${FIXED_DEPOSIT_ACCOUNT}`,
     `${FIXED_DEPOSIT_BANK}`,
     ``,
-    `결제카드: ${form.payment_card || "-"}`,
-    `카드번호: ${form.card_number || "-"}`,
+    `●결제카드: ${form.payment_card || ""}`,
+    `●카드번호: ${form.card_number || ""}`,
     ``,
-    `연락처: ${form.contact_phone || "-"}`,
-    `계산서발행여부: ${form.tax_invoice_status || "-"}`,
+    `●연락처: ${contactPhone}`,
+    `●세금계산서: ${form.tax_invoice_status || ""}`,
+    `●현금영수증: ${form.cash_receipt_status || ""}`,
+    `-------------------------`,
+    `●특이사항`,
+    `${form.special_notes || ""}`,
+  ].join("\n");
+}
+
+function normalizeMemoLabel(label: string) {
+  return label.replace(/^[#▶●\s]+/g, "").trim();
+}
+
+function parseAdMemo(memo?: string | null) {
+  const parsed: Record<string, string> = {};
+  const lines = (memo || "").split(/\r?\n/);
+  let collectingNotes = false;
+  const noteLines: string[] = [];
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
+      if (collectingNotes) noteLines.push("");
+      return;
+    }
+
+    if (line.includes("특이사항")) {
+      collectingNotes = true;
+      return;
+    }
+
+    if (collectingNotes) {
+      noteLines.push(rawLine);
+      return;
+    }
+
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex > -1) {
+      const label = normalizeMemoLabel(line.slice(0, separatorIndex));
+      const value = line.slice(separatorIndex + 1).trim();
+      parsed[label] = value;
+    }
+  });
+
+  parsed["특이사항"] = noteLines.join("\n").trim();
+  return parsed;
+}
+
+function buildDetailRowsFromMemo(item: AdExecution) {
+  const info = parseAdMemo(item.memo);
+  return [
+    ["현장명", info["현장명"]],
+    ["물건", info["물건"]],
+    ["지역", info["지역"]],
+    ["품목", info["품목"] || normalizePaymentItem(item.contract_route)],
+    ["결제금액(B)", info["결제금액(B)"] || money(item.execution_amount)],
+    ["인정매출(C)", info["인정매출(C)(30%/100%)"] || "X"],
+    ["협의마케터", info["협의마케터"]],
+    ["광고기간", info["광고기간"]],
+    ["총결제금액(A+B)", info["총결제금액(A+B)"]],
+    ["총인정매출(A+C)", info["총인정매출(A+C)"] || "X"],
+    ["분양회고객", info["분양회고객"] || "O"],
+    ["고객명", info["고객명"] || item.member_name],
+    ["고객번호", info["고객번호"]],
+    ["업종", info["업종"]],
+    ["회사명", info["회사명"]],
+    ["계약경로", info["계약경로"]],
+    ["광고지원 금액", info["광고지원 금액"]],
+    ["광고지원 회사명", info["광고지원 회사명"]],
+    ["광고지원 업종", info["광고지원 업종"]],
+    ["입금자명", info["입금자명"]],
+    ["입금계좌", info["입금계좌"] || FIXED_DEPOSIT_ACCOUNT],
+    ["은행/예금주", FIXED_DEPOSIT_BANK],
+    ["결제카드", info["결제카드"]],
+    ["카드번호", info["카드번호"]],
+    ["연락처", info["연락처"]],
+    ["세금계산서", info["세금계산서"]],
+    ["현금영수증", info["현금영수증"]],
+    ["특이사항", info["특이사항"]],
+  ].map(([label, value]) => ({ label: String(label), value: value ? String(value) : "-" }));
+}
+
+function buildWorkReportText(item: AdExecution) {
+  if (item.memo?.includes("B2C매출") && item.memo.includes("총인정매출")) return item.memo;
+
+  const info = parseAdMemo(item.memo);
+  const date = item.payment_date ? new Date(`${item.payment_date.slice(0, 10)}T00:00:00`) : new Date();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const itemName = info["품목"] || normalizePaymentItem(item.contract_route) || "";
+
+  return [
+    `#${month}월 ${day}일 B2C매출[${item.team_member || "-"} CX]`,
+    `●현장명: ${info["현장명"] || ""}`,
+    `●물건: ${info["물건"] || ""}`,
+    `●지역: ${info["지역"] || ""}`,
+    `--------------------------`,
+    `▶분양의신 광고`,
+    `●결제금액(A):`,
+    `●광고기간:`,
     ``,
-    `특이사항`,
-    `${form.special_notes || "-"}`,
+    `▶턴키광고`,
+    `●품목 : ${itemName}`,
+    `●결제금액(B): ${info["결제금액(B)"] || money(item.execution_amount)}`,
+    `●인정매출(C)(30%/100%): X`,
+    `●협의마케터: ${info["협의마케터"] || ""}`,
+    `●광고기간: ${info["광고기간"] || ""}`,
+    ``,
+    `▶총결제금액(A+B) : ${info["총결제금액(A+B)"] || money(item.execution_amount)}`,
+    `▶총인정매출(A+C) : X`,
+    `-------------------------`,
+    `●분양회고객 : O`,
+    `●고객명: ${info["고객명"] || item.member_name || ""}`,
+    `●고객번호: ${info["고객번호"] || ""}`,
+    `●업종 : ${info["업종"] || ""}`,
+    `●회사명: ${info["회사명"] || ""}`,
+    `●계약경로: ${info["계약경로"] || ""}`,
+    `-------------------------`,
+    `●광고지원 금액 : ${info["광고지원 금액"] || ""}`,
+    `●광고지원 회사명 : ${info["광고지원 회사명"] || ""}`,
+    `●광고지원 업종 : ${info["광고지원 업종"] || ""}`,
+    `-------------------------`,
+    `●입금자명: ${info["입금자명"] || ""}`,
+    `●입금계좌: ${FIXED_DEPOSIT_ACCOUNT}`,
+    `${FIXED_DEPOSIT_BANK}`,
+    ``,
+    `●결제카드: ${info["결제카드"] || ""}`,
+    `●카드번호: ${info["카드번호"] || ""}`,
+    ``,
+    `●연락처: ${info["연락처"] || ""}`,
+    `●세금계산서: ${info["세금계산서"] || ""}`,
+    `●현금영수증: ${info["현금영수증"] || ""}`,
+    `-------------------------`,
+    `●특이사항`,
+    `${info["특이사항"] || ""}`,
   ].join("\n");
 }
 
@@ -563,10 +711,27 @@ function SalesMobileCard({ item, selected, onClick, onDelete }: { item: AdExecut
 }
 
 function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { item: AdExecution; tab: DetailTab; onTab: (tab: DetailTab) => void; onClose: () => void; onEdit: (item: AdExecution) => void; onDelete: (id: number) => void }) {
+  const isAdDetail = isAdPaymentItem(normalizePaymentItem(item.contract_route));
+  const detailRows = buildDetailRowsFromMemo(item);
+  const workReportText = buildWorkReportText(item);
+
+  const handleCopyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(workReportText);
+      alert("워크 양식이 복사되었습니다.");
+    } catch {
+      alert("복사에 실패했습니다. 브라우저 권한을 확인해주세요.");
+    }
+  };
+
   return (
     <>
       <div className="slide-panel-overlay" onClick={onClose} />
-      <aside className="slide-panel" onClick={(e) => e.stopPropagation()}>
+      <aside
+        className="slide-panel"
+        style={{ width: "min(1180px, calc(100vw - 28px))", maxWidth: "1180px" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="slide-panel-header">
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
@@ -580,14 +745,13 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge tone={channelTone(item.channel)} icon={CreditCard}>{item.channel || "채널 없음"}</Badge>
                   <Badge tone="info" icon={User}>{item.team_member || "-"}</Badge>
-                  
                 </div>
               </div>
             </div>
             <button type="button" onClick={onClose} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button>
           </div>
           <div className="mt-5 flex gap-1.5">
-            {[{ key: "overview", label: "개요" }, { key: "amount", label: "금액상세" }, { key: "memo", label: "메모" }].map((menu) => {
+            {[{ key: "overview", label: "개요" }, { key: "amount", label: "세부정보" }, { key: "memo", label: "메모" }].map((menu) => {
               const active = tab === menu.key;
               return <button key={menu.key} type="button" onClick={() => onTab(menu.key as DetailTab)} className="h-9 rounded-[9px] px-3 text-[12px] font-bold transition-all" style={{ background: active ? "var(--accent-subtle)" : "transparent", color: active ? "var(--accent-text)" : "var(--text-subtle)", border: active ? "1px solid var(--accent-border)" : "1px solid transparent" }}>{menu.label}</button>;
             })}
@@ -605,7 +769,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                 <Field label="담당자"><Badge tone="info" icon={User}>{item.team_member || "-"}</Badge></Field>
               </section>
               <section className="premium-card p-4">
-                <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={TrendingUp} tone="cyan" /><div><p className="crm-section-title">실매출 요약</p><p className="crm-tiny">집행금액, VAT, 환불 반영 기준</p></div></div>
+                <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={TrendingUp} tone="cyan" /><div><p className="crm-section-title">실매출 요약</p><p className="crm-tiny">집행금액과 환불 반영 기준</p></div></div>
                 <div className="rounded-[14px] p-4" style={{ background: "var(--success-bg)", border: "1px solid var(--success-border)" }}>
                   <p className="text-[12px] font-bold" style={{ color: "var(--success-text)" }}>실매출</p>
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
@@ -614,13 +778,35 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
             </div>
           )}
           {tab === "amount" && (
-            <section className="premium-card p-4">
-              <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">금액 상세</p><p className="crm-tiny">매출 계산에 사용되는 금액 구조</p></div></div>
-              <Field label="집행금액">{money(item.execution_amount)}</Field>
-              <Field label="환불금액"><span style={{ color: item.refund_amount ? "var(--danger-text)" : "var(--text)" }}>{money(item.refund_amount)}</span></Field>
-              <Field label="실매출"><span className="text-[15px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(item))}</span></Field>
-              <div className="mt-4 rounded-[12px] p-4 text-[13px] font-semibold leading-relaxed" style={{ background: "var(--info-bg)", border: "1px solid var(--info-border)", color: "var(--info-text)" }}>VAT 금액이 있고 집행금액과 다른 경우 VAT 금액을 기준으로 계산하며, 환불금액을 차감해 실매출을 산정합니다.</div>
-            </section>
+            isAdDetail ? (
+              <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+                <section className="premium-card p-4">
+                  <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">세부정보</p><p className="crm-tiny">등록 시 입력한 광고특전 상세값</p></div></div>
+                  <div className="max-h-[620px] overflow-y-auto pr-1">
+                    {detailRows.map((row) => (
+                      <div key={row.label} className="grid grid-cols-[132px_1fr] gap-3 border-b py-2.5 text-[12.5px]" style={{ borderColor: "var(--border-subtle)" }}>
+                        <div className="font-[900]" style={{ color: "var(--text-subtle)" }}>{row.label}</div>
+                        <div className="whitespace-pre-wrap font-[750]" style={{ color: "var(--text)" }}>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+                <section className="premium-card p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2"><PremiumIcon icon={FileText} tone="purple" /><div><p className="crm-section-title">워크 공유 양식</p><p className="crm-tiny">카카오워크 매출방에 붙여넣는 양식</p></div></div>
+                    <button type="button" onClick={handleCopyReport} className="btn-premium btn-primary h-9 px-3 text-[12px]"><Copy size={13} />양식복사</button>
+                  </div>
+                  <pre className="max-h-[620px] overflow-auto whitespace-pre-wrap rounded-[14px] p-4 text-[12.5px] font-[700] leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>{workReportText}</pre>
+                </section>
+              </div>
+            ) : (
+              <section className="premium-card p-4">
+                <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">세부정보</p><p className="crm-tiny">매출 계산에 사용되는 금액 구조</p></div></div>
+                <Field label="집행금액">{money(item.execution_amount)}</Field>
+                <Field label="환불금액"><span style={{ color: item.refund_amount ? "var(--danger-text)" : "var(--text)" }}>{money(item.refund_amount)}</span></Field>
+                <Field label="실매출"><span className="text-[15px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(item))}</span></Field>
+              </section>
+            )
           )}
           {tab === "memo" && (
             <section className="premium-card p-4">
@@ -1013,6 +1199,7 @@ export default function SalesPage() {
       card_number: "",
       contact_phone: "",
       tax_invoice_status: "",
+      cash_receipt_status: "",
       special_notes: item.memo || "",
       memo: item.memo || "",
     });
@@ -1475,7 +1662,7 @@ export default function SalesPage() {
                     <div><InputLabel>협의마케터</InputLabel><input className={inputClass} value={form.agreed_marketer} onChange={(e) => setFormValue("agreed_marketer", e.target.value)} /></div>
                     <div className="md:col-span-2"><InputLabel>광고기간</InputLabel><input className={inputClass} value={form.ad_period} onChange={(e) => setFormValue("ad_period", e.target.value)} placeholder="예: 2026-06-10 ~ 2026-07-09" /></div>
                     <div><InputLabel>총결제금액</InputLabel><input className={inputClass} value={form.total_payment_amount} onChange={(e) => setFormValue("total_payment_amount", formatInputAmount(e.target.value))} /></div>
-                    <div><InputLabel>초인정매출</InputLabel><input className={inputClass} value="X" readOnly /></div>
+                    <div><InputLabel>총인정매출</InputLabel><input className={inputClass} value="X" readOnly /></div>
                     <div><InputLabel>분양회고객</InputLabel><input className={inputClass} value="O" readOnly /></div>
                     <div><InputLabel>고객명</InputLabel><input className={inputClass} value={form.member_name} readOnly /></div>
                     <div><InputLabel>고객번호</InputLabel><input className={inputClass} value={form.customer_number} onChange={(e) => setFormValue("customer_number", e.target.value)} /></div>
@@ -1491,7 +1678,8 @@ export default function SalesPage() {
                     <div><InputLabel>결제카드</InputLabel><input className={inputClass} value={form.payment_card} onChange={(e) => setFormValue("payment_card", e.target.value)} /></div>
                     <div><InputLabel>카드번호</InputLabel><input className={inputClass} value={form.card_number} onChange={(e) => setFormValue("card_number", e.target.value)} /></div>
                     <div><InputLabel>연락처</InputLabel><input className={inputClass} value={form.contact_phone || selectedMember?.phone || ""} onChange={(e) => setFormValue("contact_phone", e.target.value)} /></div>
-                    <div><InputLabel>계산서발행여부</InputLabel><select className={inputClass} value={form.tax_invoice_status} onChange={(e) => setFormValue("tax_invoice_status", e.target.value)}><option value="">선택</option>{TAX_INVOICE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+                    <div><InputLabel>세금계산서</InputLabel><select className={inputClass} value={form.tax_invoice_status} onChange={(e) => setFormValue("tax_invoice_status", e.target.value)}><option value="">선택</option>{TAX_INVOICE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+                    <div><InputLabel>현금영수증</InputLabel><select className={inputClass} value={form.cash_receipt_status} onChange={(e) => setFormValue("cash_receipt_status", e.target.value)}><option value="">선택</option>{CASH_RECEIPT_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
                     <div className="md:col-span-3"><InputLabel>특이사항</InputLabel><textarea className={textareaClass} value={form.special_notes} onChange={(e) => setFormValue("special_notes", e.target.value)} placeholder="특이사항을 입력하세요" /></div>
                   </div>
                 </div>
