@@ -114,14 +114,24 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
 }
 
 function extractPhoneFromFileName(fileName: string) {
-  const normalizedFileName = normalizePhone(fileName);
+  const nameOnly = fileName.replace(/\.[^/.]+$/, "");
+  const candidates: string[] = [];
 
+  // 1순위: 파일명 맨 앞 구간을 연락처로 인식
+  // 예: 32563576458_주해랑팀장님_20260604.m4a
+  // 예: 53252347456_김중석본부장_260605.m4a
+  const firstPart = nameOnly.split("_")[0] || "";
+  const firstPartDigits = normalizePhone(firstPart);
+
+  if (firstPartDigits.length >= 8 && firstPartDigits.length <= 11) {
+    candidates.push(firstPartDigits);
+  }
+
+  // 2순위: 010/지역번호처럼 0으로 시작하는 일반 전화번호
   const patterns = [
     /01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g,
     /0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g,
   ];
-
-  const candidates: string[] = [];
 
   for (const pattern of patterns) {
     const matches = fileName.match(pattern);
@@ -130,14 +140,24 @@ function extractPhoneFromFileName(fileName: string) {
     }
   }
 
-  const numberMatches = normalizedFileName.match(/0\d{8,10}/g);
-  if (numberMatches) {
-    candidates.push(...numberMatches.map(normalizePhone));
+  // 3순위: 파일명 전체의 숫자 덩어리 중 8~11자리 후보 인식
+  // 325-6357-6458처럼 0 없이 저장된 번호도 처리하기 위함
+  const numericChunks = nameOnly.match(/\d+/g) || [];
+
+  for (const chunk of numericChunks) {
+    const digits = normalizePhone(chunk);
+    if (digits.length >= 8 && digits.length <= 11) {
+      candidates.push(digits);
+    }
   }
 
   const uniqueCandidates = Array.from(new Set(candidates))
-    .filter((value) => value.length >= 9 && value.length <= 11)
-    .sort((a, b) => b.length - a.length);
+    .filter((value) => value.length >= 8 && value.length <= 11)
+    .sort((a, b) => {
+      if (a === firstPartDigits) return -1;
+      if (b === firstPartDigits) return 1;
+      return b.length - a.length;
+    });
 
   return uniqueCandidates[0] || null;
 }
