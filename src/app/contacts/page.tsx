@@ -70,7 +70,7 @@ type ContactNote = {
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
 const VIP_DB_SOURCE = "vip_activity";
-const ARCHIVED_DB_SOURCE = "archived";
+const CUSTOMER_DB_SOURCE = "customer_db";
 const DEFAULT_ASSIGNED_TO = "조계현";
 const VIP_SELECT_FIELDS =
   "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
@@ -577,28 +577,22 @@ export default function ContactsPage() {
 
   const deleteRecord = async (id: number) => {
     const ok = window.confirm(
-      "선택한 고객을 VIP활동DB에서 삭제할까요? 삭제 후 다시 나타나지 않도록 DB에서 VIP 표시를 제거합니다.",
+      "선택한 고객을 VIP활동DB에서 삭제하면 파이프라인3에서도 함께 삭제됩니다. 삭제하시겠습니까?",
     );
     if (!ok) return;
 
     try {
-      const { error } = await supabase
-        .from("contacts")
-        .update({
-          crm_db_source: ARCHIVED_DB_SOURCE,
-          vip_transferred_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+      const { error } = await supabase.from("contacts").delete().eq("id", id);
 
       if (error) throw error;
 
       setRecords((prev) => prev.filter((record) => record.id !== id));
       if (selectedRecord?.id === id) setSelectedRecord(null);
-      showToast("VIP활동DB에서 삭제되었습니다.");
+      showToast("VIP활동DB와 파이프라인3에서 함께 삭제되었습니다.");
     } catch (error) {
       console.error("VIP활동DB 삭제 실패", error);
-      showToast("VIP활동DB 삭제 실패: Supabase 권한 또는 SQL을 확인해주세요.");
+      const message = error instanceof Error ? error.message : "Supabase DELETE 권한 또는 참조 제약을 확인해주세요.";
+      showToast(`VIP활동DB 삭제 실패: ${message}`);
     }
   };
 
