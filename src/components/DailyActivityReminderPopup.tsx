@@ -74,14 +74,18 @@ function percent(result: number, goal: number) {
   return Math.round((result / goal) * 100);
 }
 
-async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
+async function loadAutoResultCounts(workDate: string, ownerName?: string): Promise<FormValues> {
   const start = `${workDate}T00:00:00`;
   const end = `${nextDateString(workDate)}T00:00:00`;
-  const { data, error } = await supabase
+  let query = supabase
     .from("contacts")
-    .select("id,created_at,activity_type,customer_grade,crm_db_source")
+    .select("id,created_at,activity_type,customer_grade,crm_db_source,assigned_to")
     .gte("created_at", start)
     .lt("created_at", end);
+
+  if (ownerName) query = query.eq("assigned_to", ownerName);
+
+  const { data, error } = await query;
 
   if (error) return { ...EMPTY_VALUES };
 
@@ -89,6 +93,7 @@ async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
     activity_type?: string | null;
     customer_grade?: string | null;
     crm_db_source?: string | null;
+    assigned_to?: string | null;
   }>;
 
   return {
@@ -265,7 +270,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     }
 
     const current = (data || null) as DailyActivityRow | null;
-    const autoResult = await loadAutoResultCounts(today);
+    const autoResult = await loadAutoResultCounts(today, user.name);
     setRow(current);
     setOutside(Boolean(current?.is_outside_meeting));
     setGoal(goalFromRow(current));
@@ -332,7 +337,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     setSaving(true);
     setErrorText("");
 
-    const autoResult = await loadAutoResultCounts(today);
+    const autoResult = await loadAutoResultCounts(today, user.name);
     const finalResult = target === "goal" ? result : autoResult;
 
     const payload = {
