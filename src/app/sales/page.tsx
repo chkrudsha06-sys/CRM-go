@@ -883,8 +883,9 @@ function HyosungUploadModal({
   return (
     <div className="crm-modal-overlay" onClick={onClose}>
       <div
-        className="crm-modal flex h-[calc(100vh-18px)] w-[min(1760px,calc(100vw-18px))] max-w-none flex-col overflow-hidden rounded-[26px]"
+        className="crm-modal flex h-[calc(100vh-10px)] w-[calc(100vw-24px)] max-w-none flex-col overflow-hidden rounded-[28px]"
         onClick={(event) => event.stopPropagation()}
+        style={{ maxWidth: "none", width: "min(1920px, calc(100vw - 24px))" }}
       >
         <div
           className="flex flex-shrink-0 items-start justify-between gap-4 px-8 py-6"
@@ -904,9 +905,9 @@ function HyosungUploadModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-10 py-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-5 2xl:px-10">
           <section
-            className="rounded-[18px] border p-4"
+            className="rounded-[20px] border p-4 2xl:p-5"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           >
             <div className="mb-4 rounded-[18px] border px-5 py-4" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
@@ -929,7 +930,7 @@ function HyosungUploadModal({
               </div>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(620px,1fr)_360px] xl:items-stretch">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_340px] xl:items-stretch">
               <div className="min-w-0">
                 <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
                 <label
@@ -954,7 +955,7 @@ function HyosungUploadModal({
                     setIsDraggingFile(false);
                     handleSelectedFile(event.dataTransfer.files?.[0]);
                   }}
-                  className="group flex min-h-[132px] w-full cursor-pointer flex-col justify-center rounded-[18px] border-2 border-dashed px-6 py-5 transition"
+                  className="group flex min-h-[132px] w-full cursor-pointer flex-col justify-center rounded-[18px] border-2 border-dashed px-7 py-5 transition"
                   style={{
                     background: isDraggingFile ? "var(--accent-bg)" : "var(--surface)",
                     borderColor: isDraggingFile ? "var(--accent-border)" : "var(--border)",
@@ -1002,7 +1003,7 @@ function HyosungUploadModal({
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-baseline justify-between gap-2">
                             <p className="truncate text-[11px] font-[900]" style={{ color: "var(--text-muted)" }}>{item.label}</p>
-                            <p className="max-w-[120px] truncate text-right text-[16px] font-[950] tabular-nums tracking-[-0.04em]" title={item.value.toLocaleString()} style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
+                            <p className="max-w-[112px] truncate text-right text-[16px] font-[950] tabular-nums tracking-[-0.04em]" title={item.value.toLocaleString()} style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
                           </div>
                           <p className="mt-0.5 truncate text-[10px] font-[750]" title={String(item.sub)} style={{ color: "var(--text-faint)" }}>{item.sub}</p>
                         </div>
@@ -1023,7 +1024,7 @@ function HyosungUploadModal({
               <Badge tone={importableCount > 0 ? "success" : "muted"}>{importableCount.toLocaleString()}건 반영 가능</Badge>
             </div>
 
-            <div className="max-h-[560px] overflow-auto">
+            <div className="max-h-[620px] overflow-auto">
               {rows.length === 0 ? (
                 <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-[16px]" style={{ background: "var(--surface-2)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}>
