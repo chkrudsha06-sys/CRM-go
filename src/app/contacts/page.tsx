@@ -867,7 +867,7 @@ export default function ContactsPage() {
                 </div>
                 <div className="min-w-0">
                   <h2 className="crm-card-title truncate text-lg font-[900]">
-                    고객 DB 리스트
+                    VIP활동DB 리스트
                   </h2>
                   <p className="crm-tiny mt-1">
                     검색 결과 {filteredRecords.length.toLocaleString()}건 / 전체{" "}
@@ -884,7 +884,7 @@ export default function ContactsPage() {
             </div>
 
             <div className="hidden overflow-x-auto xl:block">
-              <table className="w-full min-w-[1080px] border-collapse text-left">
+              <table className="w-full min-w-[1080px] border-collapse text-center">
                 <thead>
                   <tr
                     className="text-xs font-[900] uppercase tracking-[0.08em]"
@@ -894,14 +894,14 @@ export default function ContactsPage() {
                       borderBottom: "1px solid var(--border-subtle)",
                     }}
                   >
-                    <th className="px-5 py-4">고객명</th>
-                    <th className="px-5 py-4">직급</th>
-                    <th className="px-5 py-4">연락처</th>
-                    <th className="px-5 py-4">유입경로</th>
-                    <th className="px-5 py-4">관리구간</th>
-                    <th className="px-5 py-4">자동등급</th>
-                    <th className="px-5 py-4">메모</th>
-                    <th className="px-5 py-4">등록일</th>
+                    <th className="px-5 py-4 text-center">고객명</th>
+                    <th className="px-5 py-4 text-center">직급</th>
+                    <th className="px-5 py-4 text-center">연락처</th>
+                    <th className="px-5 py-4 text-center">유입경로</th>
+                    <th className="px-5 py-4 text-center">관리구간</th>
+                    <th className="px-5 py-4 text-center">자동등급</th>
+                    <th className="px-5 py-4 text-center">메모</th>
+                    <th className="px-5 py-4 text-center">등록일</th>
                     <th className="px-5 py-4 text-center">관리</th>
                   </tr>
                 </thead>
@@ -923,8 +923,8 @@ export default function ContactsPage() {
                           borderBottom: "1px solid var(--border-subtle)",
                         }}
                       >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
+                        <td className="px-5 py-4 text-center">
+                          <div className="flex items-center justify-center gap-3">
                             <div
                               className="flex h-10 w-10 items-center justify-center rounded-[15px] text-sm font-[930] text-white"
                               style={{
@@ -934,21 +934,20 @@ export default function ContactsPage() {
                             >
                               {record.name.slice(0, 1)}
                             </div>
-                            <div>
+                            <div className="text-center">
                               <p
                                 className="font-[900]"
                                 style={{ color: "var(--text-strong)" }}
                               >
                                 {fmt(record.name)}
                               </p>
-                              <p className="crm-tiny">ID {record.id}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">{fmt(record.title)}</td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 text-center">{fmt(record.title)}</td>
+                        <td className="px-5 py-4 text-center">
                           <div
-                            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5"
+                            className="inline-flex items-center justify-center gap-2 rounded-full px-3 py-1.5"
                             style={{
                               background: "var(--surface-2)",
                               border: "1px solid var(--border-subtle)",
@@ -961,43 +960,43 @@ export default function ContactsPage() {
                             {fmt(record.phone)}
                           </div>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 text-center">
                           <span
                             className={`badge-premium ${badgeClass(record.intake_route)}`}
                           >
                             {fmt(record.intake_route)}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 text-center">
                           <span
                             className={`badge-premium ${badgeClass(record.management_stage)}`}
                           >
                             {fmt(record.management_stage)}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 text-center">
                           <span
                             className={`badge-premium ${badgeClass(displayCustomerGrade(record))}`}
                           >
                             {fmt(displayCustomerGrade(record))}
                           </span>
                         </td>
-                        <td className="max-w-[260px] px-5 py-4">
+                        <td className="max-w-[260px] px-5 py-4 text-center">
                           <p
-                            className="truncate"
+                            className="mx-auto max-w-[240px] truncate text-center"
                             style={{ color: "var(--text-subtle)" }}
                           >
                             {fmt(stripGradeAssessmentBlock(record.memo))}
                           </p>
                         </td>
                         <td
-                          className="px-5 py-4"
+                          className="px-5 py-4 text-center"
                           style={{ color: "var(--text-subtle)" }}
                         >
                           {dateLabel(record.created_at)}
                         </td>
                         <td
-                          className="px-5 py-4"
+                          className="px-5 py-4 text-center"
                           onClick={(event) => event.stopPropagation()}
                         >
                           <RowActions
@@ -1473,8 +1472,6 @@ function CustomerDetailPanel({
               <DetailItem label="소속회사" value={record.company} />
               <DetailItem label="자동등급" value={visibleGrade} badge />
               <DetailItem label="등록일" value={dateLabel(record.created_at)} />
-              <DetailItem label="수정일" value={dateLabel(record.updated_at)} />
-              <DetailItem label="등록 ID" value={`#${record.id}`} />
             </div>
           </section>
 
