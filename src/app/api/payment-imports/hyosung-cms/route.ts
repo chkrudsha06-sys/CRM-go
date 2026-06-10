@@ -144,18 +144,19 @@ function getCell(row: HyosungRow, ...keys: string[]) {
   return "";
 }
 
+function cleanExternalKeyPart(value: unknown) {
+  const text = toText(value);
+  return text ? text.replace(/\s+/g, "").replace(/[|_]/g, "") : "";
+}
+
 function buildExternalPaymentId(payment: Omit<NormalizedPayment, "externalPaymentId">) {
   return [
     "HYOSUNG_CMS",
-    payment.memberNumber || "NO_MEMBER",
-    payment.contractNumber || "NO_CONTRACT",
-    payment.billingMonth || "NO_MONTH",
-    payment.paidAt || payment.completedAt || "NO_DATE",
-    payment.paidAmount,
-    payment.paymentStatus || "NO_STATUS",
-  ]
-    .map((value) => String(value).replace(/\s+/g, "").replace(/[|]/g, ""))
-    .join("_");
+    cleanExternalKeyPart(payment.memberNumber) || "NO_MEMBER",
+    cleanExternalKeyPart(payment.memberName) || "NO_NAME",
+    cleanExternalKeyPart(payment.billingMonth) || "NO_MONTH",
+    cleanExternalKeyPart(payment.paidAt || payment.completedAt) || "NO_DATE",
+  ].join("_");
 }
 
 function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayment {
@@ -172,7 +173,7 @@ function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayme
     paymentType: toText(getCell(row, "결제방식")),
     paymentMethod: toText(getCell(row, "결제수단")),
     promisedAt: normalizeDate(getCell(row, "약정일")),
-    paidAt: normalizeDate(getCell(row, "결제일(납부기간)", "결제일")),
+    paidAt: normalizeDate(getCell(row, "결제일", "결제일(납부기간)", "청구완납일자")),
     completedAt: normalizeDate(getCell(row, "청구완납일자")),
     billingAmount: toNumber(getCell(row, "청구금액")),
     paidAmount: toNumber(getCell(row, "수납금액")),
@@ -329,9 +330,11 @@ async function importPayments(payments: NormalizedPayment[]) {
 
   for (const payment of payments) {
     try {
-      const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId);
+      const existing = payment.isPaid && payment.paidAt
+        ? await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId)
+        : null;
 
-      if (existing?.sales_record_id) {
+      if (existing?.sales_record_id || existing?.import_status === "sales_created") {
         results.push({
           externalPaymentId: payment.externalPaymentId,
           memberName: payment.memberName,
