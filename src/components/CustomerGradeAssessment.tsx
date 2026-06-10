@@ -4,6 +4,7 @@ import { Award, BarChart3, ShieldCheck } from "lucide-react";
 import {
   calculateCustomerGrade,
   GRADE_SELECT_OPTIONS,
+  MANAGEMENT_STAGE_OPTIONS,
   hasGradeAssessmentInput,
   type GradeAssessmentForm,
 } from "@/lib/customerGrade";
@@ -12,6 +13,9 @@ type Props = {
   value: GradeAssessmentForm;
   title: string;
   onChange: (value: GradeAssessmentForm) => void;
+  managementStage?: string;
+  onManagementStageChange?: (value: string) => void;
+  managementStageOptions?: readonly string[];
 };
 
 function update(
@@ -142,6 +146,9 @@ export default function CustomerGradeAssessment({
   value,
   title,
   onChange,
+  managementStage,
+  onManagementStageChange,
+  managementStageOptions = MANAGEMENT_STAGE_OPTIONS,
 }: Props) {
   const result = calculateCustomerGrade(value, title);
   const hasInput = hasGradeAssessmentInput(value);
@@ -323,6 +330,14 @@ export default function CustomerGradeAssessment({
             onChange(update(value, "ad_budget_support", next))
           }
         />
+        {typeof managementStage === "string" && onManagementStageChange ? (
+          <SelectInput
+            label="관리구간"
+            value={managementStage}
+            options={[...managementStageOptions]}
+            onChange={onManagementStageChange}
+          />
+        ) : null}
       </div>
 
       <div
