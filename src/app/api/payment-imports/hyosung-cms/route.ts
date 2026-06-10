@@ -144,19 +144,16 @@ function getCell(row: HyosungRow, ...keys: string[]) {
   return "";
 }
 
-function cleanExternalKeyPart(value: unknown) {
-  const text = toText(value);
-  return text ? text.replace(/\s+/g, "").replace(/[|_]/g, "") : "";
-}
-
 function buildExternalPaymentId(payment: Omit<NormalizedPayment, "externalPaymentId">) {
   return [
     "HYOSUNG_CMS",
-    cleanExternalKeyPart(payment.memberNumber) || "NO_MEMBER",
-    cleanExternalKeyPart(payment.memberName) || "NO_NAME",
-    cleanExternalKeyPart(payment.billingMonth) || "NO_MONTH",
-    cleanExternalKeyPart(payment.paidAt || payment.completedAt) || "NO_DATE",
-  ].join("_");
+    payment.memberNumber || "NO_MEMBER",
+    payment.memberName || "NO_NAME",
+    payment.billingMonth || "NO_MONTH",
+    payment.paidAt || "NO_DATE",
+  ]
+    .map((value) => String(value).trim().replace(/\s+/g, "").replace(/[|]/g, ""))
+    .join("_");
 }
 
 function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayment {
@@ -283,6 +280,24 @@ async function saveExternalPaymentRecord(payment: NormalizedPayment, params: {
   return data;
 }
 
+async function findExistingSalesRecord(payment: NormalizedPayment) {
+  if (!payment.memberNumber || !payment.memberName || !payment.paidAt) return null;
+
+  const { data, error } = await supabase
+    .from("ad_executions")
+    .select("id")
+    .eq("channel", "효성CMS")
+    .eq("bunyanghoe_number", payment.memberNumber)
+    .eq("member_name", payment.memberName)
+    .eq("payment_date", payment.paidAt)
+    .eq("execution_amount", payment.paidAmount)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data;
+}
+
 async function createSalesRecord(payment: NormalizedPayment) {
   const memo = [
     "효성CMS 수납내역 자동반영",
@@ -330,11 +345,9 @@ async function importPayments(payments: NormalizedPayment[]) {
 
   for (const payment of payments) {
     try {
-      const existing = payment.isPaid && payment.paidAt
-        ? await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId)
-        : null;
+      const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId);
 
-      if (existing?.sales_record_id || existing?.import_status === "sales_created") {
+      if (existing?.sales_record_id) {
         results.push({
           externalPaymentId: payment.externalPaymentId,
           memberName: payment.memberName,
@@ -357,6 +370,25 @@ async function importPayments(payments: NormalizedPayment[]) {
           status: "logged_only",
           message: saved.import_message,
           salesRecordId: null,
+        });
+        continue;
+      }
+
+      const existingSalesRecord = await findExistingSalesRecord(payment);
+
+      if (existingSalesRecord?.id) {
+        await saveExternalPaymentRecord(payment, {
+          importStatus: "duplicate",
+          importMessage: "효성CMS 기준으로 이미 통합매출에 반영된 수납내역입니다.",
+          salesRecordId: Number(existingSalesRecord.id),
+        });
+
+        results.push({
+          externalPaymentId: payment.externalPaymentId,
+          memberName: payment.memberName,
+          status: "duplicate",
+          message: "이미 통합매출에 반영된 수납내역입니다.",
+          salesRecordId: existingSalesRecord.id,
         });
         continue;
       }
