@@ -155,6 +155,46 @@ function toDateInput(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+
+function nextDateString(dateText: string) {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return toDateInput(date);
+}
+
+async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
+  const start = `${workDate}T00:00:00`;
+  const end = `${nextDateString(workDate)}T00:00:00`;
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id,created_at,activity_type,customer_grade,crm_db_source")
+    .gte("created_at", start)
+    .lt("created_at", end);
+
+  if (error) return { ...EMPTY_VALUES };
+
+  const rows = (data || []) as Array<{
+    activity_type?: string | null;
+    customer_grade?: string | null;
+    crm_db_source?: string | null;
+  }>;
+
+  return {
+    new_tm: rows.filter((row) => String(row.activity_type || "").trim() === "TM").length,
+    coldtalk: rows.filter((row) => String(row.activity_type || "").trim() === "콜드톡").length,
+    consultant_db: rows.filter(
+      (row) =>
+        String(row.crm_db_source || "").trim() === "vip_activity" &&
+        String(row.customer_grade || "").trim() === "브론즈",
+    ).length,
+    second_touch: rows.filter((row) => {
+      const grade = String(row.customer_grade || "").trim();
+      return String(row.crm_db_source || "").trim() === "vip_activity" && (grade === "마스터" || grade === "챌린저");
+    }).length,
+    meeting_confirmed: 0,
+  };
+}
+
 function formatKoreanDate(dateText: string) {
   const date = new Date(`${dateText}T00:00:00`);
   const days = ["일", "월", "화", "수", "목", "금", "토"];
@@ -796,7 +836,7 @@ function GoalInputPanel({
   );
 }
 
-function AutoResultNotice({ result }: { result: FormValues }) {
+function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValues }) {
   return (
     <div
       className="flex h-full min-h-[228px] flex-col rounded-[16px] border p-4"
@@ -817,8 +857,9 @@ function AutoResultNotice({ result }: { result: FormValues }) {
           >
             <p className="crm-tiny">{field.label} 달성</p>
             <p className="crm-row-main mt-1">
-              {result[field.key].toLocaleString()} {field.unit}
+              {result[field.key].toLocaleString()} / {goal[field.key].toLocaleString()} {field.unit}
             </p>
+            <p className="crm-tiny mt-1">달성율 {percent(result[field.key], goal[field.key])}%</p>
           </div>
         ))}
       </div>
@@ -925,11 +966,13 @@ function DailyActivityPrompt({
             </div>
 
             {isMid ? (
-              <div
-                className="rounded-[20px] border p-5 text-[15px] font-[760] leading-relaxed"
-                style={{ borderColor: "var(--accent-border)", background: "var(--accent-subtle)", color: "var(--accent-text)" }}
-              >
-                지금까지의 진행 상황을 잠깐 점검하고, 남은 시간을 어디에 집중할지 다시 정리해보세요.
+              <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+                <WorkItemsResultChecklist
+                  items={workItems}
+                  disabled={disabled}
+                  onToggle={onTaskToggle}
+                />
+                <AutoResultNotice goal={goal} result={result} />
               </div>
             ) : isGoal ? (
                 <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
@@ -968,7 +1011,7 @@ function DailyActivityPrompt({
                     disabled={disabled}
                     onToggle={onTaskToggle}
                   />
-                  <AutoResultNotice result={result} />
+                  <AutoResultNotice goal={goal} result={result} />
                 </div>
               )}
 
@@ -981,9 +1024,9 @@ function DailyActivityPrompt({
                   <Save size={14} /> {saving ? "저장 중..." : "목표 저장"}
                 </button>
               )}
-              {mode === "result" && (
+              {(mode === "mid" || mode === "result") && (
                 <button type="button" onClick={onSaveResult} disabled={saving} className="btn-premium btn-primary">
-                  <Save size={14} /> {saving ? "저장 중..." : "결과 저장"}
+                  <Save size={14} /> {saving ? "저장 중..." : mode === "mid" ? "중간점검 저장" : "최종 확인 저장"}
                 </button>
               )}
             </div>
@@ -1049,7 +1092,7 @@ export default function DailyActivityPage() {
     const monthStart = `${monthFilter}-01`;
     const monthEnd = endOfMonth(monthStart);
 
-    const [dailyRes, periodRes] = await Promise.all([
+    const [dailyRes, periodRes, autoResult] = await Promise.all([
       supabase.from("daily_activity_goals").select("*").eq("work_date", date),
       supabase
         .from("daily_activity_goals")
@@ -1057,6 +1100,7 @@ export default function DailyActivityPage() {
         .gte("work_date", monthStart)
         .lte("work_date", monthEnd)
         .order("work_date", { ascending: false }),
+      loadAutoResultCounts(date),
     ]);
 
     if (dailyRes.error) {
@@ -1086,18 +1130,12 @@ export default function DailyActivityPage() {
         second_touch: row.goal_second_touch || 0,
         meeting_confirmed: 0,
       });
-      setResult({
-        new_tm: row.result_new_tm || 0,
-        coldtalk: row.result_coldtalk || 0,
-        consultant_db: row.result_consultant_db || 0,
-        second_touch: row.result_second_touch || 0,
-        meeting_confirmed: 0,
-      });
+      setResult(autoResult);
       setWorkItems(normalizeWorkItems(row.goal_work_items));
     } else {
       setIsOutsideMeeting(false);
       setGoal({ ...EMPTY_VALUES });
-      setResult({ ...EMPTY_VALUES });
+      setResult(autoResult);
       setWorkItems(createEmptyWorkItems());
     }
 
@@ -1123,6 +1161,20 @@ export default function DailyActivityPage() {
     const timer = window.setTimeout(() => setPromptIntro(false), 1250);
     return () => window.clearTimeout(timer);
   }, [promptMode]);
+
+  useEffect(() => {
+    let alive = true;
+    const refreshAutoResult = async () => {
+      const next = await loadAutoResultCounts(date);
+      if (alive) setResult(next);
+    };
+    refreshAutoResult();
+    const timer = window.setInterval(refreshAutoResult, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [date]);
 
   useEffect(() => {
     if (!currentMember || loading || date !== todayString()) return;
@@ -1152,8 +1204,8 @@ export default function DailyActivityPage() {
       }
 
       if (
-        minutes >= 8 * 60 &&
-        minutes < 15 * 60 &&
+        minutes >= 9 * 60 &&
+        minutes < 10 * 60 &&
         !isGoalEntered(myRow) &&
         !localStorage.getItem(`${baseKey}-goal`)
       ) {
@@ -1176,7 +1228,7 @@ export default function DailyActivityPage() {
     setPromptMode(null);
   };
 
-  const saveFromPrompt = async (mode: "goal" | "result") => {
+  const saveFromPrompt = async (mode: "goal" | "mid" | "result") => {
     await handleSave();
     closePrompt(mode);
   };
@@ -1220,6 +1272,7 @@ export default function DailyActivityPage() {
     }
 
     setSaving(true);
+    const autoResult = await loadAutoResultCounts(date);
     const payload = {
       work_date: date,
       owner_name: currentMember.name,
@@ -1234,11 +1287,11 @@ export default function DailyActivityPage() {
       goal_media_mix: 0,
       goal_meeting_confirmed: 0,
       goal_work_items: isOutsideMeeting ? [] : workItems,
-      result_consultant_db: isOutsideMeeting ? 0 : result.consultant_db,
-      result_second_touch: isOutsideMeeting ? 0 : result.second_touch,
-      result_new_tm: isOutsideMeeting ? 0 : result.new_tm,
+      result_consultant_db: isOutsideMeeting ? 0 : autoResult.consultant_db,
+      result_second_touch: isOutsideMeeting ? 0 : autoResult.second_touch,
+      result_new_tm: isOutsideMeeting ? 0 : autoResult.new_tm,
       result_manage_tm: 0,
-      result_coldtalk: isOutsideMeeting ? 0 : result.coldtalk,
+      result_coldtalk: isOutsideMeeting ? 0 : autoResult.coldtalk,
       result_media_mix: 0,
       result_meeting_confirmed: 0,
     };
@@ -1579,7 +1632,7 @@ export default function DailyActivityPage() {
                         setGoal((prev) => ({ ...prev, [key]: value }))
                       }
                     />
-                    <AutoResultNotice result={result} />
+                    <AutoResultNotice goal={goal} result={result} />
                   </div>
 
                   <div className="grid items-stretch gap-5 xl:grid-cols-2">
@@ -1869,6 +1922,26 @@ export default function DailyActivityPage() {
       </div>
 
 
+      {promptMode && (
+        <DailyActivityPrompt
+          mode={promptMode}
+          intro={promptIntro}
+          goal={goal}
+          result={result}
+          workItems={workItems}
+          saving={saving}
+          disabled={isOutsideMeeting}
+          onGoalChange={(key, value) => setGoal((current) => ({ ...current, [key]: value }))}
+          onResultChange={(key, value) => setResult((current) => ({ ...current, [key]: value }))}
+          onTaskTextChange={updateWorkItemText}
+          onTaskAdd={addWorkItem}
+          onTaskRemove={removeWorkItem}
+          onTaskToggle={toggleWorkItemDone}
+          onSaveGoal={() => saveFromPrompt("goal")}
+          onSaveResult={() => saveFromPrompt(promptMode)}
+          onClose={() => closePrompt(promptMode)}
+        />
+      )}
 
       {toast && (
         <div
