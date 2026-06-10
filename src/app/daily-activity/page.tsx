@@ -862,7 +862,7 @@ function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValu
           >
             <p className="crm-tiny">{field.label} 달성</p>
             <p className="crm-row-main mt-1">
-              {result[field.key].toLocaleString()} / {goal[field.key].toLocaleString()} {field.unit}
+              {goal[field.key].toLocaleString()} / {result[field.key].toLocaleString()} {field.unit}
             </p>
             <p className="crm-tiny mt-1">달성율 {percent(result[field.key], goal[field.key])}%</p>
           </div>
