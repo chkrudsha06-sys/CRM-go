@@ -373,6 +373,10 @@ export function stripGradeAssessmentBlock(memo: string | null | undefined) {
 
   cleaned = cleaned.replace(/\[\[CRM_GRADE_[^\]]*\]\]/g, "");
   cleaned = cleaned.replace(/\[\[\/CRM_GRADE_[^\]]*\]\]/g, "");
+  cleaned = cleaned.replace(/\n?\[고객DB 등록 정보\][\s\S]*?(?=\n{2,}\[|$)/g, "");
+  cleaned = cleaned.replace(/\n?\[고객DB 이관 정보\][\s\S]*?(?=\n{2,}\[|$)/g, "");
+  cleaned = cleaned.replace(/\n?\[고객DB 활동노트\][\s\S]*?(?=\n{2,}\[|$)/g, "");
+  cleaned = cleaned.replace(/\n?\[계약전환\][^\n]*(?:\n[^\n]*)?/g, "");
 
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 }
