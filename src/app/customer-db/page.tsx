@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getCurrentUser } from "@/lib/auth";
 import CustomerGradeAssessment from "@/components/CustomerGradeAssessment";
 import {
   appendGradeAssessmentBlock,
@@ -87,6 +88,10 @@ const VIP_DB_STORAGE_KEY = "crm_go_customer_db_local_v2";
 const CUSTOMER_DB_SOURCE = "customer_db";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
+
+function currentAssignedTo() {
+  return getCurrentUser()?.name || DEFAULT_ASSIGNED_TO;
+}
 const INTAKE_ROUTES = [
   "분양의신DB",
   "컨설턴트VIP DB",
@@ -220,8 +225,9 @@ async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
     management_stage: "리드",
     customer_grade: "심사미진행",
     memo: buildContactMemo(record),
+    activity_type: record.activity_type,
     crm_db_source: CUSTOMER_DB_SOURCE,
-    assigned_to: DEFAULT_ASSIGNED_TO,
+    assigned_to: currentAssignedTo(),
     updated_at: now,
   };
 
@@ -1318,7 +1324,8 @@ export default function CustomerDbPage() {
       memo: vipMemo,
       crm_db_source: VIP_DB_SOURCE,
       vip_transferred_at: now,
-      assigned_to: DEFAULT_ASSIGNED_TO,
+      activity_type: transferTarget.activity_type,
+      assigned_to: currentAssignedTo(),
       updated_at: now,
     };
 
