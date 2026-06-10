@@ -24,6 +24,7 @@ import {
   calculateCustomerGrade,
   CUSTOMER_GRADE_OPTIONS,
   EMPTY_GRADE_ASSESSMENT,
+  MANAGEMENT_STAGE_OPTIONS,
   hasGradeAssessmentInput,
   parseGradeAssessmentBlock,
   stripGradeAssessmentBlock,
@@ -117,7 +118,6 @@ const INTAKE_ROUTES = [
   "대협팀활동",
 ];
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
-const MANAGEMENT_STAGES = ["리드", "프로스펙팅", "딜크로징", "리텐션"];
 const UNREVIEWED_GRADE = "심사미진행";
 
 const EMPTY_FORM: FormState = {
@@ -186,7 +186,7 @@ function badgeClass(value?: string | null) {
   if (value === "대협팀활동") return "badge-info";
   if (value === "리드") return "badge-info";
   if (value === "프로스펙팅") return "badge-warning";
-  if (value === "딜크로징") return "badge-danger";
+  if (value === "딜클로징" || value === "딜크로징") return "badge-danger";
   if (value === "리텐션") return "badge-success";
   return "badge-muted";
 }
@@ -261,9 +261,11 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
   const hasAssessment = hasGradeAssessmentInput(assessment);
 
   if (!hasAssessment) {
+    const storedGrade = String(record.customer_grade || "").trim();
     return {
       ...record,
-      customer_grade: UNREVIEWED_GRADE,
+      customer_grade:
+        storedGrade && storedGrade !== "-" ? storedGrade : UNREVIEWED_GRADE,
       memo: cleanMemo,
     };
   }
@@ -834,7 +836,7 @@ export default function ContactsPage() {
               <SelectBox
                 value={filterStage}
                 onChange={setFilterStage}
-                options={MANAGEMENT_STAGES}
+                options={[...MANAGEMENT_STAGE_OPTIONS]}
                 placeholder="전체 관리구간"
               />
               <SelectBox
@@ -1147,14 +1149,6 @@ export default function ContactsPage() {
                     }
                     options={INTAKE_ROUTES}
                   />
-                  <FormSelect
-                    label="관리구간"
-                    value={form.management_stage}
-                    onChange={(value) =>
-                      setForm((prev) => ({ ...prev, management_stage: value }))
-                    }
-                    options={MANAGEMENT_STAGES}
-                  />
                   <FormInput
                     label="소속회사"
                     value={form.company}
@@ -1170,6 +1164,11 @@ export default function ContactsPage() {
                     value={gradeAssessment}
                     title={form.title}
                     onChange={setGradeAssessment}
+                    managementStage={form.management_stage || "리드"}
+                    onManagementStageChange={(value) =>
+                      setForm((prev) => ({ ...prev, management_stage: value }))
+                    }
+                    managementStageOptions={MANAGEMENT_STAGE_OPTIONS}
                   />
                 </div>
 
