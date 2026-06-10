@@ -851,6 +851,18 @@ function HyosungUploadModal({
   onImport: () => void;
   onClose: () => void;
 }) {
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  const handleSelectedFile = useCallback((file?: File | null) => {
+    if (!file) return;
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".xlsx") && !lowerName.endsWith(".xls")) {
+      alert("효성CMS 엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.");
+      return;
+    }
+    onFile(file);
+  }, [onFile]);
+
   const importableCount = rows.filter((row) => row.isPaid && !row.isDuplicate).length;
   const paidAmount = rows
     .filter((row) => row.isPaid && !row.isDuplicate)
@@ -871,11 +883,11 @@ function HyosungUploadModal({
   return (
     <div className="crm-modal-overlay" onClick={onClose}>
       <div
-        className="crm-modal flex h-[calc(100vh-56px)] w-[min(1360px,calc(100vw-48px))] max-w-none flex-col overflow-hidden rounded-[22px]"
+        className="crm-modal flex h-[calc(100vh-32px)] w-[min(1560px,calc(100vw-28px))] max-w-none flex-col overflow-hidden rounded-[24px]"
         onClick={(event) => event.stopPropagation()}
       >
         <div
-          className="flex flex-shrink-0 items-start justify-between gap-4 px-7 py-5"
+          className="flex flex-shrink-0 items-start justify-between gap-4 px-8 py-6"
           style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface)" }}
         >
           <div>
@@ -892,31 +904,70 @@ function HyosungUploadModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
           <section
             className="rounded-[18px] border p-4"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           >
-            <div className="grid gap-4 xl:grid-cols-[1fr_360px] xl:items-center">
-              <div>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
+              <div className="min-w-0">
                 <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) onFile(file);
+                <label
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setIsDraggingFile(true);
                   }}
-                  className="block h-12 w-full rounded-[14px] border px-4 text-[14px] font-[800]"
-                  style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-                <p className="mt-2 text-[12.5px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setIsDraggingFile(false);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setIsDraggingFile(false);
+                    handleSelectedFile(event.dataTransfer.files?.[0]);
+                  }}
+                  className="group flex min-h-[118px] w-full cursor-pointer flex-col justify-center rounded-[18px] border-2 border-dashed px-5 py-4 transition"
+                  style={{
+                    background: isDraggingFile ? "var(--accent-bg)" : "var(--surface)",
+                    borderColor: isDraggingFile ? "var(--accent-border)" : "var(--border)",
+                    color: "var(--text)",
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(event) => handleSelectedFile(event.target.files?.[0])}
+                    className="sr-only"
+                  />
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[16px]" style={{ background: "var(--accent-bg)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
+                      <UploadCloud size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-[950] tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                        파일을 선택하거나 이 영역으로 끌어다 놓기
+                      </p>
+                      <p className="mt-1 break-all text-[12px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                        .xlsx / .xls 형식만 가능하며, 효성CMS에서 다운로드한 수납내역 원본을 그대로 업로드해주세요.
+                      </p>
+                    </div>
+                  </div>
+                </label>
+                <p className="mt-3 text-[12.5px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
                   수납상태가 <b>완납</b>이고 결제상태가 <b>결제완료</b>이며 수납금액이 0원보다 큰 건만 매출로 생성됩니다.
                   결제실패·미납 건은 매출로 잡지 않고 수집 로그에만 보관합니다.
                 </p>
               </div>
 
-              <div className="rounded-[16px] border px-4 py-3" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+              <div className="rounded-[18px] border px-5 py-4" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
                 <p className="text-[12px] font-[900]" style={{ color: "var(--text-subtle)" }}>반영 기준</p>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
@@ -933,18 +984,20 @@ function HyosungUploadModal({
             </div>
           </section>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             {statItems.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.label} className="rounded-[16px] border px-4 py-3" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
-                  <div className="flex items-center justify-between gap-3">
+                <div key={item.label} className="min-w-0 rounded-[18px] border px-4 py-4" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
+                  <div className="flex min-w-0 items-start justify-between gap-3">
                     <PremiumIcon icon={Icon} tone={item.tone} />
-                    <p className="text-[22px] font-[950] leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
+                    <div className="min-w-0 flex-1 text-right">
+                      <p className="break-words text-[clamp(18px,1.35vw,24px)] font-[950] leading-tight tracking-[-0.05em] tabular-nums" style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
+                    </div>
                   </div>
                   <div className="mt-3 min-w-0">
-                    <p className="truncate text-[12px] font-[900]" style={{ color: "var(--text-muted)" }}>{item.label}</p>
-                    <p className="mt-0.5 truncate text-[11px] font-[750]" style={{ color: "var(--text-faint)" }}>{item.sub}</p>
+                    <p className="text-[12px] font-[900] leading-tight" style={{ color: "var(--text-muted)" }}>{item.label}</p>
+                    <p className="mt-1 break-words text-[11px] font-[750] leading-tight" style={{ color: "var(--text-faint)" }}>{item.sub}</p>
                   </div>
                 </div>
               );
@@ -960,7 +1013,7 @@ function HyosungUploadModal({
               <Badge tone={importableCount > 0 ? "success" : "muted"}>{importableCount.toLocaleString()}건 반영 가능</Badge>
             </div>
 
-            <div className="max-h-[470px] overflow-auto">
+            <div className="max-h-[560px] overflow-auto">
               {rows.length === 0 ? (
                 <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 px-6 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-[16px]" style={{ background: "var(--surface-2)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}>
@@ -1011,7 +1064,7 @@ function HyosungUploadModal({
           </section>
         </div>
 
-        <div className="flex flex-shrink-0 items-center justify-between gap-3 px-7 py-4" style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--surface)" }}>
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 px-8 py-5" style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--surface)" }}>
           <p className="text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>
             같은 파일을 다시 업로드해도 중복건은 자동 제외됩니다.
           </p>
