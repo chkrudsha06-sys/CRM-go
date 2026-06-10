@@ -8,10 +8,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 const EXEC_MEMBERS = ["조계현", "이세호", "기여운", "최연전"];
 
 const ACTIVITY_FIELDS = [
-  { key: "tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
+  { key: "new_tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
   { key: "coldtalk", label: "당일 콜드톡", goalLabel: "당일 콜드톡 목표", resultLabel: "당일 콜드톡 달성", unit: "건" },
-  { key: "bronze_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
-  { key: "one_percent_db", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
+  { key: "consultant_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
+  { key: "second_touch", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
 ] as const;
 
 type ActivityKey = (typeof ACTIVITY_FIELDS)[number]["key"];
@@ -31,29 +31,79 @@ type DailyActivityRow = {
   owner_title: string | null;
   owner_role: string | null;
   is_outside_meeting: boolean;
-  goal_tm: number;
+  goal_new_tm: number;
   goal_coldtalk: number;
-  goal_bronze_db: number;
-  goal_one_percent_db: number;
+  goal_consultant_db: number;
+  goal_second_touch: number;
+  goal_manage_tm?: number;
+  goal_media_mix?: number;
+  goal_meeting_confirmed?: number;
   goal_work_items: WorkItem[] | null;
-  result_tm: number;
+  result_new_tm: number;
   result_coldtalk: number;
-  result_bronze_db: number;
-  result_one_percent_db: number;
+  result_consultant_db: number;
+  result_second_touch: number;
+  result_manage_tm?: number;
+  result_media_mix?: number;
+  result_meeting_confirmed?: number;
   created_at?: string;
   updated_at?: string;
 };
 
 const EMPTY_VALUES: FormValues = {
-  tm: 0,
+  new_tm: 0,
   coldtalk: 0,
-  bronze_db: 0,
-  one_percent_db: 0,
+  consultant_db: 0,
+  second_touch: 0,
 };
 
 function todayString() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+
+function nextDateString(dateText: string) {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function percent(result: number, goal: number) {
+  if (!goal) return result > 0 ? 100 : 0;
+  return Math.round((result / goal) * 100);
+}
+
+async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
+  const start = `${workDate}T00:00:00`;
+  const end = `${nextDateString(workDate)}T00:00:00`;
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id,created_at,activity_type,customer_grade,crm_db_source")
+    .gte("created_at", start)
+    .lt("created_at", end);
+
+  if (error) return { ...EMPTY_VALUES };
+
+  const rows = (data || []) as Array<{
+    activity_type?: string | null;
+    customer_grade?: string | null;
+    crm_db_source?: string | null;
+  }>;
+
+  return {
+    new_tm: rows.filter((row) => String(row.activity_type || "").trim() === "TM").length,
+    coldtalk: rows.filter((row) => String(row.activity_type || "").trim() === "콜드톡").length,
+    consultant_db: rows.filter(
+      (row) =>
+        String(row.crm_db_source || "").trim() === "vip_activity" &&
+        String(row.customer_grade || "").trim() === "브론즈",
+    ).length,
+    second_touch: rows.filter((row) => {
+      const grade = String(row.customer_grade || "").trim();
+      return String(row.crm_db_source || "").trim() === "vip_activity" && (grade === "마스터" || grade === "챌린저");
+    }).length,
+  };
 }
 
 function createEmptyWorkItems(): WorkItem[] {
@@ -91,10 +141,10 @@ function isGoalEntered(row: DailyActivityRow | null) {
   if (row.is_outside_meeting) return true;
 
   return (
-    Number(row.goal_tm || 0) > 0 ||
+    Number(row.goal_new_tm || 0) > 0 ||
     Number(row.goal_coldtalk || 0) > 0 ||
-    Number(row.goal_bronze_db || 0) > 0 ||
-    Number(row.goal_one_percent_db || 0) > 0 ||
+    Number(row.goal_consultant_db || 0) > 0 ||
+    Number(row.goal_second_touch || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).length > 0
   );
 }
@@ -104,10 +154,10 @@ function isResultEntered(row: DailyActivityRow | null) {
   if (row.is_outside_meeting) return true;
 
   return (
-    Number(row.result_tm || 0) > 0 ||
+    Number(row.result_new_tm || 0) > 0 ||
     Number(row.result_coldtalk || 0) > 0 ||
-    Number(row.result_bronze_db || 0) > 0 ||
-    Number(row.result_one_percent_db || 0) > 0 ||
+    Number(row.result_consultant_db || 0) > 0 ||
+    Number(row.result_second_touch || 0) > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).some((item) => item.done)
   );
 }
@@ -116,10 +166,10 @@ function goalFromRow(row: DailyActivityRow | null): FormValues {
   if (!row) return { ...EMPTY_VALUES };
 
   return {
-    tm: Number(row.goal_tm || 0),
+    new_tm: Number(row.goal_new_tm || 0),
     coldtalk: Number(row.goal_coldtalk || 0),
-    bronze_db: Number(row.goal_bronze_db || 0),
-    one_percent_db: Number(row.goal_one_percent_db || 0),
+    consultant_db: Number(row.goal_consultant_db || 0),
+    second_touch: Number(row.goal_second_touch || 0),
   };
 }
 
@@ -127,10 +177,10 @@ function resultFromRow(row: DailyActivityRow | null): FormValues {
   if (!row) return { ...EMPTY_VALUES };
 
   return {
-    tm: Number(row.result_tm || 0),
+    new_tm: Number(row.result_new_tm || 0),
     coldtalk: Number(row.result_coldtalk || 0),
-    bronze_db: Number(row.result_bronze_db || 0),
-    one_percent_db: Number(row.result_one_percent_db || 0),
+    consultant_db: Number(row.result_consultant_db || 0),
+    second_touch: Number(row.result_second_touch || 0),
   };
 }
 
@@ -215,10 +265,11 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     }
 
     const current = (data || null) as DailyActivityRow | null;
+    const autoResult = await loadAutoResultCounts(today);
     setRow(current);
     setOutside(Boolean(current?.is_outside_meeting));
     setGoal(goalFromRow(current));
-    setResult(resultFromRow(current));
+    setResult(autoResult);
     setWorkItems(normalizeWorkItems(current?.goal_work_items));
   }, [isExec, today, user?.name]);
 
@@ -243,11 +294,11 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
 
     const now = new Date();
     const minutes = now.getHours() * 60 + now.getMinutes();
-    const afterWorkStart = minutes >= 7 * 60;
-    const afterMidCheck = minutes >= 15 * 60;
+    const inGoalWindow = minutes >= 9 * 60 && minutes < 10 * 60;
+    const inMidCheckWindow = minutes >= 15 * 60 && minutes < 17 * 60 + 30;
     const afterResultTime = minutes >= 17 * 60 + 30;
 
-    if (afterWorkStart && !isGoalEntered(row) && !window.localStorage.getItem(reminderKey(user.name, "goal"))) {
+    if (inGoalWindow && !isGoalEntered(row) && !window.localStorage.getItem(reminderKey(user.name, "goal"))) {
       setMode("goal");
       return;
     }
@@ -258,9 +309,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     }
 
     if (
-      afterMidCheck &&
-      minutes < 17 * 60 + 30 &&
-      isGoalEntered(row) &&
+      inMidCheckWindow &&
       !window.localStorage.getItem(reminderKey(user.name, "mid"))
     ) {
       setMode("mid");
@@ -283,21 +332,30 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
     setSaving(true);
     setErrorText("");
 
+    const autoResult = await loadAutoResultCounts(today);
+    const finalResult = target === "goal" ? result : autoResult;
+
     const payload = {
       work_date: today,
       owner_name: user.name,
       owner_title: user.title || null,
       owner_role: "exec",
       is_outside_meeting: outside,
-      goal_tm: outside ? 0 : goal.tm,
+      goal_new_tm: outside ? 0 : goal.new_tm,
       goal_coldtalk: outside ? 0 : goal.coldtalk,
-      goal_bronze_db: outside ? 0 : goal.bronze_db,
-      goal_one_percent_db: outside ? 0 : goal.one_percent_db,
+      goal_consultant_db: outside ? 0 : goal.consultant_db,
+      goal_second_touch: outside ? 0 : goal.second_touch,
+      goal_manage_tm: 0,
+      goal_media_mix: 0,
+      goal_meeting_confirmed: 0,
       goal_work_items: outside ? [] : workItems,
-      result_tm: outside ? 0 : result.tm,
-      result_coldtalk: outside ? 0 : result.coldtalk,
-      result_bronze_db: outside ? 0 : result.bronze_db,
-      result_one_percent_db: outside ? 0 : result.one_percent_db,
+      result_new_tm: outside ? 0 : finalResult.new_tm,
+      result_coldtalk: outside ? 0 : finalResult.coldtalk,
+      result_consultant_db: outside ? 0 : finalResult.consultant_db,
+      result_second_touch: outside ? 0 : finalResult.second_touch,
+      result_manage_tm: 0,
+      result_media_mix: 0,
+      result_meeting_confirmed: 0,
       updated_at: new Date().toISOString(),
     };
 
@@ -419,16 +477,29 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                   </p>
                 </div>
 
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {ACTIVITY_FIELDS.map((field) => (
+                    <div key={field.key} className="rounded-[18px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                      <p className="text-[12px] font-[820]" style={{ color: "var(--text-muted)" }}>{field.label}</p>
+                      <p className="mt-2 text-[20px] font-[920]" style={{ color: "var(--text-strong)" }}>
+                        {result[field.key].toLocaleString()} / {goal[field.key].toLocaleString()} {field.unit}
+                      </p>
+                      <p className="mt-1 text-[12px] font-[820]" style={{ color: "var(--accent-text)" }}>달성율 {percent(result[field.key], goal[field.key])}%</p>
+                    </div>
+                  ))}
+                </div>
+
                 <div className="rounded-[20px] border p-5" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                   <p className="mb-3 text-[13px] font-[860]" style={{ color: "var(--text-strong)" }}>
-                    금일 당일활동목표
+                    특발성활동목표 달성 체크
                   </p>
                   <div className="space-y-2">
                     {activeWorkItems(workItems).length > 0 ? (
                       activeWorkItems(workItems).map((item, index) => (
-                        <div key={item.id} className="rounded-[14px] border px-3 py-3 text-[14px] font-[760]" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
-                          {index + 1}. {item.text}
-                        </div>
+                        <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded-[14px] border px-3 py-3 text-[14px] font-[760]" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
+                          <input type="checkbox" checked={item.done} onChange={() => toggleWorkItemDone(item.id)} />
+                          <span className={item.done ? "line-through opacity-60" : ""}>{index + 1}. {item.text}</span>
+                        </label>
                       ))
                     ) : (
                       <p className="text-[13px] font-[700]" style={{ color: "var(--text-muted)" }}>
@@ -438,8 +509,9 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                   </div>
                 </div>
 
-                <button type="button" onClick={closeSoftReminder} className="btn-premium btn-primary w-full justify-center">
-                  확인했습니다
+                <button type="button" onClick={() => saveRecord("result")} disabled={saving} className="btn-premium btn-primary w-full justify-center disabled:opacity-45">
+                  {saving ? <Clock3 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  중간점검 저장
                 </button>
               </div>
             ) : (
