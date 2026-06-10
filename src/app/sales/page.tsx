@@ -63,6 +63,7 @@ type MemberOption = {
   title: string | null;
   bunyanghoe_number: string | null;
   phone: string | null;
+  meeting_result?: string | null;
 };
 
 type HyosungCmsPreviewRow = {
@@ -141,12 +142,6 @@ function formatFullDate(value?: string | null) {
 
 function money(value?: number | null) {
   const n = value || 0;
-  if (!n) return "0원";
-  if (n >= 100_000_000) {
-    const v = n / 100_000_000;
-    return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}억`;
-  }
-  if (n >= 10_000) return `${Math.floor(n / 10_000).toLocaleString()}만`;
   return `${n.toLocaleString()}원`;
 }
 
@@ -719,7 +714,7 @@ function HyosungUploadModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.slice(0, 80).map((row) => (
+                    {rows.slice(0, 15).map((row) => (
                       <tr key={`${row.externalPaymentId}-${row.rowIndex}`} style={{ borderTop: "1px solid var(--border-subtle)" }}>
                         <td className="px-4 py-3">
                           {row.isDuplicate ? <Badge tone="warning">중복</Badge> : row.isPaid ? <Badge tone="success">매출</Badge> : <Badge tone="danger">실패</Badge>}
@@ -781,6 +776,8 @@ export default function SalesPage() {
   const [fChannel, setFChannel] = useState("");
   const [fTeam, setFTeam] = useState("");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
   const inputClass = "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
   const textareaClass = "min-h-[96px] w-full resize-none rounded-[8px] border px-3 py-2 text-[13px] font-semibold outline-none";
@@ -805,7 +802,8 @@ export default function SalesPage() {
   const fetchMemberOptions = useCallback(async () => {
     const { data, error } = await supabase
       .from("contacts")
-      .select("id,name,title,bunyanghoe_number,phone")
+      .select("id,name,title,bunyanghoe_number,phone,meeting_result")
+      .in("meeting_result", ["예약완료", "계약완료"])
       .not("name", "is", null)
       .order("name", { ascending: true })
       .limit(2000);
@@ -833,14 +831,14 @@ export default function SalesPage() {
   const stats = useMemo(() => {
     const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
     const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
-    const membershipGross = filteredRows.filter(isMembership).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
-    const adBenefitGross = filteredRows.filter(isAdBenefit).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
-    const membershipRefund = filteredRows.filter(isMembership).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
-    const adBenefitRefund = filteredRows.filter(isAdBenefit).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+    const membershipGross = rows.filter(isMembership).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const adBenefitGross = rows.filter(isAdBenefit).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const membershipRefund = rows.filter(isMembership).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+    const adBenefitRefund = rows.filter(isAdBenefit).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
     const refund = membershipRefund + adBenefitRefund;
     const total = membershipGross + adBenefitGross - refund;
     return {
-      count: filteredRows.length,
+      count: rows.length,
       total,
       membershipGross,
       adBenefitGross,
@@ -848,7 +846,27 @@ export default function SalesPage() {
       membershipRefund,
       adBenefitRefund,
     };
-  }, [filteredRows]);
+  }, [rows]);
+
+  const memberTitleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    memberOptions.forEach((member) => {
+      const name = (member.name || "").trim();
+      if (name && member.title) map.set(name, member.title);
+    });
+    return map;
+  }, [memberOptions]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [month, search, fRoute, fChannel, fTeam]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage]);
 
   const routeStats = useMemo(() => CONTRACT_ROUTES.map((route) => {
     const list = filteredRows.filter((row) => normalizePaymentItem(row.contract_route) === route);
@@ -1240,16 +1258,17 @@ export default function SalesPage() {
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_310px]">
             <section className="min-h-0 overflow-hidden">
               <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
-                <table className="crm-table min-w-[1260px]"><thead><tr><th className="w-[270px]">고객명</th><th className="w-[120px]">결제일</th><th className="w-[130px]">결제채널</th><th className="w-[130px]">결제항목</th><th className="w-[150px]">집행금액</th><th className="w-[140px]">환불금액</th><th className="w-[130px]">담당자</th><th className="w-[170px]">관리</th></tr></thead><tbody>
-                  {filteredRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
-                    <td><div className="crm-row-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0"><div className="crm-row-main truncate">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate">ID {row.id}</div></div></div></td>
-                    <td><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
-                    <td><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
-                    <td><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
-                    <td><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.execution_amount)}</span></td>
-                    <td><span className="font-bold" style={{ color: row.refund_amount ? "var(--danger-text)" : "var(--text-muted)" }}>{money(row.refund_amount)}</span></td>
-                    <td><Badge tone="info">{row.team_member || "-"}</Badge></td>
-                    <td>
+                <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
+                  {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
+                    <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate text-center">ID {row.id}</div></div></div></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
+                    <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
+                    <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
+                    <td className="text-center"><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{money(row.execution_amount)}</span></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: row.refund_amount ? "var(--danger-text)" : "var(--text-muted)" }}>{money(row.refund_amount)}</span></td>
+                    <td className="text-center"><Badge tone="info">{row.team_member || "-"}</Badge></td>
+                    <td className="text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(row); }} className="btn-premium btn-secondary h-8 px-2.5 text-[12px]"><Edit2 size={13} />수정</button>
                         <button
@@ -1272,7 +1291,12 @@ export default function SalesPage() {
                   </tr>)}
                 </tbody></table>
               </div>
-              <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{filteredRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
+              <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{pagedRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage <= 1} className="btn-premium btn-secondary h-8 px-3 text-[12px] disabled:opacity-40">이전</button>
+                <span className="text-[12px] font-bold" style={{ color: "var(--text-muted)" }}>{currentPage.toLocaleString()} / {totalPages.toLocaleString()} 페이지 · {filteredRows.length.toLocaleString()}건</span>
+                <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages} className="btn-premium btn-secondary h-8 px-3 text-[12px] disabled:opacity-40">다음</button>
+              </div>
             </section>
             <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">결제항목별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
           </div>
@@ -1297,19 +1321,20 @@ export default function SalesPage() {
           <div className="crm-modal flex max-w-2xl flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}><div><h2 className="crm-section-title">{editItem ? "매출 정보 수정" : "매출 등록"}</h2><p className="crm-subtitle mt-1">분양회 입회자 기준으로 매출 금액 정보를 입력합니다.</p></div><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="md:col-span-2"><InputLabel>고객명 *</InputLabel><input className={inputClass} value={memberSearch} onChange={(e) => { setMemberSearch(e.target.value); setFormValue("member_name", e.target.value); }} placeholder="분양회 입회자 이름 검색" />
-                <div className="mt-2 max-h-[180px] overflow-y-auto rounded-[12px] border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="md:col-span-2"><InputLabel>고객명 / 직급 *</InputLabel><input className={inputClass} value={memberSearch} onChange={(e) => { setMemberSearch(e.target.value); setFormValue("member_name", e.target.value); }} placeholder="예약완료·계약완료 입회자 이름/직급 검색" />
+                <div className="mt-2 max-h-[390px] overflow-y-auto rounded-[12px] border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
                   {memberOptions
                     .filter((member) => {
                       const keyword = memberSearch.trim().toLowerCase();
                       if (!keyword) return true;
-                      return [member.name, member.title, member.bunyanghoe_number, member.phone].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                      return [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
                     })
-                    .slice(0, 80)
+                    .slice(0, 15)
                     .map((member) => (
-                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setFormValue("member_name", member.name || ""); }} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
-                        <span className="truncate">{member.name || "이름 없음"}</span>
-                        <span className="flex-shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>{member.bunyanghoe_number || member.title || member.phone || "-"}</span>
+                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setFormValue("member_name", member.name || ""); }} className="grid w-full grid-cols-[1.2fr_.8fr_.8fr] items-center gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
+                        <span className="truncate text-center">{member.name || "이름 없음"}</span>
+                        <span className="truncate text-center text-[12px]" style={{ color: "var(--text-muted)" }}>{member.title || "직급 없음"}</span>
+                        <span className="truncate text-center text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>{member.meeting_result || member.bunyanghoe_number || "-"}</span>
                       </button>
                     ))}
                 </div>
