@@ -358,49 +358,52 @@ function RouteSummaryCard({
   items: { label: string; value: number }[];
   total: number;
 }) {
+  const visibleItems = items.filter((item) => item.value > 0);
+  const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
+
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      {items.map((item) => {
-        const percent = total ? Math.round((item.value / total) * 100) : 0;
-        return (
-          <div
-            key={item.label}
-            className="premium-card min-w-0 rounded-[16px] p-3"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="crm-meta truncate">{item.label}</p>
-                <p
-                  className="mt-1.5 text-xl font-[930] tracking-[-0.06em]"
-                  style={{ color: "var(--text-strong)" }}
-                >
-                  {item.value.toLocaleString()}건
-                </p>
-                <p className="crm-tiny mt-1">고객DB</p>
-              </div>
-              <span
-                className={`badge-premium px-2 py-1 text-[11px] ${badgeClass(item.label)}`}
-              >
-                {percent}%
-              </span>
-            </div>
+    <div className="premium-card p-4 md:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="crm-card-title">유입경로별 현황</p>
+          <p className="crm-tiny mt-1">전체 {total}건 기준</p>
+        </div>
+        <span
+          className="rounded-full px-3 py-1 text-[12px] font-[650]"
+          style={{
+            background: "var(--accent-subtle)",
+            border: "1px solid var(--accent-border)",
+            color: "var(--accent-text)",
+          }}
+        >
+          {total}건
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {displayItems.map((item) => {
+          const percent = total ? Math.round((item.value / total) * 100) : 0;
+          return (
             <div
-              className="mt-2 h-1.5 overflow-hidden rounded-full"
-              style={{ background: "var(--surface-3)" }}
+              key={item.label}
+              className="rounded-[15px] border p-3"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             >
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${percent}%`,
-                  background: percent
-                    ? "linear-gradient(90deg,var(--accent),var(--accent-3))"
-                    : "transparent",
-                }}
-              />
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="crm-row-main truncate">{item.label}</p>
+                <p className="crm-row-sub shrink-0">{item.value}건</p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${percent}%`, background: "var(--accent)" }}
+                />
+              </div>
+              <p className="crm-tiny mt-1 text-right">{percent}%</p>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -764,14 +767,7 @@ function DetailBlock({
     >
       <p className="crm-meta">{label}</p>
       {badge ? (
-        <span
-          className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-[650]"
-          style={{
-            background: "var(--accent-subtle)",
-            border: "1px solid var(--accent-border)",
-            color: "var(--accent-text)",
-          }}
-        >
+        <span className={`badge-premium mt-1 ${badgeClass(display)}`}>
           {display}
         </span>
       ) : (
@@ -1680,14 +1676,7 @@ export default function CustomerDbPage() {
                     </td>
                     <td className="customer-db-td">
                       <div className="customer-db-center-cell">
-                      <span
-                        className="customer-db-badge rounded-full"
-                        style={{
-                          background: "var(--accent-subtle)",
-                          border: "1px solid var(--accent-border)",
-                          color: "var(--accent-text)",
-                        }}
-                      >
+                      <span className={`customer-db-badge badge-premium ${badgeClass(record.intake_route)}`}>
                         {record.intake_route}
                       </span>
                       </div>
