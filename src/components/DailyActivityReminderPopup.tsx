@@ -487,7 +487,7 @@ export default function DailyActivityReminderPopup({ user }: { user: CRMUser | n
                     <div key={field.key} className="rounded-[18px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                       <p className="text-[12px] font-[820]" style={{ color: "var(--text-muted)" }}>{field.label}</p>
                       <p className="mt-2 text-[20px] font-[920]" style={{ color: "var(--text-strong)" }}>
-                        {result[field.key].toLocaleString()} / {goal[field.key].toLocaleString()} {field.unit}
+                        {goal[field.key].toLocaleString()} / {result[field.key].toLocaleString()} {field.unit}
                       </p>
                       <p className="mt-1 text-[12px] font-[820]" style={{ color: "var(--accent-text)" }}>달성율 {percent(result[field.key], goal[field.key])}%</p>
                     </div>
