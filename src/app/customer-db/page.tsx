@@ -27,7 +27,7 @@ import {
   appendGradeAssessmentBlock,
   calculateCustomerGrade,
   EMPTY_GRADE_ASSESSMENT,
-  hasGradeAssessmentInput,
+  MANAGEMENT_STAGE_OPTIONS,
   stripGradeAssessmentBlock,
   type GradeAssessmentForm,
 } from "@/lib/customerGrade";
@@ -775,6 +775,8 @@ function TransferModal({
   customer,
   assessment,
   onAssessmentChange,
+  managementStage,
+  onManagementStageChange,
   onClose,
   onConfirm,
   error,
@@ -782,6 +784,8 @@ function TransferModal({
   customer: RawCustomerRecord;
   assessment: GradeAssessmentForm;
   onAssessmentChange: (value: GradeAssessmentForm) => void;
+  managementStage: string;
+  onManagementStageChange: (value: string) => void;
   onClose: () => void;
   onConfirm: () => void;
   error: string;
@@ -809,7 +813,7 @@ function TransferModal({
               </div>
               <h2 className="crm-title">{customer.name} 고객 심사 진행</h2>
               <p className="crm-subtitle mt-2">
-                고객등급 자동판정을 완료하면 VIP활동DB로 이관되고, 고객DB에서는 삭제됩니다.
+                입력값이 없어도 판정 보류 등급으로 VIP활동DB 이관이 가능하며, 고객DB에서는 삭제됩니다.
               </p>
             </div>
             <button type="button" onClick={onClose} className="btn-premium btn-ghost h-10 w-10 shrink-0 p-0">
@@ -823,6 +827,9 @@ function TransferModal({
             value={assessment}
             title={customer.title}
             onChange={onAssessmentChange}
+            managementStage={managementStage}
+            onManagementStageChange={onManagementStageChange}
+            managementStageOptions={MANAGEMENT_STAGE_OPTIONS}
           />
         </div>
 
@@ -879,6 +886,7 @@ export default function CustomerDbPage() {
   const [transferAssessment, setTransferAssessment] = useState<GradeAssessmentForm>({
     ...EMPTY_GRADE_ASSESSMENT,
   });
+  const [transferManagementStage, setTransferManagementStage] = useState<string>("리드");
   const [transferError, setTransferError] = useState("");
 
   useEffect(() => {
@@ -1281,15 +1289,12 @@ export default function CustomerDbPage() {
     if (!second) return;
     setTransferTarget(record);
     setTransferAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+    setTransferManagementStage("리드");
     setTransferError("");
   };
 
   const confirmTransfer = async () => {
     if (!transferTarget) return;
-    if (!hasGradeAssessmentInput(transferAssessment)) {
-      setTransferError("VIP활동DB 이관 전 고객등급 심사값을 1개 이상 입력해주세요.");
-      return;
-    }
 
     const result = calculateCustomerGrade(transferAssessment, transferTarget.title);
     const now = new Date().toISOString();
@@ -1309,7 +1314,7 @@ export default function CustomerDbPage() {
       phone: transferTarget.phone,
       intake_route: transferTarget.intake_route,
       company: transferTarget.company,
-      management_stage: "리드",
+      management_stage: transferManagementStage || "리드",
       customer_grade: result.customerGrade,
       memo: vipMemo,
       crm_db_source: VIP_DB_SOURCE,
@@ -2009,6 +2014,8 @@ export default function CustomerDbPage() {
           customer={transferTarget}
           assessment={transferAssessment}
           onAssessmentChange={setTransferAssessment}
+          managementStage={transferManagementStage}
+          onManagementStageChange={setTransferManagementStage}
           onClose={() => setTransferTarget(null)}
           onConfirm={confirmTransfer}
           error={transferError}
