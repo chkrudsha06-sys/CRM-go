@@ -287,8 +287,6 @@ async function saveCustomerDbNoteToSupabase(contactId: number | null, note: Cust
     note_date: noteDate,
     content: typedContent,
     author,
-    created_at: note.createdAt,
-    updated_at: note.createdAt,
   });
   if (error) throw error;
 }
