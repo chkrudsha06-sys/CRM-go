@@ -128,7 +128,7 @@ type HyosungImportSummary = {
   createdSales: number;
 };
 
-type DetailTab = "overview" | "amount" | "memo";
+type DetailTab = "overview" | "amount";
 
 const EMPTY_FORM: FormState = {
   member_name: "",
@@ -342,8 +342,6 @@ function buildDetailRowsFromMemo(item: AdExecution) {
 }
 
 function buildWorkReportText(item: AdExecution) {
-  if (item.memo?.includes("B2C매출") && item.memo.includes("총인정매출")) return item.memo;
-
   const info = parseAdMemo(item.memo);
   const date = item.payment_date ? new Date(`${item.payment_date.slice(0, 10)}T00:00:00`) : new Date();
   const month = date.getMonth() + 1;
@@ -729,7 +727,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
       <div className="slide-panel-overlay" onClick={onClose} />
       <aside
         className="slide-panel"
-        style={{ width: "min(1180px, calc(100vw - 28px))", maxWidth: "1180px" }}
+        style={{ width: "min(1520px, calc(100vw - 28px))", maxWidth: "1520px" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="slide-panel-header">
@@ -751,7 +749,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
             <button type="button" onClick={onClose} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button>
           </div>
           <div className="mt-5 flex gap-1.5">
-            {[{ key: "overview", label: "개요" }, { key: "amount", label: "세부정보" }, { key: "memo", label: "메모" }].map((menu) => {
+            {[{ key: "overview", label: "개요" }, { key: "amount", label: "세부정보" }].map((menu) => {
               const active = tab === menu.key;
               return <button key={menu.key} type="button" onClick={() => onTab(menu.key as DetailTab)} className="h-9 rounded-[9px] px-3 text-[12px] font-bold transition-all" style={{ background: active ? "var(--accent-subtle)" : "transparent", color: active ? "var(--accent-text)" : "var(--text-subtle)", border: active ? "1px solid var(--accent-border)" : "1px solid transparent" }}>{menu.label}</button>;
             })}
@@ -779,10 +777,10 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
           )}
           {tab === "amount" && (
             isAdDetail ? (
-              <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+              <div className="grid min-h-[calc(100vh-280px)] gap-4 lg:grid-cols-[minmax(460px,540px)_1fr]">
                 <section className="premium-card p-4">
                   <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">세부정보</p><p className="crm-tiny">등록 시 입력한 광고특전 상세값</p></div></div>
-                  <div className="max-h-[620px] overflow-y-auto pr-1">
+                  <div className="max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
                     {detailRows.map((row) => (
                       <div key={row.label} className="grid grid-cols-[132px_1fr] gap-3 border-b py-2.5 text-[12.5px]" style={{ borderColor: "var(--border-subtle)" }}>
                         <div className="font-[900]" style={{ color: "var(--text-subtle)" }}>{row.label}</div>
@@ -796,7 +794,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                     <div className="flex items-center gap-2"><PremiumIcon icon={FileText} tone="purple" /><div><p className="crm-section-title">워크 공유 양식</p><p className="crm-tiny">카카오워크 매출방에 붙여넣는 양식</p></div></div>
                     <button type="button" onClick={handleCopyReport} className="btn-premium btn-primary h-9 px-3 text-[12px]"><Copy size={13} />양식복사</button>
                   </div>
-                  <pre className="max-h-[620px] overflow-auto whitespace-pre-wrap rounded-[14px] p-4 text-[12.5px] font-[700] leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>{workReportText}</pre>
+                  <pre className="max-h-[calc(100vh-340px)] overflow-auto whitespace-pre-wrap rounded-[14px] p-4 text-[12.5px] font-[700] leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>{workReportText}</pre>
                 </section>
               </div>
             ) : (
@@ -807,12 +805,6 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                 <Field label="실매출"><span className="text-[15px] font-[760]" style={{ color: "var(--success-text)" }}>{money(effectiveSales(item))}</span></Field>
               </section>
             )
-          )}
-          {tab === "memo" && (
-            <section className="premium-card p-4">
-              <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={FileText} tone="purple" /><div><p className="crm-section-title">메모</p><p className="crm-tiny">매출 건 관련 특이사항</p></div></div>
-              <div className="min-h-[180px] whitespace-pre-wrap rounded-[12px] p-4 text-[13px] font-medium leading-relaxed" style={{ background: "var(--surface-2)", color: item.memo ? "var(--text-muted)" : "var(--text-faint)", border: "1px solid var(--border-subtle)" }}>{item.memo || "등록된 메모가 없습니다."}</div>
-            </section>
           )}
         </div>
         <div className="slide-panel-footer">
@@ -1056,7 +1048,7 @@ export default function SalesPage() {
   const pageSize = 15;
 
   const inputClass = "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
-  const textareaClass = "min-h-[96px] w-full resize-none rounded-[8px] border px-3 py-2 text-[13px] font-semibold outline-none";
+  const textareaClass = "min-h-[180px] w-full resize-y rounded-[8px] border px-3 py-2 text-[13px] font-semibold outline-none";
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -1168,6 +1160,8 @@ export default function SalesPage() {
 
   const openAdd = () => { setEditItem(null); setMemberSearch(""); setForm({ ...EMPTY_FORM, payment_date: new Date().toISOString().slice(0, 10) }); setShowModal(true); };
   const openEdit = (item: AdExecution) => {
+    const info = parseAdMemo(item.memo);
+    const paymentItem = normalizePaymentItem(item.contract_route) || "";
     setEditItem(item);
     setMemberSearch(item.member_name || "");
     setForm({
@@ -1176,32 +1170,32 @@ export default function SalesPage() {
       vat_amount: item.vat_amount ? item.vat_amount.toLocaleString() : "",
       refund_amount: item.refund_amount ? item.refund_amount.toLocaleString() : "",
       channel: item.channel || "",
-      contract_route: normalizePaymentItem(item.contract_route) || "",
+      contract_route: paymentItem,
       payment_date: item.payment_date?.slice(0, 10) || "",
       team_member: item.team_member || "",
       consultant: item.consultant || "",
-      site_name: "",
-      property_name: "",
-      region: "",
-      agreed_marketer: "",
-      ad_period: "",
-      total_payment_amount: item.execution_amount ? item.execution_amount.toLocaleString() : "",
+      site_name: info["현장명"] || "",
+      property_name: info["물건"] || "",
+      region: info["지역"] || "",
+      agreed_marketer: info["협의마케터"] || "",
+      ad_period: info["광고기간"] || "",
+      total_payment_amount: info["총결제금액(A+B)"] || (item.execution_amount ? item.execution_amount.toLocaleString() : ""),
       initial_recognized_sales: "X",
-      customer_number: "",
-      customer_industry: "",
-      customer_company: "",
-      customer_contract_route: "",
-      ad_support_amount: "",
-      ad_support_company: "",
-      ad_support_industry: "",
-      depositor_name: "",
-      payment_card: "",
-      card_number: "",
-      contact_phone: "",
-      tax_invoice_status: "",
-      cash_receipt_status: "",
-      special_notes: item.memo || "",
-      memo: item.memo || "",
+      customer_number: info["고객번호"] || "",
+      customer_industry: info["업종"] || "",
+      customer_company: info["회사명"] || "",
+      customer_contract_route: info["계약경로"] || "",
+      ad_support_amount: info["광고지원 금액"] || "",
+      ad_support_company: info["광고지원 회사명"] || "",
+      ad_support_industry: info["광고지원 업종"] || "",
+      depositor_name: info["입금자명"] || "",
+      payment_card: info["결제카드"] || "",
+      card_number: info["카드번호"] || "",
+      contact_phone: info["연락처"] || "",
+      tax_invoice_status: info["세금계산서"] || "",
+      cash_receipt_status: info["현금영수증"] || "",
+      special_notes: info["특이사항"] || "",
+      memo: isAdPaymentItem(paymentItem) ? "" : item.memo || "",
     });
     setShowModal(true);
   };
@@ -1618,7 +1612,7 @@ export default function SalesPage() {
 
       {showModal && (
         <div className="crm-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="crm-modal flex w-[min(1080px,calc(100vw-40px))] max-w-none flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="crm-modal flex max-h-[calc(100vh-40px)] w-[min(1360px,calc(100vw-40px))] max-w-none flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}><div><h2 className="crm-section-title">{editItem ? "매출 정보 수정" : "매출 등록"}</h2><p className="crm-subtitle mt-1">분양회 입회자 기준으로 매출 금액 정보를 입력합니다.</p></div><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2"><InputLabel>고객명 / 직급 *</InputLabel><input className={inputClass} value={memberSearch} onChange={(e) => { setMemberSearch(e.target.value); setFormValue("member_name", e.target.value); }} placeholder="예약완료·계약완료 입회자 이름/직급 검색" />
@@ -1631,7 +1625,7 @@ export default function SalesPage() {
                     })
                     .slice(0, 15)
                     .map((member) => (
-                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setForm((prev) => ({ ...prev, member_name: member.name || "", customer_number: member.bunyanghoe_number || "", contact_phone: member.phone || "", customer_contract_route: member.meeting_result || prev.customer_contract_route })); }} className="grid w-full grid-cols-[1.2fr_.8fr_.8fr] items-center gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
+                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setForm((prev) => ({ ...prev, member_name: member.name || "", customer_number: member.bunyanghoe_number || "", contact_phone: member.phone || "" })); }} className="grid w-full grid-cols-[1.2fr_.8fr_.8fr] items-center gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
                         <span className="truncate text-center">{member.name || "이름 없음"}</span>
                         <span className="truncate text-center text-[12px]" style={{ color: "var(--text-muted)" }}>{member.title || "직급 없음"}</span>
                         <span className="truncate text-center text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>{member.meeting_result || member.bunyanghoe_number || "-"}</span>
@@ -1680,7 +1674,7 @@ export default function SalesPage() {
                     <div><InputLabel>연락처</InputLabel><input className={inputClass} value={form.contact_phone || selectedMember?.phone || ""} onChange={(e) => setFormValue("contact_phone", e.target.value)} /></div>
                     <div><InputLabel>세금계산서</InputLabel><select className={inputClass} value={form.tax_invoice_status} onChange={(e) => setFormValue("tax_invoice_status", e.target.value)}><option value="">선택</option>{TAX_INVOICE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
                     <div><InputLabel>현금영수증</InputLabel><select className={inputClass} value={form.cash_receipt_status} onChange={(e) => setFormValue("cash_receipt_status", e.target.value)}><option value="">선택</option>{CASH_RECEIPT_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-                    <div className="md:col-span-3"><InputLabel>특이사항</InputLabel><textarea className={textareaClass} value={form.special_notes} onChange={(e) => setFormValue("special_notes", e.target.value)} placeholder="특이사항을 입력하세요" /></div>
+                    <div className="md:col-span-3"><InputLabel>특이사항</InputLabel><textarea className={`${textareaClass} min-h-[240px]`} value={form.special_notes} onChange={(e) => setFormValue("special_notes", e.target.value)} placeholder="특이사항을 입력하세요" /></div>
                   </div>
                 </div>
               ) : (
