@@ -2427,20 +2427,6 @@ export default function Pipeline3Page() {
 
   const customers = useMemo(() => records.map(toPipelineCustomer), [records]);
 
-  const routeStats = useMemo(() => {
-    const total = customers.length;
-    return INTAKE_ROUTES.map((route) => {
-      const count = customers.filter((customer) => customer.intakeRoute === route).length;
-      const percent = total ? Math.round((count / total) * 100) : 0;
-
-      return {
-        route,
-        count,
-        percent,
-      };
-    });
-  }, [customers]);
-
   const filteredCustomers = useMemo(() => {
     const keyword = normalizeSearchText(searchKeyword);
 
@@ -2703,48 +2689,6 @@ export default function Pipeline3Page() {
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-5 pb-4 md:px-7">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {routeStats.map((item) => (
-            <div
-              key={item.route}
-              className="premium-card min-w-0 rounded-[16px] p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="crm-meta truncate">{item.route}</p>
-                  <p
-                    className="mt-1.5 text-xl font-[930] tracking-[-0.06em]"
-                    style={{ color: "var(--text-strong)" }}
-                  >
-                    {item.count.toLocaleString()}건
-                  </p>
-                  <p className="crm-tiny mt-1">VIP활동DB</p>
-                </div>
-                <span
-                  className={`badge-premium px-2 py-1 text-[11px] ${badgeClass(item.route)}`}
-                >
-                  {item.percent}%
-                </span>
-              </div>
-              <div
-                className="mt-2 h-1.5 overflow-hidden rounded-full"
-                style={{ background: "var(--surface-3)" }}
-              >
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${item.percent}%`,
-                    background: item.percent
-                      ? "linear-gradient(90deg,var(--accent),var(--accent-3))"
-                      : "transparent",
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="flex-shrink-0 px-5 pb-4 md:px-7">
         <div className="premium-card rounded-[22px] p-4">
