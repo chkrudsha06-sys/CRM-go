@@ -69,6 +69,7 @@ type ContactNote = {
 };
 
 const STORAGE_KEY = "crm_go_customer_db_local_v2";
+const PIPELINE_STORAGE_KEY = "crm_go_pipeline3_clean_v1";
 const VIP_DB_SOURCE = "vip_activity";
 const CUSTOMER_DB_SOURCE = "customer_db";
 const DEFAULT_ASSIGNED_TO = "조계현";
@@ -585,6 +586,10 @@ export default function ContactsPage() {
       const { error } = await supabase.from("contacts").delete().eq("id", id);
 
       if (error) throw error;
+
+      try {
+        window.localStorage.removeItem(PIPELINE_STORAGE_KEY);
+      } catch {}
 
       setRecords((prev) => prev.filter((record) => record.id !== id));
       if (selectedRecord?.id === id) setSelectedRecord(null);
