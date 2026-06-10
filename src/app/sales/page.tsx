@@ -1756,4 +1756,3 @@ export default function SalesPage() {
     </div>
   );
 }
-ㄴ
