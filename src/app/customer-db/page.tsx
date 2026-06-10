@@ -179,10 +179,7 @@ type ContactPhoneRecord = {
 };
 
 function buildContactMemo(record: RawCustomerRecord) {
-  const cleanMemo = stripGradeAssessmentBlock(record.memo);
-  const registerInfo = `[고객DB 등록 정보]\n유입경로: ${record.intake_route}\n활동항목: ${record.activity_type}\n소속회사: ${fmt(record.company)}`;
-  if (cleanMemo.includes("[고객DB 등록 정보]")) return cleanMemo;
-  return [cleanMemo, registerInfo].filter(Boolean).join("\n\n");
+  return stripGradeAssessmentBlock(record.memo).trim();
 }
 
 async function findContactIdByPhone(phone: string) {
@@ -294,6 +291,18 @@ function fmt(value?: string | null) {
   return value && value.trim() ? value : "-";
 }
 
+function badgeClass(value?: string | null) {
+  if (value === "분양의신DB") return "badge-purple";
+  if (value === "컨설턴트VIP DB") return "badge-info";
+  if (value === "완판트럭") return "badge-warning";
+  if (value === "분양라인") return "badge-cyan";
+  if (value === "분양회MGM") return "badge-success";
+  if (value === "대협팀활동") return "badge-info";
+  if (value === "TM") return "badge-info";
+  if (value === "콜드톡") return "badge-cyan";
+  return "badge-muted";
+}
+
 function readJsonArray<T>(key: string): T[] {
   if (typeof window === "undefined") return [];
   try {
@@ -349,48 +358,49 @@ function RouteSummaryCard({
   items: { label: string; value: number }[];
   total: number;
 }) {
-  const visibleItems = items.filter((item) => item.value > 0);
-  const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
-
   return (
-    <div className="premium-card p-4 md:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="crm-card-title">유입경로별 현황</p>
-          <p className="crm-tiny mt-1">전체 {total}건 기준</p>
-        </div>
-        <span
-          className="rounded-full px-3 py-1 text-[12px] font-[650]"
-          style={{
-            background: "var(--accent-subtle)",
-            border: "1px solid var(--accent-border)",
-            color: "var(--accent-text)",
-          }}
-        >
-          {total}건
-        </span>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {displayItems.map((item) => {
-          const percent = total ? Math.round((item.value / total) * 100) : 0;
-          return (
-            <div key={item.label} className="rounded-[15px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="crm-row-main truncate">{item.label}</p>
-                <p className="crm-row-sub shrink-0">{item.value}건</p>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {items.map((item) => {
+        const percent = total ? Math.round((item.value / total) * 100) : 0;
+        return (
+          <div
+            key={item.label}
+            className="premium-card min-w-0 rounded-[16px] p-3"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="crm-meta truncate">{item.label}</p>
+                <p
+                  className="mt-1.5 text-xl font-[930] tracking-[-0.06em]"
+                  style={{ color: "var(--text-strong)" }}
+                >
+                  {item.value.toLocaleString()}건
+                </p>
+                <p className="crm-tiny mt-1">고객DB</p>
               </div>
-              <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${percent}%`, background: "var(--accent)" }}
-                />
-              </div>
-              <p className="crm-tiny mt-1 text-right">{percent}%</p>
+              <span
+                className={`badge-premium px-2 py-1 text-[11px] ${badgeClass(item.label)}`}
+              >
+                {percent}%
+              </span>
             </div>
-          );
-        })}
-      </div>
+            <div
+              className="mt-2 h-1.5 overflow-hidden rounded-full"
+              style={{ background: "var(--surface-3)" }}
+            >
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${percent}%`,
+                  background: percent
+                    ? "linear-gradient(90deg,var(--accent),var(--accent-3))"
+                    : "transparent",
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1298,14 +1308,7 @@ export default function CustomerDbPage() {
 
     const result = calculateCustomerGrade(transferAssessment, transferTarget.title);
     const now = new Date().toISOString();
-    const noteMemo = buildNoteMemo(transferTarget.notes);
-    const baseMemo = [
-      stripGradeAssessmentBlock(transferTarget.memo),
-      noteMemo ? `[고객DB 활동노트]\n${noteMemo}` : "",
-      `[고객DB 이관 정보]\n유입경로: ${transferTarget.intake_route}\n활동항목: ${transferTarget.activity_type}\n소속회사: ${fmt(transferTarget.company)}`,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const baseMemo = stripGradeAssessmentBlock(transferTarget.memo).trim();
 
     const vipMemo = appendGradeAssessmentBlock(baseMemo, transferAssessment, result);
     const vipPayload = {
@@ -1576,7 +1579,7 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+      <section className="mb-5 space-y-3">
         <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
         <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
       </section>
