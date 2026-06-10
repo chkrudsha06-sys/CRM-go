@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
-type StageKey = "리드" | "프로스펙팅" | "딜크로징" | "리텐션" | "보류/이탈";
+type StageKey = "리드" | "프로스펙팅" | "딜클로징" | "리텐션" | "보류/이탈";
 
 type Stage = {
   key: StageKey;
@@ -59,6 +59,9 @@ type CustomerDbRecord = {
   contract_date: string | null;
   created_at: string;
   updated_at: string;
+  crm_db_source?: string | null;
+  vip_transferred_at?: string | null;
+  assigned_to?: string | null;
 };
 
 type PipelineCustomer = {
@@ -140,6 +143,10 @@ const LEGACY_STORAGE_KEYS = [
 ];
 const TODAY = new Date().toISOString().slice(0, 10);
 const UNREVIEWED_GRADE = "심사미진행";
+const VIP_DB_SOURCE = "vip_activity";
+const DEFAULT_ASSIGNED_TO = "조계현";
+const PIPELINE_SELECT_FIELDS =
+  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,reservation_date,contract_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
 
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const INTAKE_ROUTES = [
@@ -153,9 +160,8 @@ const INTAKE_ROUTES = [
 const MANAGEMENT_STAGES: StageKey[] = [
   "리드",
   "프로스펙팅",
-  "딜크로징",
+  "딜클로징",
   "리텐션",
-  "보류/이탈",
 ];
 const CUSTOMER_GRADES = [
   UNREVIEWED_GRADE,
@@ -239,7 +245,7 @@ const STAGES: Stage[] = [
     icon: Search,
   },
   {
-    key: "딜크로징",
+    key: "딜클로징",
     label: "Closing",
     desc: "계약 직전",
     tone: "success",
@@ -251,13 +257,6 @@ const STAGES: Stage[] = [
     desc: "계약/사후관리",
     tone: "purple",
     icon: UserCheck,
-  },
-  {
-    key: "보류/이탈",
-    label: "Paused",
-    desc: "보류/이탈",
-    tone: "muted",
-    icon: X,
   },
 ];
 
@@ -372,16 +371,16 @@ function formatShortDate(value?: string | null) {
 }
 
 function normalizeStage(value?: string | null): StageKey {
-  if (value === "딜클로징") return "딜크로징";
+  if (value === "딜크로징") return "딜클로징";
+  if (value === "딜클로징") return "딜클로징";
   if (value === "계약완료") return "리텐션";
-  if (value === "예약완료") return "딜크로징";
-  if (value === "보류") return "보류/이탈";
+  if (value === "예약완료") return "딜클로징";
+  if (value === "보류" || value === "보류/이탈") return "리드";
   if (
     value === "리드" ||
     value === "프로스펙팅" ||
-    value === "딜크로징" ||
-    value === "리텐션" ||
-    value === "보류/이탈"
+    value === "딜클로징" ||
+    value === "리텐션"
   ) {
     return value;
   }
@@ -390,7 +389,7 @@ function normalizeStage(value?: string | null): StageKey {
 
 function getPipelineStage(record: CustomerDbRecord): StageKey {
   if (record.meeting_result === "계약완료") return "리텐션";
-  if (record.meeting_result === "예약완료") return "딜크로징";
+  if (record.meeting_result === "예약완료") return "딜클로징";
   return normalizeStage(record.management_stage);
 }
 
@@ -399,7 +398,7 @@ function isContractConversionResult(value?: string | null): value is ContractCon
 }
 
 function stageLabel(value: StageKey) {
-  if (value === "딜크로징") return "딜클로징";
+  if (value === "딜클로징") return "딜클로징";
   if (value === "리텐션") return "리텐션";
   return value;
 }
@@ -442,6 +441,10 @@ function mergeRecordsByPhone(
     const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
     return bTime - aTime;
   });
+}
+
+function isVipActivityRecord(record: CustomerDbRecord) {
+  return record.crm_db_source === VIP_DB_SOURCE;
 }
 
 function getWeekday(date: string) {
@@ -490,7 +493,7 @@ function badgeClass(value: string) {
   if (value === "판정 보류") return "grade-hold";
   if (value === "리드") return "badge-danger";
   if (value === "프로스펙팅") return "badge-warning";
-  if (value === "딜크로징" || value === "딜클로징") return "badge-success";
+  if (value === "딜클로징" || value === "딜크로징") return "badge-success";
   if (value === "예약완료") return "badge-info";
   if (value === "리텐션" || value === "계약완료") return "badge-purple";
   if (value === "보류" || value === "보류/이탈") return "badge-muted";
@@ -559,7 +562,7 @@ function toneClass(tone: Stage["tone"]) {
 }
 
 function getStageButtonLabel(target: StageKey) {
-  if (target === "딜크로징") return "딜클로징 전환";
+  if (target === "딜클로징") return "딜클로징 전환";
   if (target === "리텐션") return "계약전환";
   return `${target} 전환`;
 }
@@ -567,17 +570,17 @@ function getStageButtonLabel(target: StageKey) {
 function getStageButtonIcon(target: StageKey) {
   if (target === "리드") return <Flame size={14} />;
   if (target === "프로스펙팅") return <Search size={14} />;
-  if (target === "딜크로징") return <Zap size={14} />;
+  if (target === "딜클로징") return <Zap size={14} />;
   if (target === "리텐션") return <UserCheck size={14} />;
   return <X size={14} />;
 }
 
 function getQuickStageTargets(stage: StageKey): StageKey[] {
-  if (stage === "리드") return ["프로스펙팅", "딜크로징", "리텐션"];
-  if (stage === "프로스펙팅") return ["리드", "딜크로징", "리텐션"];
-  if (stage === "딜크로징") return ["리드", "프로스펙팅", "리텐션"];
-  if (stage === "리텐션") return ["리드", "프로스펙팅", "딜크로징"];
-  return ["리드", "프로스펙팅", "딜크로징"];
+  if (stage === "리드") return ["프로스펙팅", "딜클로징", "리텐션"];
+  if (stage === "프로스펙팅") return ["리드", "딜클로징", "리텐션"];
+  if (stage === "딜클로징") return ["리드", "프로스펙팅", "리텐션"];
+  if (stage === "리텐션") return ["리드", "프로스펙팅", "딜클로징"];
+  return ["리드", "프로스펙팅", "딜클로징"];
 }
 
 function getFollowUpByStage(stage: StageKey) {
@@ -585,7 +588,7 @@ function getFollowUpByStage(stage: StageKey) {
     return "철저한 고객관리를 통해 프로스펙팅 구간으로 관리를 변경하세요.";
   if (stage === "프로스펙팅")
     return "고객과의 라포 형성이 되었는지 확인하고 미팅 일정 확정을 진행하세요.";
-  if (stage === "딜크로징")
+  if (stage === "딜클로징")
     return "계약 전환을 위해 마지막 클로징을 진행하세요.";
   if (stage === "리텐션")
     return "계약완료 고객입니다. 분양회 입회자 메뉴와 정산/사후관리 흐름을 확인하세요.";
@@ -2381,7 +2384,7 @@ export default function Pipeline3Page() {
         if (saved) {
           const parsed = JSON.parse(saved) as CustomerDbRecord[];
           if (Array.isArray(parsed)) {
-            localRecords = parsed.map(normalizeRecordGrade);
+            localRecords = parsed.map(normalizeRecordGrade).filter(isVipActivityRecord);
           }
         }
       } catch {
@@ -2396,7 +2399,8 @@ export default function Pipeline3Page() {
       try {
         const { data, error } = await supabase
           .from("contacts")
-          .select("id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,reservation_date,contract_date,created_at,updated_at")
+          .select(PIPELINE_SELECT_FIELDS)
+          .eq("crm_db_source", VIP_DB_SOURCE)
           .order("updated_at", { ascending: false });
 
         if (error) throw error;
@@ -2474,11 +2478,9 @@ export default function Pipeline3Page() {
       prospecting: filteredCustomers.filter(
         (customer) => customer.stage === "프로스펙팅",
       ).length,
-      closing: filteredCustomers.filter((customer) => customer.stage === "딜크로징")
+      closing: filteredCustomers.filter((customer) => customer.stage === "딜클로징")
         .length,
       signed: filteredCustomers.filter((customer) => customer.stage === "리텐션")
-        .length,
-      paused: filteredCustomers.filter((customer) => customer.stage === "보류/이탈")
         .length,
     }),
     [filteredCustomers],
@@ -2530,6 +2532,9 @@ export default function Pipeline3Page() {
             contract_date: recordToSave.contract_date || null,
             created_at: recordToSave.created_at,
             updated_at: recordToSave.updated_at,
+            crm_db_source: VIP_DB_SOURCE,
+            vip_transferred_at: recordToSave.vip_transferred_at || recordToSave.created_at,
+            assigned_to: recordToSave.assigned_to || DEFAULT_ASSIGNED_TO,
           },
           { onConflict: "id" },
         )
@@ -2542,7 +2547,7 @@ export default function Pipeline3Page() {
   };
   const deleteRecord = async (customer: PipelineCustomer) => {
     const confirmed = window.confirm(
-      "파이프라인3에서 고객 데이터를 삭제하면 고객DB도 함께 삭제됩니다. 삭제하시겠습니까?",
+      "파이프라인3에서 고객 데이터를 삭제하면 VIP활동DB에서도 함께 삭제됩니다. 삭제하시겠습니까?",
     );
 
     if (!confirmed) return;
@@ -2556,11 +2561,11 @@ export default function Pipeline3Page() {
     try {
       const { error } = await supabase.from("contacts").delete().eq("id", customer.id);
       if (error) {
-        alert(`고객DB 삭제 중 오류가 발생했습니다: ${error.message}`);
+        alert(`VIP활동DB 삭제 중 오류가 발생했습니다: ${error.message}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      alert(`고객DB 삭제 중 오류가 발생했습니다: ${message}`);
+      alert(`VIP활동DB 삭제 중 오류가 발생했습니다: ${message}`);
     }
   };
 
@@ -2587,7 +2592,7 @@ export default function Pipeline3Page() {
     result: ContractConversionResult,
   ) => {
     const isReservation = result === "예약완료";
-    const nextStage: StageKey = isReservation ? "딜크로징" : "리텐션";
+    const nextStage: StageKey = isReservation ? "딜클로징" : "리텐션";
     const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
     const conversionMemo = [
       cleanMemo,
@@ -2681,16 +2686,16 @@ export default function Pipeline3Page() {
             <h1 className="crm-title">파이프라인3</h1>
           </div>
           <p className="crm-subtitle mt-1">
-            고객DB 기본정보를 기반으로 계약 전환 전 영업 활동을 관리합니다.
+            VIP활동DB 고객만 관리구간 기준으로 계약 전환 전 영업 활동을 관리합니다.
             {loadedFromDb
-              ? " 새로운 파이프라인 데이터 기준으로 표시 중입니다."
+              ? " VIP활동DB 데이터 기준으로 표시 중입니다."
               : " 기존 샘플 데이터는 제거되었으며, 등록된 고객만 표시됩니다."}
           </p>
         </div>
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard label="전체 고객" value={stats.total} icon={Target} />
           <StatCard label="리드" value={stats.lead} icon={Flame} />
           <StatCard
@@ -2700,7 +2705,6 @@ export default function Pipeline3Page() {
           />
           <StatCard label="딜클로징" value={stats.closing} icon={Zap} />
           <StatCard label="리텐션" value={stats.signed} icon={UserCheck} />
-          <StatCard label="보류/이탈" value={stats.paused} icon={X} />
         </div>
       </div>
 
