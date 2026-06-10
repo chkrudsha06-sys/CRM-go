@@ -362,7 +362,7 @@ function RouteSummaryCard({
   const displayItems = visibleItems.length ? visibleItems : items.slice(0, 4);
 
   return (
-    <div className="premium-card p-4 md:p-5">
+    <div className="premium-card h-full p-4 md:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="crm-card-title">유입경로별 현황</p>
@@ -410,7 +410,7 @@ function RouteSummaryCard({
 
 function ActivitySummaryCard({ tm, cold }: { tm: number; cold: number }) {
   return (
-    <div className="premium-card p-4 md:p-5">
+    <div className="premium-card h-full p-4 md:p-5">
       <div className="mb-4">
         <p className="crm-card-title">활동항목 현황</p>
         <p className="crm-tiny mt-1">TM과 콜드톡만 표시합니다.</p>
@@ -1575,7 +1575,7 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-5 space-y-3">
+      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
         <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
       </section>
