@@ -2353,28 +2353,13 @@ export default function Pipeline3Page() {
     let alive = true;
 
     const loadPipelineRecords = async () => {
-      let localRecords: CustomerDbRecord[] = [];
-
       try {
-        LEGACY_STORAGE_KEYS.forEach((key) => {
-          window.localStorage.removeItem(key);
-        });
-
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as CustomerDbRecord[];
-          if (Array.isArray(parsed)) {
-            localRecords = parsed.map(normalizeRecordGrade).filter(isVipActivityRecord);
-          }
-        }
-      } catch {
-        localRecords = [];
-      }
-
-      if (alive) {
-        setRecords(localRecords);
-        setLoadedFromDb(localRecords.length > 0);
-      }
+        // 파이프라인3은 VIP활동DB와 같은 contacts 테이블만 기준으로 사용합니다.
+        // 이전 localStorage 캐시를 읽으면 VIP활동DB에서 삭제한 고객이 파이프라인3에 다시 남는 문제가 생기므로
+        // 모든 구버전/현버전 캐시를 비우고 Supabase 결과만 화면에 출력합니다.
+        LEGACY_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {}
 
       try {
         const { data, error } = await supabase
@@ -2386,21 +2371,18 @@ export default function Pipeline3Page() {
         if (error) throw error;
 
         const remoteRecords = Array.isArray(data)
-          ? (data as CustomerDbRecord[]).map(normalizeRecordGrade)
+          ? (data as CustomerDbRecord[]).map(normalizeRecordGrade).filter(isVipActivityRecord)
           : [];
 
-        const merged = mergeRecordsByPhone(localRecords, remoteRecords);
-
         if (!alive) return;
 
-        setRecords(merged);
+        setRecords(remoteRecords);
         setLoadedFromDb(true);
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       } catch (error) {
-        console.warn("파이프라인3 VIP활동DB 데이터 불러오기 실패. localStorage 데이터로 표시합니다.", error);
+        console.warn("파이프라인3 VIP활동DB 데이터 불러오기 실패", error);
         if (!alive) return;
-        setRecords(localRecords);
-        setLoadedFromDb(localRecords.length > 0);
+        setRecords([]);
+        setLoadedFromDb(false);
       }
     };
 
@@ -2468,9 +2450,9 @@ export default function Pipeline3Page() {
 
   const persistRecords = (nextRecords: CustomerDbRecord[]) => {
     setRecords(nextRecords);
+    setLoadedFromDb(true);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextRecords));
-      setLoadedFromDb(true);
+      window.localStorage.removeItem(STORAGE_KEY);
     } catch {}
   };
 
