@@ -996,7 +996,7 @@ function HyosungUploadModal({
                     const Icon = item.icon;
                     return (
                       <div key={item.label} className="flex min-w-0 items-center gap-3 rounded-[13px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[11px]" style={{ background: toneStyle(item.tone).bg, color: toneStyle(item.tone).text, border: `1px solid ${toneStyle(item.tone).border}` }}>
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[11px]" style={{ background: toneStyle(item.tone).bg, color: toneStyle(item.tone).color, border: `1px solid ${toneStyle(item.tone).border}` }}>
                           <Icon size={16} />
                         </div>
                         <div className="min-w-0 flex-1">
