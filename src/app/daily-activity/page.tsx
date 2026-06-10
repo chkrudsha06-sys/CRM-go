@@ -162,14 +162,18 @@ function nextDateString(dateText: string) {
   return toDateInput(date);
 }
 
-async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
+async function loadAutoResultCounts(workDate: string, ownerName?: string): Promise<FormValues> {
   const start = `${workDate}T00:00:00`;
   const end = `${nextDateString(workDate)}T00:00:00`;
-  const { data, error } = await supabase
+  let query = supabase
     .from("contacts")
-    .select("id,created_at,activity_type,customer_grade,crm_db_source")
+    .select("id,created_at,activity_type,customer_grade,crm_db_source,assigned_to")
     .gte("created_at", start)
     .lt("created_at", end);
+
+  if (ownerName) query = query.eq("assigned_to", ownerName);
+
+  const { data, error } = await query;
 
   if (error) return { ...EMPTY_VALUES };
 
@@ -177,6 +181,7 @@ async function loadAutoResultCounts(workDate: string): Promise<FormValues> {
     activity_type?: string | null;
     customer_grade?: string | null;
     crm_db_source?: string | null;
+    assigned_to?: string | null;
   }>;
 
   return {
@@ -1100,7 +1105,7 @@ export default function DailyActivityPage() {
         .gte("work_date", monthStart)
         .lte("work_date", monthEnd)
         .order("work_date", { ascending: false }),
-      loadAutoResultCounts(date),
+      loadAutoResultCounts(date, loginUser?.name),
     ]);
 
     if (dailyRes.error) {
@@ -1165,7 +1170,7 @@ export default function DailyActivityPage() {
   useEffect(() => {
     let alive = true;
     const refreshAutoResult = async () => {
-      const next = await loadAutoResultCounts(date);
+      const next = await loadAutoResultCounts(date, user?.name);
       if (alive) setResult(next);
     };
     refreshAutoResult();
@@ -1174,7 +1179,7 @@ export default function DailyActivityPage() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [date]);
+  }, [date, user?.name]);
 
   useEffect(() => {
     if (!currentMember || loading || date !== todayString()) return;
@@ -1272,7 +1277,7 @@ export default function DailyActivityPage() {
     }
 
     setSaving(true);
-    const autoResult = await loadAutoResultCounts(date);
+    const autoResult = await loadAutoResultCounts(date, currentMember.name);
     const payload = {
       work_date: date,
       owner_name: currentMember.name,
