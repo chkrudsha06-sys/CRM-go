@@ -54,6 +54,26 @@ type FormState = {
   payment_date: string;
   team_member: string;
   consultant: string;
+  site_name: string;
+  property_name: string;
+  region: string;
+  agreed_marketer: string;
+  ad_period: string;
+  total_payment_amount: string;
+  initial_recognized_sales: string;
+  customer_number: string;
+  customer_industry: string;
+  customer_company: string;
+  customer_contract_route: string;
+  ad_support_amount: string;
+  ad_support_company: string;
+  ad_support_industry: string;
+  depositor_name: string;
+  payment_card: string;
+  card_number: string;
+  contact_phone: string;
+  tax_invoice_status: string;
+  special_notes: string;
   memo: string;
 };
 
@@ -118,6 +138,26 @@ const EMPTY_FORM: FormState = {
   payment_date: "",
   team_member: "",
   consultant: "",
+  site_name: "",
+  property_name: "",
+  region: "",
+  agreed_marketer: "",
+  ad_period: "",
+  total_payment_amount: "",
+  initial_recognized_sales: "X",
+  customer_number: "",
+  customer_industry: "",
+  customer_company: "",
+  customer_contract_route: "",
+  ad_support_amount: "",
+  ad_support_company: "",
+  ad_support_industry: "",
+  depositor_name: "",
+  payment_card: "",
+  card_number: "",
+  contact_phone: "",
+  tax_invoice_status: "",
+  special_notes: "",
   memo: "",
 };
 
@@ -126,6 +166,10 @@ const CONTRACT_ROUTES = ["분양회 회비", "LMS", "호갱노노"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
 const HYOSUNG_PROVIDER = "HYOSUNG_CMS";
+const TAX_INVOICE_OPTIONS = ["O", "X", "X(추후발행)"];
+const AD_ITEMS = ["LMS", "호갱노노"];
+const FIXED_DEPOSIT_ACCOUNT = "298-122618-04-018";
+const FIXED_DEPOSIT_BANK = "기업은행 (주)광고인";
 
 function formatFullDate(value?: string | null) {
   if (!value) return "-";
@@ -157,6 +201,52 @@ function parseNumber(value: string) {
 function formatInputAmount(value: string) {
   const clean = numberInput(value);
   return clean ? Number(clean).toLocaleString() : "";
+}
+
+function isAdPaymentItem(value?: string | null) {
+  return AD_ITEMS.includes(value || "");
+}
+
+function buildAdMemo(form: FormState) {
+  const item = form.contract_route || "-";
+  return [
+    `현장명: ${form.site_name || "-"}`,
+    `물건: ${form.property_name || "-"}`,
+    `지역: ${form.region || "-"}`,
+    ``,
+    `품목: ${item}`,
+    `결제금액: ${form.execution_amount || "0"}`,
+    `인정매출: X`,
+    `협의마케터: ${form.agreed_marketer || "-"}`,
+    `광고기간: ${form.ad_period || "-"}`,
+    ``,
+    `총결제금액: ${form.total_payment_amount || form.execution_amount || "0"}`,
+    `초인정매출: X`,
+    ``,
+    `분양회고객: O`,
+    `고객명: ${form.member_name || "-"}`,
+    `고객번호: ${form.customer_number || "-"}`,
+    `업종: ${form.customer_industry || "-"}`,
+    `회사명: ${form.customer_company || "-"}`,
+    `계약경로: ${form.customer_contract_route || "-"}`,
+    ``,
+    `광고지원금액: ${form.ad_support_amount || "-"}`,
+    `광고지원 회사명: ${form.ad_support_company || "-"}`,
+    `광고지원 업종: ${form.ad_support_industry || "-"}`,
+    ``,
+    `입금자명: ${form.depositor_name || "-"}`,
+    `입금계좌: ${FIXED_DEPOSIT_ACCOUNT}`,
+    `${FIXED_DEPOSIT_BANK}`,
+    ``,
+    `결제카드: ${form.payment_card || "-"}`,
+    `카드번호: ${form.card_number || "-"}`,
+    ``,
+    `연락처: ${form.contact_phone || "-"}`,
+    `계산서발행여부: ${form.tax_invoice_status || "-"}`,
+    ``,
+    `특이사항`,
+    `${form.special_notes || "-"}`,
+  ].join("\n");
 }
 
 
@@ -886,6 +976,8 @@ export default function SalesPage() {
 
   const activeFilters = [search, fRoute, fChannel, fTeam].filter(Boolean).length;
   const resetFilters = () => { setSearch(""); setFRoute(""); setFChannel(""); setFTeam(""); };
+  const selectedMember = useMemo(() => memberOptions.find((member) => (member.name || "") === form.member_name) || null, [memberOptions, form.member_name]);
+  const shouldShowAdForm = isAdPaymentItem(form.contract_route);
   const setFormValue = (key: keyof FormState, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const openAdd = () => { setEditItem(null); setMemberSearch(""); setForm({ ...EMPTY_FORM, payment_date: new Date().toISOString().slice(0, 10) }); setShowModal(true); };
@@ -902,6 +994,26 @@ export default function SalesPage() {
       payment_date: item.payment_date?.slice(0, 10) || "",
       team_member: item.team_member || "",
       consultant: item.consultant || "",
+      site_name: "",
+      property_name: "",
+      region: "",
+      agreed_marketer: "",
+      ad_period: "",
+      total_payment_amount: item.execution_amount ? item.execution_amount.toLocaleString() : "",
+      initial_recognized_sales: "X",
+      customer_number: "",
+      customer_industry: "",
+      customer_company: "",
+      customer_contract_route: "",
+      ad_support_amount: "",
+      ad_support_company: "",
+      ad_support_industry: "",
+      depositor_name: "",
+      payment_card: "",
+      card_number: "",
+      contact_phone: "",
+      tax_invoice_status: "",
+      special_notes: item.memo || "",
       memo: item.memo || "",
     });
     setShowModal(true);
@@ -910,6 +1022,7 @@ export default function SalesPage() {
   const handleSave = async () => {
     if (!form.member_name.trim()) return alert("고객명을 입력하세요.");
     if (!form.payment_date) return alert("결제일을 선택하세요.");
+    const memo = shouldShowAdForm ? buildAdMemo({ ...form, contact_phone: form.contact_phone || selectedMember?.phone || "" }) : form.memo;
     const payload = {
       member_name: form.member_name || null,
       execution_amount: parseNumber(form.execution_amount),
@@ -920,7 +1033,7 @@ export default function SalesPage() {
       payment_date: form.payment_date || null,
       team_member: form.team_member || null,
       consultant: null,
-      memo: form.memo || null,
+      memo: memo || null,
     };
     setSaving(true);
     const { error } = editItem ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id) : await supabase.from("ad_executions").insert(payload);
@@ -1318,7 +1431,7 @@ export default function SalesPage() {
 
       {showModal && (
         <div className="crm-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="crm-modal flex max-w-2xl flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="crm-modal flex w-[min(1080px,calc(100vw-40px))] max-w-none flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--border-subtle)" }}><div><h2 className="crm-section-title">{editItem ? "매출 정보 수정" : "매출 등록"}</h2><p className="crm-subtitle mt-1">분양회 입회자 기준으로 매출 금액 정보를 입력합니다.</p></div><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="md:col-span-2"><InputLabel>고객명 / 직급 *</InputLabel><input className={inputClass} value={memberSearch} onChange={(e) => { setMemberSearch(e.target.value); setFormValue("member_name", e.target.value); }} placeholder="예약완료·계약완료 입회자 이름/직급 검색" />
@@ -1331,7 +1444,7 @@ export default function SalesPage() {
                     })
                     .slice(0, 15)
                     .map((member) => (
-                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setFormValue("member_name", member.name || ""); }} className="grid w-full grid-cols-[1.2fr_.8fr_.8fr] items-center gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
+                      <button key={member.id} type="button" onClick={() => { setMemberSearch(member.name || ""); setForm((prev) => ({ ...prev, member_name: member.name || "", customer_number: member.bunyanghoe_number || "", contact_phone: member.phone || "", customer_contract_route: member.meeting_result || prev.customer_contract_route })); }} className="grid w-full grid-cols-[1.2fr_.8fr_.8fr] items-center gap-3 px-3 py-2 text-left text-[13px] font-bold hover:opacity-80" style={{ color: "var(--text)", borderBottom: "1px solid var(--border-subtle)" }}>
                         <span className="truncate text-center">{member.name || "이름 없음"}</span>
                         <span className="truncate text-center text-[12px]" style={{ color: "var(--text-muted)" }}>{member.title || "직급 없음"}</span>
                         <span className="truncate text-center text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>{member.meeting_result || member.bunyanghoe_number || "-"}</span>
@@ -1341,11 +1454,50 @@ export default function SalesPage() {
               </div>
               <div><InputLabel>결제일 *</InputLabel><input type="date" className={inputClass} value={form.payment_date} onChange={(e) => setFormValue("payment_date", e.target.value)} /></div>
               <div><InputLabel>결제채널</InputLabel><select className={inputClass} value={form.channel} onChange={(e) => setFormValue("channel", e.target.value)}><option value="">선택</option>{CHANNELS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-              <div><InputLabel>결제항목</InputLabel><select className={inputClass} value={form.contract_route} onChange={(e) => setFormValue("contract_route", e.target.value)}><option value="">선택</option>{CONTRACT_ROUTES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-              <div><InputLabel>집행금액</InputLabel><input className={inputClass} value={form.execution_amount} onChange={(e) => setFormValue("execution_amount", formatInputAmount(e.target.value))} placeholder="0" /></div>
+              <div><InputLabel>결제항목</InputLabel><select className={inputClass} value={form.contract_route} onChange={(e) => { const next = e.target.value; setForm((prev) => ({ ...prev, contract_route: next, total_payment_amount: isAdPaymentItem(next) && !prev.total_payment_amount ? prev.execution_amount : prev.total_payment_amount, initial_recognized_sales: isAdPaymentItem(next) ? "X" : prev.initial_recognized_sales, contact_phone: prev.contact_phone || selectedMember?.phone || "", customer_number: prev.customer_number || selectedMember?.bunyanghoe_number || "" })); }}><option value="">선택</option>{CONTRACT_ROUTES.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+              <div><InputLabel>집행금액</InputLabel><input className={inputClass} value={form.execution_amount} onChange={(e) => { const next = formatInputAmount(e.target.value); setForm((prev) => ({ ...prev, execution_amount: next, total_payment_amount: isAdPaymentItem(prev.contract_route) && (!prev.total_payment_amount || prev.total_payment_amount === prev.execution_amount) ? next : prev.total_payment_amount })); }} placeholder="0" /></div>
               <div><InputLabel>환불금액</InputLabel><input className={inputClass} value={form.refund_amount} onChange={(e) => setFormValue("refund_amount", formatInputAmount(e.target.value))} placeholder="0" /></div>
               <div><InputLabel>담당자</InputLabel><select className={inputClass} value={form.team_member} onChange={(e) => setFormValue("team_member", e.target.value)}><option value="">선택</option>{TEAM.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
-              <div className="md:col-span-2"><InputLabel>메모</InputLabel><textarea className={textareaClass} value={form.memo} onChange={(e) => setFormValue("memo", e.target.value)} placeholder="매출 관련 특이사항을 입력하세요" /></div>
+
+              {shouldShowAdForm ? (
+                <div className="md:col-span-2 rounded-[18px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  <div className="mb-4">
+                    <p className="text-[15px] font-[950] tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>광고특전 상세 입력</p>
+                    <p className="mt-1 text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>LMS 또는 호갱노노 선택 시 아래 양식이 메모에 자동 저장됩니다.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div><InputLabel>현장명</InputLabel><input className={inputClass} value={form.site_name} onChange={(e) => setFormValue("site_name", e.target.value)} /></div>
+                    <div><InputLabel>물건</InputLabel><input className={inputClass} value={form.property_name} onChange={(e) => setFormValue("property_name", e.target.value)} /></div>
+                    <div><InputLabel>지역</InputLabel><input className={inputClass} value={form.region} onChange={(e) => setFormValue("region", e.target.value)} /></div>
+                    <div><InputLabel>품목</InputLabel><input className={inputClass} value={form.contract_route || ""} readOnly /></div>
+                    <div><InputLabel>결제금액</InputLabel><input className={inputClass} value={form.execution_amount} readOnly /></div>
+                    <div><InputLabel>인정매출</InputLabel><input className={inputClass} value="X" readOnly /></div>
+                    <div><InputLabel>협의마케터</InputLabel><input className={inputClass} value={form.agreed_marketer} onChange={(e) => setFormValue("agreed_marketer", e.target.value)} /></div>
+                    <div className="md:col-span-2"><InputLabel>광고기간</InputLabel><input className={inputClass} value={form.ad_period} onChange={(e) => setFormValue("ad_period", e.target.value)} placeholder="예: 2026-06-10 ~ 2026-07-09" /></div>
+                    <div><InputLabel>총결제금액</InputLabel><input className={inputClass} value={form.total_payment_amount} onChange={(e) => setFormValue("total_payment_amount", formatInputAmount(e.target.value))} /></div>
+                    <div><InputLabel>초인정매출</InputLabel><input className={inputClass} value="X" readOnly /></div>
+                    <div><InputLabel>분양회고객</InputLabel><input className={inputClass} value="O" readOnly /></div>
+                    <div><InputLabel>고객명</InputLabel><input className={inputClass} value={form.member_name} readOnly /></div>
+                    <div><InputLabel>고객번호</InputLabel><input className={inputClass} value={form.customer_number} onChange={(e) => setFormValue("customer_number", e.target.value)} /></div>
+                    <div><InputLabel>업종</InputLabel><input className={inputClass} value={form.customer_industry} onChange={(e) => setFormValue("customer_industry", e.target.value)} /></div>
+                    <div><InputLabel>회사명</InputLabel><input className={inputClass} value={form.customer_company} onChange={(e) => setFormValue("customer_company", e.target.value)} /></div>
+                    <div><InputLabel>계약경로</InputLabel><input className={inputClass} value={form.customer_contract_route} onChange={(e) => setFormValue("customer_contract_route", e.target.value)} /></div>
+                    <div><InputLabel>광고지원금액</InputLabel><input className={inputClass} value={form.ad_support_amount} onChange={(e) => setFormValue("ad_support_amount", formatInputAmount(e.target.value))} /></div>
+                    <div><InputLabel>광고지원 회사명</InputLabel><input className={inputClass} value={form.ad_support_company} onChange={(e) => setFormValue("ad_support_company", e.target.value)} /></div>
+                    <div><InputLabel>광고지원 업종</InputLabel><input className={inputClass} value={form.ad_support_industry} onChange={(e) => setFormValue("ad_support_industry", e.target.value)} /></div>
+                    <div><InputLabel>입금자명</InputLabel><input className={inputClass} value={form.depositor_name} onChange={(e) => setFormValue("depositor_name", e.target.value)} /></div>
+                    <div><InputLabel>입금계좌</InputLabel><input className={inputClass} value={FIXED_DEPOSIT_ACCOUNT} readOnly /></div>
+                    <div><InputLabel>은행/예금주</InputLabel><input className={inputClass} value={FIXED_DEPOSIT_BANK} readOnly /></div>
+                    <div><InputLabel>결제카드</InputLabel><input className={inputClass} value={form.payment_card} onChange={(e) => setFormValue("payment_card", e.target.value)} /></div>
+                    <div><InputLabel>카드번호</InputLabel><input className={inputClass} value={form.card_number} onChange={(e) => setFormValue("card_number", e.target.value)} /></div>
+                    <div><InputLabel>연락처</InputLabel><input className={inputClass} value={form.contact_phone || selectedMember?.phone || ""} onChange={(e) => setFormValue("contact_phone", e.target.value)} /></div>
+                    <div><InputLabel>계산서발행여부</InputLabel><select className={inputClass} value={form.tax_invoice_status} onChange={(e) => setFormValue("tax_invoice_status", e.target.value)}><option value="">선택</option>{TAX_INVOICE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
+                    <div className="md:col-span-3"><InputLabel>특이사항</InputLabel><textarea className={textareaClass} value={form.special_notes} onChange={(e) => setFormValue("special_notes", e.target.value)} placeholder="특이사항을 입력하세요" /></div>
+                  </div>
+                </div>
+              ) : (
+                <div className="md:col-span-2"><InputLabel>메모</InputLabel><textarea className={textareaClass} value={form.memo} onChange={(e) => setFormValue("memo", e.target.value)} placeholder="매출 관련 특이사항을 입력하세요" /></div>
+              )}
             </div></div>
             <div className="flex justify-end gap-2 px-6 py-4" style={{ borderTop: "1px solid var(--border-subtle)" }}><button type="button" onClick={() => setShowModal(false)} className="btn-premium btn-secondary">취소</button><button type="button" onClick={handleSave} disabled={saving} className="btn-premium btn-primary disabled:opacity-50"><ReceiptText size={14} />{saving ? "저장 중..." : editItem ? "수정 완료" : "등록"}</button></div>
           </div>
