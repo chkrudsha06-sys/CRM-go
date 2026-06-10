@@ -1257,6 +1257,69 @@ export default function DailyActivityPage() {
     fetchRows();
   };
 
+  const handleEditDetailRow = (row: DailyActivityRow) => {
+    if (!user?.name || row.owner_name !== user.name) {
+      alert("본인 활동기록만 수정할 수 있습니다.");
+      return;
+    }
+
+    setDate(row.work_date);
+    setIsOutsideMeeting(row.is_outside_meeting);
+    setGoal({
+      new_tm: row.goal_new_tm || 0,
+      coldtalk: row.goal_coldtalk || 0,
+      consultant_db: row.goal_consultant_db || 0,
+      second_touch: row.goal_second_touch || 0,
+      meeting_confirmed: 0,
+    });
+    setResult({
+      new_tm: row.result_new_tm || 0,
+      coldtalk: row.result_coldtalk || 0,
+      consultant_db: row.result_consultant_db || 0,
+      second_touch: row.result_second_touch || 0,
+      meeting_confirmed: 0,
+    });
+    setWorkItems(normalizeWorkItems(row.goal_work_items));
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    showToast(`${formatKoreanDate(row.work_date)} 기록을 수정 모드로 불러왔습니다`);
+  };
+
+  const handleDeleteDetailRow = async (row: DailyActivityRow) => {
+    if (!user?.name || row.owner_name !== user.name) {
+      alert("본인 활동기록만 삭제할 수 있습니다.");
+      return;
+    }
+
+    const ok = window.confirm(`${formatKoreanDate(row.work_date)} 활동기록을 삭제할까요?`);
+    if (!ok) return;
+
+    setSaving(true);
+    const { error } = await supabase
+      .from("daily_activity_goals")
+      .delete()
+      .eq("id", row.id)
+      .eq("owner_name", user.name);
+    setSaving(false);
+
+    if (error) {
+      alert(`삭제 실패\n${error.message}`);
+      return;
+    }
+
+    if (row.work_date === date) {
+      setIsOutsideMeeting(false);
+      setGoal({ ...EMPTY_VALUES });
+      setResult({ ...EMPTY_VALUES });
+      setWorkItems(createEmptyWorkItems());
+    }
+
+    showToast("월간 상세 기록이 삭제되었습니다");
+    fetchRows();
+  };
+
   const copyGoalReport = async () => {
     await copyToClipboard(buildGoalReport(date, dailyRows));
     showToast("카카오워크 활동목표 양식이 복사되었습니다");
@@ -1673,17 +1736,18 @@ export default function DailyActivityPage() {
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[1120px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
+                <table className="crm-table min-w-[1240px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
+                    <col className="w-[10%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[11%]" />
                     <col className="w-[13%]" />
                     <col className="w-[10%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[14%]" />
-                    <col className="w-[13%]" />
+                    <col className="w-[10%]" />
                   </colgroup>
                   <thead>
                     <tr>
@@ -1696,12 +1760,13 @@ export default function DailyActivityPage() {
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>1%DB 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>특발성활동목표 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>수정일</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>관리</th>
                     </tr>
                   </thead>
                   <tbody>
                     {visibleDetailRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="text-center align-middle">
+                        <td colSpan={10} className="text-center align-middle">
                           기록이 없습니다.
                         </td>
                       </tr>
@@ -1712,12 +1777,23 @@ export default function DailyActivityPage() {
                             <span className="block w-full text-center">{formatKoreanDate(row.work_date)}</span>
                           </td>
                           <td className="text-center align-middle" style={{ textAlign: "center" }}>
-                            <span className="crm-row-main block w-full text-center">
-                              {row.owner_name}
-                            </span>
-                            <span className="crm-row-sub block w-full text-center">
-                              {row.owner_title || ""}
-                            </span>
+                            <div className="flex w-full items-center justify-center gap-1.5 whitespace-nowrap">
+                              <span className="crm-row-main text-center">
+                                {row.owner_name}
+                              </span>
+                              {row.owner_title ? (
+                                <span
+                                  className="rounded-full border px-2 py-0.5 text-[11px] font-[850]"
+                                  style={{
+                                    borderColor: "var(--border)",
+                                    background: "var(--surface-2)",
+                                    color: "var(--text-muted)",
+                                  }}
+                                >
+                                  {row.owner_title}
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="text-center align-middle" style={{ textAlign: "center" }}>
                             <span
@@ -1750,6 +1826,36 @@ export default function DailyActivityPage() {
                               hour: "2-digit",
                               minute: "2-digit",
                             })}
+                          </td>
+                          <td className="text-center align-middle" style={{ textAlign: "center" }}>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEditDetailRow(row)}
+                                disabled={saving || row.owner_name !== user?.name}
+                                className="rounded-full border px-2.5 py-1 text-[11px] font-[850] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                                style={{
+                                  borderColor: "var(--border)",
+                                  background: "var(--surface-2)",
+                                  color: "var(--text)",
+                                }}
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDetailRow(row)}
+                                disabled={saving || row.owner_name !== user?.name}
+                                className="rounded-full border px-2.5 py-1 text-[11px] font-[850] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                                style={{
+                                  borderColor: "var(--danger-border)",
+                                  background: "var(--danger-bg)",
+                                  color: "var(--danger-text)",
+                                }}
+                              >
+                                삭제
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
