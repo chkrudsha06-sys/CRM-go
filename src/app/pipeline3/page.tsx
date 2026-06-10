@@ -55,6 +55,9 @@ type CustomerDbRecord = {
   customer_grade: string;
   memo: string;
   meeting_result: string | null;
+  meeting_date?: string | null;
+  meeting_date_text?: string | null;
+  meeting_address?: string | null;
   reservation_date: string | null;
   contract_date: string | null;
   created_at: string;
@@ -146,7 +149,7 @@ const UNREVIEWED_GRADE = "심사미진행";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
 const PIPELINE_SELECT_FIELDS =
-  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,reservation_date,contract_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
+  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
 
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const INTAKE_ROUTES = [
@@ -618,8 +621,10 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     lastActivity: formatShortDate(record.updated_at || record.created_at),
     registeredAt: formatShortDate(record.created_at),
     nextContact: getFollowUpByStage(stage),
-    meetingSchedule: "미팅 일정 조율 전",
-    meetingAddress: "",
+    meetingSchedule: record.meeting_date
+      ? formatShortDate(record.meeting_date)
+      : "미팅 일정 조율 전",
+    meetingAddress: fmt(record.meeting_address),
     noteSummary: memo,
     adsSummary:
       "광고 요청 이력 없음. 필요 시 하단 광고요청 버튼으로 업무요청을 생성하세요.",
@@ -718,7 +723,6 @@ function DetailPanel({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
-    meetingMemo: string,
   ) => void;
   onOpenNoteComposer: () => void;
   onOpenEdit: () => void;
@@ -890,7 +894,6 @@ function SummaryTab({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
-    meetingMemo: string,
   ) => void;
   onOpenNoteComposer: () => void;
 }) {
@@ -1010,7 +1013,6 @@ function QuickActions({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
-    meetingMemo: string,
   ) => void;
   onOpenNoteComposer: () => void;
 }) {
@@ -1018,7 +1020,6 @@ function QuickActions({
   const [contractOpen, setContractOpen] = useState(false);
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingAddress, setMeetingAddress] = useState("");
-  const [meetingMemo, setMeetingMemo] = useState("");
   const targets = getQuickStageTargets(customer.stage);
 
   const handleMeetingSubmit = () => {
@@ -1026,11 +1027,10 @@ function QuickActions({
       alert("미팅일정을 선택해 주세요.");
       return;
     }
-    onMeetingSave(customer, meetingDate, meetingAddress, meetingMemo);
+    onMeetingSave(customer, meetingDate, meetingAddress);
     setMeetingOpen(false);
     setMeetingDate("");
     setMeetingAddress("");
-    setMeetingMemo("");
   };
 
   return (
@@ -1124,7 +1124,7 @@ function QuickActions({
 
       {meetingOpen ? (
         <div
-          className="mt-4 grid gap-3 rounded-[16px] border p-4 md:grid-cols-3"
+          className="mt-4 grid gap-3 rounded-[16px] border p-4 md:grid-cols-2"
           style={{
             background: "var(--surface-2)",
             borderColor: "var(--border-subtle)",
@@ -1158,21 +1158,7 @@ function QuickActions({
               }}
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="crm-tiny">일정 메모</span>
-            <input
-              value={meetingMemo}
-              onChange={(event) => setMeetingMemo(event.target.value)}
-              placeholder="예: 미팅 전 자료 전달"
-              className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-              style={{
-                background: "var(--surface)",
-                borderColor: "var(--border-subtle)",
-                color: "var(--text-strong)",
-              }}
-            />
-          </label>
-          <div className="flex gap-2 md:col-span-3">
+          <div className="flex gap-2 md:col-span-2">
             <button
               type="button"
               onClick={() => setMeetingOpen(false)}
@@ -2522,6 +2508,9 @@ export default function Pipeline3Page() {
             customer_grade: recordToSave.customer_grade,
             memo: recordToSave.memo,
             meeting_result: recordToSave.meeting_result || null,
+            meeting_date: recordToSave.meeting_date || null,
+            meeting_date_text: recordToSave.meeting_date_text || null,
+            meeting_address: recordToSave.meeting_address || null,
             reservation_date: recordToSave.reservation_date || null,
             contract_date: recordToSave.contract_date || null,
             created_at: recordToSave.created_at,
@@ -2601,21 +2590,11 @@ export default function Pipeline3Page() {
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
-    meetingMemo: string,
   ) => {
-    const currentMemo = stripGradeAssessmentBlock(customer.raw.memo);
-    const meetingMemoBlock = [
-      currentMemo,
-      "",
-      `[미팅일정] ${meetingDate}`,
-      meetingAddress ? `장소: ${meetingAddress}` : "장소: 미입력",
-      meetingMemo ? `메모: ${meetingMemo}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
     updateRecord(customer.id, {
-      memo: meetingMemoBlock,
+      meeting_date: meetingDate,
+      meeting_date_text: "파이프라인3 미팅일정",
+      meeting_address: meetingAddress.trim() || null,
     });
   };
 
