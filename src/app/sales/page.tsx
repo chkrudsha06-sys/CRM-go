@@ -909,7 +909,27 @@ function HyosungUploadModal({
             className="rounded-[18px] border p-4"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           >
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
+            <div className="mb-4 rounded-[18px] border px-5 py-4" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-[950] tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>반영 기준</p>
+                  <p className="mt-1 text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>아래 3가지 조건을 모두 만족하는 건만 통합매출로 생성됩니다.</p>
+                </div>
+                <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
+                  <div className="rounded-[12px] px-4 py-2 text-center" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[950]">완납</p>
+                  </div>
+                  <div className="rounded-[12px] px-4 py-2 text-center" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[950]">결제완료</p>
+                  </div>
+                  <div className="rounded-[12px] px-4 py-2 text-center" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
+                    <p className="text-[11px] font-[950]">수납금액 0원 초과</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px] xl:items-stretch">
               <div className="min-w-0">
                 <InputLabel>효성CMS 수납내역 엑셀 파일</InputLabel>
                 <label
@@ -934,7 +954,7 @@ function HyosungUploadModal({
                     setIsDraggingFile(false);
                     handleSelectedFile(event.dataTransfer.files?.[0]);
                   }}
-                  className="group flex min-h-[118px] w-full cursor-pointer flex-col justify-center rounded-[18px] border-2 border-dashed px-5 py-4 transition"
+                  className="group flex min-h-[92px] w-full cursor-pointer flex-col justify-center rounded-[18px] border-2 border-dashed px-5 py-4 transition"
                   style={{
                     background: isDraggingFile ? "var(--accent-bg)" : "var(--surface)",
                     borderColor: isDraggingFile ? "var(--accent-border)" : "var(--border)",
@@ -948,61 +968,51 @@ function HyosungUploadModal({
                     className="sr-only"
                   />
                   <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[16px]" style={{ background: "var(--accent-bg)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
-                      <UploadCloud size={22} />
+                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[15px]" style={{ background: "var(--accent-bg)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
+                      <UploadCloud size={21} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[14px] font-[950] tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
-                        파일을 선택하거나 이 영역으로 끌어다 놓기
+                      <p className="truncate text-[14px] font-[950] tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                        파일 선택 또는 드래그앤드롭
                       </p>
                       <p className="mt-1 break-all text-[12px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        .xlsx / .xls 형식만 가능하며, 효성CMS에서 다운로드한 수납내역 원본을 그대로 업로드해주세요.
+                        .xlsx / .xls 형식만 가능하며, 효성CMS 수납내역 원본 파일을 그대로 업로드해주세요.
                       </p>
                     </div>
                   </div>
                 </label>
-                <p className="mt-3 text-[12.5px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  수납상태가 <b>완납</b>이고 결제상태가 <b>결제완료</b>이며 수납금액이 0원보다 큰 건만 매출로 생성됩니다.
+                <p className="mt-2 text-[12px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
                   결제실패·미납 건은 매출로 잡지 않고 수집 로그에만 보관합니다.
                 </p>
               </div>
 
-              <div className="rounded-[18px] border px-5 py-4" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
-                <p className="text-[12px] font-[900]" style={{ color: "var(--text-subtle)" }}>반영 기준</p>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
-                    <p className="text-[11px] font-[900]">완납</p>
-                  </div>
-                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
-                    <p className="text-[11px] font-[900]">결제완료</p>
-                  </div>
-                  <div className="rounded-[12px] px-2 py-2" style={{ background: "var(--success-bg)", color: "var(--success-text)" }}>
-                    <p className="text-[11px] font-[900]">수납금액 0원 초과</p>
-                  </div>
+              <div className="min-w-0 rounded-[18px] border px-4 py-3" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[13px] font-[950] tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>업로드 집계</p>
+                  <Badge tone={importableCount > 0 ? "success" : "muted"}>{importableCount.toLocaleString()}건 반영 가능</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {statItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.label} className="flex min-w-0 items-center gap-3 rounded-[13px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[11px]" style={{ background: toneStyle(item.tone).bg, color: toneStyle(item.tone).text, border: `1px solid ${toneStyle(item.tone).border}` }}>
+                          <Icon size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-baseline justify-between gap-2">
+                            <p className="truncate text-[11px] font-[900]" style={{ color: "var(--text-muted)" }}>{item.label}</p>
+                            <p className="max-w-[90px] truncate text-right text-[15px] font-[950] tabular-nums tracking-[-0.04em]" title={item.value.toLocaleString()} style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
+                          </div>
+                          <p className="mt-0.5 truncate text-[10px] font-[750]" title={String(item.sub)} style={{ color: "var(--text-faint)" }}>{item.sub}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
           </section>
-
-          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            {statItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="min-w-0 rounded-[18px] border px-4 py-4" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <PremiumIcon icon={Icon} tone={item.tone} />
-                    <div className="min-w-0 flex-1 text-right">
-                      <p className="break-words text-[clamp(18px,1.35vw,24px)] font-[950] leading-tight tracking-[-0.05em] tabular-nums" style={{ color: "var(--text-strong)" }}>{item.value.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 min-w-0">
-                    <p className="text-[12px] font-[900] leading-tight" style={{ color: "var(--text-muted)" }}>{item.label}</p>
-                    <p className="mt-1 break-words text-[11px] font-[750] leading-tight" style={{ color: "var(--text-faint)" }}>{item.sub}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
 
           <section className="mt-4 overflow-hidden rounded-[18px] border" style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-soft)" }}>
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
@@ -1809,3 +1819,4 @@ export default function SalesPage() {
     </div>
   );
 }
+
