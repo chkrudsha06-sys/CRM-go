@@ -107,17 +107,22 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
   const blocks: any[] = [
     { type: "header", text: "📋 일별활동목표 등록", style: "blue" },
     sectionHeader(`■ ${d.owner_name || "-"} ${d.owner_title || ""}`),
-    desc("날짜", d.work_date || "-"),
+    { type: "text", text: `날짜 : ${d.work_date || "-"}` },
     { type: "divider" },
   ];
   if (d.is_outside_meeting) {
     blocks.push({ type: "text", text: "📌 외근/미팅일 (활동목표 없음)" });
   } else {
     blocks.push(sectionHeader("■ 활동목표"));
-    blocks.push(desc("TM", `${d.goal_new_tm || 0}건`));
-    blocks.push(desc("콜드톡", `${d.goal_coldtalk || 0}건`));
-    blocks.push(desc("브론즈", `${d.goal_consultant_db || 0}개`));
-    blocks.push(desc("1%DB", `${d.goal_second_touch || 0}개`));
+    blocks.push({
+      type: "text",
+      text: [
+        `TM : ${d.goal_new_tm || 0}건`,
+        `콜드톡 : ${d.goal_coldtalk || 0}건`,
+        `브론즈DB수취 : ${d.goal_consultant_db || 0}개`,
+        `1%DB수취 : ${d.goal_second_touch || 0}개`,
+      ].join("\n"),
+    });
     if (hasWorkItems) {
       blocks.push({ type: "divider" });
       blocks.push(sectionHeader("■ 특발성활동목표"));
