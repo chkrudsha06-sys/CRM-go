@@ -2,6 +2,7 @@
 
 import EmptyState from "@/components/EmptyState";
 import { supabase } from "@/lib/supabase";
+import { getCurrentUser } from "@/lib/auth";
 import {
   useCallback,
   useEffect,
@@ -1135,7 +1136,12 @@ export default function WanpanTruckPage() {
   const [filterOrder, setFilterOrder] = useState("");
   const [filterPhoto, setFilterPhoto] = useState("");
   const [search, setSearch] = useState("");
-  const [reportTruck, setReportTruck] = useState<WanpanTruck | null>(null);
+  const [crmUser, setCrmUser] = useState<{ name: string; title: string } | null>(null);
+
+  useEffect(() => {
+    const u = getCurrentUser();
+    if (u) setCrmUser({ name: u.name, title: u.title });
+  }, []);
 
   const fetchTrucks = useCallback(async () => {
     setLoading(true);
@@ -1210,7 +1216,7 @@ export default function WanpanTruckPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, staff_members: crmUser ? [crmUser.name] : [] });
     setShowModal(true);
   };
 
@@ -1456,7 +1462,7 @@ export default function WanpanTruckPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:min-w-[760px]">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[760px]">
               <StatCard
                 icon={<Route size={17} />}
                 label="전체 회차"
@@ -1480,12 +1486,6 @@ export default function WanpanTruckPage() {
                 label="확인 완료"
                 value={summary.confirmed}
                 tone="info"
-              />
-              <StatCard
-                icon={<FileText size={17} />}
-                label="리포트"
-                value={summary.reported}
-                tone="warning"
               />
             </div>
           </div>
@@ -1576,42 +1576,32 @@ export default function WanpanTruckPage() {
             </section>
           ) : (
             <section className="crm-table-wrap overflow-hidden">
-              <div className="hidden min-w-[1560px] xl:block">
+              <div className="hidden min-w-[1060px] xl:block">
                 <div
-                  className="grid h-12 items-center gap-2 border-b px-4 text-[11.5px] font-[800] tracking-[-0.02em]"
+                  className="grid h-12 items-center border-b px-4 text-[11.5px] font-[800] tracking-[-0.02em]"
                   style={{
                     gridTemplateColumns:
-                      "54px 96px 210px 126px 190px 96px 168px 168px 86px 96px 100px 96px 96px 122px minmax(170px,1fr) 88px",
+                      "100px 160px 140px 80px 100px 80px 110px 90px 160px",
                     borderColor: "color-mix(in srgb, var(--border) 44%, transparent)",
                     color: "var(--text-faint)",
                     background: "var(--surface-2)",
+                    textAlign: "center" as const,
                   }}
                 >
                   {[
-                    "No",
                     "발송일",
-                    "현장",
-                    "대행사",
-                    "접점",
+                    "현장명",
+                    "현장주소",
                     "조직수",
-                    "대협팀",
-                    "컨설턴트",
-                    "리포트",
-                    "촬영",
+                    "대협팀담당자",
+                    "촬영여부",
                     "발주수량",
-                    "발주",
-                    "시안",
-                    "담당확인",
-                    "비고",
-                    "관리",
+                    "시안직발주",
+                    "담당자최종확인",
                   ].map((header) => (
                     <span
                       key={header}
-                      className={
-                        header === "No" || header === "관리"
-                          ? "text-center"
-                          : ""
-                      }
+                      className="text-center"
                     >
                       {header}
                     </span>
@@ -1622,212 +1612,86 @@ export default function WanpanTruckPage() {
                   className=""
                   style={{ borderColor: "color-mix(in srgb, var(--border) 30%, transparent)" }}
                 >
-                  {filteredTrucks.map((truck, index) => {
+                  {filteredTrucks.map((truck) => {
                     const staff = parseMembers(truck.staff_members);
-                    const consultants = parseMembers(truck.consultant_members);
-                    const hasReport = !!truck.report_data;
                     const tone = orderTone(truck);
 
                     return (
                       <div
                         key={truck.id}
-                        className="wanpan-row grid min-h-[52px] items-center gap-1 border-t px-4 py-1 transition-colors hover:bg-white/[0.025]"
+                        className="wanpan-row grid min-h-[52px] items-center border-t px-4 py-2 transition-colors hover:bg-white/[0.025]"
                         style={{
                           gridTemplateColumns:
-                            "54px 96px 210px 126px 190px 96px 168px 168px 86px 96px 100px 96px 96px 122px minmax(170px,1fr) 88px",
+                            "100px 160px 140px 80px 100px 80px 110px 90px 160px",
                           borderLeft: `3px solid ${toneStyle(tone).dot}`,
+                          textAlign: "center" as const,
                         }}
                       >
-                        <span className="crm-meta text-center">
-                          {index + 1}
+                        <span className="crm-row-sub flex items-center justify-center gap-1">
+                          <CalendarDays size={12} /> {formatDate(truck.dispatch_date)}
                         </span>
 
-                        <span className="crm-row-sub flex items-center gap-1.5">
-                          <CalendarDays size={13} />{" "}
-                          {formatDate(truck.dispatch_date)}
-                        </span>
+                        <p className="crm-row-main truncate text-center" title={truck.site_name || ""}>
+                          {truck.site_name || "-"}
+                        </p>
 
-                        <div className="min-w-0">
-                          <p className="crm-row-main truncate">
-                            {truck.site_name || "-"}
-                          </p>
-                          <p className="crm-row-sub flex items-center justify-center gap-1.5 truncate">
-                            <MapPin size={12} /> {truck.location || "-"}
-                          </p>
-                        </div>
+                        <p className="crm-row-sub truncate text-center" title={truck.location || ""}>
+                          {truck.location || "-"}
+                        </p>
 
-                        <span className="crm-row-sub truncate">
-                          {truck.agency || "-"}
-                        </span>
-
-                        <div className="min-w-0">
-                          <p
-                            className="crm-row-sub truncate"
-                            style={{ color: "var(--text)" }}
-                          >
-                            {truck.contact_point || "-"}
-                          </p>
-                          <p className="crm-tiny flex items-center justify-center gap-1 truncate">
-                            {truck.contact_point_title || "-"}
-                            {truck.contact_phone ? (
-                              <>
-                                {" "}
-                                · <Phone size={11} /> {truck.contact_phone}
-                              </>
-                            ) : null}
-                          </p>
-                        </div>
-
-                        <Badge tone="muted">
-                          <Users size={12} />{" "}
+                        <span className="crm-row-sub text-center">
                           {truck.team_size ? `${truck.team_size}명` : "-"}
-                        </Badge>
+                        </span>
 
-                        <div className="flex max-w-[168px] flex-wrap gap-1">
+                        <span className="flex justify-center">
                           {staff.length > 0 ? (
-                            staff.map((name) => (
-                              <Badge key={name} tone="info">
-                                {name}
-                              </Badge>
-                            ))
+                            <Badge tone="info">{staff[0]}</Badge>
                           ) : (
                             <span className="crm-tiny">-</span>
                           )}
-                        </div>
+                        </span>
 
-                        <div className="flex max-w-[168px] flex-wrap gap-1">
-                          {consultants.length > 0 ? (
-                            consultants.map((name) => (
-                              <Badge key={name} tone="purple">
-                                {name}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="crm-tiny">-</span>
-                          )}
-                        </div>
+                        <span className="flex justify-center">
+                          <Badge tone={truck.has_photo ? "success" : "muted"} icon={ImageIcon}>
+                            {truck.has_photo ? "촬영" : "미촬영"}
+                          </Badge>
+                        </span>
 
-                        <button
-                          type="button"
-                          onClick={() => setReportTruck(truck)}
-                          className="flex h-9 w-9 items-center justify-center rounded-[11px] border"
-                          style={{
-                            background: hasReport
-                              ? "var(--success-bg)"
-                              : "var(--surface-2)",
-                            borderColor: hasReport
-                              ? "var(--success-border)"
-                              : "var(--border)",
-                            color: hasReport
-                              ? "var(--success-text)"
-                              : "var(--text-subtle)",
-                          }}
-                          title={hasReport ? "리포트 보기" : "리포트 작성"}
-                        >
-                          <FileText size={15} />
-                        </button>
-
-                        <Badge
-                          tone={truck.has_photo ? "success" : "muted"}
-                          icon={ImageIcon}
-                        >
-                          {truck.has_photo ? "촬영" : "미촬영"}
-                        </Badge>
-
-                        <p
-                          className="crm-row-sub"
-                          style={{ color: "var(--text)" }}
-                        >
+                        <p className="crm-row-sub text-center" style={{ color: "var(--text)" }}>
                           {truck.order_qty_base || "-"}
                           {truck.order_qty_extra ? (
-                            <span style={{ color: "var(--accent-text)" }}>
-                              {" "}
-                              + {truck.order_qty_extra}
-                            </span>
+                            <span style={{ color: "var(--accent-text)" }}> + {truck.order_qty_extra}</span>
                           ) : null}
                         </p>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleOrder(truck.id, truck.is_ordered)
-                          }
-                        >
-                          <Badge
-                            tone={truck.is_ordered ? "success" : "muted"}
-                            icon={truck.is_ordered ? CheckCircle2 : XCircle}
-                          >
-                            {truck.is_ordered ? "완료" : "미발주"}
-                          </Badge>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleDirectOrder(truck.id, truck.is_direct_order)
-                          }
-                        >
-                          <Badge
-                            tone={truck.is_direct_order ? "purple" : "muted"}
-                          >
+                        <button type="button" className="flex justify-center" onClick={() => toggleDirectOrder(truck.id, truck.is_direct_order)}>
+                          <Badge tone={truck.is_direct_order ? "purple" : "muted"}>
                             {truck.is_direct_order ? "직발주" : "미발주"}
                           </Badge>
                         </button>
 
-                        {truck.assigned_to ? (
-                          <div className="space-y-1">
-                            <Badge tone="info" icon={User}>
-                              {truck.assigned_to}
-                            </Badge>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleConfirm(
-                                  truck.id,
-                                  truck.order_confirmed_by,
-                                  truck.assigned_to,
-                                )
-                              }
-                            >
-                              <Badge
-                                tone={
-                                  truck.order_confirmed_by
-                                    ? "success"
-                                    : "warning"
-                                }
-                              >
-                                {truck.order_confirmed_by
-                                  ? "확인완료"
-                                  : "담당자확인"}
-                              </Badge>
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="crm-tiny">-</span>
-                        )}
-
-                        <p
-                          className="crm-row-sub truncate"
-                          title={truck.notes || ""}
-                        >
-                          {truck.notes || "-"}
-                        </p>
-
-                        <div className="flex justify-center gap-1">
-                          <IconButton
-                            label="수정"
-                            tone="info"
-                            onClick={() => openEdit(truck)}
-                          >
-                            <Edit2 size={14} />
-                          </IconButton>
-                          <IconButton
-                            label="삭제"
-                            tone="danger"
-                            onClick={() => handleDelete(truck.id)}
-                          >
-                            <Trash2 size={14} />
-                          </IconButton>
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          {truck.assigned_to ? (
+                            <>
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                {truck.assigned_to === "모두" ? (
+                                  <>
+                                    <Badge tone="info" icon={User}>김재영</Badge>
+                                    <Badge tone="info" icon={User}>최은정</Badge>
+                                  </>
+                                ) : (
+                                  <Badge tone="info" icon={User}>{truck.assigned_to}</Badge>
+                                )}
+                              </div>
+                              <button type="button" className="flex justify-center" onClick={() => toggleConfirm(truck.id, truck.order_confirmed_by, truck.assigned_to)}>
+                                <Badge tone={truck.order_confirmed_by ? "success" : "warning"}>
+                                  {truck.order_confirmed_by ? "확인완료" : "미확인"}
+                                </Badge>
+                              </button>
+                            </>
+                          ) : (
+                            <span className="crm-tiny">-</span>
+                          )}
                         </div>
                       </div>
                     );
@@ -1836,9 +1700,8 @@ export default function WanpanTruckPage() {
               </div>
 
               <div className="space-y-3 p-3 xl:hidden">
-                {filteredTrucks.map((truck, index) => {
+                {filteredTrucks.map((truck) => {
                   const staff = parseMembers(truck.staff_members);
-                  const consultants = parseMembers(truck.consultant_members);
                   const tone = orderTone(truck);
                   return (
                     <article
@@ -1849,98 +1712,37 @@ export default function WanpanTruckPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <span className="badge-premium badge-muted">
-                              #{index + 1}
-                            </span>
-                            <Badge
-                              tone={truck.is_ordered ? "success" : "muted"}
-                            >
-                              {truck.is_ordered ? "발주완료" : "미발주"}
+                            <Badge tone={truck.is_direct_order ? "purple" : "muted"}>
+                              {truck.is_direct_order ? "직발주" : "미발주"}
                             </Badge>
                             <Badge tone={truck.has_photo ? "success" : "muted"}>
                               {truck.has_photo ? "촬영" : "미촬영"}
                             </Badge>
+                            {staff.length > 0 && <Badge tone="info">{staff[0]}</Badge>}
                           </div>
-                          <p className="crm-row-main truncate">
-                            {truck.site_name || "-"}
-                          </p>
+                          <p className="crm-row-main truncate">{truck.site_name || "-"}</p>
                           <p className="crm-row-sub mt-1 flex items-center gap-1.5">
-                            <MapPin size={13} /> {truck.location || "-"} ·{" "}
-                            {formatDate(truck.dispatch_date)}
+                            <MapPin size={13} /> {truck.location || "-"} · {formatDate(truck.dispatch_date)}
                           </p>
                         </div>
                         <div className="flex flex-shrink-0 gap-1">
-                          <IconButton
-                            label="리포트"
-                            tone={truck.report_data ? "success" : "warning"}
-                            onClick={() => setReportTruck(truck)}
-                          >
-                            <FileText size={14} />
-                          </IconButton>
-                          <IconButton
-                            label="수정"
-                            tone="info"
-                            onClick={() => openEdit(truck)}
-                          >
+                          <IconButton label="수정" tone="info" onClick={() => openEdit(truck)}>
                             <Edit2 size={14} />
+                          </IconButton>
+                          <IconButton label="삭제" tone="danger" onClick={() => handleDelete(truck.id)}>
+                            <Trash2 size={14} />
                           </IconButton>
                         </div>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <MiniInfo label="대행사" value={truck.agency} />
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                        <MiniInfo label="조직수" value={truck.team_size ? `${truck.team_size}명` : "-"} />
+                        <MiniInfo label="발주수량" value={`${truck.order_qty_base || "-"}${truck.order_qty_extra ? ` + ${truck.order_qty_extra}` : ""}`} />
                         <MiniInfo
-                          label="접점"
-                          value={`${safe(truck.contact_point)} / ${safe(truck.contact_point_title)}`}
+                          label="담당자확인"
+                          value={truck.order_confirmed_by ? "확인완료" : truck.assigned_to || "-"}
+                          tone={truck.order_confirmed_by ? "success" : "warning"}
                         />
-                        <MiniInfo
-                          label="대협팀"
-                          value={staff.length ? staff.join(", ") : "-"}
-                          tone="info"
-                        />
-                        <MiniInfo
-                          label="컨설턴트"
-                          value={
-                            consultants.length ? consultants.join(", ") : "-"
-                          }
-                          tone="purple"
-                        />
-                        <MiniInfo
-                          label="조직수"
-                          value={truck.team_size ? `${truck.team_size}명` : "-"}
-                        />
-                        <MiniInfo
-                          label="발주수량"
-                          value={`${safe(truck.order_qty_base)}${truck.order_qty_extra ? ` + ${truck.order_qty_extra}` : ""}`}
-                        />
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleOrder(truck.id, truck.is_ordered)
-                          }
-                          className="btn-premium btn-secondary"
-                        >
-                          {truck.is_ordered ? "발주완료" : "미발주"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleDirectOrder(truck.id, truck.is_direct_order)
-                          }
-                          className="btn-premium btn-secondary"
-                        >
-                          {truck.is_direct_order ? "직발주" : "시안미발주"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(truck.id)}
-                          className="btn-premium btn-danger"
-                        >
-                          <Trash2 size={14} /> 삭제
-                        </button>
                       </div>
                     </article>
                   );
@@ -1951,16 +1753,6 @@ export default function WanpanTruckPage() {
         </div>
       </main>
 
-      {reportTruck && (
-        <ReportModal
-          truck={reportTruck}
-          onClose={() => setReportTruck(null)}
-          onSaved={() => {
-            fetchTrucks();
-            setReportTruck(null);
-          }}
-        />
-      )}
 
       {showModal && (
         <TruckModal
