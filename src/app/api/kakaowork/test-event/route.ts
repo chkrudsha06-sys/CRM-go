@@ -12,27 +12,21 @@ const EXEC_MEMBERS = [
   { name: "최연전", title: "CX" },
 ];
 
+const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
+
 function todayKST(): string {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function pct(result: number, goal: number): number {
-  if (goal <= 0) return result > 0 ? 100 : 0;
-  return Math.round((result / goal) * 100);
-}
-
-function bar(percent: number): string {
-  const filled = Math.min(Math.round(percent / 10), 10);
-  return "█".repeat(filled) + "░".repeat(10 - filled) + ` ${percent}%`;
+function pct(result: number, goal: number): string {
+  if (goal <= 0) return result > 0 ? "100%" : "0%";
+  return Math.round((result / goal) * 100) + "%";
 }
 
 function parseWorkItems(value: any): { total: number; done: number } {
   let items: any[] = [];
-  if (typeof value === "string") {
-    try { items = JSON.parse(value); } catch { items = []; }
-  } else if (Array.isArray(value)) {
-    items = value;
-  }
+  if (typeof value === "string") { try { items = JSON.parse(value); } catch {} }
+  else if (Array.isArray(value)) items = value;
   const active = items.filter((i: any) => i?.text?.trim());
   const completed = active.filter((i: any) => i?.done === true);
   return { total: active.length, done: completed.length };
@@ -62,57 +56,38 @@ export async function GET() {
     const { data: rows } = await supabase.from("daily_activity_goals").select("*").eq("work_date", today);
 
     const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
-    const timeLabel = `${now.getUTCHours()}시 ${now.getUTCMinutes()}분`;
+    const [, mm, dd] = today.split("-");
+    const dateLabel = `${Number(mm)}월 ${Number(dd)}일`;
+    const timeLabel = `${now.getUTCHours()}시 ${String(now.getUTCMinutes()).padStart(2, "0")}분`;
+    const viewerTag = VIEWER_NAMES.map((n) => `@${n}`).join("\n");
 
     const lines: string[] = [
-      `📊 실행파트 활동목표 진척율 (${timeLabel} 기준)`,
+      `📊 실행파트 활동목표 진척율`,
+      `${dateLabel} (${timeLabel} 기준)`,
+      viewerTag,
       "──────────────",
-      "",
     ];
 
     for (const member of EXEC_MEMBERS) {
       const row = (rows || []).find((r: any) => r.owner_name === member.name);
-      if (!row) {
-        lines.push(`■ ${member.name} ${member.title}`);
-        lines.push("  ⚠️ 미등록");
-        lines.push("");
-        continue;
-      }
-      if ((row as any).is_outside_meeting) {
-        lines.push(`■ ${member.name} ${member.title}`);
-        lines.push("  📌 외근(미팅)");
-        lines.push("");
-        continue;
-      }
+      if (!row) { lines.push(`■ ${member.name} ${member.title} — ⚠️ 미등록`, ""); continue; }
       const r = row as any;
-      const tmP = pct(r.result_new_tm || 0, r.goal_new_tm || 0);
-      const coldP = pct(r.result_coldtalk || 0, r.goal_coldtalk || 0);
-      const bronzeP = pct(r.result_consultant_db || 0, r.goal_consultant_db || 0);
-      const dbP = pct(r.result_second_touch || 0, r.goal_second_touch || 0);
-      const wi = parseWorkItems(r.goal_work_items);
-      const wiP = wi.total > 0 ? pct(wi.done, wi.total) : 0;
+      if (r.is_outside_meeting) { lines.push(`■ ${member.name} ${member.title} — 📌 외근(미팅)`, ""); continue; }
 
       lines.push(`■ ${member.name} ${member.title}`);
-      lines.push(`  TM ${bar(tmP)}  (${r.result_new_tm || 0}/${r.goal_new_tm || 0}건)`);
-      lines.push(`  콜드톡 ${bar(coldP)}  (${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건)`);
-      lines.push(`  브론즈 ${bar(bronzeP)}  (${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개)`);
-      lines.push(`  1%DB ${bar(dbP)}  (${r.result_second_touch || 0}/${r.goal_second_touch || 0}개)`);
-      if (wi.total > 0) {
-        lines.push(`  특발성 ${bar(wiP)}  (${wi.done}/${wi.total}건)`);
-      }
+      lines.push(`  TM : ${r.result_new_tm || 0}/${r.goal_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`);
+      lines.push(`  콜드톡 : ${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`);
+      lines.push(`  브론즈DB수취 : ${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`);
+      lines.push(`  1%DB수취 : ${r.result_second_touch || 0}/${r.goal_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`);
+      const wi = parseWorkItems(r.goal_work_items);
+      if (wi.total > 0) lines.push(`  특발성 : ${wi.done}/${wi.total}건 (${pct(wi.done, wi.total)})`);
       lines.push("");
     }
 
     lines.push("──────────────");
-
     const res = await sendMessage(appKey, convId, lines.join("\n"));
 
-    return NextResponse.json({
-      ok: res.ok,
-      date: today,
-      time: timeLabel,
-      memberCount: (rows || []).length,
-    });
+    return NextResponse.json({ ok: res.ok, date: today, time: timeLabel });
   } catch (error: any) {
     return NextResponse.json({ ok: false, message: error?.message });
   }
