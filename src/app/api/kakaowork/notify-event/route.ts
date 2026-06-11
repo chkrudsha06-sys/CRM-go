@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,6 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
 
   const blocks: any[] = [
     { type: "header", text: "📋 일별활동목표 등록", style: "blue" },
-    { type: "text", text: "@all" },
     sectionHeader(`■ ${d.owner_name || "-"} ${d.owner_title || ""}`),
     desc("날짜", d.work_date || "-"),
     { type: "divider" },
@@ -111,7 +111,7 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
     blocks.push(sectionHeader("■ 활동목표"));
     blocks.push(desc("TM", `${d.goal_new_tm || 0}건`));
     blocks.push(desc("콜드톡", `${d.goal_coldtalk || 0}건`));
-    blocks.push(desc("브론즈DB", `${d.goal_consultant_db || 0}개`));
+    blocks.push(desc("브론즈", `${d.goal_consultant_db || 0}개`));
     blocks.push(desc("1%DB", `${d.goal_second_touch || 0}개`));
 
     if (hasWorkItems) {
@@ -255,17 +255,55 @@ export async function POST(request: Request) {
 
     // ===== 발송 (카드 → 실패 시 텍스트 폴백) =====
     const first = await sendMessage(appKey, conversationId, pushText, blocks);
-    if (first.ok) {
-      return NextResponse.json({ ok: true, mode: "card" });
+    if (!first.ok) {
+      const fallbackText = buildFallbackText(event, d, baseUrl);
+      if (fallbackText) {
+        await sendMessage(appKey, conversationId, fallbackText);
+      }
     }
 
-    const fallbackText = buildFallbackText(event, d, baseUrl);
-    if (fallbackText) {
-      const fallback = await sendMessage(appKey, conversationId, fallbackText);
-      return NextResponse.json({ ok: fallback.ok, mode: "fallback_text", cardError: first.result }, { status: fallback.ok ? 200 : 500 });
+    // ===== 일별활동: 전원 완료 체크 =====
+    if (event === "daily_activity_saved" && d.work_date) {
+      try {
+        const EXEC_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const { data: todayRows } = await supabase
+          .from("daily_activity_goals")
+          .select("owner_name")
+          .eq("work_date", d.work_date);
+
+        const registered = new Set((todayRows || []).map((r: any) => r.owner_name));
+        const allDone = EXEC_NAMES.every((name) => registered.has(name));
+
+        if (allDone) {
+          // 전원 완료 카드 — 각 멤버 개별 멘션
+          const completeBlocks: any[] = [
+            { type: "header", text: "✅ 실행파트 금일 목표등록 모두 완료", style: "green" },
+            { type: "text", text: `${d.work_date} 실행파트 전원의 일별활동목표 등록이 완료되었습니다.` },
+            { type: "divider" },
+          ];
+
+          for (const eName of EXEC_NAMES) {
+            const eEmail = getMentionEmail(eName);
+            const eUid = eEmail ? await findUserIdByEmail(appKey, eEmail) : null;
+            if (eUid) {
+              completeBlocks.push({
+                type: "text",
+                text: `@${eName}`,
+                inlines: [{ type: "mention", text: `@${eName}`, ref: { type: "kw", value: Number(eUid) } }],
+              });
+            }
+          }
+
+          await sendMessage(appKey, conversationId, "✅ 실행파트 금일 목표등록 모두 완료", completeBlocks);
+        }
+      } catch {}
     }
 
-    return NextResponse.json({ ok: false, mode: "failed", cardError: first.result }, { status: 500 });
+    return NextResponse.json({ ok: first.ok, mode: first.ok ? "card" : "fallback" });
   } catch (error: any) {
     return NextResponse.json({ ok: false, message: error?.message || "알 수 없는 오류" }, { status: 500 });
   }
