@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
-type StageKey = "리드" | "프로스펙팅" | "딜클로징" | "리텐션" | "보류/이탈";
+type StageKey = "리드" | "프로스펙팅" | "딜클로징" | "리텐션" | "이탈/탈퇴";
 
 type Stage = {
   key: StageKey;
@@ -60,6 +60,7 @@ type CustomerDbRecord = {
   meeting_address?: string | null;
   reservation_date: string | null;
   contract_date: string | null;
+  churn_date?: string | null;
   created_at: string;
   updated_at: string;
   crm_db_source?: string | null;
@@ -79,6 +80,7 @@ type PipelineCustomer = {
   meetingResult: string;
   reservationDate: string;
   contractDate: string;
+  churnDate: string;
   stage: StageKey;
   lastActivity: string;
   registeredAt: string;
@@ -151,7 +153,7 @@ const UNREVIEWED_GRADE = "심사미진행";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
 const PIPELINE_SELECT_FIELDS =
-  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
+  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,churn_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
 
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const INTAKE_ROUTES = [
@@ -167,6 +169,7 @@ const MANAGEMENT_STAGES: StageKey[] = [
   "프로스펙팅",
   "딜클로징",
   "리텐션",
+  "이탈/탈퇴",
 ];
 const CUSTOMER_GRADES = [
   UNREVIEWED_GRADE,
@@ -262,6 +265,13 @@ const STAGES: Stage[] = [
     desc: "계약/사후관리",
     tone: "purple",
     icon: UserCheck,
+  },
+  {
+    key: "이탈/탈퇴",
+    label: "Churn",
+    desc: "이탈/탈퇴",
+    tone: "muted",
+    icon: X,
   },
 ];
 
@@ -386,11 +396,13 @@ function normalizeStage(value?: string | null): StageKey {
   if (value === "계약완료") return "리텐션";
   if (value === "예약완료") return "딜클로징";
   if (value === "보류" || value === "보류/이탈") return "리드";
+  if (value === "탈퇴" || value === "이탈" || value === "이탈/탈퇴") return "이탈/탈퇴";
   if (
     value === "리드" ||
     value === "프로스펙팅" ||
     value === "딜클로징" ||
-    value === "리텐션"
+    value === "리텐션" ||
+    value === "이탈/탈퇴"
   ) {
     return value;
   }
@@ -410,6 +422,7 @@ function isContractConversionResult(value?: string | null): value is ContractCon
 function stageLabel(value: StageKey) {
   if (value === "딜클로징") return "딜클로징";
   if (value === "리텐션") return "리텐션";
+  if (value === "이탈/탈퇴") return "이탈/탈퇴";
   return value;
 }
 
@@ -574,6 +587,7 @@ function toneClass(tone: Stage["tone"]) {
 function getStageButtonLabel(target: StageKey) {
   if (target === "딜클로징") return "딜클로징 전환";
   if (target === "리텐션") return "계약전환";
+  if (target === "이탈/탈퇴") return "탈퇴처리";
   return `${target} 전환`;
 }
 
@@ -582,15 +596,16 @@ function getStageButtonIcon(target: StageKey) {
   if (target === "프로스펙팅") return <Search size={14} />;
   if (target === "딜클로징") return <Zap size={14} />;
   if (target === "리텐션") return <UserCheck size={14} />;
+  if (target === "이탈/탈퇴") return <X size={14} />;
   return <X size={14} />;
 }
 
 function getQuickStageTargets(stage: StageKey): StageKey[] {
-  if (stage === "리드") return ["프로스펙팅", "딜클로징", "리텐션"];
-  if (stage === "프로스펙팅") return ["리드", "딜클로징", "리텐션"];
-  if (stage === "딜클로징") return ["리드", "프로스펙팅", "리텐션"];
-  if (stage === "리텐션") return ["리드", "프로스펙팅", "딜클로징"];
-  return ["리드", "프로스펙팅", "딜클로징"];
+  if (stage === "리드") return ["프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
+  if (stage === "프로스펙팅") return ["리드", "딜클로징", "리텐션", "이탈/탈퇴"];
+  if (stage === "딜클로징") return ["리드", "프로스펙팅", "리텐션", "이탈/탈퇴"];
+  if (stage === "리텐션") return ["리드", "프로스펙팅", "딜클로징", "이탈/탈퇴"];
+  return ["리드", "프로스펙팅", "딜클로징", "리텐션"];
 }
 
 function getFollowUpByStage(stage: StageKey) {
@@ -602,6 +617,8 @@ function getFollowUpByStage(stage: StageKey) {
     return "계약 전환을 위해 마지막 클로징을 진행하세요.";
   if (stage === "리텐션")
     return "계약완료 고객입니다. 분양회 입회자 메뉴와 정산/사후관리 흐름을 확인하세요.";
+  if (stage === "이탈/탈퇴")
+    return "이탈/탈퇴 처리된 고객입니다. 필요 시 리드, 프로스펙팅, 딜클로징, 리텐션으로 복귀할 수 있습니다.";
   return "재접점 필요 여부를 확인하고 리드 또는 프로스펙팅으로 복귀하세요.";
 }
 
@@ -619,6 +636,7 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     meetingResult: isContractConversionResult(record.meeting_result) ? record.meeting_result : "",
     reservationDate: record.meeting_result === "예약완료" ? formatShortDate(record.reservation_date) : "",
     contractDate: record.meeting_result === "계약완료" ? formatShortDate(record.contract_date) : "",
+    churnDate: stage === "이탈/탈퇴" ? formatShortDate(record.churn_date || record.updated_at) : "",
     stage,
     lastActivity: formatShortDate(record.last_note_at),
     registeredAt: formatShortDate(record.created_at),
@@ -924,6 +942,9 @@ function SummaryTab({
           {customer.meetingResult === "계약완료" ? (
             <InfoItem label="계약완료일" value={customer.contractDate} />
           ) : null}
+          {customer.stage === "이탈/탈퇴" ? (
+            <InfoItem label="탈퇴일" value={customer.churnDate} />
+          ) : null}
           <InfoItem label="등록일" value={customer.registeredAt} />
         </div>
       </section>
@@ -1046,7 +1067,7 @@ function QuickActions({
         </div>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
         {targets.map((target) => (
           target === "리텐션" ? (
             <button
@@ -1085,6 +1106,15 @@ function QuickActions({
         >
           <MessageSquare size={14} />
           활동노트 작성
+        </button>
+        <button
+          type="button"
+          onClick={() => onStageChange(customer, "이탈/탈퇴")}
+          className="btn-premium btn-secondary w-full"
+          style={{ color: "#e11d48", borderColor: "rgba(225, 29, 72, 0.28)" }}
+        >
+          <X size={14} />
+          탈퇴
         </button>
       </div>
 
@@ -2530,6 +2560,7 @@ export default function Pipeline3Page() {
             meeting_address: recordToSave.meeting_address || null,
             reservation_date: recordToSave.reservation_date || null,
             contract_date: recordToSave.contract_date || null,
+            churn_date: recordToSave.churn_date || null,
             created_at: recordToSave.created_at,
             updated_at: recordToSave.updated_at,
             crm_db_source: VIP_DB_SOURCE,
@@ -2578,8 +2609,10 @@ export default function Pipeline3Page() {
 
   const handleStageChange = (customer: PipelineCustomer, target: StageKey) => {
     const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
+    const isChurn = target === "이탈/탈퇴";
     updateRecord(customer.id, {
       management_stage: target,
+      churn_date: isChurn ? TODAY : customer.raw.churn_date || null,
       memo: mergeMemoWithExistingGradeBlock(cleanMemo, customer.raw.memo),
     });
   };
