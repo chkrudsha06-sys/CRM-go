@@ -1576,12 +1576,12 @@ export default function WanpanTruckPage() {
             </section>
           ) : (
             <section className="crm-table-wrap overflow-hidden">
-              <div className="hidden min-w-[1060px] xl:block">
+              <div className="hidden min-w-[900px] xl:block">
                 <div
                   className="grid h-12 items-center border-b px-4 text-[11.5px] font-[800] tracking-[-0.02em]"
                   style={{
                     gridTemplateColumns:
-                      "100px 160px 140px 80px 100px 80px 110px 90px 160px",
+                      "1fr 1.8fr 1.5fr 0.7fr 1fr 0.8fr 1fr 0.8fr 1.5fr",
                     borderColor: "color-mix(in srgb, var(--border) 44%, transparent)",
                     color: "var(--text-faint)",
                     background: "var(--surface-2)",
@@ -1622,7 +1622,7 @@ export default function WanpanTruckPage() {
                         className="wanpan-row grid min-h-[52px] items-center border-t px-4 py-2 transition-colors hover:bg-white/[0.025]"
                         style={{
                           gridTemplateColumns:
-                            "100px 160px 140px 80px 100px 80px 110px 90px 160px",
+                            "1fr 1.8fr 1.5fr 0.7fr 1fr 0.8fr 1fr 0.8fr 1.5fr",
                           borderLeft: `3px solid ${toneStyle(tone).dot}`,
                           textAlign: "center" as const,
                         }}
