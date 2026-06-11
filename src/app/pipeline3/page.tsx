@@ -65,6 +65,7 @@ type CustomerDbRecord = {
   crm_db_source?: string | null;
   vip_transferred_at?: string | null;
   assigned_to?: string | null;
+  last_note_at?: string | null;
 };
 
 type PipelineCustomer = {
@@ -86,6 +87,7 @@ type PipelineCustomer = {
   meetingAddress: string;
   noteSummary: string;
   adsSummary: string;
+  owner: string;
   raw: CustomerDbRecord;
 };
 
@@ -618,7 +620,7 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     reservationDate: record.meeting_result === "예약완료" ? formatShortDate(record.reservation_date) : "",
     contractDate: record.meeting_result === "계약완료" ? formatShortDate(record.contract_date) : "",
     stage,
-    lastActivity: formatShortDate(record.updated_at || record.created_at),
+    lastActivity: formatShortDate(record.last_note_at),
     registeredAt: formatShortDate(record.created_at),
     nextContact: getFollowUpByStage(stage),
     meetingSchedule: record.meeting_date
@@ -628,6 +630,7 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     noteSummary: memo,
     adsSummary:
       "광고 요청 이력 없음. 필요 시 하단 광고요청 버튼으로 업무요청을 생성하세요.",
+    owner: fmt(record.assigned_to),
     raw: record,
   };
 }
@@ -685,6 +688,9 @@ function PipelineCard({
         >
           {customer.intakeRoute}
         </span>
+        <span className="badge-premium px-2 py-1 text-[11px] badge-muted">
+          담당자 {customer.owner}
+        </span>
       </div>
 
       <div
@@ -692,7 +698,6 @@ function PipelineCard({
         style={{ color: "var(--text-faint)" }}
       >
         <span>활동 {customer.lastActivity}</span>
-        <span>등록 {customer.registeredAt}</span>
       </div>
     </button>
   );
@@ -913,6 +918,7 @@ function SummaryTab({
           <InfoItem label="연락처" value={customer.phone} />
           <InfoItem label="소속회사" value={customer.company} />
           <InfoItem label="유입경로" value={customer.intakeRoute} badge />
+          <InfoItem label="담당자" value={customer.owner} />
           <InfoItem label="심사결과" value={customer.grade} badge />
           <InfoItem label="관리구간" value={stageLabel(customer.stage)} badge />
           {customer.meetingResult === "예약완료" ? (
@@ -2370,9 +2376,41 @@ export default function Pipeline3Page() {
 
         if (error) throw error;
 
-        const remoteRecords = Array.isArray(data)
+        const baseRecords = Array.isArray(data)
           ? (data as CustomerDbRecord[]).map(normalizeRecordGrade).filter(isVipActivityRecord)
           : [];
+
+        const ids = baseRecords.map((record) => record.id);
+        let lastNoteMap = new Map<number, string>();
+
+        if (ids.length > 0) {
+          const { data: notes, error: notesError } = await supabase
+            .from("contact_notes")
+            .select("contact_id,note_date,created_at")
+            .in("contact_id", ids);
+
+          if (!notesError && Array.isArray(notes)) {
+            notes.forEach((note) => {
+              const contactId = Number((note as { contact_id?: number }).contact_id);
+              const noteDate =
+                (note as { note_date?: string | null; created_at?: string | null }).note_date ||
+                (note as { note_date?: string | null; created_at?: string | null }).created_at ||
+                "";
+
+              if (!contactId || !noteDate) return;
+
+              const prev = lastNoteMap.get(contactId);
+              if (!prev || new Date(noteDate).getTime() > new Date(prev).getTime()) {
+                lastNoteMap.set(contactId, noteDate);
+              }
+            });
+          }
+        }
+
+        const remoteRecords = baseRecords.map((record) => ({
+          ...record,
+          last_note_at: lastNoteMap.get(record.id) || null,
+        }));
 
         if (!alive) return;
 
