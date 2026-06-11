@@ -1383,6 +1383,14 @@ export default function WanpanTruckPage() {
     fetchTrucks();
   };
 
+  const togglePhoto = async (id: number, current: boolean) => {
+    await supabase
+      .from("wanpan_trucks")
+      .update({ has_photo: !current })
+      .eq("id", id);
+    fetchTrucks();
+  };
+
   const toggleConfirm = async (
     id: number,
     current: string | null,
@@ -1821,12 +1829,30 @@ export default function WanpanTruckPage() {
                     <Badge tone={selectedTruck.is_ordered ? "success" : "muted"}>
                       {selectedTruck.is_ordered ? "발주완료" : "미발주"}
                     </Badge>
-                    <Badge tone={selectedTruck.is_direct_order ? "purple" : "muted"}>
-                      {selectedTruck.is_direct_order ? "직발주" : "일반"}
-                    </Badge>
-                    <Badge tone={selectedTruck.has_photo ? "success" : "muted"} icon={ImageIcon}>
-                      {selectedTruck.has_photo ? "촬영" : "미촬영"}
-                    </Badge>
+                    <button
+                      type="button"
+                      title="클릭하여 직발주 토글"
+                      onClick={() => {
+                        toggleDirectOrder(selectedTruck.id, selectedTruck.is_direct_order);
+                        setSelectedTruck({ ...selectedTruck, is_direct_order: !selectedTruck.is_direct_order });
+                      }}
+                    >
+                      <Badge tone={selectedTruck.is_direct_order ? "purple" : "muted"}>
+                        {selectedTruck.is_direct_order ? "직발주" : "일반"}
+                      </Badge>
+                    </button>
+                    <button
+                      type="button"
+                      title="클릭하여 촬영여부 토글"
+                      onClick={() => {
+                        togglePhoto(selectedTruck.id, selectedTruck.has_photo);
+                        setSelectedTruck({ ...selectedTruck, has_photo: !selectedTruck.has_photo });
+                      }}
+                    >
+                      <Badge tone={selectedTruck.has_photo ? "success" : "muted"} icon={ImageIcon}>
+                        {selectedTruck.has_photo ? "촬영" : "미촬영"}
+                      </Badge>
+                    </button>
                     <Badge tone={selectedTruck.order_confirmed_by ? "success" : "warning"}>
                       {selectedTruck.order_confirmed_by ? "확인완료" : "미확인"}
                     </Badge>
@@ -1915,7 +1941,49 @@ export default function WanpanTruckPage() {
                     <p className="text-[18px] font-[840]" style={{ color: "var(--text)" }}>{(selectedTruck.order_qty_base || 0) + (selectedTruck.order_qty_extra || 0)}</p>
                   </div>
                 </div>
+
+                {/* 상태 토글 */}
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    className="flex items-center justify-between rounded-xl border p-3 transition-colors hover:bg-white/[0.03]"
+                    style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}
+                    onClick={() => {
+                      togglePhoto(selectedTruck.id, selectedTruck.has_photo);
+                      setSelectedTruck({ ...selectedTruck, has_photo: !selectedTruck.has_photo });
+                    }}
+                  >
+                    <span className="crm-tiny">촬영여부</span>
+                    <Badge tone={selectedTruck.has_photo ? "success" : "muted"} icon={ImageIcon}>
+                      {selectedTruck.has_photo ? "촬영" : "미촬영"}
+                    </Badge>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center justify-between rounded-xl border p-3 transition-colors hover:bg-white/[0.03]"
+                    style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}
+                    onClick={() => {
+                      toggleDirectOrder(selectedTruck.id, selectedTruck.is_direct_order);
+                      setSelectedTruck({ ...selectedTruck, is_direct_order: !selectedTruck.is_direct_order });
+                    }}
+                  >
+                    <span className="crm-tiny">시안직발주</span>
+                    <Badge tone={selectedTruck.is_direct_order ? "purple" : "muted"}>
+                      {selectedTruck.is_direct_order ? "직발주" : "미발주"}
+                    </Badge>
+                  </button>
+                </div>
               </section>
+
+              {/* 메모 */}
+              {selectedTruck.notes && (
+                <section className="premium-card p-4">
+                  <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>메모</p>
+                  <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    {selectedTruck.notes}
+                  </p>
+                </section>
+              )}
 
               {/* 담당자 확인 */}
               <section className="premium-card p-4">
