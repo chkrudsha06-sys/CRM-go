@@ -309,7 +309,7 @@ function StatCard({
         >
           {icon}
         </div>
-        <div className="min-w-0 text-center">
+        <div className="min-w-0">
           <p className="crm-tiny">{label}</p>
           <p
             className="mt-0.5 text-[22px] font-[830] tracking-[-0.055em]"
@@ -1289,6 +1289,16 @@ export default function WanpanTruckPage() {
       alert(`저장 실패: ${res.error.message}`);
       return;
     }
+
+    // 신규 등록일 때만 카카오워크 이벤트 알림방으로 발송 (실패해도 저장에는 영향 없음)
+    if (!editItem) {
+      fetch("/api/kakaowork/notify-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "wanpan_truck_created", data: payload }),
+      }).catch(() => {});
+    }
+
     setShowModal(false);
     fetchTrucks();
   };
@@ -1545,7 +1555,11 @@ export default function WanpanTruckPage() {
                   ].map((header) => (
                     <span
                       key={header}
-                      className="text-center"
+                      className={
+                        header === "No" || header === "관리"
+                          ? "text-center"
+                          : ""
+                      }
                     >
                       {header}
                     </span>
@@ -1565,7 +1579,7 @@ export default function WanpanTruckPage() {
                     return (
                       <div
                         key={truck.id}
-                        className="wanpan-row grid min-h-[76px] items-center gap-2 border-t px-4 text-center transition-colors hover:bg-white/[0.025]"
+                        className="wanpan-row grid min-h-[76px] items-center gap-2 border-t px-4 transition-colors hover:bg-white/[0.025]"
                         style={{
                           gridTemplateColumns:
                             "54px 96px 210px 126px 190px 96px 168px 168px 86px 96px 100px 96px 96px 122px minmax(170px,1fr) 88px",
@@ -1576,7 +1590,7 @@ export default function WanpanTruckPage() {
                           {index + 1}
                         </span>
 
-                        <span className="crm-row-sub flex items-center justify-center gap-1.5">
+                        <span className="crm-row-sub flex items-center gap-1.5">
                           <CalendarDays size={13} />{" "}
                           {formatDate(truck.dispatch_date)}
                         </span>
@@ -1585,23 +1599,23 @@ export default function WanpanTruckPage() {
                           <p className="crm-row-main truncate">
                             {truck.site_name || "-"}
                           </p>
-                          <p className="crm-row-sub mt-0.5 flex items-center justify-center gap-1.5 truncate">
+                          <p className="crm-row-sub mt-0.5 flex items-center gap-1.5 truncate">
                             <MapPin size={12} /> {truck.location || "-"}
                           </p>
                         </div>
 
-                        <span className="crm-row-sub truncate text-center">
+                        <span className="crm-row-sub truncate">
                           {truck.agency || "-"}
                         </span>
 
-                        <div className="min-w-0 text-center">
+                        <div className="min-w-0">
                           <p
-                            className="crm-row-sub truncate text-center"
+                            className="crm-row-sub truncate"
                             style={{ color: "var(--text)" }}
                           >
                             {truck.contact_point || "-"}
                           </p>
-                          <p className="crm-tiny mt-0.5 flex items-center justify-center gap-1 truncate">
+                          <p className="crm-tiny mt-0.5 flex items-center gap-1 truncate">
                             {truck.contact_point_title || "-"}
                             {truck.contact_phone ? (
                               <>
@@ -1617,7 +1631,7 @@ export default function WanpanTruckPage() {
                           {truck.team_size ? `${truck.team_size}명` : "-"}
                         </Badge>
 
-                        <div className="flex max-w-[168px] flex-wrap justify-center gap-1">
+                        <div className="flex max-w-[168px] flex-wrap gap-1">
                           {staff.length > 0 ? (
                             staff.map((name) => (
                               <Badge key={name} tone="info">
@@ -1629,7 +1643,7 @@ export default function WanpanTruckPage() {
                           )}
                         </div>
 
-                        <div className="flex max-w-[168px] flex-wrap justify-center gap-1">
+                        <div className="flex max-w-[168px] flex-wrap gap-1">
                           {consultants.length > 0 ? (
                             consultants.map((name) => (
                               <Badge key={name} tone="purple">
@@ -1644,7 +1658,7 @@ export default function WanpanTruckPage() {
                         <button
                           type="button"
                           onClick={() => setReportTruck(truck)}
-                          className="mx-auto flex h-9 w-9 items-center justify-center rounded-[11px] border"
+                          className="flex h-9 w-9 items-center justify-center rounded-[11px] border"
                           style={{
                             background: hasReport
                               ? "var(--success-bg)"
@@ -1669,7 +1683,7 @@ export default function WanpanTruckPage() {
                         </Badge>
 
                         <p
-                          className="crm-row-sub text-center"
+                          className="crm-row-sub"
                           style={{ color: "var(--text)" }}
                         >
                           {truck.order_qty_base || "-"}
@@ -1683,7 +1697,6 @@ export default function WanpanTruckPage() {
 
                         <button
                           type="button"
-                          className="mx-auto flex justify-center"
                           onClick={() =>
                             toggleOrder(truck.id, truck.is_ordered)
                           }
@@ -1698,7 +1711,6 @@ export default function WanpanTruckPage() {
 
                         <button
                           type="button"
-                          className="mx-auto flex justify-center"
                           onClick={() =>
                             toggleDirectOrder(truck.id, truck.is_direct_order)
                           }
@@ -1711,13 +1723,12 @@ export default function WanpanTruckPage() {
                         </button>
 
                         {truck.assigned_to ? (
-                          <div className="flex flex-col items-center justify-center space-y-1 text-center">
+                          <div className="space-y-1">
                             <Badge tone="info" icon={User}>
                               {truck.assigned_to}
                             </Badge>
                             <button
                               type="button"
-                              className="mx-auto flex justify-center"
                               onClick={() =>
                                 toggleConfirm(
                                   truck.id,
@@ -1744,7 +1755,7 @@ export default function WanpanTruckPage() {
                         )}
 
                         <p
-                          className="crm-row-sub truncate text-center"
+                          className="crm-row-sub truncate"
                           title={truck.notes || ""}
                         >
                           {truck.notes || "-"}
