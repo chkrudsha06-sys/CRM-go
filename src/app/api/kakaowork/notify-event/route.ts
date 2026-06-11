@@ -99,6 +99,7 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
 
   const blocks: any[] = [
     { type: "header", text: "📋 일별활동목표 등록", style: "blue" },
+    { type: "text", text: "@all" },
     sectionHeader(`■ ${d.owner_name || "-"} ${d.owner_title || ""}`),
     desc("날짜", d.work_date || "-"),
     { type: "divider" },
@@ -108,10 +109,10 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
     blocks.push({ type: "text", text: "📌 외근/미팅일 (활동목표 없음)" });
   } else {
     blocks.push(sectionHeader("■ 활동목표"));
-    blocks.push(desc("당일 TM", `${d.goal_new_tm || 0}건`));
-    blocks.push(desc("당일 콜드톡", `${d.goal_coldtalk || 0}건`));
-    blocks.push(desc("브론즈 DB", `${d.goal_consultant_db || 0}개`));
-    blocks.push(desc("1% DB", `${d.goal_second_touch || 0}개`));
+    blocks.push(desc("TM", `${d.goal_new_tm || 0}건`));
+    blocks.push(desc("콜드톡", `${d.goal_coldtalk || 0}건`));
+    blocks.push(desc("브론즈DB", `${d.goal_consultant_db || 0}개`));
+    blocks.push(desc("1%DB", `${d.goal_second_touch || 0}개`));
 
     if (hasWorkItems) {
       blocks.push({ type: "divider" });
@@ -244,21 +245,6 @@ export async function POST(request: Request) {
     } else if (event === "daily_activity_saved") {
       blocks = buildDailyActivityBlocks(d, baseUrl);
       pushText = `📋 활동목표 등록 | ${d.owner_name || "-"} (${d.work_date || "-"})`;
-
-      // 담당자 @멘션 (본인)
-      const mEmail = getMentionEmail(d.owner_name);
-      const mUid = mEmail ? await findUserIdByEmail(appKey, mEmail) : null;
-      if (mUid) {
-        // 멘션을 헤더 바로 아래(인덱스 1)에 삽입
-        blocks.splice(1, 0, {
-          type: "text",
-          text: `@${d.owner_name} ${d.owner_title || ""}`,
-          inlines: [
-            { type: "mention", text: `@${d.owner_name}`, ref: { type: "kw", value: Number(mUid) } },
-            { type: "styled", text: ` ${d.owner_title || ""}` },
-          ],
-        });
-      }
 
     } else {
       return NextResponse.json(
