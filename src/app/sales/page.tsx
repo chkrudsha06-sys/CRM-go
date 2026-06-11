@@ -41,6 +41,7 @@ type AdExecution = {
   payment_date: string | null;
   team_member: string | null;
   consultant: string | null;
+  bunyanghoe_number?: string | null;
   memo?: string | null;
   created_at: string;
 };
@@ -85,6 +86,8 @@ type MemberOption = {
   title: string | null;
   bunyanghoe_number: string | null;
   phone: string | null;
+  assigned_to?: string | null;
+  consultant?: string | null;
   meeting_result?: string | null;
 };
 
@@ -745,7 +748,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <h2 className="truncate text-[22px] font-[780] tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{item.member_name || "고객명 없음"}</h2>
                   <Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge>
                 </div>
-                <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>ID {item.id} · {item.channel || "채널 없음"} · {formatFullDate(item.payment_date)}</p>
+                <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>{item.channel || "채널 없음"} · {formatFullDate(item.payment_date)}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge tone={channelTone(item.channel)} icon={CreditCard}>{item.channel || "채널 없음"}</Badge>
                   <Badge tone="info" icon={User}>{item.team_member || "-"}</Badge>
@@ -1140,7 +1143,7 @@ export default function SalesPage() {
   const fetchMemberOptions = useCallback(async () => {
     const { data, error } = await supabase
       .from("contacts")
-      .select("id,name,title,bunyanghoe_number,phone,meeting_result")
+      .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .in("meeting_result", ["예약완료", "계약완료"])
       .not("name", "is", null)
       .order("name", { ascending: true })
@@ -1160,11 +1163,11 @@ export default function SalesPage() {
 
   const filteredRows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return rows.filter((row) => {
+    return displayRows.filter((row) => {
       const matchSearch = !keyword || [row.member_name, row.channel, row.contract_route, row.team_member, row.consultant, row.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword);
       return matchSearch && (!fRoute || normalizePaymentItem(row.contract_route) === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam);
     });
-  }, [rows, search, fRoute, fChannel, fTeam]);
+  }, [displayRows, search, fRoute, fChannel, fTeam]);
 
   const stats = useMemo(() => {
     const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
@@ -1194,6 +1197,43 @@ export default function SalesPage() {
     });
     return map;
   }, [memberOptions]);
+
+  const memberManagerByNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    memberOptions.forEach((member) => {
+      const name = (member.name || "").trim();
+      const manager = (member.assigned_to || "").trim();
+      if (name && manager) map.set(name, manager);
+    });
+    return map;
+  }, [memberOptions]);
+
+  const memberManagerByNumberMap = useMemo(() => {
+    const map = new Map<string, string>();
+    memberOptions.forEach((member) => {
+      const number = (member.bunyanghoe_number || "").trim();
+      const manager = (member.assigned_to || "").trim();
+      if (number && manager) map.set(number, manager);
+    });
+    return map;
+  }, [memberOptions]);
+
+  const displayRows = useMemo(() => {
+    return rows.map((row) => {
+      const currentManager = (row.team_member || "").trim();
+      const isCompanyManager = currentManager === "주식회사광고인" || currentManager === "주식회사 광고인";
+      const matchedManager =
+        memberManagerByNumberMap.get((row.bunyanghoe_number || "").trim()) ||
+        memberManagerByNameMap.get((row.member_name || "").trim()) ||
+        "";
+
+      if (matchedManager && (!currentManager || isCompanyManager)) {
+        return { ...row, team_member: matchedManager };
+      }
+
+      return row;
+    });
+  }, [rows, memberManagerByNameMap, memberManagerByNumberMap]);
 
   useEffect(() => {
     setPage(1);
@@ -1686,7 +1726,7 @@ export default function SalesPage() {
               <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
                   {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
-                    <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate text-center">ID {row.id}</div></div></div></td>
+                    <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate text-center">{row.channel || "채널 없음"} · {formatFullDate(row.payment_date)}</div></div></div></td>
                     <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
