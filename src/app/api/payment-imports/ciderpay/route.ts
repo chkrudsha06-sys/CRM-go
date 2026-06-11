@@ -91,6 +91,24 @@ async function ciderpayLogin() {
   return `JSESSIONID=${jsessionMatch[1]}`;
 }
 
+
+async function findMatchedMemberByName(memberName: string) {
+  const name = cleanText(memberName || "");
+  if (!name) return null;
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+    .eq("name", name)
+    .in("meeting_result", ["예약완료", "계약완료"])
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 async function syncCiderpay(maxPages: number) {
   const cookie = await ciderpayLogin();
 
@@ -211,6 +229,11 @@ async function syncCiderpay(maxPages: number) {
         `취소완료일시: ${canceledAtText || "-"}`,
       ].join("\n");
 
+      const matchedMember = await findMatchedMemberByName(buyerName);
+      const matchedManagerName = cleanText(matchedMember?.assigned_to || "");
+      const matchedBunyanghoeNumber = cleanText(matchedMember?.bunyanghoe_number || "");
+      const matchedConsultant = cleanText(matchedMember?.consultant || matchedMember?.phone || "");
+
       const salesPayload = isCancel
         ? {
             member_name: buyerName,
@@ -262,7 +285,9 @@ async function syncCiderpay(maxPages: number) {
             provider: "CIDERPAY",
             external_payment_id: externalPaymentId,
             member_name: buyerName,
-            member_phone: "",
+            member_phone: matchedMember?.phone || "",
+            member_number: matchedBunyanghoeNumber,
+            manager_name: matchedManagerName || null,
             product_name: productName,
             payment_status: isCancel ? "결제취소" : "결제완료",
             payment_method: "정기결제",
