@@ -219,6 +219,49 @@ function parseWorkbook(buffer: Buffer) {
     .filter((row) => row.memberName || row.memberNumber || row.memberPhone);
 }
 
+
+async function findMatchedMember(payment: Pick<NormalizedPayment, "memberName" | "memberNumber" | "memberPhone">) {
+  const memberNumber = toText(payment.memberNumber);
+  const memberName = toText(payment.memberName);
+  const phoneDigits = toText(payment.memberPhone).replace(/\D/g, "");
+
+  if (memberNumber) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+      .eq("bunyanghoe_number", memberNumber)
+      .in("meeting_result", ["예약완료", "계약완료"])
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  if (memberName) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+      .eq("name", memberName)
+      .in("meeting_result", ["예약완료", "계약완료"])
+      .order("id", { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+
+    const list = data || [];
+    if (phoneDigits) {
+      const phoneMatched = list.find((member) => toText(member.phone).replace(/\D/g, "") === phoneDigits);
+      if (phoneMatched) return phoneMatched;
+    }
+
+    if (list[0]) return list[0];
+  }
+
+  return null;
+}
+
 async function findExistingImport(provider: string, externalPaymentId: string) {
   const { data, error } = await supabase
     .from("external_payment_records")
@@ -299,6 +342,11 @@ async function findExistingSalesRecord(payment: NormalizedPayment) {
 }
 
 async function createSalesRecord(payment: NormalizedPayment) {
+  const matchedMember = await findMatchedMember(payment);
+  const matchedManagerName = toText(matchedMember?.assigned_to || "");
+  const matchedBunyanghoeNumber = toText(matchedMember?.bunyanghoe_number || payment.memberNumber);
+  const matchedConsultant = toText(matchedMember?.consultant || payment.memberPhone);
+
   const memo = [
     "효성CMS 수납내역 자동반영",
     `회원번호: ${payment.memberNumber || "-"}`,
@@ -317,15 +365,15 @@ async function createSalesRecord(payment: NormalizedPayment) {
     .from("ad_executions")
     .insert({
       member_name: payment.memberName,
-      bunyanghoe_number: payment.memberNumber,
+      bunyanghoe_number: matchedBunyanghoeNumber,
       execution_amount: payment.paidAmount,
       vat_amount: payment.paidAmount,
       refund_amount: payment.refundAmount || 0,
       channel: "효성CMS",
       contract_route: "분양회",
       payment_date: payment.paidAt || payment.completedAt || new Date().toISOString().slice(0, 10),
-      team_member: payment.managerName || "주식회사광고인",
-      consultant: payment.memberPhone,
+      team_member: matchedManagerName || payment.managerName || null,
+      consultant: matchedConsultant,
       hightarget_mileage: 0,
       hightarget_reward: 0,
       hogaengnono_reward: 0,
@@ -345,6 +393,13 @@ async function importPayments(payments: NormalizedPayment[]) {
 
   for (const payment of payments) {
     try {
+      const matchedMember = await findMatchedMember(payment);
+      if (matchedMember?.assigned_to) {
+        payment.managerName = toText(matchedMember.assigned_to);
+      }
+      if (matchedMember?.bunyanghoe_number) {
+        payment.memberNumber = toText(matchedMember.bunyanghoe_number);
+      }
       const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId);
 
       if (existing?.sales_record_id) {
