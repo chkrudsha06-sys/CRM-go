@@ -410,9 +410,13 @@ function normalizeStage(value?: string | null): StageKey {
 }
 
 function getPipelineStage(record: CustomerDbRecord): StageKey {
+  const explicitStage = normalizeStage(record.management_stage);
+
+  if (record.management_stage) return explicitStage;
   if (record.meeting_result === "계약완료") return "리텐션";
   if (record.meeting_result === "예약완료") return "딜클로징";
-  return normalizeStage(record.management_stage);
+
+  return explicitStage;
 }
 
 function isContractConversionResult(value?: string | null): value is ContractConversionResult {
@@ -1106,15 +1110,6 @@ function QuickActions({
         >
           <MessageSquare size={14} />
           활동노트 작성
-        </button>
-        <button
-          type="button"
-          onClick={() => onStageChange(customer, "이탈/탈퇴")}
-          className="btn-premium btn-secondary w-full"
-          style={{ color: "#e11d48", borderColor: "rgba(225, 29, 72, 0.28)" }}
-        >
-          <X size={14} />
-          탈퇴
         </button>
       </div>
 
@@ -2509,6 +2504,8 @@ export default function Pipeline3Page() {
         .length,
       signed: filteredCustomers.filter((customer) => customer.stage === "리텐션")
         .length,
+      churn: filteredCustomers.filter((customer) => customer.stage === "이탈/탈퇴")
+        .length,
     }),
     [filteredCustomers],
   );
@@ -2610,9 +2607,13 @@ export default function Pipeline3Page() {
   const handleStageChange = (customer: PipelineCustomer, target: StageKey) => {
     const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
     const isChurn = target === "이탈/탈퇴";
+
     updateRecord(customer.id, {
       management_stage: target,
-      churn_date: isChurn ? TODAY : customer.raw.churn_date || null,
+      meeting_result: null,
+      reservation_date: null,
+      contract_date: null,
+      churn_date: isChurn ? TODAY : null,
       memo: mergeMemoWithExistingGradeBlock(cleanMemo, customer.raw.memo),
     });
   };
