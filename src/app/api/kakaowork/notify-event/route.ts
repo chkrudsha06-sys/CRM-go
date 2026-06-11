@@ -84,18 +84,30 @@ function buildWanpanBlocks(d: Record<string, any>, truckId: any, baseUrl: string
   return [
     { type: "header", text: "🚚 완판트럭 신규 등록", style: "yellow" },
     sectionHeader("■ 현장정보"),
-    desc("발송일", d.dispatch_date || "-"), desc("현장명", d.site_name || "-"), desc("현장주소", d.location || "-"),
+    { type: "text", text: [
+      `발송일 : ${d.dispatch_date || "-"}`,
+      `현장명 : ${d.site_name || "-"}`,
+      `현장주소 : ${d.location || "-"}`,
+    ].join("\n") },
     { type: "divider" },
     sectionHeader("■ 소통자정보"),
-    desc("소통자", d.contact_point || "-"), desc("직급", d.contact_point_title || "-"), desc("연락처", d.contact_phone || "-"),
+    { type: "text", text: [
+      `소통자 : ${d.contact_point || "-"}`,
+      `직급 : ${d.contact_point_title || "-"}`,
+      `연락처 : ${d.contact_phone || "-"}`,
+    ].join("\n") },
     { type: "divider" },
-    sectionHeader("■ BX요청사항"), desc("촬영여부", d.has_photo ? "촬영" : "미촬영"),
+    sectionHeader("■ BX요청사항"),
+    { type: "text", text: `촬영여부 : ${d.has_photo ? "촬영" : "미촬영"}` },
     { type: "divider" },
-    sectionHeader("■ 발주수량"), desc("수량", `기본 ${d.order_qty_base || 0} + 추가 ${d.order_qty_extra || 0}`),
+    sectionHeader("■ 발주수량"),
+    { type: "text", text: `수량 : 기본 ${d.order_qty_base || 0} + 추가 ${d.order_qty_extra || 0}` },
     { type: "divider" },
     sectionHeader("■ 참석자"),
-    desc("대협팀", staff.length > 0 ? staff.join(", ") : "-"),
-    desc("컨설턴트", consultants.length > 0 ? consultants.join(", ") : "-"),
+    { type: "text", text: [
+      `대협팀 : ${staff.length > 0 ? staff.join(", ") : "-"}`,
+      `컨설턴트 : ${consultants.length > 0 ? consultants.join(", ") : "-"}`,
+    ].join("\n") },
     { type: "divider" },
   ];
 }
