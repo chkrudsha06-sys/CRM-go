@@ -1379,6 +1379,26 @@ export default function WanpanTruckPage() {
           background: var(--surface);
         }
 
+        [data-wanpan-page] .wanpan-row > *,
+        [data-wanpan-page] .wanpan-row .crm-row-main,
+        [data-wanpan-page] .wanpan-row .crm-row-sub,
+        [data-wanpan-page] .wanpan-row .crm-meta,
+        [data-wanpan-page] .wanpan-row .crm-tiny {
+          text-align: center !important;
+          justify-content: center !important;
+        }
+
+        [data-wanpan-page] .wanpan-row > div {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+
+        [data-wanpan-page] .wanpan-row > span {
+          justify-content: center !important;
+        }
+
         [data-theme="dark"] [data-wanpan-page] .crm-table-wrap {
           border-color: color-mix(in srgb, var(--border) 28%, transparent) !important;
           box-shadow: inset 0 1px 0 color-mix(in srgb, white 3%, transparent);
