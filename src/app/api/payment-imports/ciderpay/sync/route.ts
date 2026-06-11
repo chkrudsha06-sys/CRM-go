@@ -228,6 +228,93 @@ async function processPaymentRow($: cheerio.CheerioAPI, row: any) {
     };
   }
 
+  // 당일 취소 기록은 이미 skip 처리됨 → 재처리 방지
+  if (existing && !existing.sales_record_id) {
+    return {
+      buyerName,
+      productName,
+      amount,
+      paymentStatus: isCancel ? "결제취소" : "결제완료",
+      status: "duplicate",
+      reason: "이미 처리된 기록 (당일취소 skip 포함)",
+    };
+  }
+
+  // ===== 당일 결제+취소 → CRM 반영 제외 =====
+  if (isCancel) {
+    const paidDate = paidAtText.slice(0, 10);
+    const cancelDate = canceledAtText.slice(0, 10);
+
+    if (paidDate && cancelDate && paidDate === cancelDate) {
+      // 1) 같은 거래의 결제완료 매출이 이미 생성됐다면 삭제 (매출 과대계상 방지)
+      const completeId = `${paymentViewId}_COMPLETE`;
+      const { data: completeRec } = await supabase
+        .from("external_payment_records")
+        .select("id, sales_record_id")
+        .eq("provider", "CIDERPAY")
+        .eq("external_payment_id", completeId)
+        .maybeSingle();
+
+      if (completeRec?.sales_record_id) {
+        await supabase
+          .from("ad_executions")
+          .delete()
+          .eq("id", completeRec.sales_record_id);
+        await supabase
+          .from("external_payment_records")
+          .update({
+            sales_record_id: null,
+            import_status: "same_day_cancel_removed",
+            import_message: "당일 결제+취소 건으로 기존 매출 기록을 삭제했습니다.",
+          })
+          .eq("id", completeRec.id);
+      }
+
+      // 2) 취소 기록은 매출/환불 생성 없이 skip 마킹만
+      await supabase.from("external_payment_records").upsert(
+        {
+          provider: "CIDERPAY",
+          external_payment_id: externalPaymentId,
+          member_name: buyerName,
+          member_phone: "",
+          member_number: "",
+          manager_name: null,
+          product_name: productName,
+          payment_status: "결제취소",
+          payment_method: "정기결제",
+          paid_at: paidAtText || null,
+          completed_at: canceledAtText || null,
+          paid_amount: 0,
+          billing_amount: amount,
+          match_status: "matched",
+          sales_record_id: null,
+          import_status: "same_day_cancel_skipped",
+          import_message: "당일 결제+취소 건으로 CRM 반영을 제외했습니다.",
+          raw_data: {
+            buyerName,
+            productName,
+            amount,
+            paidAtText,
+            canceledAtText,
+            paymentViewId,
+            externalPaymentId,
+            statusText,
+          },
+        },
+        { onConflict: "provider,external_payment_id" }
+      );
+
+      return {
+        buyerName,
+        productName,
+        amount,
+        paymentStatus: "결제취소",
+        status: "same_day_cancel_skipped",
+        reason: "당일 결제+취소 → CRM 반영 제외",
+      };
+    }
+  }
+
   const paymentDate = isCancel
     ? canceledAtText.slice(0, 10)
     : paidAtText.slice(0, 10);
@@ -373,6 +460,7 @@ export async function GET() {
     const created = results.filter((item) => item.status === "sales_created").length;
     const canceled = results.filter((item) => item.status === "cancel_created").length;
     const duplicated = results.filter((item) => item.status === "duplicate").length;
+    const sameDaySkipped = results.filter((item) => item.status === "same_day_cancel_skipped").length;
     const skipped = totalFound - results.length;
 
     return NextResponse.json({
@@ -386,6 +474,7 @@ export async function GET() {
       created,
       canceled,
       duplicated,
+      sameDaySkipped,
       skipped,
       results,
     });
