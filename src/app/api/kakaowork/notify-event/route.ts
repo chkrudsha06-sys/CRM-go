@@ -116,7 +116,7 @@ function buildPlainText(d: Record<string, any>, baseUrl: string): string {
     `▪ 대협팀 : ${staff.length > 0 ? staff.join(", ") : "-"}`,
     `▪ 컨설턴트 : ${consultants.length > 0 ? consultants.join(", ") : "-"}`,
     "──────────────",
-    d.assigned_to ? `👤 담당자 확인 요청 : ${d.assigned_to}` : null,
+    d.assigned_to ? `👤 담당자 확인 요청 : ${d.assigned_to === "모두" ? "김재영, 최은정" : d.assigned_to}` : null,
     `🔗 CRM 바로가기 : ${baseUrl}/wanpan-truck`,
   ].filter(Boolean);
   return lines.join("\n");
@@ -151,13 +151,8 @@ export async function POST(request: Request) {
     const staff = parseMembers(d.staff_members);
     const consultants = parseMembers(d.consultant_members);
 
-    // 담당자 @멘션 준비
+    // 담당자 이름 확인
     const assignedName = d.assigned_to as string | null;
-    let mentionUserId: number | null = null;
-    if (assignedName) {
-      const email = getMentionEmail(assignedName);
-      if (email) mentionUserId = await findUserIdByEmail(appKey, email);
-    }
 
     // ===== 블록킷 카드 구성 =====
     const blocks: any[] = [
@@ -199,22 +194,29 @@ export async function POST(request: Request) {
       { type: "divider" },
     ];
 
-    // 담당자 멘션
-    if (assignedName && mentionUserId) {
-      blocks.push({
-        type: "text",
-        text: `👤 담당자 확인 요청 : @${assignedName}`,
-        inlines: [
-          { type: "styled", text: "👤 담당자 확인 요청 : ", bold: true },
-          {
-            type: "mention",
-            text: `@${assignedName}`,
-            ref: { type: "kw", value: Number(mentionUserId) },
-          },
-        ],
-      });
-    } else if (assignedName) {
-      blocks.push({ type: "text", text: `👤 담당자 확인 요청 : ${assignedName}` });
+    // 담당자 멘션 ("모두" → 김재영, 최은정 각각 개별 멘션)
+    const CONFIRM_LIST = ["김재영", "최은정"];
+    const mentionNames = assignedName === "모두" ? CONFIRM_LIST : assignedName ? [assignedName] : [];
+
+    for (const mName of mentionNames) {
+      const mEmail = getMentionEmail(mName);
+      const mUid = mEmail ? await findUserIdByEmail(appKey, mEmail) : null;
+      if (mUid) {
+        blocks.push({
+          type: "text",
+          text: `👤 담당자 확인 요청 : @${mName}`,
+          inlines: [
+            { type: "styled", text: "👤 담당자 확인 요청 : ", bold: true },
+            {
+              type: "mention",
+              text: `@${mName}`,
+              ref: { type: "kw", value: Number(mUid) },
+            },
+          ],
+        });
+      } else if (mName) {
+        blocks.push({ type: "text", text: `👤 담당자 확인 요청 : ${mName}` });
+      }
     }
 
     // 처리 버튼 3개
@@ -261,7 +263,7 @@ export async function POST(request: Request) {
     // 1차: 카드 발송 시도
     const first = await sendMessage(appKey, conversationId, pushText, blocks);
     if (first.ok) {
-      return NextResponse.json({ ok: true, mode: "card", mentioned: !!mentionUserId });
+      return NextResponse.json({ ok: true, mode: "card", mentioned: mentionNames.length > 0 });
     }
 
     // 2차(안전장치): 카드 실패 시 일반 텍스트로 발송
