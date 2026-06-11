@@ -79,9 +79,9 @@ function buildPlainText(d: Record<string, any>, baseUrl: string): string {
     `▪ 지역 : ${d.location || "-"}`,
     `▪ 대행사 : ${d.agency || "-"}`,
     "──────────",
-    `▪ 컨택포인트 : ${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`,
+    `▪ 접점 : ${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`,
     `▪ 연락처 : ${d.contact_phone || "-"}`,
-    `▪ 조직규모 : ${d.team_size ? d.team_size + "명" : "-"}`,
+    `▪ 조직수 : ${d.team_size ? d.team_size + "명" : "-"}`,
     "──────────",
     d.assigned_to ? `▪ 담당자 확인 요청 : ${d.assigned_to}` : null,
     "──────────────",
@@ -115,7 +115,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 담당자 @멘션 준비 (user_id는 반드시 숫자로 변환)
     const assignedName = d.assigned_to as string | null;
     let mentionUserId: number | null = null;
     if (assignedName) {
@@ -123,7 +122,6 @@ export async function POST(request: Request) {
       if (email) mentionUserId = await findUserIdByEmail(appKey, email);
     }
 
-    // ===== 블록킷 카드 구성 =====
     const blocks: any[] = [
       { type: "header", text: "🚚 완판트럭 신규 등록", style: "yellow" },
       {
@@ -135,13 +133,13 @@ export async function POST(request: Request) {
       desc("지역", d.location),
       desc("대행사", d.agency),
       desc(
-        "컨택포인트",
+        "접점",
         `${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`
       ),
       desc("연락처", d.contact_phone),
-      desc("조직규모", d.team_size ? `${d.team_size}명` : "-"),
+      desc("조직수", d.team_size ? `${d.team_size}명` : "-"),
       desc(
-        "발주수량",
+        "수량",
         d.order_qty_base
           ? `${d.order_qty_base}${d.order_qty_extra ? ` + ${d.order_qty_extra}` : ""}`
           : "-"
@@ -208,13 +206,11 @@ export async function POST(request: Request) {
 
     const pushText = `🚚 완판트럭 신규 등록 | ${d.site_name || "-"} (${d.dispatch_date || "-"})`;
 
-    // 1차: 카드 발송 시도
     const first = await sendMessage(appKey, conversationId, pushText, blocks);
     if (first.ok) {
       return NextResponse.json({ ok: true, mode: "card", mentioned: !!mentionUserId });
     }
 
-    // 2차(안전장치): 카드 실패 시 일반 텍스트로라도 발송
     const fallback = await sendMessage(appKey, conversationId, buildPlainText(d, baseUrl));
 
     return NextResponse.json(
