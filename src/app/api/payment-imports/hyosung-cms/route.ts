@@ -403,14 +403,29 @@ async function importPayments(payments: NormalizedPayment[]) {
       const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId);
 
       if (existing?.sales_record_id) {
-        results.push({
-          externalPaymentId: payment.externalPaymentId,
-          memberName: payment.memberName,
-          status: "duplicate",
-          message: "이미 통합매출에 반영된 수납내역입니다.",
-          salesRecordId: existing.sales_record_id,
-        });
-        continue;
+        // 실제 매출 레코드가 존재하는지 확인 (삭제된 경우 재생성 허용)
+        const { data: realSales } = await supabase
+          .from("ad_executions")
+          .select("id")
+          .eq("id", existing.sales_record_id)
+          .maybeSingle();
+
+        if (realSales?.id) {
+          results.push({
+            externalPaymentId: payment.externalPaymentId,
+            memberName: payment.memberName,
+            status: "duplicate",
+            message: "이미 통합매출에 반영된 수납내역입니다.",
+            salesRecordId: existing.sales_record_id,
+          });
+          continue;
+        }
+
+        // 매출이 삭제된 상태 → sales_record_id 초기화 후 재처리
+        await supabase
+          .from("external_payment_records")
+          .update({ sales_record_id: null, import_status: "reset_for_reimport" })
+          .eq("id", existing.id);
       }
 
       if (!payment.isPaid) {
