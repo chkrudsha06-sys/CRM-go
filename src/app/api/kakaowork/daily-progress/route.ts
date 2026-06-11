@@ -130,25 +130,35 @@ export async function GET() {
       { type: "text", text: `${dateLabel} (${hour}시 ${String(min).padStart(2, "0")}분 기준)` },
     ];
 
-    // 뷰어 개별 멘션
-    for (const vName of VIEWER_NAMES) {
-      const vEmail = getMentionEmail(vName);
-      const vUid = vEmail ? await findUserIdByEmail(appKey, vEmail) : null;
-      if (vUid) {
-        blocks.push({
-          type: "text",
-          text: `@${vName}`,
-          inlines: [{ type: "mention", text: `@${vName}`, ref: { type: "kw", value: Number(vUid) } }],
-        });
+    // 뷰어 멘션 (세로 배치, 간격 없음)
+    {
+      const vInlines: any[] = [];
+      const vParts: string[] = [];
+      for (let vi = 0; vi < VIEWER_NAMES.length; vi++) {
+        const vName = VIEWER_NAMES[vi];
+        const vEmail = getMentionEmail(vName);
+        const vUid = vEmail ? await findUserIdByEmail(appKey, vEmail) : null;
+        if (vi > 0) { vInlines.push({ type: "styled", text: "\n" }); vParts.push("\n"); }
+        if (vUid) {
+          vInlines.push({ type: "mention", text: `@${vName}`, ref: { type: "kw", value: Number(vUid) } });
+        } else {
+          vInlines.push({ type: "styled", text: `@${vName}` });
+        }
+        vParts.push(`@${vName}`);
+      }
+      if (vInlines.length > 0) {
+        blocks.push({ type: "text", text: vParts.join(""), inlines: vInlines });
       }
     }
 
     blocks.push({ type: "divider" });
 
-    for (const member of EXEC_MEMBERS) {
+    // 멤버 데이터 한 블록으로 (간격 없음)
+    const allMemberText = EXEC_MEMBERS.map((member) => {
       const row = (rows || []).find((r: any) => r.owner_name === member.name);
-      blocks.push({ type: "text", text: buildMemberLines(row, member) });
-    }
+      return buildMemberLines(row, member);
+    }).join("\n");
+    blocks.push({ type: "text", text: allMemberText });
 
     const pushText = `📊 진척율 (${hour}시 기준)`;
     await sendMessage(appKey, convId, pushText, blocks);
