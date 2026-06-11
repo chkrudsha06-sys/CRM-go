@@ -29,6 +29,23 @@ async function findUserIdByEmail(appKey: string, email: string): Promise<number 
   }
 }
 
+// 방 멤버 전체 조회
+async function getRoomMembers(appKey: string, conversationId: string): Promise<{ id: number; name: string }[]> {
+  try {
+    const res = await fetch(
+      `${KAKAO_WORK_API_BASE}/conversations/${conversationId}/users`,
+      { method: "GET", headers: { Authorization: `Bearer ${appKey}` }, cache: "no-store" }
+    );
+    const data = await res.json();
+    if (!data?.success || !Array.isArray(data?.users)) return [];
+    return data.users
+      .filter((u: any) => u?.id && u?.display_name)
+      .map((u: any) => ({ id: Number(u.id), name: String(u.display_name || u.name || "") }));
+  } catch {
+    return [];
+  }
+}
+
 function parseMembers(value: any): string[] {
   if (!value) return [];
   try {
@@ -246,6 +263,22 @@ export async function POST(request: Request) {
       blocks = buildDailyActivityBlocks(d, baseUrl);
       pushText = `📋 활동목표 등록 | ${d.owner_name || "-"} (${d.work_date || "-"})`;
 
+      // 뷰어 멘션 (김창완, 최웅, 김재영, 최은정) — 헤더 바로 아래 개별 삽입
+      const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
+      let insertIdx = 1;
+      for (const vName of VIEWER_NAMES) {
+        const vEmail = getMentionEmail(vName);
+        const vUid = vEmail ? await findUserIdByEmail(appKey, vEmail) : null;
+        if (vUid) {
+          blocks.splice(insertIdx, 0, {
+            type: "text",
+            text: `@${vName}`,
+            inlines: [{ type: "mention", text: `@${vName}`, ref: { type: "kw", value: Number(vUid) } }],
+          });
+          insertIdx++;
+        }
+      }
+
     } else {
       return NextResponse.json(
         { ok: false, message: `알 수 없는 이벤트: ${event}` },
@@ -272,23 +305,47 @@ export async function POST(request: Request) {
         );
         const { data: todayRows } = await supabase
           .from("daily_activity_goals")
-          .select("owner_name")
+          .select("owner_name, is_outside_meeting")
           .eq("work_date", d.work_date);
 
         const registered = new Set((todayRows || []).map((r: any) => r.owner_name));
         const allDone = EXEC_NAMES.every((name) => registered.has(name));
 
         if (allDone) {
-          const names = EXEC_NAMES.join(", ");
-          await sendMessage(appKey, conversationId, [
+          const outsideNames: string[] = [];
+          const goalNames: string[] = [];
+          for (const r of (todayRows || [])) {
+            const row = r as any;
+            if (EXEC_NAMES.includes(row.owner_name)) {
+              if (row.is_outside_meeting) {
+                outsideNames.push(row.owner_name);
+              } else {
+                goalNames.push(row.owner_name);
+              }
+            }
+          }
+
+          const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
+          const viewerTag = VIEWER_NAMES.map((n) => `@${n}`).join(" ");
+
+          const lines = [
             "✅ 실행파트 금일 목표등록 모두 완료",
             "──────────────",
+            viewerTag,
+            "",
             `${d.work_date} 실행파트 전원의`,
             `일별활동목표 등록이 완료되었습니다.`,
-            "",
-            `등록완료 : ${names}`,
-            "──────────────",
-          ].join("\n"));
+            "──────────",
+          ];
+          if (goalNames.length > 0) {
+            lines.push(`▪ 목표등록 : ${goalNames.join(", ")}`);
+          }
+          if (outsideNames.length > 0) {
+            lines.push(`▪ 외근(미팅) : ${outsideNames.join(", ")}`);
+          }
+          lines.push("──────────────");
+
+          await sendMessage(appKey, conversationId, lines.join("\n"));
         }
       } catch {}
     }
