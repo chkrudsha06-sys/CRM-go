@@ -214,6 +214,93 @@ async function syncCiderpay(maxPages: number) {
         continue;
       }
 
+      // 당일 취소 기록은 이미 skip 처리됨 → 재처리 방지
+      if (existing && !existing.sales_record_id) {
+        results.push({
+          buyerName,
+          productName,
+          amount,
+          paymentStatus: isCancel ? "결제취소" : "결제완료",
+          status: "duplicate",
+          reason: "이미 처리된 기록 (당일취소 skip 포함)",
+        });
+        continue;
+      }
+
+      // ===== 당일 결제+취소 → CRM 반영 제외 =====
+      if (isCancel) {
+        const paidDate = paidAtText.slice(0, 10);
+        const cancelDate = canceledAtText.slice(0, 10);
+
+        if (paidDate && cancelDate && paidDate === cancelDate) {
+          const completeId = `${paymentViewId}_COMPLETE`;
+          const { data: completeRec } = await supabase
+            .from("external_payment_records")
+            .select("id, sales_record_id")
+            .eq("provider", "CIDERPAY")
+            .eq("external_payment_id", completeId)
+            .maybeSingle();
+
+          if (completeRec?.sales_record_id) {
+            await supabase
+              .from("ad_executions")
+              .delete()
+              .eq("id", completeRec.sales_record_id);
+            await supabase
+              .from("external_payment_records")
+              .update({
+                sales_record_id: null,
+                import_status: "same_day_cancel_removed",
+                import_message: "당일 결제+취소 건으로 기존 매출 기록을 삭제했습니다.",
+              })
+              .eq("id", completeRec.id);
+          }
+
+          await supabase.from("external_payment_records").upsert(
+            {
+              provider: "CIDERPAY",
+              external_payment_id: externalPaymentId,
+              member_name: buyerName,
+              member_phone: "",
+              member_number: "",
+              manager_name: null,
+              product_name: productName,
+              payment_status: "결제취소",
+              payment_method: "정기결제",
+              paid_at: paidAtText || null,
+              completed_at: canceledAtText || null,
+              paid_amount: 0,
+              billing_amount: amount,
+              match_status: "matched",
+              sales_record_id: null,
+              import_status: "same_day_cancel_skipped",
+              import_message: "당일 결제+취소 건으로 CRM 반영을 제외했습니다.",
+              raw_data: {
+                buyerName,
+                productName,
+                amount,
+                paidAtText,
+                canceledAtText,
+                paymentViewId,
+                externalPaymentId,
+                statusText,
+              },
+            },
+            { onConflict: "provider,external_payment_id" }
+          );
+
+          results.push({
+            buyerName,
+            productName,
+            amount,
+            paymentStatus: "결제취소",
+            status: "same_day_cancel_skipped",
+            reason: "당일 결제+취소 → CRM 반영 제외",
+          });
+          continue;
+        }
+      }
+
       const paymentDate = isCancel
         ? canceledAtText.slice(0, 10)
         : paidAtText.slice(0, 10);
