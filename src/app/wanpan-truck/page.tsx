@@ -1692,14 +1692,14 @@ export default function WanpanTruckPage() {
                         </span>
 
                         {/* 대협팀출장자 */}
-                        <div className="flex flex-wrap items-center justify-center gap-1">
+                        <div className="flex flex-nowrap items-center justify-center gap-1 overflow-hidden">
                           {staff.length > 0 ? staff.map((name) => (
                             <Badge key={name} tone="info">{name}</Badge>
                           )) : <span className="crm-tiny">-</span>}
                         </div>
 
                         {/* 컨설턴트출장자 */}
-                        <div className="flex flex-wrap items-center justify-center gap-1">
+                        <div className="flex flex-nowrap items-center justify-center gap-1 overflow-hidden">
                           {consultants.length > 0 ? consultants.map((name) => (
                             <Badge key={name} tone="purple">{name}</Badge>
                           )) : <span className="crm-tiny">-</span>}
@@ -1729,7 +1729,7 @@ export default function WanpanTruckPage() {
                         <div className="flex flex-col items-center justify-center gap-1">
                           {truck.assigned_to ? (
                             <>
-                              <div className="flex flex-wrap items-center justify-center gap-1">
+                              <div className="flex flex-nowrap items-center justify-center gap-1 overflow-hidden">
                                 {truck.assigned_to === "모두" ? (
                                   <><Badge tone="info" icon={User}>김재영</Badge><Badge tone="info" icon={User}>최은정</Badge></>
                                 ) : (
