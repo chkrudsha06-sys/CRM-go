@@ -688,9 +688,6 @@ function PipelineCard({
         >
           {customer.intakeRoute}
         </span>
-        <span className="badge-premium px-2 py-1 text-[11px] badge-muted">
-          담당자 {customer.owner}
-        </span>
       </div>
 
       <div
