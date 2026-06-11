@@ -357,6 +357,61 @@ async function syncCiderpay(maxPages: number) {
             memo,
           };
 
+      // ===== 중복 안전망: 동일 회원/일자/금액/채널 매출이 이미 있으면 생성하지 않고 연결만 =====
+      const dupDate = paymentDate || new Date().toISOString().slice(0, 10);
+      let dupQuery = supabase
+        .from("ad_executions")
+        .select("id")
+        .eq("member_name", buyerName)
+        .eq("channel", "사이다페이")
+        .eq("payment_date", dupDate);
+
+      dupQuery = isCancel
+        ? dupQuery.eq("refund_amount", amount)
+        : dupQuery.eq("execution_amount", amount);
+
+      const { data: dupSales } = await dupQuery
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (dupSales?.id) {
+        await supabase.from("external_payment_records").upsert(
+          {
+            provider: "CIDERPAY",
+            external_payment_id: externalPaymentId,
+            member_name: buyerName,
+            member_phone: matchedMember?.phone || "",
+            member_number: matchedBunyanghoeNumber,
+            manager_name: matchedManagerName || null,
+            product_name: productName,
+            payment_status: isCancel ? "결제취소" : "결제완료",
+            payment_method: "정기결제",
+            paid_at: paidAtText || null,
+            completed_at: isCancel ? canceledAtText || null : paidAtText || null,
+            paid_amount: isCancel ? 0 : amount,
+            billing_amount: amount,
+            match_status: "matched",
+            sales_record_id: Number(dupSales.id),
+            import_status: "linked_existing",
+            import_message: "동일 매출 기록이 이미 존재하여 신규 생성 없이 연결만 수행했습니다.",
+            raw_data: { buyerName, productName, amount, paidAtText, canceledAtText, paymentViewId, externalPaymentId, statusText },
+          },
+          { onConflict: "provider,external_payment_id" }
+        );
+
+        results.push({
+          buyerName,
+          productName,
+          amount,
+          paymentStatus: isCancel ? "결제취소" : "결제완료",
+          status: "duplicate",
+          reason: "동일 매출 존재 → 연결만 수행",
+          salesRecordId: dupSales.id,
+        });
+        continue;
+      }
+
       const { data: salesRecord, error: salesError } = await supabase
         .from("ad_executions")
         .insert(salesPayload)
