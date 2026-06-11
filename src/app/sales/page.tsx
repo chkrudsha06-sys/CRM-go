@@ -737,7 +737,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
       <div className="slide-panel-overlay" onClick={onClose} />
       <aside
         className="slide-panel"
-        style={{ "--panel-width": "580px" } as React.CSSProperties}
+        style={{ "--panel-width": (tab === "amount" && isAdDetail) ? "1100px" : "580px" } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="slide-panel-header">
@@ -783,9 +783,9 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
                 </div>
               </section>
-              {item.memo && (
+              {item.memo && (item.channel === "사이다페이" || item.channel === "효성CMS") && (
                 <section className="premium-card p-4">
-                  <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={ReceiptText} tone="purple" /><div><p className="crm-section-title">결제원 데이터</p><p className="crm-tiny">사이다페이 · 효성CMS 자동연동 기록</p></div></div>
+                  <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={ReceiptText} tone="purple" /><div><p className="crm-section-title">결제원 데이터</p><p className="crm-tiny">{item.channel} 자동연동 기록</p></div></div>
                   <pre className="whitespace-pre-wrap rounded-[14px] p-4 text-[12.5px] font-[700] leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>{item.memo}</pre>
                 </section>
               )}
@@ -793,7 +793,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
           )}
           {tab === "amount" && (
             isAdDetail ? (
-              <div className="space-y-4">
+              <div className="grid min-h-[calc(100vh-280px)] gap-4 lg:grid-cols-[1fr_1fr]">
                 <section className="premium-card p-4">
                   <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">세부정보</p><p className="crm-tiny">등록 시 입력한 광고특전 상세값</p></div></div>
                   <div className="max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
@@ -1779,7 +1779,7 @@ export default function SalesPage() {
                 <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages} className="btn-premium btn-secondary h-8 px-3 text-[12px] disabled:opacity-40">다음</button>
               </div>
             </section>
-            <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">결제항목별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
+            <aside className="hidden min-h-0 xl:block"><div className="grid min-h-[calc(100vh-280px)] gap-4 lg:grid-cols-[1fr_1fr]"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">결제항목별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
           </div>
         )}
       </main>
