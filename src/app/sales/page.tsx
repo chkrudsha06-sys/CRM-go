@@ -688,7 +688,7 @@ function SalesMobileCard({ item, selected, onClick, onDelete }: { item: AdExecut
             <p className="crm-row-main truncate">{item.member_name || "고객명 없음"}</p>
             <Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge>
           </div>
-          <p className="crm-row-sub mt-0.5 truncate">{item.channel || "-"} · {formatFullDate(item.payment_date)}</p>
+          
         </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -748,7 +748,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <h2 className="truncate text-[22px] font-[780] tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{item.member_name || "고객명 없음"}</h2>
                   <Badge tone={routeTone(normalizePaymentItem(item.contract_route))}>{normalizePaymentItem(item.contract_route) || "-"}</Badge>
                 </div>
-                <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>{item.channel || "채널 없음"} · {formatFullDate(item.payment_date)}</p>
+                
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <Badge tone={channelTone(item.channel)} icon={CreditCard}>{item.channel || "채널 없음"}</Badge>
                   <Badge tone="info" icon={User}>{item.team_member || "-"}</Badge>
@@ -1727,7 +1727,7 @@ export default function SalesPage() {
               <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
                   {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
-                    <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div><div className="crm-row-sub truncate text-center">{row.channel || "채널 없음"} · {formatFullDate(row.payment_date)}</div></div></div></td>
+                    <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div></div></div></td>
                     <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
