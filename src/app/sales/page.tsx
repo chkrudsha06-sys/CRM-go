@@ -3,6 +3,7 @@
 import EmptyState from "@/components/EmptyState";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { getCurrentUser } from "@/lib/auth";
 import type { ElementType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -736,7 +737,7 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
       <div className="slide-panel-overlay" onClick={onClose} />
       <aside
         className="slide-panel"
-        style={{ width: "min(1520px, calc(100vw - 28px))", maxWidth: "1520px" }}
+        style={{ "--panel-width": "580px" } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="slide-panel-header">
@@ -782,11 +783,17 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
                 </div>
               </section>
+              {item.memo && (
+                <section className="premium-card p-4">
+                  <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={ReceiptText} tone="purple" /><div><p className="crm-section-title">결제원 데이터</p><p className="crm-tiny">사이다페이 · 효성CMS 자동연동 기록</p></div></div>
+                  <pre className="whitespace-pre-wrap rounded-[14px] p-4 text-[12.5px] font-[700] leading-relaxed" style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>{item.memo}</pre>
+                </section>
+              )}
             </div>
           )}
           {tab === "amount" && (
             isAdDetail ? (
-              <div className="grid min-h-[calc(100vh-280px)] gap-4 lg:grid-cols-[minmax(460px,540px)_1fr]">
+              <div className="space-y-4">
                 <section className="premium-card p-4">
                   <div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Wallet} tone="warning" /><div><p className="crm-section-title">세부정보</p><p className="crm-tiny">등록 시 입력한 광고특전 상세값</p></div></div>
                   <div className="max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
@@ -1159,6 +1166,13 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
+
+  // 로그인 사용자
+  const [crmUser, setCrmUser] = useState<{ name: string; title: string; role: string } | null>(null);
+  useEffect(() => {
+    const u = getCurrentUser();
+    if (u) setCrmUser(u);
+  }, []);
 
 
   const stats = useMemo(() => {
@@ -1794,7 +1808,9 @@ export default function SalesPage() {
                     .filter((member) => {
                       const keyword = memberSearch.trim().toLowerCase();
                       if (!keyword) return true;
-                      return [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                      const matchKeyword = [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                      const matchAssigned = !crmUser || member.assigned_to === crmUser.name;
+                      return matchKeyword && matchAssigned;
                     })
                     .slice(0, 15)
                     .map((member) => (
