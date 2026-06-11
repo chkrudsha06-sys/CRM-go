@@ -1161,14 +1161,6 @@ export default function SalesPage() {
   useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
 
 
-  const filteredRows = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    return displayRows.filter((row) => {
-      const matchSearch = !keyword || [row.member_name, row.channel, row.contract_route, row.team_member, row.consultant, row.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword);
-      return matchSearch && (!fRoute || normalizePaymentItem(row.contract_route) === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam);
-    });
-  }, [displayRows, search, fRoute, fChannel, fTeam]);
-
   const stats = useMemo(() => {
     const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
     const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
@@ -1234,6 +1226,15 @@ export default function SalesPage() {
       return row;
     });
   }, [rows, memberManagerByNameMap, memberManagerByNumberMap]);
+
+
+  const filteredRows = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return displayRows.filter((row) => {
+      const matchSearch = !keyword || [row.member_name, row.channel, row.contract_route, row.team_member, row.consultant, row.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+      return matchSearch && (!fRoute || normalizePaymentItem(row.contract_route) === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam);
+    });
+  }, [displayRows, search, fRoute, fChannel, fTeam]);
 
   useEffect(() => {
     setPage(1);
