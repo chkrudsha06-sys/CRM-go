@@ -2608,6 +2608,14 @@ export default function Pipeline3Page() {
     const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
     const isChurn = target === "이탈/탈퇴";
 
+    if (isChurn) {
+      const confirmed = window.confirm(
+        `${customer.name || "선택한 고객"} 고객이 분양회 탈퇴처리가 진행됩니다.\n진행하시겠습니까?`,
+      );
+
+      if (!confirmed) return;
+    }
+
     updateRecord(customer.id, {
       management_stage: target,
       meeting_result: null,
