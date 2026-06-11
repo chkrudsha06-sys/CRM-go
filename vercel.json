@@ -9,6 +9,10 @@
     {
       "path": "/api/payment-imports/ciderpay/sync",
       "schedule": "0 2,5,7,9 * * *"
+    },
+    {
+      "path": "/api/kakaowork/daily-reminder",
+      "schedule": "*/30 1-9 * * 1-5"
     }
   ]
 }
