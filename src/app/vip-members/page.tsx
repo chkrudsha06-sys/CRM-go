@@ -389,7 +389,7 @@ function VipTable({
   const softHeader = "color-mix(in srgb, var(--surface-2) 88%, transparent)";
   const softRowAlt = "color-mix(in srgb, var(--surface-2) 68%, transparent)";
   const tableColumns =
-    "minmax(128px,1fr) minmax(82px,0.58fr) minmax(128px,0.9fr) minmax(116px,0.82fr) minmax(112px,0.78fr)";
+    "minmax(128px,1fr) minmax(82px,0.56fr) minmax(128px,0.85fr) minmax(116px,0.78fr) minmax(112px,0.72fr) minmax(112px,0.72fr)";
 
   return (
     <section
@@ -425,7 +425,7 @@ function VipTable({
               {title}
             </p>
             <p className="mt-0.5 text-[12px] font-[720]" style={{ color: "var(--text-muted)" }}>
-              고객명 · 직급 · 연락처 · 유입경로 · 심사결과 기준 목록
+              고객명 · 직급 · 연락처 · 유입경로 · 심사결과 · 담당자 기준 목록
             </p>
           </div>
         </div>
@@ -464,6 +464,7 @@ function VipTable({
                 <span>연락처</span>
                 <span>유입경로</span>
                 <span>심사결과</span>
+                <span>담당자</span>
               </div>
 
               <div>
@@ -525,6 +526,12 @@ function VipTable({
                         {fmt(contact.customer_grade)}
                       </span>
                     </TableCell>
+
+                    <TableCell>
+                      <span className="whitespace-nowrap text-center text-[12px] font-[720]" style={{ color: "var(--text)" }}>
+                        {fmt(contact.assigned_to)}
+                      </span>
+                    </TableCell>
                   </div>
                 ))}
               </div>
@@ -581,6 +588,7 @@ function VipTable({
                   <MiniInfo label="연락처" value={fmt(contact.phone)} />
                   <MiniInfo label="유입경로" value={fmt(contact.intake_route)} />
                   <MiniInfo label="심사결과" value={fmt(contact.customer_grade)} />
+                  <MiniInfo label="담당자" value={fmt(contact.assigned_to)} />
                 </div>
               </article>
             ))}
@@ -750,7 +758,7 @@ export default function VipMembersPage() {
               </div>
               <p className="crm-subtitle mt-2 text-left">
                 예약완료 고객은 왼쪽, 계약완료 고객은 오른쪽으로 나누고
-                고객명·직급·연락처·유입경로·심사결과를 한 화면에서 확인합니다.
+                고객명·직급·연락처·유입경로·심사결과·담당자를 한 화면에서 확인합니다.
               </p>
             </div>
 
