@@ -57,7 +57,7 @@ async function sendMessage(appKey: string, convId: string, text: string, blocks?
   return { ok: res.ok && result?.success !== false, result };
 }
 
-// 뷰어 멘션 블록 생성 (한 줄에 @김창완 @최웅 @김재영 @최은정)
+// 뷰어 멘션 블록 (세로 배치, 간격 없음)
 async function buildViewerMentionBlock(appKey: string): Promise<any | null> {
   const inlines: any[] = [];
   const textParts: string[] = [];
@@ -65,7 +65,7 @@ async function buildViewerMentionBlock(appKey: string): Promise<any | null> {
     const name = VIEWER_NAMES[i];
     const email = getMentionEmail(name);
     const uid = email ? await findUserIdByEmail(appKey, email) : null;
-    if (i > 0) { inlines.push({ type: "styled", text: " " }); textParts.push(" "); }
+    if (i > 0) { inlines.push({ type: "styled", text: "\n" }); textParts.push("\n"); }
     if (uid) {
       inlines.push({ type: "mention", text: `@${name}`, ref: { type: "kw", value: Number(uid) } });
     } else {
