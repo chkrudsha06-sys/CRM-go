@@ -1277,16 +1277,28 @@ export default function WanpanTruckPage() {
       notes: form.notes || null,
     };
 
-    const res = editItem
-      ? await supabase
-          .from("wanpan_trucks")
-          .update(payload)
-          .eq("id", editItem.id)
-      : await supabase.from("wanpan_trucks").insert(payload);
+    let saveError: string | null = null;
+    let newTruckId: number | null = null;
+
+    if (editItem) {
+      const { error } = await supabase
+        .from("wanpan_trucks")
+        .update(payload)
+        .eq("id", editItem.id);
+      saveError = error?.message || null;
+    } else {
+      const { data, error } = await supabase
+        .from("wanpan_trucks")
+        .insert(payload)
+        .select("id")
+        .single();
+      saveError = error?.message || null;
+      newTruckId = data?.id ?? null;
+    }
 
     setSaving(false);
-    if (res.error) {
-      alert(`저장 실패: ${res.error.message}`);
+    if (saveError) {
+      alert(`저장 실패: ${saveError}`);
       return;
     }
 
@@ -1295,7 +1307,11 @@ export default function WanpanTruckPage() {
       fetch("/api/kakaowork/notify-event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "wanpan_truck_created", data: payload }),
+        body: JSON.stringify({
+          event: "wanpan_truck_created",
+          truck_id: newTruckId,
+          data: payload,
+        }),
       }).catch(() => {});
     }
 
