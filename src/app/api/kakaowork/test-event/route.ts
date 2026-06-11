@@ -28,21 +28,56 @@ function parseWorkItems(value: any): { total: number; done: number } {
   if (typeof value === "string") { try { items = JSON.parse(value); } catch {} }
   else if (Array.isArray(value)) items = value;
   const active = items.filter((i: any) => i?.text?.trim());
-  const completed = active.filter((i: any) => i?.done === true);
-  return { total: active.length, done: completed.length };
+  return { total: active.length, done: active.filter((i: any) => i?.done === true).length };
 }
 
-async function sendMessage(appKey: string, convId: string, text: string) {
+function getMentionEmail(name: string): string | null {
+  const map = process.env.KAKAO_WORK_MENTION_MAP || "";
+  for (const pair of map.split(",")) {
+    const [n, email] = pair.split(":").map((s) => s.trim());
+    if (n === name && email) return email;
+  }
+  return null;
+}
+
+async function findUserIdByEmail(appKey: string, email: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${KAKAO_WORK_API_BASE}/users.find_by_email?email=${encodeURIComponent(email)}`, {
+      method: "GET", headers: { Authorization: `Bearer ${appKey}` }, cache: "no-store",
+    });
+    const data = await res.json();
+    const id = Number(data?.user?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
+async function sendMessage(appKey: string, convId: string, text: string, blocks?: any[]) {
   const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${appKey}`, "Content-Type": "application/json" },
     cache: "no-store",
-    body: JSON.stringify({ conversation_id: Number(convId), text }),
+    body: JSON.stringify({ conversation_id: Number(convId), text, ...(blocks ? { blocks } : {}) }),
   });
   const raw = await res.text();
   let result: any = null;
   try { result = raw ? JSON.parse(raw) : null; } catch { result = { raw }; }
   return { ok: res.ok && result?.success !== false, result };
+}
+
+function buildMemberLines(r: any, member: { name: string; title: string }): string {
+  if (!r) return `■ ${member.name} ${member.title} — ⚠️ 미등록`;
+  if (r.is_outside_meeting) return `■ ${member.name} ${member.title} — 📌 외근(미팅)`;
+
+  const wi = parseWorkItems(r.goal_work_items);
+  const lines = [
+    `■ ${member.name} ${member.title}`,
+    `  TM : ${r.goal_new_tm || 0}/${r.result_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`,
+    `  콜드톡 : ${r.goal_coldtalk || 0}/${r.result_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`,
+    `  브론즈DB수취 : ${r.goal_consultant_db || 0}/${r.result_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`,
+    `  1%DB수취 : ${r.goal_second_touch || 0}/${r.result_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`,
+  ];
+  if (wi.total > 0) lines.push(`  특발성 : ${wi.total}/${wi.done}건 (${pct(wi.done, wi.total)})`);
+  return lines.join("\n");
 }
 
 export async function GET() {
@@ -59,33 +94,36 @@ export async function GET() {
     const [, mm, dd] = today.split("-");
     const dateLabel = `${Number(mm)}월 ${Number(dd)}일`;
     const timeLabel = `${now.getUTCHours()}시 ${String(now.getUTCMinutes()).padStart(2, "0")}분`;
-    const viewerTag = VIEWER_NAMES.map((n) => `@${n}`).join("\n");
 
-    const lines: string[] = [
-      `📊 실행파트 활동목표 진척율`,
-      `${dateLabel} (${timeLabel} 기준)`,
-      viewerTag,
-      "──────────────",
+    // 블록킷: 헤더 + 날짜 + 뷰어 멘션 + 구분선
+    const blocks: any[] = [
+      { type: "header", text: "📊 실행파트 활동목표 진척율", style: "blue" },
+      { type: "text", text: `${dateLabel} (${timeLabel} 기준)` },
     ];
 
-    for (const member of EXEC_MEMBERS) {
-      const row = (rows || []).find((r: any) => r.owner_name === member.name);
-      if (!row) { lines.push(`■ ${member.name} ${member.title} — ⚠️ 미등록`, ""); continue; }
-      const r = row as any;
-      if (r.is_outside_meeting) { lines.push(`■ ${member.name} ${member.title} — 📌 외근(미팅)`, ""); continue; }
-
-      lines.push(`■ ${member.name} ${member.title}`);
-      lines.push(`  TM : ${r.result_new_tm || 0}/${r.goal_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`);
-      lines.push(`  콜드톡 : ${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`);
-      lines.push(`  브론즈DB수취 : ${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`);
-      lines.push(`  1%DB수취 : ${r.result_second_touch || 0}/${r.goal_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`);
-      const wi = parseWorkItems(r.goal_work_items);
-      if (wi.total > 0) lines.push(`  특발성 : ${wi.done}/${wi.total}건 (${pct(wi.done, wi.total)})`);
-      lines.push("");
+    // 뷰어 개별 멘션
+    for (const vName of VIEWER_NAMES) {
+      const vEmail = getMentionEmail(vName);
+      const vUid = vEmail ? await findUserIdByEmail(appKey, vEmail) : null;
+      if (vUid) {
+        blocks.push({
+          type: "text",
+          text: `@${vName}`,
+          inlines: [{ type: "mention", text: `@${vName}`, ref: { type: "kw", value: Number(vUid) } }],
+        });
+      }
     }
 
-    lines.push("──────────────");
-    const res = await sendMessage(appKey, convId, lines.join("\n"));
+    blocks.push({ type: "divider" });
+
+    // 각 멤버 데이터를 텍스트 블록으로
+    for (const member of EXEC_MEMBERS) {
+      const row = (rows || []).find((r: any) => r.owner_name === member.name);
+      blocks.push({ type: "text", text: buildMemberLines(row, member) });
+    }
+
+    const pushText = `📊 진척율 (${timeLabel} 기준)`;
+    const res = await sendMessage(appKey, convId, pushText, blocks);
 
     return NextResponse.json({ ok: res.ok, date: today, time: timeLabel });
   } catch (error: any) {
