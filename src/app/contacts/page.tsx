@@ -1471,6 +1471,7 @@ function CustomerDetailPanel({
               />
               <DetailItem label="소속회사" value={record.company} />
               <DetailItem label="자동등급" value={visibleGrade} badge />
+              <DetailItem label="담당자" value={record.assigned_to || "-"} />
               <DetailItem label="등록일" value={dateLabel(record.created_at)} />
             </div>
           </section>
