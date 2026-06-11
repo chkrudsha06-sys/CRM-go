@@ -878,13 +878,13 @@ export default function ContactsPage() {
               <div className="inline-flex max-w-full items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted sm:text-sm">
                 <Filter className="h-4 w-4 flex-none" />
                 <span className="truncate">
-                  고객명 · 직급 · 연락처 · 유입경로 · 관리구간 · 고객등급 기준
+                  고객명 · 직급 · 연락처 · 유입경로 · 관리구간 · 고객등급 · 담당자 기준
                 </span>
               </div>
             </div>
 
             <div className="hidden overflow-x-auto xl:block">
-              <table className="w-full min-w-[1080px] border-collapse text-center">
+              <table className="w-full min-w-[1180px] border-collapse text-center">
                 <thead>
                   <tr
                     className="text-xs font-[900] uppercase tracking-[0.08em]"
@@ -900,6 +900,7 @@ export default function ContactsPage() {
                     <th className="px-5 py-4 text-center">유입경로</th>
                     <th className="px-5 py-4 text-center">관리구간</th>
                     <th className="px-5 py-4 text-center">자동등급</th>
+                    <th className="px-5 py-4 text-center">담당자</th>
                     <th className="px-5 py-4 text-center">메모</th>
                     <th className="px-5 py-4 text-center">등록일</th>
                     <th className="px-5 py-4 text-center">관리</th>
@@ -908,7 +909,7 @@ export default function ContactsPage() {
                 <tbody>
                   {filteredRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-5 py-20 text-center">
+                      <td colSpan={10} className="px-5 py-20 text-center">
                         <EmptyList onCreate={openCreate} />
                       </td>
                     </tr>
@@ -979,6 +980,18 @@ export default function ContactsPage() {
                             className={`badge-premium ${badgeClass(displayCustomerGrade(record))}`}
                           >
                             {fmt(displayCustomerGrade(record))}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <span
+                            className="inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-[900]"
+                            style={{
+                              background: "var(--surface-2)",
+                              border: "1px solid var(--border-subtle)",
+                              color: "var(--text-strong)",
+                            }}
+                          >
+                            {fmt(record.assigned_to)}
                           </span>
                         </td>
                         <td className="max-w-[260px] px-5 py-4 text-center">
@@ -1070,6 +1083,9 @@ export default function ContactsPage() {
                         className={`badge-premium ${badgeClass(displayCustomerGrade(record))}`}
                       >
                         {fmt(displayCustomerGrade(record))}
+                      </span>
+                      <span className="badge-premium badge-gray">
+                        담당자 {fmt(record.assigned_to)}
                       </span>
                     </div>
 
