@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const TARGET_PRODUCT = "분양회(얼리버드)";
-const MAX_PAGES = 50;
+const MAX_PAGES = 2;
 
 function cleanText(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -23,7 +23,6 @@ function getPaymentIdFromHref(href: string) {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-
   if (error && typeof error === "object") {
     try {
       return JSON.stringify(error, null, 2);
@@ -31,7 +30,6 @@ function getErrorMessage(error: unknown) {
       return String(error);
     }
   }
-
   return String(error);
 }
 
@@ -93,6 +91,24 @@ async function ciderpayLogin() {
   return `JSESSIONID=${jsessionMatch[1]}`;
 }
 
+
+async function findMatchedMemberByName(memberName: string) {
+  const name = cleanText(memberName || "");
+  if (!name) return null;
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+    .eq("name", name)
+    .in("meeting_result", ["예약완료", "계약완료"])
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 async function syncCiderpay(maxPages: number) {
   const cookie = await ciderpayLogin();
 
@@ -123,10 +139,9 @@ async function syncCiderpay(maxPages: number) {
 
     const $ = cheerio.load(html);
     const rows = $("tr.success_tr, tr.cancel_tr");
+    totalRows += rows.length;
 
     if (rows.length === 0) break;
-
-    totalRows += rows.length;
 
     for (const row of rows.toArray()) {
       const $row = $(row);
@@ -195,7 +210,6 @@ async function syncCiderpay(maxPages: number) {
           paymentStatus: isCancel ? "결제취소" : "결제완료",
           status: "duplicate",
           salesRecordId: existing.sales_record_id,
-          page,
         });
         continue;
       }
@@ -205,9 +219,7 @@ async function syncCiderpay(maxPages: number) {
         : paidAtText.slice(0, 10);
 
       const memo = [
-        isCancel
-          ? "사이다페이 정기결제 취소 자동반영"
-          : "사이다페이 정기결제 완료 자동반영",
+        isCancel ? "사이다페이 정기결제 취소 자동반영" : "사이다페이 정기결제 완료 자동반영",
         `거래번호: ${paymentViewId}`,
         `구매자명: ${buyerName}`,
         `상품명: ${productName}`,
@@ -216,6 +228,11 @@ async function syncCiderpay(maxPages: number) {
         `결제완료일시: ${paidAtText || "-"}`,
         `취소완료일시: ${canceledAtText || "-"}`,
       ].join("\n");
+
+      const matchedMember = await findMatchedMemberByName(buyerName);
+      const matchedManagerName = cleanText(matchedMember?.assigned_to || "");
+      const matchedBunyanghoeNumber = cleanText(matchedMember?.bunyanghoe_number || "");
+      const matchedConsultant = cleanText(matchedMember?.consultant || matchedMember?.phone || "");
 
       const salesPayload = isCancel
         ? {
@@ -268,7 +285,9 @@ async function syncCiderpay(maxPages: number) {
             provider: "CIDERPAY",
             external_payment_id: externalPaymentId,
             member_name: buyerName,
-            member_phone: "",
+            member_phone: matchedMember?.phone || "",
+            member_number: matchedBunyanghoeNumber,
+            manager_name: matchedManagerName || null,
             product_name: productName,
             payment_status: isCancel ? "결제취소" : "결제완료",
             payment_method: "정기결제",
@@ -306,7 +325,6 @@ async function syncCiderpay(maxPages: number) {
         paymentStatus: isCancel ? "결제취소" : "결제완료",
         status: isCancel ? "cancel_created" : "sales_created",
         salesRecordId: salesRecord.id,
-        page,
       });
     }
   }
@@ -327,8 +345,8 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      message: "사이다페이 전체동기화 완료",
-      mode: "all",
+      message: "사이다페이 동기화 완료",
+      mode: "recent",
       maxPages: MAX_PAGES,
       targetProduct: TARGET_PRODUCT,
       totalFound: totalRows,
@@ -341,7 +359,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        message: "사이다페이 전체동기화 실패",
+        message: "사이다페이 동기화 실패",
         error: getErrorMessage(error),
       },
       { status: 500 }
