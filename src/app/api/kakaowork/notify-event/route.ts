@@ -4,8 +4,6 @@ export const dynamic = "force-dynamic";
 
 const KAKAO_WORK_API_BASE = "https://api.kakaowork.com/v1";
 
-// 이름 → 카카오워크 이메일 매핑 (환경변수 KAKAO_WORK_MENTION_MAP)
-// 형식 예시: 김재영:kim@company.com,최은정:choi@company.com
 function getMentionEmail(name: string | null | undefined): string | null {
   if (!name) return null;
   const map = process.env.KAKAO_WORK_MENTION_MAP || "";
@@ -16,7 +14,6 @@ function getMentionEmail(name: string | null | undefined): string | null {
   return null;
 }
 
-// 이메일 → 카카오워크 user_id 조회
 async function findUserIdByEmail(appKey: string, email: string): Promise<number | null> {
   try {
     const res = await fetch(
@@ -34,28 +31,13 @@ async function findUserIdByEmail(appKey: string, email: string): Promise<number 
   }
 }
 
-function buildWanpanTruckText(d: Record<string, any>, baseUrl: string): string {
-  const lines = [
-    "🚚 완판트럭 신규 등록",
-    "──────────────",
-    `▪ 출동일 : ${d.dispatch_date || "-"}`,
-    `▪ 현장명 : ${d.site_name || "-"}`,
-    `▪ 지역 : ${d.location || "-"}`,
-    `▪ 대행사 : ${d.agency || "-"}`,
-    "──────────",
-    `▪ 컨택포인트 : ${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`,
-    `▪ 연락처 : ${d.contact_phone || "-"}`,
-    `▪ 조직규모 : ${d.team_size ? d.team_size + "명" : "-"}`,
-    "──────────",
-    `▪ 발주여부 : ${d.is_ordered ? "발주 완료" : "미발주"}`,
-    d.order_qty_base ? `▪ 기본수량 : ${d.order_qty_base}` : null,
-    d.order_qty_extra ? `▪ 추가수량 : ${d.order_qty_extra}` : null,
-    d.notes ? `▪ 비고 : ${d.notes}` : null,
-    "──────────────",
-    `🔗 CRM 바로가기 : ${baseUrl}/wanpan-truck`,
-  ].filter(Boolean);
-
-  return lines.join("\n");
+function desc(term: string, value: string) {
+  return {
+    type: "description",
+    term,
+    content: { type: "text", text: value || "-" },
+    accent: true,
+  };
 }
 
 export async function POST(request: Request) {
@@ -73,7 +55,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const event = body?.event;
-    const data = body?.data || {};
+    const d = body?.data || {};
+    const truckId = body?.truck_id;
 
     if (event !== "wanpan_truck_created") {
       return NextResponse.json(
@@ -82,28 +65,50 @@ export async function POST(request: Request) {
       );
     }
 
-    const text = buildWanpanTruckText(data, baseUrl);
-
     // 담당자 @멘션 준비
-    const assignedName = data.assigned_to as string | null;
+    const assignedName = d.assigned_to as string | null;
     let mentionUserId: number | null = null;
     if (assignedName) {
       const email = getMentionEmail(assignedName);
-      if (email) {
-        mentionUserId = await findUserIdByEmail(appKey, email);
-      }
+      if (email) mentionUserId = await findUserIdByEmail(appKey, email);
     }
 
-    // 메시지 블록 구성
-    const blocks: any[] = [{ type: "text", text }];
+    // ===== 블록킷 카드 구성 =====
+    const blocks: any[] = [
+      { type: "header", text: "🚚 완판트럭 신규 등록", style: "yellow" },
+      {
+        type: "text",
+        text: `${d.site_name || "현장 미입력"}`,
+        inlines: [{ type: "styled", text: `${d.site_name || "현장 미입력"}`, bold: true }],
+      },
+      desc("출동일", d.dispatch_date),
+      desc("지역", d.location),
+      desc("대행사", d.agency),
+      desc(
+        "컨택포인트",
+        `${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`
+      ),
+      desc("연락처", d.contact_phone),
+      desc("조직규모", d.team_size ? `${d.team_size}명` : "-"),
+      desc(
+        "발주수량",
+        d.order_qty_base
+          ? `${d.order_qty_base}${d.order_qty_extra ? ` + ${d.order_qty_extra}` : ""}`
+          : "-"
+      ),
+    ];
 
+    if (d.notes) blocks.push(desc("비고", String(d.notes).slice(0, 400)));
+
+    blocks.push({ type: "divider" });
+
+    // 담당자 멘션 라인
     if (assignedName && mentionUserId) {
-      // 진짜 @멘션 블록 추가 (멘션 알림 발생)
       blocks.push({
         type: "text",
         text: `👤 담당자 확인 요청 : @${assignedName}`,
         inlines: [
-          { type: "styled", text: "👤 담당자 확인 요청 : " },
+          { type: "styled", text: "👤 담당자 확인 요청 : ", bold: true },
           {
             type: "mention",
             text: `@${assignedName}`,
@@ -112,9 +117,61 @@ export async function POST(request: Request) {
         ],
       });
     } else if (assignedName) {
-      // user_id를 못 찾으면 일반 텍스트로 표시
       blocks.push({ type: "text", text: `👤 담당자 확인 요청 : ${assignedName}` });
     }
+
+    // 처리 버튼 3개 (truckId가 있을 때만)
+    if (truckId) {
+      blocks.push({
+        type: "action",
+        elements: [
+          {
+            type: "button",
+            text: "발주 완료",
+            style: "primary",
+            action: {
+              type: "submit_action",
+              name: "wanpan_action",
+              value: `wanpan:${truckId}:order`,
+            },
+          },
+          {
+            type: "button",
+            text: "시안 발주",
+            style: "default",
+            action: {
+              type: "submit_action",
+              name: "wanpan_action",
+              value: `wanpan:${truckId}:draft`,
+            },
+          },
+          {
+            type: "button",
+            text: "담당자 확인",
+            style: "default",
+            action: {
+              type: "submit_action",
+              name: "wanpan_action",
+              value: `wanpan:${truckId}:confirm`,
+            },
+          },
+        ],
+      });
+    }
+
+    // CRM 바로가기 버튼
+    blocks.push({
+      type: "button",
+      text: "CRM에서 보기",
+      style: "default",
+      action: {
+        type: "open_system_browser",
+        name: "open_crm",
+        value: `${baseUrl}/wanpan-truck`,
+      },
+    });
+
+    const pushText = `🚚 완판트럭 신규 등록 | ${d.site_name || "-"} (${d.dispatch_date || "-"})`;
 
     const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
       method: "POST",
@@ -125,7 +182,7 @@ export async function POST(request: Request) {
       cache: "no-store",
       body: JSON.stringify({
         conversation_id: Number(conversationId),
-        text, // 알림(푸시)용 텍스트
+        text: pushText,
         blocks,
       }),
     });
