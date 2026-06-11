@@ -157,7 +157,7 @@ export async function GET() {
     const allMemberText = EXEC_MEMBERS.map((member) => {
       const row = (rows || []).find((r: any) => r.owner_name === member.name);
       return buildMemberLines(row, member);
-    }).join("\n");
+    }).join("\n\n");
     blocks.push({ type: "text", text: allMemberText });
 
     const pushText = `📊 진척율 (${hour}시 기준)`;
