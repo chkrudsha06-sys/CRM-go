@@ -39,6 +39,7 @@ import {
 
 interface WanpanTruck {
   id: number;
+  requester_name: string | null;
   team_size: number | null;
   agency: string | null;
   contact_point: string | null;
@@ -98,6 +99,7 @@ const CONSULTANT_MEMBERS = [
 const CONFIRM_MEMBERS = ["김재영", "최은정", "모두"];
 
 const EMPTY_FORM = {
+  requester_name: "",
   team_size: "",
   agency: "",
   contact_point: "",
@@ -842,7 +844,7 @@ function TruckModal({
   return (
     <div className="crm-modal-overlay" onClick={onClose}>
       <div
-        className="crm-modal flex max-h-[90vh] max-w-4xl flex-col"
+        className="crm-modal flex max-h-[96vh] max-w-5xl flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="slide-panel-header flex items-center justify-between gap-4">
@@ -873,6 +875,15 @@ function TruckModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <InputLabel>요청자</InputLabel>
+              <input
+                className={inputClass}
+                value={form.requester_name}
+                readOnly
+                style={{ background: "var(--surface-3)", color: "var(--text-muted)" }}
+              />
+            </div>
             <div>
               <InputLabel>발송일</InputLabel>
               <input
@@ -1216,13 +1227,14 @@ export default function WanpanTruckPage() {
 
   const openAdd = () => {
     setEditItem(null);
-    setForm({ ...EMPTY_FORM, staff_members: crmUser ? [crmUser.name] : [] });
+    setForm({ ...EMPTY_FORM, requester_name: crmUser?.name || "", staff_members: [] });
     setShowModal(true);
   };
 
   const openEdit = (truck: WanpanTruck) => {
     setEditItem(truck);
     setForm({
+      requester_name: truck.requester_name || "",
       team_size: truck.team_size ? String(truck.team_size) : "",
       agency: truck.agency || "",
       contact_point: truck.contact_point || "",
@@ -1255,6 +1267,7 @@ export default function WanpanTruckPage() {
   const handleSave = async () => {
     setSaving(true);
     const payload = {
+      requester_name: form.requester_name || crmUser?.name || null,
       team_size: Number(form.team_size) || null,
       agency: form.agency || null,
       contact_point: form.contact_point || null,
@@ -1581,7 +1594,7 @@ export default function WanpanTruckPage() {
                   className="grid h-12 items-center border-b px-4 text-[11.5px] font-[800] tracking-[-0.02em]"
                   style={{
                     gridTemplateColumns:
-                      "1fr 1.8fr 1.5fr 0.7fr 1fr 0.8fr 1fr 0.8fr 1.5fr",
+                      "0.8fr 1.4fr 1.2fr 0.6fr 0.7fr 1fr 1fr 0.6fr 0.8fr 0.7fr 1.3fr",
                     borderColor: "color-mix(in srgb, var(--border) 44%, transparent)",
                     color: "var(--text-faint)",
                     background: "var(--surface-2)",
@@ -1593,7 +1606,9 @@ export default function WanpanTruckPage() {
                     "현장명",
                     "현장주소",
                     "조직수",
-                    "대협팀담당자",
+                    "요청자",
+                    "대협팀출장자",
+                    "컨설턴트출장자",
                     "촬영여부",
                     "발주수량",
                     "시안직발주",
@@ -1614,6 +1629,7 @@ export default function WanpanTruckPage() {
                 >
                   {filteredTrucks.map((truck) => {
                     const staff = parseMembers(truck.staff_members);
+                    const consultants = parseMembers(truck.consultant_members);
                     const tone = orderTone(truck);
 
                     return (
@@ -1622,63 +1638,75 @@ export default function WanpanTruckPage() {
                         className="wanpan-row grid min-h-[52px] items-center border-t px-4 py-2 transition-colors hover:bg-white/[0.025]"
                         style={{
                           gridTemplateColumns:
-                            "1fr 1.8fr 1.5fr 0.7fr 1fr 0.8fr 1fr 0.8fr 1.5fr",
+                            "0.8fr 1.4fr 1.2fr 0.6fr 0.7fr 1fr 1fr 0.6fr 0.8fr 0.7fr 1.3fr",
                           borderLeft: `3px solid ${toneStyle(tone).dot}`,
                           textAlign: "center" as const,
                         }}
                       >
+                        {/* 발송일 */}
                         <span className="crm-row-sub flex items-center justify-center gap-1">
                           <CalendarDays size={12} /> {formatDate(truck.dispatch_date)}
                         </span>
 
-                        <p className="crm-row-main truncate text-center" title={truck.site_name || ""}>
-                          {truck.site_name || "-"}
-                        </p>
+                        {/* 현장명 */}
+                        <p className="crm-row-main truncate text-center" title={truck.site_name || ""}>{truck.site_name || "-"}</p>
 
-                        <p className="crm-row-sub truncate text-center" title={truck.location || ""}>
-                          {truck.location || "-"}
-                        </p>
+                        {/* 현장주소 */}
+                        <p className="crm-row-sub truncate text-center" title={truck.location || ""}>{truck.location || "-"}</p>
 
-                        <span className="crm-row-sub text-center">
-                          {truck.team_size ? `${truck.team_size}명` : "-"}
-                        </span>
+                        {/* 조직수 */}
+                        <span className="crm-row-sub text-center">{truck.team_size ? `${truck.team_size}명` : "-"}</span>
 
+                        {/* 요청자 */}
                         <span className="flex justify-center">
-                          {staff.length > 0 ? (
-                            <Badge tone="info">{staff[0]}</Badge>
+                          {truck.requester_name ? (
+                            <Badge tone="warning">{truck.requester_name}</Badge>
                           ) : (
                             <span className="crm-tiny">-</span>
                           )}
                         </span>
 
+                        {/* 대협팀출장자 */}
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          {staff.length > 0 ? staff.map((name) => (
+                            <Badge key={name} tone="info">{name}</Badge>
+                          )) : <span className="crm-tiny">-</span>}
+                        </div>
+
+                        {/* 컨설턴트출장자 */}
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          {consultants.length > 0 ? consultants.map((name) => (
+                            <Badge key={name} tone="purple">{name}</Badge>
+                          )) : <span className="crm-tiny">-</span>}
+                        </div>
+
+                        {/* 촬영여부 */}
                         <span className="flex justify-center">
                           <Badge tone={truck.has_photo ? "success" : "muted"} icon={ImageIcon}>
                             {truck.has_photo ? "촬영" : "미촬영"}
                           </Badge>
                         </span>
 
+                        {/* 발주수량 */}
                         <p className="crm-row-sub text-center" style={{ color: "var(--text)" }}>
                           {truck.order_qty_base || "-"}
-                          {truck.order_qty_extra ? (
-                            <span style={{ color: "var(--accent-text)" }}> + {truck.order_qty_extra}</span>
-                          ) : null}
+                          {truck.order_qty_extra ? <span style={{ color: "var(--accent-text)" }}> + {truck.order_qty_extra}</span> : null}
                         </p>
 
+                        {/* 시안직발주 */}
                         <button type="button" className="flex justify-center" onClick={() => toggleDirectOrder(truck.id, truck.is_direct_order)}>
                           <Badge tone={truck.is_direct_order ? "purple" : "muted"}>
                             {truck.is_direct_order ? "직발주" : "미발주"}
                           </Badge>
                         </button>
 
+                        {/* 담당자최종확인 */}
                         <div className="flex flex-col items-center justify-center gap-1">
                           {truck.assigned_to ? (
                             <>
                               <div className="flex flex-wrap items-center justify-center gap-1">
                                 {truck.assigned_to === "모두" ? (
-                                  <>
-                                    <Badge tone="info" icon={User}>김재영</Badge>
-                                    <Badge tone="info" icon={User}>최은정</Badge>
-                                  </>
+                                  <><Badge tone="info" icon={User}>김재영</Badge><Badge tone="info" icon={User}>최은정</Badge></>
                                 ) : (
                                   <Badge tone="info" icon={User}>{truck.assigned_to}</Badge>
                                 )}
@@ -1689,9 +1717,7 @@ export default function WanpanTruckPage() {
                                 </Badge>
                               </button>
                             </>
-                          ) : (
-                            <span className="crm-tiny">-</span>
-                          )}
+                          ) : <span className="crm-tiny">-</span>}
                         </div>
                       </div>
                     );
@@ -1712,13 +1738,13 @@ export default function WanpanTruckPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
+                            {truck.requester_name && <Badge tone="warning">{truck.requester_name}</Badge>}
                             <Badge tone={truck.is_direct_order ? "purple" : "muted"}>
                               {truck.is_direct_order ? "직발주" : "미발주"}
                             </Badge>
                             <Badge tone={truck.has_photo ? "success" : "muted"}>
                               {truck.has_photo ? "촬영" : "미촬영"}
                             </Badge>
-                            {staff.length > 0 && <Badge tone="info">{staff[0]}</Badge>}
                           </div>
                           <p className="crm-row-main truncate">{truck.site_name || "-"}</p>
                           <p className="crm-row-sub mt-1 flex items-center gap-1.5">
