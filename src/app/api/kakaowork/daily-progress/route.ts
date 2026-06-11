@@ -68,18 +68,12 @@ function pct(result: number, goal: number): string {
   return Math.round((result / goal) * 100) + "%";
 }
 
-function pctNum(result: number, goal: number): number {
-  if (goal <= 0) return result > 0 ? 100 : 0;
-  return Math.round((result / goal) * 100);
-}
-
 function parseWorkItems(value: any): { total: number; done: number } {
   let items: any[] = [];
   if (typeof value === "string") { try { items = JSON.parse(value); } catch {} }
   else if (Array.isArray(value)) items = value;
   const active = items.filter((i: any) => i?.text?.trim());
-  const completed = active.filter((i: any) => i?.done === true);
-  return { total: active.length, done: completed.length };
+  return { total: active.length, done: active.filter((i: any) => i?.done === true).length };
 }
 
 function isGoalAchieved(row: any): boolean {
@@ -92,8 +86,23 @@ function isGoalAchieved(row: any): boolean {
   ];
   const numOk = checks.every((c) => c.g <= 0 || c.r >= c.g);
   const wi = parseWorkItems(row.goal_work_items);
-  const wiOk = wi.total <= 0 || wi.done >= wi.total;
-  return numOk && wiOk;
+  return numOk && (wi.total <= 0 || wi.done >= wi.total);
+}
+
+function buildMemberLines(r: any, member: { name: string; title: string }): string {
+  if (!r) return `■ ${member.name} ${member.title} — ⚠️ 미등록`;
+  if (r.is_outside_meeting) return `■ ${member.name} ${member.title} — 📌 외근(미팅)`;
+
+  const wi = parseWorkItems(r.goal_work_items);
+  const lines = [
+    `■ ${member.name} ${member.title}`,
+    `  TM : ${r.goal_new_tm || 0}/${r.result_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`,
+    `  콜드톡 : ${r.goal_coldtalk || 0}/${r.result_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`,
+    `  브론즈DB수취 : ${r.goal_consultant_db || 0}/${r.result_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`,
+    `  1%DB수취 : ${r.goal_second_touch || 0}/${r.result_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`,
+  ];
+  if (wi.total > 0) lines.push(`  특발성 : ${wi.total}/${wi.done}건 (${pct(wi.done, wi.total)})`);
+  return lines.join("\n");
 }
 
 export async function GET() {
@@ -112,53 +121,39 @@ export async function GET() {
     const supabase = getSupabase();
     const { data: rows } = await supabase.from("daily_activity_goals").select("*").eq("work_date", today);
 
-    // 날짜 포맷: 6월 11일
     const [, mm, dd] = today.split("-");
     const dateLabel = `${Number(mm)}월 ${Number(dd)}일`;
 
-    // ===== 진척율 텍스트 보고 =====
-    const viewerTag = VIEWER_NAMES.map((n) => `@${n}`).join("\n");
-
-    const lines: string[] = [
-      `📊 실행파트 활동목표 진척율`,
-      `${dateLabel} (${hour}시 ${String(min).padStart(2, "0")}분 기준)`,
-      viewerTag,
-      "──────────────",
+    // ===== 블록킷으로 진척율 보고 =====
+    const blocks: any[] = [
+      { type: "header", text: "📊 실행파트 활동목표 진척율", style: "blue" },
+      { type: "text", text: `${dateLabel} (${hour}시 ${String(min).padStart(2, "0")}분 기준)` },
     ];
+
+    // 뷰어 개별 멘션
+    for (const vName of VIEWER_NAMES) {
+      const vEmail = getMentionEmail(vName);
+      const vUid = vEmail ? await findUserIdByEmail(appKey, vEmail) : null;
+      if (vUid) {
+        blocks.push({
+          type: "text",
+          text: `@${vName}`,
+          inlines: [{ type: "mention", text: `@${vName}`, ref: { type: "kw", value: Number(vUid) } }],
+        });
+      }
+    }
+
+    blocks.push({ type: "divider" });
 
     for (const member of EXEC_MEMBERS) {
       const row = (rows || []).find((r: any) => r.owner_name === member.name);
-
-      if (!row) {
-        lines.push(`■ ${member.name} ${member.title} — ⚠️ 미등록`);
-        lines.push("");
-        continue;
-      }
-
-      const r = row as any;
-      if (r.is_outside_meeting) {
-        lines.push(`■ ${member.name} ${member.title} — 📌 외근(미팅)`);
-        lines.push("");
-        continue;
-      }
-
-      lines.push(`■ ${member.name} ${member.title}`);
-      lines.push(`  TM : ${r.result_new_tm || 0}/${r.goal_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`);
-      lines.push(`  콜드톡 : ${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`);
-      lines.push(`  브론즈DB수취 : ${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`);
-      lines.push(`  1%DB수취 : ${r.result_second_touch || 0}/${r.goal_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`);
-
-      const wi = parseWorkItems(r.goal_work_items);
-      if (wi.total > 0) {
-        lines.push(`  특발성 : ${wi.done}/${wi.total}건 (${pct(wi.done, wi.total)})`);
-      }
-      lines.push("");
+      blocks.push({ type: "text", text: buildMemberLines(row, member) });
     }
 
-    lines.push("──────────────");
-    await sendMessage(appKey, convId, lines.join("\n"));
+    const pushText = `📊 진척율 (${hour}시 기준)`;
+    await sendMessage(appKey, convId, pushText, blocks);
 
-    // ===== 18시: 목표달성 축하카드 =====
+    // ===== 18시: 축하카드 =====
     if (hour === 18) {
       const achievers: { name: string; title: string }[] = [];
       for (const member of EXEC_MEMBERS) {
@@ -176,13 +171,9 @@ export async function GET() {
         ];
         const todayQuote = quotes[new Date().getDate() % quotes.length];
 
-        const blocks: any[] = [
+        const cBlocks: any[] = [
           { type: "header", text: "🏆 금일 목표달성 축하", style: "yellow" },
-          {
-            type: "text",
-            text: `🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!`,
-            inlines: [{ type: "styled", text: `🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!`, bold: true }],
-          },
+          { type: "text", text: "🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!", inlines: [{ type: "styled", text: "🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!", bold: true }] },
           { type: "divider" },
         ];
 
@@ -190,24 +181,16 @@ export async function GET() {
           const mEmail = getMentionEmail(a.name);
           const mUid = mEmail ? await findUserIdByEmail(appKey, mEmail) : null;
           if (mUid) {
-            blocks.push({
-              type: "text",
-              text: `🎯 @${a.name} ${a.title} — 금일 목표달성!`,
-              inlines: [
-                { type: "styled", text: "🎯 " },
-                { type: "mention", text: `@${a.name}`, ref: { type: "kw", value: Number(mUid) } },
-                { type: "styled", text: ` ${a.title} — 금일 목표달성!`, bold: true },
-              ],
-            });
+            cBlocks.push({ type: "text", text: `🎯 @${a.name} ${a.title} — 금일 목표달성!`, inlines: [{ type: "styled", text: "🎯 " }, { type: "mention", text: `@${a.name}`, ref: { type: "kw", value: Number(mUid) } }, { type: "styled", text: ` ${a.title} — 금일 목표달성!`, bold: true }] });
           } else {
-            blocks.push({ type: "text", text: `🎯 ${a.name} ${a.title} — 금일 목표달성!`, inlines: [{ type: "styled", text: `🎯 ${a.name} ${a.title} — 금일 목표달성!`, bold: true }] });
+            cBlocks.push({ type: "text", text: `🎯 ${a.name} ${a.title} — 금일 목표달성!` });
           }
         }
 
-        blocks.push({ type: "divider" });
-        blocks.push({ type: "text", text: `"${todayQuote}"`, inlines: [{ type: "styled", text: `"${todayQuote}"`, italic: true, color: "grey" }] });
+        cBlocks.push({ type: "divider" });
+        cBlocks.push({ type: "text", text: `"${todayQuote}"`, inlines: [{ type: "styled", text: `"${todayQuote}"`, italic: true, color: "grey" }] });
 
-        await sendMessage(appKey, convId, `🏆 금일 목표달성 축하 | ${achievers.map((a) => a.name).join(", ")}`, blocks);
+        await sendMessage(appKey, convId, `🏆 금일 목표달성 축하 | ${achievers.map((a) => a.name).join(", ")}`, cBlocks);
       }
     }
 
