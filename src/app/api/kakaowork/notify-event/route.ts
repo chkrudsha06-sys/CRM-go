@@ -32,12 +32,33 @@ async function findUserIdByEmail(appKey: string, email: string): Promise<number 
   }
 }
 
+function parseMembers(value: any): string[] {
+  if (!value) return [];
+  try {
+    if (typeof value === "string") {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
 function desc(term: string, value: string) {
   return {
     type: "description",
     term,
     content: { type: "text", text: value || "-" },
     accent: true,
+  };
+}
+
+function sectionHeader(text: string) {
+  return {
+    type: "text",
+    text,
+    inlines: [{ type: "styled", text, bold: true }],
   };
 }
 
@@ -71,20 +92,31 @@ async function sendMessage(
 }
 
 function buildPlainText(d: Record<string, any>, baseUrl: string): string {
+  const staff = parseMembers(d.staff_members);
+  const consultants = parseMembers(d.consultant_members);
   const lines = [
     "🚚 완판트럭 신규 등록",
     "──────────────",
-    `▪ 출동일 : ${d.dispatch_date || "-"}`,
+    "■ 현장정보",
+    `▪ 발송일 : ${d.dispatch_date || "-"}`,
     `▪ 현장명 : ${d.site_name || "-"}`,
-    `▪ 지역 : ${d.location || "-"}`,
-    `▪ 대행사 : ${d.agency || "-"}`,
+    `▪ 현장주소 : ${d.location || "-"}`,
     "──────────",
-    `▪ 접점 : ${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`,
+    "■ 소통자정보",
+    `▪ 소통자 : ${d.contact_point || "-"}`,
+    `▪ 직급 : ${d.contact_point_title || "-"}`,
     `▪ 연락처 : ${d.contact_phone || "-"}`,
-    `▪ 조직수 : ${d.team_size ? d.team_size + "명" : "-"}`,
     "──────────",
-    d.assigned_to ? `▪ 담당자 확인 요청 : ${d.assigned_to}` : null,
+    "■ BX요청사항",
+    `▪ 촬영여부 : ${d.has_photo ? "촬영" : "미촬영"}`,
+    "──────────",
+    `■ 발주수량 : 기본 ${d.order_qty_base || 0} + 추가 ${d.order_qty_extra || 0}`,
+    "──────────",
+    "■ 참석자",
+    `▪ 대협팀 : ${staff.length > 0 ? staff.join(", ") : "-"}`,
+    `▪ 컨설턴트 : ${consultants.length > 0 ? consultants.join(", ") : "-"}`,
     "──────────────",
+    d.assigned_to ? `👤 담당자 확인 요청 : ${d.assigned_to}` : null,
     `🔗 CRM 바로가기 : ${baseUrl}/wanpan-truck`,
   ].filter(Boolean);
   return lines.join("\n");
@@ -115,6 +147,11 @@ export async function POST(request: Request) {
       );
     }
 
+    // 참석자 파싱
+    const staff = parseMembers(d.staff_members);
+    const consultants = parseMembers(d.consultant_members);
+
+    // 담당자 @멘션 준비
     const assignedName = d.assigned_to as string | null;
     let mentionUserId: number | null = null;
     if (assignedName) {
@@ -122,34 +159,47 @@ export async function POST(request: Request) {
       if (email) mentionUserId = await findUserIdByEmail(appKey, email);
     }
 
+    // ===== 블록킷 카드 구성 =====
     const blocks: any[] = [
       { type: "header", text: "🚚 완판트럭 신규 등록", style: "yellow" },
-      {
-        type: "text",
-        text: `${d.site_name || "현장 미입력"}`,
-        inlines: [{ type: "styled", text: `${d.site_name || "현장 미입력"}`, bold: true }],
-      },
-      desc("출동일", d.dispatch_date),
-      desc("지역", d.location),
-      desc("대행사", d.agency),
-      desc(
-        "접점",
-        `${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`
-      ),
-      desc("연락처", d.contact_phone),
-      desc("조직수", d.team_size ? `${d.team_size}명` : "-"),
-      desc(
-        "수량",
-        d.order_qty_base
-          ? `${d.order_qty_base}${d.order_qty_extra ? ` + ${d.order_qty_extra}` : ""}`
-          : "-"
-      ),
+
+      // ■ 현장정보
+      sectionHeader("■ 현장정보"),
+      desc("발송일", d.dispatch_date || "-"),
+      desc("현장명", d.site_name || "-"),
+      desc("현장주소", d.location || "-"),
+
+      { type: "divider" },
+
+      // ■ 소통자정보
+      sectionHeader("■ 소통자정보"),
+      desc("소통자", d.contact_point || "-"),
+      desc("직급", d.contact_point_title || "-"),
+      desc("연락처", d.contact_phone || "-"),
+
+      { type: "divider" },
+
+      // ■ BX요청사항
+      sectionHeader("■ BX요청사항"),
+      desc("촬영여부", d.has_photo ? "촬영" : "미촬영"),
+
+      { type: "divider" },
+
+      // ■ 발주수량
+      sectionHeader("■ 발주수량"),
+      desc("수량", `기본 ${d.order_qty_base || 0} + 추가 ${d.order_qty_extra || 0}`),
+
+      { type: "divider" },
+
+      // ■ 참석자
+      sectionHeader("■ 참석자"),
+      desc("대협팀", staff.length > 0 ? staff.join(", ") : "-"),
+      desc("컨설턴트", consultants.length > 0 ? consultants.join(", ") : "-"),
+
+      { type: "divider" },
     ];
 
-    if (d.notes) blocks.push(desc("비고", String(d.notes).slice(0, 400)));
-
-    blocks.push({ type: "divider" });
-
+    // 담당자 멘션
     if (assignedName && mentionUserId) {
       blocks.push({
         type: "text",
@@ -167,6 +217,7 @@ export async function POST(request: Request) {
       blocks.push({ type: "text", text: `👤 담당자 확인 요청 : ${assignedName}` });
     }
 
+    // 처리 버튼 3개
     if (truckId) {
       blocks.push({
         type: "action",
@@ -193,6 +244,7 @@ export async function POST(request: Request) {
       });
     }
 
+    // CRM 바로가기
     blocks.push({
       type: "button",
       text: "CRM에서 보기",
@@ -206,11 +258,13 @@ export async function POST(request: Request) {
 
     const pushText = `🚚 완판트럭 신규 등록 | ${d.site_name || "-"} (${d.dispatch_date || "-"})`;
 
+    // 1차: 카드 발송 시도
     const first = await sendMessage(appKey, conversationId, pushText, blocks);
     if (first.ok) {
       return NextResponse.json({ ok: true, mode: "card", mentioned: !!mentionUserId });
     }
 
+    // 2차(안전장치): 카드 실패 시 일반 텍스트로 발송
     const fallback = await sendMessage(appKey, conversationId, buildPlainText(d, baseUrl));
 
     return NextResponse.json(
