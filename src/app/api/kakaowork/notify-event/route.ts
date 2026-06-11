@@ -279,26 +279,16 @@ export async function POST(request: Request) {
         const allDone = EXEC_NAMES.every((name) => registered.has(name));
 
         if (allDone) {
-          // 전원 완료 카드 — 각 멤버 개별 멘션
-          const completeBlocks: any[] = [
-            { type: "header", text: "✅ 실행파트 금일 목표등록 모두 완료", style: "green" },
-            { type: "text", text: `${d.work_date} 실행파트 전원의 일별활동목표 등록이 완료되었습니다.` },
-            { type: "divider" },
-          ];
-
-          for (const eName of EXEC_NAMES) {
-            const eEmail = getMentionEmail(eName);
-            const eUid = eEmail ? await findUserIdByEmail(appKey, eEmail) : null;
-            if (eUid) {
-              completeBlocks.push({
-                type: "text",
-                text: `@${eName}`,
-                inlines: [{ type: "mention", text: `@${eName}`, ref: { type: "kw", value: Number(eUid) } }],
-              });
-            }
-          }
-
-          await sendMessage(appKey, conversationId, "✅ 실행파트 금일 목표등록 모두 완료", completeBlocks);
+          const names = EXEC_NAMES.join(", ");
+          await sendMessage(appKey, conversationId, [
+            "✅ 실행파트 금일 목표등록 모두 완료",
+            "──────────────",
+            `${d.work_date} 실행파트 전원의`,
+            `일별활동목표 등록이 완료되었습니다.`,
+            "",
+            `등록완료 : ${names}`,
+            "──────────────",
+          ].join("\n"));
         }
       } catch {}
     }
