@@ -25,7 +25,8 @@ async function findUserIdByEmail(appKey: string, email: string): Promise<number 
       }
     );
     const data = await res.json();
-    return data?.user?.id ?? null;
+    const id = Number(data?.user?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     return null;
   }
@@ -38,6 +39,55 @@ function desc(term: string, value: string) {
     content: { type: "text", text: value || "-" },
     accent: true,
   };
+}
+
+async function sendMessage(
+  appKey: string,
+  conversationId: string,
+  text: string,
+  blocks?: any[]
+) {
+  const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${appKey}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({
+      conversation_id: Number(conversationId),
+      text,
+      ...(blocks ? { blocks } : {}),
+    }),
+  });
+  const raw = await res.text();
+  let result: any = null;
+  try {
+    result = raw ? JSON.parse(raw) : null;
+  } catch {
+    result = { raw };
+  }
+  return { ok: res.ok && result?.success !== false, result };
+}
+
+function buildPlainText(d: Record<string, any>, baseUrl: string): string {
+  const lines = [
+    "🚚 완판트럭 신규 등록",
+    "──────────────",
+    `▪ 출동일 : ${d.dispatch_date || "-"}`,
+    `▪ 현장명 : ${d.site_name || "-"}`,
+    `▪ 지역 : ${d.location || "-"}`,
+    `▪ 대행사 : ${d.agency || "-"}`,
+    "──────────",
+    `▪ 컨택포인트 : ${d.contact_point || "-"}${d.contact_point_title ? ` ${d.contact_point_title}` : ""}`,
+    `▪ 연락처 : ${d.contact_phone || "-"}`,
+    `▪ 조직규모 : ${d.team_size ? d.team_size + "명" : "-"}`,
+    "──────────",
+    d.assigned_to ? `▪ 담당자 확인 요청 : ${d.assigned_to}` : null,
+    "──────────────",
+    `🔗 CRM 바로가기 : ${baseUrl}/wanpan-truck`,
+  ].filter(Boolean);
+  return lines.join("\n");
 }
 
 export async function POST(request: Request) {
@@ -65,7 +115,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 담당자 @멘션 준비
+    // 담당자 @멘션 준비 (user_id는 반드시 숫자로 변환)
     const assignedName = d.assigned_to as string | null;
     let mentionUserId: number | null = null;
     if (assignedName) {
@@ -102,7 +152,6 @@ export async function POST(request: Request) {
 
     blocks.push({ type: "divider" });
 
-    // 담당자 멘션 라인
     if (assignedName && mentionUserId) {
       blocks.push({
         type: "text",
@@ -112,7 +161,7 @@ export async function POST(request: Request) {
           {
             type: "mention",
             text: `@${assignedName}`,
-            ref: { type: "kw", value: mentionUserId },
+            ref: { type: "kw", value: Number(mentionUserId) },
           },
         ],
       });
@@ -120,7 +169,6 @@ export async function POST(request: Request) {
       blocks.push({ type: "text", text: `👤 담당자 확인 요청 : ${assignedName}` });
     }
 
-    // 처리 버튼 3개 (truckId가 있을 때만)
     if (truckId) {
       blocks.push({
         type: "action",
@@ -129,37 +177,24 @@ export async function POST(request: Request) {
             type: "button",
             text: "발주 완료",
             style: "primary",
-            action: {
-              type: "submit_action",
-              name: "wanpan_action",
-              value: `wanpan:${truckId}:order`,
-            },
+            action: { type: "submit_action", name: "wanpan_action", value: `wanpan:${truckId}:order` },
           },
           {
             type: "button",
             text: "시안 발주",
             style: "default",
-            action: {
-              type: "submit_action",
-              name: "wanpan_action",
-              value: `wanpan:${truckId}:draft`,
-            },
+            action: { type: "submit_action", name: "wanpan_action", value: `wanpan:${truckId}:draft` },
           },
           {
             type: "button",
             text: "담당자 확인",
             style: "default",
-            action: {
-              type: "submit_action",
-              name: "wanpan_action",
-              value: `wanpan:${truckId}:confirm`,
-            },
+            action: { type: "submit_action", name: "wanpan_action", value: `wanpan:${truckId}:confirm` },
           },
         ],
       });
     }
 
-    // CRM 바로가기 버튼
     blocks.push({
       type: "button",
       text: "CRM에서 보기",
@@ -173,36 +208,23 @@ export async function POST(request: Request) {
 
     const pushText = `🚚 완판트럭 신규 등록 | ${d.site_name || "-"} (${d.dispatch_date || "-"})`;
 
-    const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${appKey}`,
-        "Content-Type": "application/json",
+    // 1차: 카드 발송 시도
+    const first = await sendMessage(appKey, conversationId, pushText, blocks);
+    if (first.ok) {
+      return NextResponse.json({ ok: true, mode: "card", mentioned: !!mentionUserId });
+    }
+
+    // 2차(안전장치): 카드 실패 시 일반 텍스트로라도 발송
+    const fallback = await sendMessage(appKey, conversationId, buildPlainText(d, baseUrl));
+
+    return NextResponse.json(
+      {
+        ok: fallback.ok,
+        mode: "fallback_text",
+        cardError: first.result,
       },
-      cache: "no-store",
-      body: JSON.stringify({
-        conversation_id: Number(conversationId),
-        text: pushText,
-        blocks,
-      }),
-    });
-
-    const raw = await res.text();
-    let result: any = null;
-    try {
-      result = raw ? JSON.parse(raw) : null;
-    } catch {
-      result = { raw };
-    }
-
-    if (!res.ok || result?.success === false) {
-      return NextResponse.json(
-        { ok: false, message: "카카오워크 발송 실패", detail: result },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ ok: true, mentioned: !!mentionUserId });
+      { status: fallback.ok ? 200 : 500 }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { ok: false, message: error?.message || "알 수 없는 오류" },
