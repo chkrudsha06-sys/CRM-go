@@ -94,7 +94,7 @@ const CONSULTANT_MEMBERS = [
   "전정훈",
   "박나라",
 ];
-const CONFIRM_MEMBERS = ["김재영", "최은정"];
+const CONFIRM_MEMBERS = ["김재영", "최은정", "모두"];
 
 const EMPTY_FORM = {
   team_size: "",
@@ -1379,11 +1379,11 @@ export default function WanpanTruckPage() {
           background: var(--surface);
         }
 
-        [data-wanpan-page] .wanpan-row > *,
-        [data-wanpan-page] .wanpan-row .crm-row-main,
-        [data-wanpan-page] .wanpan-row .crm-row-sub,
-        [data-wanpan-page] .wanpan-row .crm-meta,
-        [data-wanpan-page] .wanpan-row .crm-tiny {
+        [data-wanpan-page] .wanpan-row {
+          min-height: 56px !important;
+        }
+
+        [data-wanpan-page] .wanpan-row > * {
           text-align: center !important;
           justify-content: center !important;
         }
@@ -1396,6 +1396,22 @@ export default function WanpanTruckPage() {
         }
 
         [data-wanpan-page] .wanpan-row > span {
+          display: flex;
+          align-items: center;
+          justify-content: center !important;
+        }
+
+        [data-wanpan-page] .wanpan-row p,
+        [data-wanpan-page] .wanpan-row span,
+        [data-wanpan-page] .wanpan-row .crm-row-main,
+        [data-wanpan-page] .wanpan-row .crm-row-sub,
+        [data-wanpan-page] .wanpan-row .crm-meta,
+        [data-wanpan-page] .wanpan-row .crm-tiny {
+          text-align: center !important;
+          justify-content: center !important;
+        }
+
+        [data-wanpan-page] .wanpan-row .crm-row-sub.mt-0\\.5 {
           justify-content: center !important;
         }
 
@@ -1615,7 +1631,7 @@ export default function WanpanTruckPage() {
                     return (
                       <div
                         key={truck.id}
-                        className="wanpan-row grid min-h-[76px] items-center gap-2 border-t px-4 transition-colors hover:bg-white/[0.025]"
+                        className="wanpan-row grid min-h-[52px] items-center gap-1 border-t px-4 py-1 transition-colors hover:bg-white/[0.025]"
                         style={{
                           gridTemplateColumns:
                             "54px 96px 210px 126px 190px 96px 168px 168px 86px 96px 100px 96px 96px 122px minmax(170px,1fr) 88px",
@@ -1635,7 +1651,7 @@ export default function WanpanTruckPage() {
                           <p className="crm-row-main truncate">
                             {truck.site_name || "-"}
                           </p>
-                          <p className="crm-row-sub mt-0.5 flex items-center gap-1.5 truncate">
+                          <p className="crm-row-sub flex items-center justify-center gap-1.5 truncate">
                             <MapPin size={12} /> {truck.location || "-"}
                           </p>
                         </div>
@@ -1651,7 +1667,7 @@ export default function WanpanTruckPage() {
                           >
                             {truck.contact_point || "-"}
                           </p>
-                          <p className="crm-tiny mt-0.5 flex items-center gap-1 truncate">
+                          <p className="crm-tiny flex items-center justify-center gap-1 truncate">
                             {truck.contact_point_title || "-"}
                             {truck.contact_phone ? (
                               <>
