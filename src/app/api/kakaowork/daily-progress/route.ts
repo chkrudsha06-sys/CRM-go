@@ -19,12 +19,15 @@ function getSupabase() {
 }
 
 function todayKST(): string {
-  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10);
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function hourKST(): number {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).getUTCHours();
+}
+
+function minKST(): number {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).getUTCMinutes();
 }
 
 function getMentionEmail(name: string): string | null {
@@ -60,23 +63,20 @@ async function sendMessage(appKey: string, convId: string, text: string, blocks?
   return { ok: res.ok && result?.success !== false, result };
 }
 
-function pct(result: number, goal: number): number {
+function pct(result: number, goal: number): string {
+  if (goal <= 0) return result > 0 ? "100%" : "0%";
+  return Math.round((result / goal) * 100) + "%";
+}
+
+function pctNum(result: number, goal: number): number {
   if (goal <= 0) return result > 0 ? 100 : 0;
   return Math.round((result / goal) * 100);
 }
 
-function bar(percent: number): string {
-  const filled = Math.min(Math.round(percent / 10), 10);
-  return "█".repeat(filled) + "░".repeat(10 - filled) + ` ${percent}%`;
-}
-
 function parseWorkItems(value: any): { total: number; done: number } {
   let items: any[] = [];
-  if (typeof value === "string") {
-    try { items = JSON.parse(value); } catch { items = []; }
-  } else if (Array.isArray(value)) {
-    items = value;
-  }
+  if (typeof value === "string") { try { items = JSON.parse(value); } catch {} }
+  else if (Array.isArray(value)) items = value;
   const active = items.filter((i: any) => i?.text?.trim());
   const completed = active.filter((i: any) => i?.done === true);
   return { total: active.length, done: completed.length };
@@ -85,28 +85,15 @@ function parseWorkItems(value: any): { total: number; done: number } {
 function isGoalAchieved(row: any): boolean {
   if (row.is_outside_meeting) return false;
   const checks = [
-    { goal: row.goal_new_tm || 0, result: row.result_new_tm || 0 },
-    { goal: row.goal_coldtalk || 0, result: row.result_coldtalk || 0 },
-    { goal: row.goal_consultant_db || 0, result: row.result_consultant_db || 0 },
-    { goal: row.goal_second_touch || 0, result: row.result_second_touch || 0 },
+    { g: row.goal_new_tm || 0, r: row.result_new_tm || 0 },
+    { g: row.goal_coldtalk || 0, r: row.result_coldtalk || 0 },
+    { g: row.goal_consultant_db || 0, r: row.result_consultant_db || 0 },
+    { g: row.goal_second_touch || 0, r: row.result_second_touch || 0 },
   ];
-  const numericOk = checks.every((c) => c.goal <= 0 || c.result >= c.goal);
+  const numOk = checks.every((c) => c.g <= 0 || c.r >= c.g);
   const wi = parseWorkItems(row.goal_work_items);
-  const workOk = wi.total <= 0 || wi.done >= wi.total;
-  return numericOk && workOk;
-}
-
-async function buildViewerMentionText(appKey: string): Promise<string> {
-  const parts: string[] = [];
-  for (const name of VIEWER_NAMES) {
-    const email = getMentionEmail(name);
-    if (email) {
-      const uid = await findUserIdByEmail(appKey, email);
-      if (uid) { parts.push(`@${name}`); continue; }
-    }
-    parts.push(name);
-  }
-  return parts.join(" ");
+  const wiOk = wi.total <= 0 || wi.done >= wi.total;
+  return numOk && wiOk;
 }
 
 export async function GET() {
@@ -117,114 +104,69 @@ export async function GET() {
 
     const hour = hourKST();
     if (![14, 16, 18].includes(hour)) {
-      return NextResponse.json({ ok: true, skipped: true, reason: `${hour}시는 보고 시간이 아닙니다` });
+      return NextResponse.json({ ok: true, skipped: true, reason: `${hour}시는 보고 시간 아님` });
     }
 
     const today = todayKST();
+    const min = minKST();
     const supabase = getSupabase();
-    const { data: rows } = await supabase
-      .from("daily_activity_goals")
-      .select("*")
-      .eq("work_date", today);
+    const { data: rows } = await supabase.from("daily_activity_goals").select("*").eq("work_date", today);
 
-    const viewerTag = await buildViewerMentionText(appKey);
+    // 날짜 포맷: 6월 11일
+    const [, mm, dd] = today.split("-");
+    const dateLabel = `${Number(mm)}월 ${Number(dd)}일`;
 
     // ===== 진척율 텍스트 보고 =====
+    const viewerTag = VIEWER_NAMES.map((n) => `@${n}`).join("\n");
+
     const lines: string[] = [
-      `📊 실행파트 활동목표 진척율 (${hour}시 기준)`,
-      "──────────────",
+      `📊 실행파트 활동목표 진척율`,
+      `${dateLabel} (${hour}시 ${String(min).padStart(2, "0")}분 기준)`,
       viewerTag,
-      "",
+      "──────────────",
     ];
 
     for (const member of EXEC_MEMBERS) {
       const row = (rows || []).find((r: any) => r.owner_name === member.name);
 
       if (!row) {
-        lines.push(`■ ${member.name} ${member.title}`);
-        lines.push("  ⚠️ 미등록");
-        lines.push("");
-        continue;
-      }
-
-      if ((row as any).is_outside_meeting) {
-        lines.push(`■ ${member.name} ${member.title}`);
-        lines.push("  📌 외근(미팅)");
+        lines.push(`■ ${member.name} ${member.title} — ⚠️ 미등록`);
         lines.push("");
         continue;
       }
 
       const r = row as any;
-      const tmP = pct(r.result_new_tm || 0, r.goal_new_tm || 0);
-      const coldP = pct(r.result_coldtalk || 0, r.goal_coldtalk || 0);
-      const bronzeP = pct(r.result_consultant_db || 0, r.goal_consultant_db || 0);
-      const dbP = pct(r.result_second_touch || 0, r.goal_second_touch || 0);
-      const wi = parseWorkItems(r.goal_work_items);
-      const wiP = wi.total > 0 ? pct(wi.done, wi.total) : 0;
+      if (r.is_outside_meeting) {
+        lines.push(`■ ${member.name} ${member.title} — 📌 외근(미팅)`);
+        lines.push("");
+        continue;
+      }
 
       lines.push(`■ ${member.name} ${member.title}`);
-      lines.push(`  TM ${bar(tmP)}  (${r.result_new_tm || 0}/${r.goal_new_tm || 0}건)`);
-      lines.push(`  콜드톡 ${bar(coldP)}  (${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건)`);
-      lines.push(`  브론즈 ${bar(bronzeP)}  (${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개)`);
-      lines.push(`  1%DB ${bar(dbP)}  (${r.result_second_touch || 0}/${r.goal_second_touch || 0}개)`);
+      lines.push(`  TM : ${r.result_new_tm || 0}/${r.goal_new_tm || 0}건 (${pct(r.result_new_tm || 0, r.goal_new_tm || 0)})`);
+      lines.push(`  콜드톡 : ${r.result_coldtalk || 0}/${r.goal_coldtalk || 0}건 (${pct(r.result_coldtalk || 0, r.goal_coldtalk || 0)})`);
+      lines.push(`  브론즈DB수취 : ${r.result_consultant_db || 0}/${r.goal_consultant_db || 0}개 (${pct(r.result_consultant_db || 0, r.goal_consultant_db || 0)})`);
+      lines.push(`  1%DB수취 : ${r.result_second_touch || 0}/${r.goal_second_touch || 0}개 (${pct(r.result_second_touch || 0, r.goal_second_touch || 0)})`);
+
+      const wi = parseWorkItems(r.goal_work_items);
       if (wi.total > 0) {
-        lines.push(`  특발성 ${bar(wiP)}  (${wi.done}/${wi.total}건)`);
+        lines.push(`  특발성 : ${wi.done}/${wi.total}건 (${pct(wi.done, wi.total)})`);
       }
       lines.push("");
     }
 
     lines.push("──────────────");
-
     await sendMessage(appKey, convId, lines.join("\n"));
 
-    // ===== 18시: 축하카드 =====
+    // ===== 18시: 목표달성 축하카드 =====
     if (hour === 18) {
-      const achievers: string[] = [];
+      const achievers: { name: string; title: string }[] = [];
       for (const member of EXEC_MEMBERS) {
         const row = (rows || []).find((r: any) => r.owner_name === member.name);
-        if (row && isGoalAchieved(row)) {
-          achievers.push(member.name);
-        }
+        if (row && isGoalAchieved(row)) achievers.push(member);
       }
 
       if (achievers.length > 0) {
-        const blocks: any[] = [
-          { type: "header", text: "🏆 금일 목표달성 축하", style: "yellow" },
-          {
-            type: "text",
-            text: "오늘 하루도 목표를 향해 최선을 다한 당신,\n정말 대단합니다! 🎉",
-            inlines: [
-              { type: "styled", text: "오늘 하루도 목표를 향해 최선을 다한 당신,\n정말 대단합니다! 🎉", bold: true },
-            ],
-          },
-          { type: "divider" },
-        ];
-
-        // 달성자 멘션
-        for (const name of achievers) {
-          const mEmail = getMentionEmail(name);
-          const mUid = mEmail ? await findUserIdByEmail(appKey, mEmail) : null;
-          if (mUid) {
-            blocks.push({
-              type: "text",
-              text: `🎯 @${name} — 금일 목표달성 완료!`,
-              inlines: [
-                { type: "styled", text: "🎯 " },
-                { type: "mention", text: `@${name}`, ref: { type: "kw", value: Number(mUid) } },
-                { type: "styled", text: " — 금일 목표달성 완료!", bold: true, color: "blue" },
-              ],
-            });
-          } else {
-            blocks.push({
-              type: "text",
-              text: `🎯 ${name} — 금일 목표달성 완료!`,
-              inlines: [{ type: "styled", text: `🎯 ${name} — 금일 목표달성 완료!`, bold: true, color: "blue" }],
-            });
-          }
-        }
-
-        blocks.push({ type: "divider" });
-
         const quotes = [
           "작은 승리의 반복이 큰 성공을 만듭니다.",
           "오늘의 노력이 내일의 성과가 됩니다.",
@@ -234,14 +176,38 @@ export async function GET() {
         ];
         const todayQuote = quotes[new Date().getDate() % quotes.length];
 
-        blocks.push({
-          type: "text",
-          text: `"${todayQuote}"`,
-          inlines: [{ type: "styled", text: `"${todayQuote}"`, italic: true, color: "grey" }],
-        });
+        const blocks: any[] = [
+          { type: "header", text: "🏆 금일 목표달성 축하", style: "yellow" },
+          {
+            type: "text",
+            text: `🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!`,
+            inlines: [{ type: "styled", text: `🎉 오늘 하루도 목표를 향해 최선을 다한\n당신, 정말 대단합니다!`, bold: true }],
+          },
+          { type: "divider" },
+        ];
 
-        const pushText = `🏆 금일 목표달성 축하 | ${achievers.join(", ")}`;
-        await sendMessage(appKey, convId, pushText, blocks);
+        for (const a of achievers) {
+          const mEmail = getMentionEmail(a.name);
+          const mUid = mEmail ? await findUserIdByEmail(appKey, mEmail) : null;
+          if (mUid) {
+            blocks.push({
+              type: "text",
+              text: `🎯 @${a.name} ${a.title} — 금일 목표달성!`,
+              inlines: [
+                { type: "styled", text: "🎯 " },
+                { type: "mention", text: `@${a.name}`, ref: { type: "kw", value: Number(mUid) } },
+                { type: "styled", text: ` ${a.title} — 금일 목표달성!`, bold: true },
+              ],
+            });
+          } else {
+            blocks.push({ type: "text", text: `🎯 ${a.name} ${a.title} — 금일 목표달성!`, inlines: [{ type: "styled", text: `🎯 ${a.name} ${a.title} — 금일 목표달성!`, bold: true }] });
+          }
+        }
+
+        blocks.push({ type: "divider" });
+        blocks.push({ type: "text", text: `"${todayQuote}"`, inlines: [{ type: "styled", text: `"${todayQuote}"`, italic: true, color: "grey" }] });
+
+        await sendMessage(appKey, convId, `🏆 금일 목표달성 축하 | ${achievers.map((a) => a.name).join(", ")}`, blocks);
       }
     }
 
