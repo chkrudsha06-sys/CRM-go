@@ -98,6 +98,21 @@ const CONSULTANT_MEMBERS = [
 ];
 const CONFIRM_MEMBERS = ["김재영", "최은정", "모두"];
 
+function DetailItem({ label, value, highlight, span2 }: { label: string; value: string; highlight?: boolean; span2?: boolean }) {
+  return (
+    <div className={span2 ? "col-span-2" : ""}>
+      <p className="crm-tiny mb-1">{label}</p>
+      <p
+        className="text-[13.5px] font-[700] tracking-[-0.01em]"
+        style={{ color: highlight ? "var(--accent-text)" : "var(--text)" }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+
 const EMPTY_FORM = {
   requester_name: "",
   team_size: "",
@@ -1148,6 +1163,7 @@ export default function WanpanTruckPage() {
   const [filterPhoto, setFilterPhoto] = useState("");
   const [search, setSearch] = useState("");
   const [crmUser, setCrmUser] = useState<{ name: string; title: string } | null>(null);
+  const [selectedTruck, setSelectedTruck] = useState<WanpanTruck | null>(null);
 
   useEffect(() => {
     const u = getCurrentUser();
@@ -1635,7 +1651,8 @@ export default function WanpanTruckPage() {
                     return (
                       <div
                         key={truck.id}
-                        className="wanpan-row grid min-h-[52px] items-center border-t px-4 py-2 transition-colors hover:bg-white/[0.025]"
+                        className="wanpan-row grid min-h-[52px] cursor-pointer items-center border-t px-4 py-2 transition-colors hover:bg-white/[0.04]"
+                        onClick={() => setSelectedTruck(truck)}
                         style={{
                           gridTemplateColumns:
                             "0.8fr 1.4fr 1.2fr 0.6fr 0.7fr 1fr 1fr 0.6fr 0.8fr 0.7fr 1.3fr",
@@ -1694,7 +1711,7 @@ export default function WanpanTruckPage() {
                         </p>
 
                         {/* 시안직발주 */}
-                        <button type="button" className="flex justify-center" onClick={() => toggleDirectOrder(truck.id, truck.is_direct_order)}>
+                        <button type="button" className="flex justify-center" onClick={(e) => { e.stopPropagation(); toggleDirectOrder(truck.id, truck.is_direct_order); }}>
                           <Badge tone={truck.is_direct_order ? "purple" : "muted"}>
                             {truck.is_direct_order ? "직발주" : "미발주"}
                           </Badge>
@@ -1711,7 +1728,7 @@ export default function WanpanTruckPage() {
                                   <Badge tone="info" icon={User}>{truck.assigned_to}</Badge>
                                 )}
                               </div>
-                              <button type="button" className="flex justify-center" onClick={() => toggleConfirm(truck.id, truck.order_confirmed_by, truck.assigned_to)}>
+                              <button type="button" className="flex justify-center" onClick={(e) => { e.stopPropagation(); toggleConfirm(truck.id, truck.order_confirmed_by, truck.assigned_to); }}>
                                 <Badge tone={truck.order_confirmed_by ? "success" : "warning"}>
                                   {truck.order_confirmed_by ? "확인완료" : "미확인"}
                                 </Badge>
@@ -1789,6 +1806,178 @@ export default function WanpanTruckPage() {
           onClose={() => setShowModal(false)}
           onSave={handleSave}
         />
+      )}
+
+      {/* ===== 완판트럭 상세 패널 (오른쪽 슬라이드) ===== */}
+      {selectedTruck && (
+        <>
+          <div className="slide-panel-overlay" onClick={() => setSelectedTruck(null)} />
+          <aside className="slide-panel" style={{ "--panel-width": "560px" } as React.CSSProperties}>
+            {/* 헤더 */}
+            <div className="slide-panel-header">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <Badge tone={selectedTruck.is_ordered ? "success" : "muted"}>
+                      {selectedTruck.is_ordered ? "발주완료" : "미발주"}
+                    </Badge>
+                    <Badge tone={selectedTruck.is_direct_order ? "purple" : "muted"}>
+                      {selectedTruck.is_direct_order ? "직발주" : "일반"}
+                    </Badge>
+                    <Badge tone={selectedTruck.has_photo ? "success" : "muted"} icon={ImageIcon}>
+                      {selectedTruck.has_photo ? "촬영" : "미촬영"}
+                    </Badge>
+                    <Badge tone={selectedTruck.order_confirmed_by ? "success" : "warning"}>
+                      {selectedTruck.order_confirmed_by ? "확인완료" : "미확인"}
+                    </Badge>
+                  </div>
+                  <h2 className="truncate text-[19px] font-[840] tracking-[-0.02em]" style={{ color: "var(--text)" }}>
+                    {selectedTruck.site_name || "현장명 미입력"}
+                  </h2>
+                  <p className="crm-row-sub mt-1.5 flex items-center gap-1.5">
+                    <MapPin size={13} /> {selectedTruck.location || "-"}
+                    <span style={{ color: "var(--text-faint)" }}>·</span>
+                    <CalendarDays size={13} /> {formatDate(selectedTruck.dispatch_date)}
+                  </p>
+                </div>
+                <IconButton label="닫기" onClick={() => setSelectedTruck(null)}>
+                  <X size={16} />
+                </IconButton>
+              </div>
+            </div>
+
+            {/* 바디 */}
+            <div className="slide-panel-body space-y-4">
+              {/* 기본 정보 */}
+              <section className="premium-card p-4">
+                <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>기본 정보</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DetailItem label="요청자" value={selectedTruck.requester_name || "-"} highlight />
+                  <DetailItem label="발송일" value={formatDate(selectedTruck.dispatch_date)} />
+                  <DetailItem label="현장명" value={selectedTruck.site_name || "-"} />
+                  <DetailItem label="현장주소" value={selectedTruck.location || "-"} />
+                  <DetailItem label="대행사" value={selectedTruck.agency || "-"} />
+                  <DetailItem label="조직수" value={selectedTruck.team_size ? `${selectedTruck.team_size}명` : "-"} />
+                </div>
+              </section>
+
+              {/* 소통자 정보 */}
+              <section className="premium-card p-4">
+                <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>소통자 정보</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <DetailItem label="소통자" value={selectedTruck.contact_point || "-"} />
+                  <DetailItem label="직급" value={selectedTruck.contact_point_title || "-"} />
+                  <DetailItem label="연락처" value={selectedTruck.contact_phone || "-"} span2 />
+                </div>
+              </section>
+
+              {/* 출장 인원 */}
+              <section className="premium-card p-4">
+                <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>출장 인원</p>
+                <div className="space-y-3">
+                  <div>
+                    <p className="crm-tiny mb-1.5">대협팀 출장자</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {parseMembers(selectedTruck.staff_members).length > 0
+                        ? parseMembers(selectedTruck.staff_members).map((name) => (
+                            <Badge key={name} tone="info" icon={User}>{name}</Badge>
+                          ))
+                        : <span className="crm-tiny">-</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="crm-tiny mb-1.5">컨설턴트 출장자</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {parseMembers(selectedTruck.consultant_members).length > 0
+                        ? parseMembers(selectedTruck.consultant_members).map((name) => (
+                            <Badge key={name} tone="purple" icon={User}>{name}</Badge>
+                          ))
+                        : <span className="crm-tiny">-</span>}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 발주 정보 */}
+              <section className="premium-card p-4">
+                <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>발주 정보</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl border p-3 text-center" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+                    <p className="crm-tiny mb-1">기본 수량</p>
+                    <p className="text-[18px] font-[840]" style={{ color: "var(--text)" }}>{selectedTruck.order_qty_base || 0}</p>
+                  </div>
+                  <div className="rounded-xl border p-3 text-center" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+                    <p className="crm-tiny mb-1">추가 수량</p>
+                    <p className="text-[18px] font-[840]" style={{ color: "var(--accent-text)" }}>+{selectedTruck.order_qty_extra || 0}</p>
+                  </div>
+                  <div className="rounded-xl border p-3 text-center" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+                    <p className="crm-tiny mb-1">총 수량</p>
+                    <p className="text-[18px] font-[840]" style={{ color: "var(--text)" }}>{(selectedTruck.order_qty_base || 0) + (selectedTruck.order_qty_extra || 0)}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* 담당자 확인 */}
+              <section className="premium-card p-4">
+                <p className="mb-3 text-[11px] font-[800] uppercase tracking-[0.08em]" style={{ color: "var(--text-faint)" }}>담당자 최종확인</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedTruck.assigned_to === "모두" ? (
+                      <><Badge tone="info" icon={User}>김재영</Badge><Badge tone="info" icon={User}>최은정</Badge></>
+                    ) : selectedTruck.assigned_to ? (
+                      <Badge tone="info" icon={User}>{selectedTruck.assigned_to}</Badge>
+                    ) : (
+                      <span className="crm-tiny">담당자 미지정</span>
+                    )}
+                  </div>
+                  {selectedTruck.assigned_to && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleConfirm(selectedTruck.id, selectedTruck.order_confirmed_by, selectedTruck.assigned_to);
+                        setSelectedTruck({ ...selectedTruck, order_confirmed_by: selectedTruck.order_confirmed_by ? null : (selectedTruck.assigned_to || "확인") });
+                      }}
+                    >
+                      <Badge tone={selectedTruck.order_confirmed_by ? "success" : "warning"}>
+                        {selectedTruck.order_confirmed_by ? "확인완료" : "미확인 — 클릭하여 확인"}
+                      </Badge>
+                    </button>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            {/* 푸터 */}
+            <div className="slide-panel-footer">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="btn-premium flex items-center gap-1.5 px-4 text-[13px]"
+                  style={{ borderColor: "color-mix(in srgb, #ef4444 35%, transparent)", color: "#f87171" }}
+                  onClick={() => { handleDelete(selectedTruck.id); setSelectedTruck(null); }}
+                >
+                  <Trash2 size={14} /> 삭제
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn-premium btn-secondary px-4 text-[13px]"
+                    onClick={() => setSelectedTruck(null)}
+                  >
+                    닫기
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-premium btn-primary px-5 text-[13px]"
+                    onClick={() => { openEdit(selectedTruck); setSelectedTruck(null); }}
+                  >
+                    <Edit2 size={14} /> 수정
+                  </button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </>
       )}
     </div>
   );
