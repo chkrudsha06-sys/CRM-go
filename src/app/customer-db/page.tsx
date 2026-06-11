@@ -51,6 +51,7 @@ type RawCustomerRecord = {
   phone: string;
   intake_route: string;
   company: string;
+  assigned_to: string;
   activity_type: ActivityType;
   memo: string;
   notes: CustomerDbNote[];
@@ -344,6 +345,7 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
       ? String(record.intake_route)
       : INTAKE_ROUTES[0],
     company: String(record.company || ""),
+    assigned_to: String((record as any).assigned_to || currentAssignedTo()),
     activity_type:
       record.activity_type === "콜드톡" || record.activity_type === "TM"
         ? record.activity_type
@@ -1048,7 +1050,7 @@ export default function CustomerDbPage() {
     if (!selectedRecord) return [];
 
     const map = new Map<string, CustomerDbNote>();
-    [...(selectedRecord.notes || []), ...selectedRemoteNotes].forEach((note) => {
+    [...selectedRemoteNotes, ...(selectedRecord.notes || [])].forEach((note) => {
       const normalizedContent = String(note.content || "")
         .replace(/^\[(TM|콜드톡)\]\s*/g, "")
         .trim();
@@ -1125,6 +1127,7 @@ export default function CustomerDbPage() {
         phone: form.phone.trim(),
         intake_route: form.intake_route,
         company: form.company.trim(),
+        assigned_to: editingRecord.assigned_to || currentAssignedTo(),
         activity_type: form.activity_type,
         memo: form.memo.trim(),
         notes: firstNote.length ? [...firstNote, ...editingRecord.notes] : editingRecord.notes,
@@ -1156,6 +1159,7 @@ export default function CustomerDbPage() {
       phone: form.phone.trim(),
       intake_route: form.intake_route,
       company: form.company.trim(),
+      assigned_to: currentAssignedTo(),
       activity_type: form.activity_type,
       memo: form.memo.trim(),
       notes: firstNote,
@@ -1230,13 +1234,23 @@ export default function CustomerDbPage() {
   const handleDeleteNote = async (customerId: number, note: CustomerDbNote) => {
     if (!window.confirm("해당 활동노트를 삭제하시겠습니까?")) return;
 
+    const sameNote = (item: CustomerDbNote) =>
+      item.noteDate === note.noteDate &&
+      String(item.author || "").trim() === String(note.author || "").trim() &&
+      String(item.content || "").trim() === String(note.content || "").trim();
+
+    const remoteTarget =
+      note.id < 1000000000000
+        ? note
+        : selectedRemoteNotes.find((item) => sameNote(item) && item.id < 1000000000000);
+
     try {
       const contactId = await findContactIdByPhone(selectedRecord?.phone || "");
-      if (contactId && note.id < 1000000000000) {
+      if (contactId && remoteTarget?.id && remoteTarget.id < 1000000000000) {
         const { error } = await supabase
           .from("contact_notes")
           .delete()
-          .eq("id", note.id)
+          .eq("id", remoteTarget.id)
           .eq("contact_id", contactId);
 
         if (error) throw error;
@@ -1252,17 +1266,7 @@ export default function CustomerDbPage() {
         record.id === customerId
           ? {
               ...record,
-              notes: record.notes.filter(
-                (item) =>
-                  !(
-                    item.id === note.id ||
-                    (
-                      item.noteDate === note.noteDate &&
-                      item.author === note.author &&
-                      item.content.trim() === note.content.trim()
-                    )
-                  ),
-              ),
+              notes: record.notes.filter((item) => !(item.id === note.id || sameNote(item))),
               updated_at: new Date().toISOString(),
             }
           : record,
@@ -1273,22 +1277,14 @@ export default function CustomerDbPage() {
       current?.id === customerId
         ? {
             ...current,
-            notes: current.notes.filter(
-              (item) =>
-                !(
-                  item.id === note.id ||
-                  (
-                    item.noteDate === note.noteDate &&
-                    item.author === note.author &&
-                    item.content.trim() === note.content.trim()
-                  )
-                ),
-            ),
+            notes: current.notes.filter((item) => !(item.id === note.id || sameNote(item))),
           }
         : current,
     );
 
-    setSelectedRemoteNotes((items) => items.filter((item) => item.id !== note.id));
+    setSelectedRemoteNotes((items) =>
+      items.filter((item) => !(item.id === note.id || item.id === remoteTarget?.id || sameNote(item))),
+    );
     showToast("활동노트가 삭제되었습니다.");
   };
 
@@ -1629,13 +1625,14 @@ export default function CustomerDbPage() {
 
       <section className="premium-card overflow-hidden">
         <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
-          <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1540px] table-fixed text-center">
+          <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1640px] table-fixed text-center">
             <colgroup>
               <col className="w-[170px]" />
               <col className="w-[110px]" />
               <col className="w-[165px]" />
               <col className="w-[190px]" />
               <col className="w-[140px]" />
+              <col className="w-[150px]" />
               <col className="w-[160px]" />
               <col className="w-[230px]" />
               <col className="w-[170px]" />
@@ -1649,6 +1646,7 @@ export default function CustomerDbPage() {
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">유입경로</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">활동항목</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">소속회사</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">담당자</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">최근 활동</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">등록일</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">관리</th>
@@ -1703,6 +1701,11 @@ export default function CustomerDbPage() {
                     <td className="customer-db-td">
                       <div className="customer-db-center-cell">
                         <span className="customer-db-cell-text">{fmt(record.company)}</span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-cell-text">{fmt(record.assigned_to)}</span>
                       </div>
                     </td>
                     <td className="customer-db-td">
@@ -1874,6 +1877,7 @@ export default function CustomerDbPage() {
                   <DetailBlock label="유입경로" value={selectedRecord.intake_route} badge />
                   <DetailBlock label="활동항목" value={selectedRecord.activity_type} badge />
                   <DetailBlock label="소속회사" value={selectedRecord.company} />
+                  <DetailBlock label="담당자" value={selectedRecord.assigned_to} />
                   <DetailBlock label="등록일" value={dateLabel(selectedRecord.created_at)} />
                   <DetailBlock label="수정일" value={dateLabel(selectedRecord.updated_at)} />
                 </div>
