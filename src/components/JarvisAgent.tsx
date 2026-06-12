@@ -20,7 +20,14 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ElementType, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ElementType,
+  type KeyboardEvent,
+} from "react";
 
 type JarvisStatus = "idle" | "talk" | "thinking";
 
@@ -126,6 +133,7 @@ function buildWelcomeMessage(user: CRMUser) {
 
 export default function JarvisAgent({ user }: JarvisAgentProps) {
   const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState<JarvisStatus>("idle");
   const [input, setInput] = useState("");
@@ -145,6 +153,26 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   const talkTimerRef = useRef<number | null>(null);
 
   const currentImage = STATUS_IMAGE[status];
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("jarvis-hidden");
+      if (saved === "true") {
+        setHidden(true);
+        setOpen(false);
+      }
+    } catch {
+      // localStorage 접근이 제한된 환경에서는 기본 표시 상태를 유지합니다.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("jarvis-hidden", hidden ? "true" : "false");
+    } catch {
+      // localStorage 접근이 제한된 환경에서는 현재 세션 상태만 사용합니다.
+    }
+  }, [hidden]);
 
   const panelSizeClass = useMemo(() => {
     if (expanded) {
@@ -182,6 +210,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     const text = (preset ?? input).trim();
     if (!text || loading) return;
 
+    setHidden(false);
     setOpen(true);
     setInput("");
     setLastActionId(actionId || null);
@@ -271,16 +300,32 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     setStatus("idle");
   };
 
+  const hideJarvis = () => {
+    setOpen(false);
+    setExpanded(false);
+    setStatus("idle");
+    setHidden(true);
+  };
+
+  const showJarvis = () => {
+    setHidden(false);
+    window.setTimeout(() => setOpen(true), 80);
+  };
+
   return (
     <div className="pointer-events-none fixed inset-0 z-40">
       <section
         className={`pointer-events-auto absolute bottom-[116px] right-4 overflow-hidden rounded-[28px] shadow-2xl transition-all duration-300 ease-out md:right-6 ${panelSizeClass} ${
-          open ? "translate-x-0 opacity-100" : "translate-x-[115%] opacity-0"
+          open && !hidden
+            ? "translate-x-0 opacity-100"
+            : "pointer-events-none translate-x-[115%] opacity-0"
         }`}
         style={{
-          background: "linear-gradient(180deg, rgba(15, 23, 42, 0.97), rgba(15, 23, 42, 0.93))",
+          background:
+            "linear-gradient(180deg, rgba(15, 23, 42, 0.97), rgba(15, 23, 42, 0.93))",
           border: "1px solid rgba(125, 211, 252, 0.28)",
-          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.36), 0 0 0 1px rgba(255,255,255,0.06) inset",
+          boxShadow:
+            "0 24px 80px rgba(15, 23, 42, 0.36), 0 0 0 1px rgba(255,255,255,0.06) inset",
           backdropFilter: "blur(22px)",
         }}
         aria-hidden={!open}
@@ -302,14 +347,22 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                     className="h-12 w-12 object-contain drop-shadow-[0_0_16px_rgba(56,189,248,0.45)]"
                   />
                 )}
-                <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950 ${loading ? "animate-pulse bg-sky-300" : "bg-emerald-400"}`} />
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950 ${loading ? "animate-pulse bg-sky-300" : "bg-emerald-400"}`}
+                />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-[15px] font-black tracking-[-0.03em] text-white">JARVIS</h2>
-                  <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-2 py-0.5 text-[10px] font-black text-sky-200">CRM AGENT</span>
+                  <h2 className="truncate text-[15px] font-black tracking-[-0.03em] text-white">
+                    JARVIS
+                  </h2>
+                  <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-2 py-0.5 text-[10px] font-black text-sky-200">
+                    CRM AGENT
+                  </span>
                 </div>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-300">{user.name}님 전용 CRM 운영 에이전트</p>
+                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-300">
+                  {user.name}님 전용 CRM 운영 에이전트
+                </p>
               </div>
             </div>
 
@@ -335,16 +388,17 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                 type="button"
                 onClick={closePanel}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
-                aria-label="자비스 접기"
-                title="접기"
+                aria-label="자비스 패널만 접기"
+                title="패널 접기"
               >
                 <ChevronRight size={17} />
               </button>
               <button
                 type="button"
-                onClick={closePanel}
+                onClick={hideJarvis}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
-                aria-label="자비스 닫기"
+                aria-label="자비스 완전히 숨기기"
+                title="자비스 숨기기"
               >
                 <X size={15} />
               </button>
@@ -353,16 +407,24 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
 
           <div className="relative border-b border-white/10 px-4 py-3">
             <div className="flex items-start gap-3 rounded-2xl border border-sky-300/15 bg-white/[0.06] p-3">
-              <Sparkles className="mt-0.5 flex-shrink-0 text-sky-300" size={16} />
+              <Sparkles
+                className="mt-0.5 flex-shrink-0 text-sky-300"
+                size={16}
+              />
               <div className="min-w-0">
-                <p className="text-[12px] font-black text-white">자비스 업무 버튼</p>
+                <p className="text-[12px] font-black text-white">
+                  자비스 업무 버튼
+                </p>
                 <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-300">
-                  버튼을 누르면 CRM 데이터를 읽고 자동으로 분석합니다. 현재는 읽기/분석 전용이며 데이터 수정은 하지 않습니다.
+                  버튼을 누르면 CRM 데이터를 읽고 자동으로 분석합니다. 현재는
+                  읽기/분석 전용이며 데이터 수정은 하지 않습니다.
                 </p>
               </div>
             </div>
 
-            <div className={`mt-3 grid gap-2 ${expanded ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2"}`}>
+            <div
+              className={`mt-3 grid gap-2 ${expanded ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2"}`}
+            >
               {JARVIS_ACTIONS.map((action) => {
                 const Icon = action.icon;
                 const active = loading && lastActionId === action.id;
@@ -380,11 +442,19 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   >
                     <div className="flex items-center gap-2">
                       <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 text-sky-200 ring-1 ring-sky-300/15">
-                        {active ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
+                        {active ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Icon size={14} />
+                        )}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-100">{action.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-100">
+                        {action.label}
+                      </span>
                     </div>
-                    <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed text-slate-400">{action.description}</p>
+                    <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed text-slate-400">
+                      {action.description}
+                    </p>
                   </button>
                 );
               })}
@@ -394,22 +464,31 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 jarvis-scrollbar">
             <div className="space-y-3">
               {messages.map((message, index) => (
-                <div key={`${message.timestamp}-${index}`} className={`flex gap-2.5 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  key={`${message.timestamp}-${index}`}
+                  className={`flex gap-2.5 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                >
                   {message.role === "assistant" && (
                     <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 ring-1 ring-sky-300/20">
                       <Bot size={15} className="text-sky-200" />
                     </div>
                   )}
 
-                  <div className={`max-w-[84%] ${message.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                  <div
+                    className={`max-w-[84%] ${message.role === "user" ? "items-end" : "items-start"} flex flex-col`}
+                  >
                     <div
                       className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12px] font-medium leading-relaxed ${
-                        message.role === "user" ? "rounded-br-md bg-sky-500 text-white" : "rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100"
+                        message.role === "user"
+                          ? "rounded-br-md bg-sky-500 text-white"
+                          : "rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100"
                       }`}
                     >
                       {message.content}
                     </div>
-                    <span className="mt-1 px-1 text-[10px] font-semibold text-slate-500">{message.timestamp}</span>
+                    <span className="mt-1 px-1 text-[10px] font-semibold text-slate-500">
+                      {message.timestamp}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -450,13 +529,23 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                 className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-lg shadow-sky-950/30 transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
                 aria-label="자비스에게 보내기"
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {loading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
               </button>
             </div>
 
             <div className="mt-2 flex items-center justify-between gap-2 px-1">
-              <p className="text-[10px] font-medium text-slate-500">Enter 전송 · Shift+Enter 줄바꿈</p>
-              <button type="button" onClick={resetChat} className="flex items-center gap-1 text-[10px] font-bold text-slate-500 transition hover:text-slate-200">
+              <p className="text-[10px] font-medium text-slate-500">
+                Enter 전송 · Shift+Enter 줄바꿈
+              </p>
+              <button
+                type="button"
+                onClick={resetChat}
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-500 transition hover:text-slate-200"
+              >
                 <Trash2 size={11} /> 초기화
               </button>
             </div>
@@ -464,43 +553,87 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
         </div>
       </section>
 
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="pointer-events-auto absolute bottom-5 right-4 flex flex-col items-center gap-1 outline-none transition hover:-translate-y-1 md:right-6 jarvis-floating-button"
-        aria-label="자비스 열기"
-        title="JARVIS 자비스"
+      <div
+        className={`pointer-events-auto absolute bottom-5 right-4 flex flex-col items-center gap-1 outline-none transition-all duration-500 ease-out md:right-6 ${
+          hidden
+            ? "pointer-events-none translate-x-[150%] opacity-0"
+            : "translate-x-0 opacity-100"
+        }`}
+        aria-hidden={hidden}
       >
-        <div
-          className="relative flex h-[92px] w-[92px] items-center justify-center rounded-[28px] border border-sky-300/25 bg-slate-950/80 shadow-2xl transition md:h-[104px] md:w-[104px]"
-          style={{
-            boxShadow: "0 16px 55px rgba(2, 132, 199, 0.28), 0 0 0 1px rgba(255,255,255,0.08) inset",
-            backdropFilter: "blur(18px)",
-          }}
-        >
-          <span className="absolute inset-2 rounded-[22px] bg-sky-400/10 blur-xl" />
-          {imageFailed ? (
-            <Bot size={44} className="relative text-sky-200 drop-shadow-[0_0_20px_rgba(56,189,248,0.55)]" />
-          ) : (
-            <img
-              src={currentImage}
-              alt="JARVIS"
-              onError={() => setImageFailed(true)}
-              className="relative h-[94px] w-[94px] object-contain drop-shadow-[0_0_20px_rgba(56,189,248,0.55)] md:h-[110px] md:w-[110px]"
-            />
-          )}
-          {loading && <span className="absolute right-2 top-2 h-3 w-3 animate-pulse rounded-full bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.9)]" />}
-        </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="flex flex-col items-center gap-1 outline-none transition hover:-translate-y-1 jarvis-floating-button"
+            aria-label="자비스 열기"
+            title="JARVIS 자비스"
+          >
+            <div
+              className="relative flex h-[92px] w-[92px] items-center justify-center rounded-[28px] border border-sky-300/25 bg-slate-950/80 shadow-2xl transition md:h-[104px] md:w-[104px]"
+              style={{
+                boxShadow:
+                  "0 16px 55px rgba(2, 132, 199, 0.28), 0 0 0 1px rgba(255,255,255,0.08) inset",
+                backdropFilter: "blur(18px)",
+              }}
+            >
+              <span className="absolute inset-2 rounded-[22px] bg-sky-400/10 blur-xl" />
+              {imageFailed ? (
+                <Bot
+                  size={44}
+                  className="relative text-sky-200 drop-shadow-[0_0_20px_rgba(56,189,248,0.55)]"
+                />
+              ) : (
+                <img
+                  src={currentImage}
+                  alt="JARVIS"
+                  onError={() => setImageFailed(true)}
+                  className="relative h-[94px] w-[94px] object-contain drop-shadow-[0_0_20px_rgba(56,189,248,0.55)] md:h-[110px] md:w-[110px]"
+                />
+              )}
+              {loading && (
+                <span className="absolute right-2 top-2 h-3 w-3 animate-pulse rounded-full bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.9)]" />
+              )}
+            </div>
 
-        <div className="hidden rounded-full border border-sky-300/25 bg-slate-950/80 px-3 py-1 text-[11px] font-black text-sky-100 shadow-lg backdrop-blur md:flex">
-          <MessageCircle size={12} className="mr-1.5" /> JARVIS
+            <div className="hidden rounded-full border border-sky-300/25 bg-slate-950/80 px-3 py-1 text-[11px] font-black text-sky-100 shadow-lg backdrop-blur md:flex">
+              <MessageCircle size={12} className="mr-1.5" /> JARVIS
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={hideJarvis}
+            className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full border border-sky-300/25 bg-slate-950/90 text-sky-100 shadow-lg backdrop-blur transition hover:translate-x-0.5 hover:bg-sky-500 hover:text-white"
+            aria-label="자비스를 오른쪽으로 숨기기"
+            title="자비스 숨기기"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
-      </button>
+      </div>
+
+      {hidden && (
+        <button
+          type="button"
+          onClick={showJarvis}
+          className="pointer-events-auto absolute bottom-8 right-0 flex h-16 w-8 translate-x-1 items-center justify-center rounded-l-2xl border border-r-0 border-sky-300/25 bg-slate-950/90 text-sky-100 shadow-2xl backdrop-blur transition hover:translate-x-0 hover:bg-sky-500 hover:text-white md:bottom-10"
+          aria-label="숨긴 자비스 다시 열기"
+          title="자비스 다시 열기"
+        >
+          <ChevronRight size={15} className="rotate-180" />
+        </button>
+      )}
 
       <style jsx>{`
         @keyframes jarvisFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-7px); }
+          0%,
+          100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-7px);
+          }
         }
 
         .jarvis-floating-button > div:first-child {
