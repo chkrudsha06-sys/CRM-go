@@ -11,6 +11,7 @@ import {
   FileText,
   MessageCircle,
   Phone,
+  PhoneCall,
   Plus,
   RefreshCcw,
   Save,
@@ -995,12 +996,16 @@ export default function CustomerDbPage() {
   const stats = useMemo(() => {
     const tm = records.filter((record) => record.activity_type === "TM").length;
     const cold = records.filter((record) => record.activity_type === "콜드톡").length;
-    const routeCounts = INTAKE_ROUTES.map((route) => ({
-      label: route,
-      value: records.filter((record) => record.intake_route === route).length,
-    }));
+    const today = new Date().toISOString().slice(0, 10);
+    const todayCount = records.filter((record) => String(record.created_at || "").slice(0, 10) === today).length;
+    const routeCounts = INTAKE_ROUTES
+      .map((route) => ({
+        route,
+        count: records.filter((record) => record.intake_route === route).length,
+      }))
+      .filter((item) => item.count > 0);
 
-    return { total: records.length, tm, cold, routeCounts };
+    return { total: records.length, tm, cold, todayCount, routeCounts };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -1551,50 +1556,56 @@ export default function CustomerDbPage() {
       }
 
     `}</style>
-      <section className="premium-hero mb-5 overflow-hidden p-5 md:p-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div
-              className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-[650]"
-              style={{
-                background: "var(--accent-subtle)",
-                border: "1px solid var(--accent-border)",
-                color: "var(--accent-text)",
-              }}
-            >
-              <Database size={14} /> VIP활동DB 발굴용 원천 DB
-            </div>
-            <h1 className="crm-title">고객DB</h1>
-            <p className="crm-subtitle mt-2 max-w-[820px]">
-              TM과 콜드톡 활동으로 확보한 원천 고객을 등록하고, 심사 후 VIP활동DB로 이관합니다.
-            </p>
+
+      <section className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
+          <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1 text-[11px]" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
+            <Database size={12} /> VIP활동DB 발굴용 원천 DB
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setShowForm(true)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
-              <Plus size={16} /> 신규고객등록
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
-                showToast("고객DB를 새로고침했습니다.");
-              }}
-              className="btn-premium btn-ghost"
-            >
-              <RefreshCcw size={15} /> 새로고침
-            </button>
+          <h1 className="crm-title">고객DB</h1>
+          <p className="crm-subtitle mt-1">TM과 콜드톡 활동으로 확보한 원천 고객을 등록하고, 심사 후 VIP활동DB로 이관합니다.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setShowForm(true)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
+            <Plus size={16} /> 신규고객등록
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
+              showToast("고객DB를 새로고침했습니다.");
+            }}
+            className="btn-premium btn-ghost"
+          >
+            <RefreshCcw size={15} /> 새로고침
+          </button>
+        </div>
+      </section>
+
+      <section className="mb-4 flex flex-wrap items-center gap-3">
+        {stats.routeCounts.map((item) => (
+          <div key={item.route} className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{item.route}</span>
+            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{item.count}건</span>
+          </div>
+        ))}
+        <div className="ml-auto flex items-center gap-3">
+          <div className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <PhoneCall size={13} style={{ color: "var(--info-text)" }} />
+            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>TM</span>
+            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.tm}건</span>
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <MessageCircle size={13} style={{ color: "var(--purple-text)" }} />
+            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>콜드톡</span>
+            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.cold}건</span>
           </div>
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-        <RouteSummaryCard items={stats.routeCounts} total={stats.total} />
-        <ActivitySummaryCard tm={stats.tm} cold={stats.cold} />
-      </section>
-
-      <section className="premium-card mb-5 p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
-          <label className="relative block">
+      <section className="mb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative block min-w-0 flex-1">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
@@ -1604,13 +1615,21 @@ export default function CustomerDbPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="고객명, 연락처, 소속회사, 메모, 활동노트 검색"
-              className="crm-search h-11 w-full pl-9 pr-3"
+              className="crm-search h-10 w-full pl-9 pr-3"
             />
           </label>
+          <div className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 DB</span>
+            <span className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.total}건</span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>당일등록</span>
+            <span className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.todayCount || 0}건</span>
+          </div>
           <select
             value={filterRoute}
             onChange={(event) => setFilterRoute(event.target.value)}
-            className="crm-search h-11 w-full px-3"
+            className="crm-search h-10 w-[150px] px-3"
           >
             <option value="">전체 유입경로</option>
             {INTAKE_ROUTES.map((route) => (
@@ -1622,7 +1641,7 @@ export default function CustomerDbPage() {
           <select
             value={filterActivity}
             onChange={(event) => setFilterActivity(event.target.value)}
-            className="crm-search h-11 w-full px-3"
+            className="crm-search h-10 w-[150px] px-3"
           >
             <option value="">전체 활동항목</option>
             {ACTIVITY_TYPES.map((type) => (
@@ -1636,18 +1655,18 @@ export default function CustomerDbPage() {
 
       <section className="premium-card overflow-hidden">
         <div className="crm-table-wrap max-h-[690px] overflow-auto rounded-[18px]">
-          <table className="crm-table customer-db-centered-table customer-db-force-center min-w-[1640px] table-fixed text-center">
+          <table className="crm-table customer-db-centered-table customer-db-force-center w-full table-fixed text-center">
             <colgroup>
-              <col className="w-[170px]" />
-              <col className="w-[110px]" />
-              <col className="w-[165px]" />
-              <col className="w-[190px]" />
-              <col className="w-[140px]" />
-              <col className="w-[150px]" />
-              <col className="w-[160px]" />
-              <col className="w-[230px]" />
-              <col className="w-[170px]" />
-              <col className="w-[330px]" />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5.5%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "28.5%" }} />
             </colgroup>
             <thead>
               <tr>
