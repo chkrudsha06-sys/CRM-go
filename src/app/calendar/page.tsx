@@ -665,7 +665,7 @@ export default function CalendarPage() {
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="stat-grid grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard label="이번 달 일정" value={stats.total} icon={CalendarDays} tone="info" />
           <StatCard label="오늘 일정" value={stats.today} icon={Clock} tone="cyan" />
           <StatCard label="선택일 일정" value={stats.selected} icon={Target} tone="warning" />
