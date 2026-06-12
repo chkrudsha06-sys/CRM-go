@@ -1223,3 +1223,45 @@ aside span {
     max-width: none !important;
   }
 }
+
+/* ── PDF / Print Stylesheet ── */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 10mm;
+  }
+
+  body, html { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  aside, nav, .print\\:hidden { display: none !important; }
+  .premium-page { overflow: visible !important; height: auto !important; }
+  .premium-shell { padding: 0 !important; max-width: 100% !important; }
+
+  /* 모든 카드 그림자/보더 간소화 */
+  .premium-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px !important; }
+
+  /* 스크롤 컨테이너 풀 높이 */
+  [class*="max-h-"] { max-height: none !important; overflow: visible !important; }
+
+  /* 2열 그리드 유지 */
+  .grid.gap-4.\\32xl\\:grid-cols-\\[1\\.25fr_\\.75fr\\] { grid-template-columns: 1.25fr .75fr !important; }
+  .grid.gap-4.xl\\:grid-cols-2 { grid-template-columns: 1fr 1fr !important; }
+
+  /* 퍼널 가로 유지 */
+  .lg\\:flex-row { flex-direction: row !important; }
+
+  /* 폰트 */
+  * { font-family: 'Pretendard', sans-serif !important; }
+  h1.crm-title { font-size: 22px !important; }
+
+  /* 프린트 타이틀 푸터 */
+  .premium-shell::after {
+    content: "분양회 CRM · 광고인㈜ 대외협력팀";
+    display: block;
+    text-align: center;
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+  }
+}
