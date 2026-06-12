@@ -4,7 +4,6 @@ import { logout, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
   Bell,
-  Bot,
   CalendarDays,
   Check,
   ChevronRight,
@@ -12,7 +11,6 @@ import {
   ChevronsRight,
   CircleDollarSign,
   Database,
-  FileText,
   Kanban,
   LayoutDashboard,
   LogOut,
@@ -75,11 +73,10 @@ type MenuItem = {
 const EXEC_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
-  { href: "/customer-register", label: "고객등록", icon: FileText },
   { href: "/customer-db", label: "고객DB", icon: Database },
   { href: "/contacts", label: "VIP활동DB", icon: Users },
   { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
-  { href: "/pipeline3", label: "파이프라인3", icon: Kanban },
+  { href: "/pipeline3", label: "파이프라인", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
   { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
   { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
@@ -101,7 +98,6 @@ const ADMIN_MENUS: MenuItem[] = [
 const PREFETCH_MENUS = [
   ...EXEC_MENUS,
   ...OPS_MENUS,
-  { href: "/ai-assistant", label: "AI assistant", icon: Bot },
   ...ADMIN_MENUS,
 ];
 
@@ -999,14 +995,6 @@ export default function Sidebar({
           ))}
         </div>
 
-        <div
-          className="my-3"
-          style={{ borderTop: "1px solid var(--border-subtle)" }}
-        />
-        <SectionTitle>AI</SectionTitle>
-        <div className="space-y-0.5">
-          <NavItem href="/ai-assistant" label="AI 어시스턴트" icon={Bot} />
-        </div>
 
         {isAdmin && (
           <>
