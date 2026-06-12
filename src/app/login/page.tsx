@@ -7,6 +7,7 @@ import styles from "./login.module.css";
 // ─────────────────────────────────────────────
 // 분양의신 CRM 로그인 페이지
 // 경로: app/login/page.tsx
+// 배경이미지: public/login-network-bg.png
 // 영상: public/login-video.mp4 (없으면 안내 화면 표시)
 // ─────────────────────────────────────────────
 
@@ -25,14 +26,14 @@ const SLIDES = [
     desc: "분양회 VIP 멤버십과 함께 분양 산업의 새로운 생태계를 만들어갑니다.",
   },
 ];
-const AUTO_INTERVAL = 6000; // 자동 전환 ms, 0이면 끔
+
+const AUTO_INTERVAL = 6000;
 
 const DEPTS = ["광고사업부", "대외협력팀", "TF1", "TF2", "마디1팀", "마디2팀"];
 
 export default function LoginPage() {
   const router = useRouter();
 
-  // ── 로그인 폼 상태 ──
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
@@ -40,14 +41,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ── 캐러셀 상태 ──
   const [slide, setSlide] = useState(0);
   const touchX = useRef<number | null>(null);
 
-  // ── 영상 상태 ──
   const [videoReady, setVideoReady] = useState(false);
 
-  // ── 계정요청 모달 상태 ──
   const [modalOpen, setModalOpen] = useState(false);
   const [requestDone, setRequestDone] = useState(false);
   const [showReqPw, setShowReqPw] = useState(false);
@@ -60,7 +58,6 @@ export default function LoginPage() {
     reason: "",
   });
 
-  // 캐러셀 자동 전환
   useEffect(() => {
     if (AUTO_INTERVAL <= 0) return;
     const t = setInterval(
@@ -70,7 +67,6 @@ export default function LoginPage() {
     return () => clearInterval(t);
   }, [slide]);
 
-  // ESC로 모달 닫기
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setModalOpen(false);
@@ -79,7 +75,6 @@ export default function LoginPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ── 로그인 처리 ──
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -94,15 +89,8 @@ export default function LoginPage() {
     }
   }
 
-  // ── 계정요청 처리 ──
   async function handleRequest(e: FormEvent) {
     e.preventDefault();
-    // ── TODO: 실서비스 연동 ──
-    // await fetch('/api/account-request', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(req),
-    // });
     console.log("계정 요청:", req);
     setRequestDone(true);
   }
@@ -118,8 +106,51 @@ export default function LoginPage() {
   const prevSlide = () => setSlide((s) => (s - 1 + SLIDES.length) % SLIDES.length);
 
   return (
-    <main className={styles.page}>
-      <div className={styles.panel}>
+    <main
+      className={styles.page}
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "#050505",
+      }}
+    >
+      {/* 로그인 전체 배경 이미지 */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 0,
+          backgroundImage: "url('/login-network-bg.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.62,
+          filter: "contrast(1.08) brightness(0.82)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* 배경 위 어두운 그라데이션 */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 0,
+          background:
+            "radial-gradient(circle at 72% 42%, rgba(255,255,255,0.08), transparent 34%), linear-gradient(135deg, rgba(0,0,0,0.58), rgba(0,0,0,0.78))",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        className={styles.panel}
+        style={{
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
         {/* ═════════ 좌측: 영상 + 캐러셀 ═════════ */}
         <section className={styles.mediaSide}>
           <video
@@ -143,7 +174,6 @@ export default function LoginPage() {
           )}
 
           <div className={styles.mediaLogo}>
-            {/* 로고: public/wordmark.png */}
             <img className={styles.wordmark} src="/wordmark.png" alt="분양의신" />
             <div className={styles.logoText}>
               <span>(주)광고인</span>
@@ -153,7 +183,6 @@ export default function LoginPage() {
 
           <div className={styles.mediaShade} />
 
-          {/* 텍스트 캐러셀: 클릭 = 다음, 스와이프 = 좌우 이동 */}
           <div className={styles.captionArea}>
             <div className={styles.captionBars}>
               {SLIDES.map((_, i) => (
@@ -196,7 +225,6 @@ export default function LoginPage() {
         <section className={styles.formSide}>
           <div className={styles.formInner}>
             <div className={styles.formLogo}>
-              {/* 아이콘 로고: public/logo.png */}
               <img src="/logo.png" alt="분양의신 로고" />
             </div>
             <h1 className={styles.formTitle}>다시 오셨군요!</h1>
