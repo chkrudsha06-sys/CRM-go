@@ -133,6 +133,8 @@ const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
 const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
 const CORE_VIP_GRADES = ["마스터", "챌린저", "브론즈"];
+const PAYMENT_CHANNEL_OPTIONS = ["자동이체 (효성CMS)", "카드 (사이다페이)", "기타 (별도입금)"];
+const PAYMENT_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 const MONTH_LABEL_FORMAT = new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit" });
 const TODAY = new Date();
 
@@ -515,21 +517,21 @@ function FunnelStage({ label, value, sub, tone, rate, isLast }: { label: string;
   const c = toneStyle(tone);
   return (
     <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 lg:flex-row lg:gap-0">
-      <div className="min-w-0 flex-1 rounded-[12px] border p-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="min-w-0 flex-1 rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
         <div className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.dot }} />
           <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
         </div>
-        <p className="mt-1.5 text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
-          {value.toLocaleString()}<span className="ml-0.5 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
+        <p className="mt-1 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+          {value.toLocaleString()}<span className="ml-0.5 text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
         </p>
-        <p className="mt-1 truncate text-[11px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+        <p className="mt-1 truncate text-[10px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
       </div>
       {!isLast && (
-        <div className="flex shrink-0 items-center justify-center px-1 py-0.5 lg:w-[58px] lg:px-1.5 lg:py-0">
+        <div className="flex shrink-0 items-center justify-center py-0.5 lg:w-[68px] lg:py-0">
           {rate !== null && rate !== undefined ? (
             <span
-              className="inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[12px] font-bold tabular-nums tracking-[-0.02em]"
+              className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums tracking-[-0.02em]"
               style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
             >
               {rate}% <ArrowRight size={11} className="rotate-90 lg:rotate-0" />
@@ -757,13 +759,12 @@ export default function HomePage() {
     };
   }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
 
-  /* 당월 영업 퍼널 */
+  /* 당월 영업 퍼널: 4단계 */
   const funnelStages = useMemo(() => {
     return [
       { label: "고객DB 신규", value: monthContacts.length, sub: "당월 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthContacts.length) },
       { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: percent(stats.vipThisMonth, Math.max(stats.firstTouch, 1)) },
-      { label: "VIP 이관·등급심사", value: stats.vipThisMonth, sub: `현재 VIP ${stats.currentPipelineTotal}명`, tone: "purple" as ToneName, rate: null },
-      { label: "파이프라인 진행", value: stats.activePipeline, sub: `리드 ${stats.stageCounts["리드"] || 0} · 프로스 ${stats.stageCounts["프로스펙팅"] || 0} · 클로징 ${stats.stageCounts["딜클로징"] || 0}`, tone: "warning" as ToneName, rate: percent(stats.retention, Math.max(stats.currentPipelineTotal, 1)) },
+      { label: "VIP 이관·등급심사", value: stats.vipThisMonth, sub: `현재 VIP ${stats.currentPipelineTotal}명`, tone: "purple" as ToneName, rate: percent(stats.retention, Math.max(stats.vipThisMonth, 1)) },
       { label: "계약 · 리텐션", value: stats.retention, sub: `당월 계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
     ];
   }, [monthContacts.length, stats]);
@@ -874,16 +875,18 @@ export default function HomePage() {
       const ownerVip = ownerVisible.filter(isVipContact);
       const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInMonth(row.payment_date || row.created_at, selectedMonth));
       const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      const masterChallenger = ownerVisible.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length;
+      const bronze = ownerVisible.filter((contact) => isGradeContact(contact, "브론즈")).length;
       return {
         owner,
         db: ownerMonthContacts.length,
-        vip: ownerVip.length,
+        masterChallenger,
+        bronze,
         lead: ownerStage("리드"),
         prospect: ownerStage("프로스펙팅"),
         closing: ownerStage("딜클로징"),
-        retention: ownerStage("리텐션"),
-        churn: ownerStage("이탈/탈퇴"),
         contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length,
+        churn: ownerStage("이탈/탈퇴"),
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
       };
     });
@@ -1051,19 +1054,11 @@ export default function HomePage() {
                       <FunnelStage key={stage.label} {...stage} />
                     ))}
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
-                      VIP 계약전환율 <strong style={{ color: "var(--success-text)" }}>{stats.contractRate}%</strong>
-                    </span>
-                    <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
-                      당월 순매출 <strong style={{ color: "var(--text-strong)" }}>{money(stats.totalSales)}</strong>
-                    </span>
-                  </div>
                 </div>
               </Panel>
 
               <Panel className="flex h-full flex-col">
-                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급 가입 현황" desc="자동등급 심사 실시간 집계" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급별 가입현황" desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
                 <div className="flex flex-1 flex-col justify-center gap-2 p-4">
                   {gradeJoinRows.map((row) => {
                     const c = toneStyle(row.tone);
@@ -1088,28 +1083,39 @@ export default function HomePage() {
 
                 {/* 담당자별 파이프라인 현황 */}
                 <Panel>
-                  <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="신규DB · VIP · 관리구간 · 계약 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
+                  <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
                   <div className="overflow-x-auto p-2">
                     <table className="w-full border-separate" style={{ borderSpacing: "0 4px" }}>
                       <thead>
                         <tr>
-                          {["담당자", "신규DB", "VIP", "리드", "프로스펙팅", "클로징", "계약", "이탈", "매출"].map((head, index) => (
-                            <th key={head} className={`px-2 pb-1 text-[11px] font-semibold tracking-[-0.01em] ${index === 0 ? "text-left" : "text-right"}`} style={{ color: "var(--text-subtle)" }}>{head}</th>
-                          ))}
+                          <th className="w-[72px] px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
+                          <th className="border-r px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>리드</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>프로스펙팅</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>클로징</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--success-text)" }}>계약</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--danger-text)" }}>이탈</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--cyan-text)" }}>매출</th>
                         </tr>
                       </thead>
                       <tbody>
                         {teamRows.map((row) => {
                           const isMine = normalizePersonName(row.owner) === normalizePersonName(activeOwner);
+                          const cellCls = "px-1.5 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.02em]";
                           return (
-                            <tr key={row.owner} className="rounded-[10px]" style={{ background: isMine ? "var(--surface-selected)" : "var(--surface-2)" }}>
-                              <td className="rounded-l-[10px] px-2.5 py-2.5 text-[12px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
-                              {[row.db, row.vip, row.lead, row.prospect, row.closing].map((value, index) => (
-                                <td key={index} className="px-2 py-2.5 text-right text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text)" }}>{value}</td>
-                              ))}
-                              <td className="px-2 py-2.5 text-right text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--success-text)" }}>{row.contracts}</td>
-                              <td className="px-2 py-2.5 text-right text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: row.churn > 0 ? "var(--danger-text)" : "var(--text-faint)" }}>{row.churn}</td>
-                              <td className="rounded-r-[10px] px-2.5 py-2.5 text-right text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--cyan-text)" }}>{money(row.sales)}</td>
+                            <tr key={row.owner} style={{ background: isMine ? "var(--surface-selected)" : "var(--surface-2)" }}>
+                              <td className="rounded-l-[10px] px-1.5 py-2.5 text-center text-[12px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.db}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.masterChallenger}</td>
+                              <td className={`${cellCls} border-r`} style={{ color: "var(--text)", borderColor: "var(--border)" }}>{row.bronze}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.lead}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.prospect}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.closing}</td>
+                              <td className={cellCls} style={{ color: "var(--success-text)" }}>{row.contracts}</td>
+                              <td className={cellCls} style={{ color: row.churn > 0 ? "var(--danger-text)" : "var(--text-faint)" }}>{row.churn}</td>
+                              <td className={`${cellCls} rounded-r-[10px]`} style={{ color: "var(--cyan-text)" }}>{money(row.sales)}</td>
                             </tr>
                           );
                         })}
@@ -1416,11 +1422,17 @@ export default function HomePage() {
                   <div className="grid grid-cols-2 gap-2.5">
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>결제채널</span>
-                      <input value={editForm.payment_channel} onChange={(event) => setEditForm((prev) => ({ ...prev, payment_channel: event.target.value }))} placeholder="예: 효성CMS, 사이다페이" className="crm-search w-full px-3" />
+                      <select value={editForm.payment_channel} onChange={(event) => setEditForm((prev) => ({ ...prev, payment_channel: event.target.value }))} className="crm-search w-full px-3">
+                        <option value="">선택해주세요</option>
+                        {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
                     </label>
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
-                      <input value={editForm.regular_payment_date} onChange={(event) => setEditForm((prev) => ({ ...prev, regular_payment_date: event.target.value }))} placeholder="예: 25 (매월 25일)" className="crm-search w-full px-3" />
+                      <select value={editForm.regular_payment_date} onChange={(event) => setEditForm((prev) => ({ ...prev, regular_payment_date: event.target.value }))} className="crm-search w-full px-3">
+                        <option value="">선택해주세요</option>
+                        {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
+                      </select>
                     </label>
                   </div>
                 </div>
