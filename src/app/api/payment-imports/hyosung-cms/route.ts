@@ -261,7 +261,8 @@ async function findMatchedMember(payment: Pick<NormalizedPayment, "memberName" |
   return null;
 }
 
-async function findExistingImport(provider: string, externalPaymentId: string) {
+async function findExistingImport(provider: string, externalPaymentId: string, payment?: NormalizedPayment) {
+  // 1차: 현재 ID로 조회
   const { data, error } = await supabase
     .from("external_payment_records")
     .select("id, sales_record_id, import_status")
@@ -270,8 +271,31 @@ async function findExistingImport(provider: string, externalPaymentId: string) {
     .maybeSingle();
 
   if (error) throw error;
+  if (data) return data;
 
-  return data;
+  // 2차: 구버전 ID 포맷으로 조회 (회원번호+이름+청구월 prefix 매칭)
+  if (payment) {
+    const prefix = [
+      provider,
+      payment.memberNumber || "NO_MEMBER",
+      payment.memberName || "NO_NAME",
+      payment.billingMonth || "NO_MONTH",
+    ].map((v) => String(v).trim().replace(/\s+/g, "")).join("_");
+
+    const { data: fallback } = await supabase
+      .from("external_payment_records")
+      .select("id, sales_record_id, import_status")
+      .eq("provider", provider)
+      .like("external_payment_id", `${prefix}%`)
+      .not("sales_record_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fallback) return fallback;
+  }
+
+  return null;
 }
 
 async function saveExternalPaymentRecord(payment: NormalizedPayment, params: {
@@ -399,7 +423,7 @@ async function importPayments(payments: NormalizedPayment[]) {
       if (matchedMember?.bunyanghoe_number) {
         payment.memberNumber = toText(matchedMember.bunyanghoe_number);
       }
-      const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId);
+      const existing = await findExistingImport("HYOSUNG_CMS", payment.externalPaymentId, payment);
 
       if (existing?.sales_record_id) {
         // 실제 매출 레코드가 존재하는지 확인 (삭제된 경우 재생성 허용)
