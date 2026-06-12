@@ -971,7 +971,7 @@ function SummaryTab({
             <p className="crm-tiny">고객DB와 연동되는 기본 정보</p>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InfoItem label="고객명" value={customer.name} />
           <InfoItem label="직급" value={customer.title} />
           <InfoItem label="연락처" value={customer.phone} />
