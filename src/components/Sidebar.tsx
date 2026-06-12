@@ -206,7 +206,7 @@ async function upsertPresence(user: CRMUser) {
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="px-2 pb-1.5 pt-3 text-[10px] font-[760] uppercase tracking-[0.13em]"
+      className="px-2 pb-1.5 pt-3 text-[10px] font-normal uppercase tracking-[0.13em]"
       style={{ color: "var(--text-faint)" }}
     >
       {children}
@@ -477,7 +477,7 @@ export default function Sidebar({
       <Link
         href={href}
         onClick={() => onMobileClose?.()}
-        className="group flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-[650] tracking-[-0.018em] transition-all"
+        className="group flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-normal tracking-[-0.018em] transition-all"
         style={{
           background: active ? "var(--accent-subtle)" : "transparent",
           border: active
@@ -527,14 +527,14 @@ export default function Sidebar({
         <div className="flex items-center gap-2">
           <Bell size={14} style={{ color: "var(--accent-text)" }} />
           <span
-            className="text-[13px] font-[760] tracking-[-0.025em]"
+            className="text-[13px] font-normal tracking-[-0.025em]"
             style={{ color: "var(--text)" }}
           >
             알림
           </span>
           {unreadCount > 0 && (
             <span
-              className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white"
+              className="rounded-full px-1.5 py-0.5 text-[10px] font-normal text-white"
               style={{ background: "var(--danger)" }}
             >
               {unreadCount}
@@ -547,7 +547,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onMarkAll}
-              className="rounded-[8px] px-2 py-1 text-[11px] font-bold"
+              className="rounded-[8px] px-2 py-1 text-[11px] font-normal"
               style={{ color: "var(--accent-text)" }}
             >
               전체 읽음
@@ -569,7 +569,7 @@ export default function Sidebar({
           <div className="flex flex-col items-center justify-center gap-2 py-11">
             <Bell size={24} style={{ color: "var(--text-disabled)" }} />
             <p
-              className="text-[12px] font-semibold"
+              className="text-[12px] font-normal"
               style={{ color: "var(--text-faint)" }}
             >
               알림이 없습니다
@@ -631,7 +631,7 @@ export default function Sidebar({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
                     <span
-                      className="line-clamp-1 text-[12px] font-[740] tracking-[-0.02em]"
+                      className="line-clamp-1 text-[12px] font-normal tracking-[-0.02em]"
                       style={{
                         color: notification.is_read
                           ? "var(--text-subtle)"
@@ -670,7 +670,7 @@ export default function Sidebar({
                       )}
                     </span>
                     <span
-                      className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                      className="rounded-full px-1.5 py-0.5 text-[10px] font-normal"
                       style={{
                         background: bg,
                         color,
@@ -717,7 +717,7 @@ export default function Sidebar({
 
           <div className="min-w-0 flex-1">
             <p
-              className="line-clamp-1 text-[14px] font-[780] tracking-[-0.04em]"
+              className="line-clamp-1 text-[14px] font-normal tracking-[-0.04em]"
               style={{ color: "var(--text-strong)" }}
             >
               분양회 CRM
@@ -748,7 +748,7 @@ export default function Sidebar({
       >
         <div className="flex items-center gap-3">
           <div
-            className="crm-avatar flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[16px] text-[17px] font-[860]"
+            className="crm-avatar flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[16px] text-[17px] font-normal"
             style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)" }}
           >
             {initials(user.name)}
@@ -757,13 +757,13 @@ export default function Sidebar({
           <div className="flex min-h-12 min-w-0 flex-1 items-center">
             <div className="flex min-w-0 items-center gap-2 leading-none">
               <p
-                className="line-clamp-1 text-[22px] font-[900] tracking-[-0.045em]"
+                className="line-clamp-1 text-[22px] font-normal tracking-[-0.045em]"
                 style={{ color: "var(--text-strong)" }}
               >
                 {user.name}
               </p>
               <span
-                className="line-clamp-1 text-[16px] font-[820] tracking-[-0.025em]"
+                className="line-clamp-1 text-[16px] font-normal tracking-[-0.025em]"
                 style={{ color: "var(--text-subtle)" }}
               >
                 {user.title}
@@ -781,7 +781,7 @@ export default function Sidebar({
         >
           <div className="flex items-center justify-between gap-2">
             <span
-              className="text-[11px] font-[780]"
+              className="text-[11px] font-normal"
               style={{ color: "var(--text-faint)" }}
             >
               나의 슬로건
@@ -793,7 +793,7 @@ export default function Sidebar({
                   setSloganDraft(slogan);
                   setSloganEditing(true);
                 }}
-                className="flex h-6 items-center gap-1 rounded-[8px] px-2 text-[10px] font-bold"
+                className="flex h-6 items-center gap-1 rounded-[8px] px-2 text-[10px] font-normal"
                 style={{
                   background: "var(--surface)",
                   border: "1px solid var(--border)",
@@ -813,7 +813,7 @@ export default function Sidebar({
                 placeholder="나만의 슬로건을 입력하세요."
                 rows={3}
                 maxLength={140}
-                className="w-full resize-none rounded-[12px] px-3 py-2 text-[12px] font-[760] leading-relaxed outline-none"
+                className="w-full resize-none rounded-[12px] px-3 py-2 text-[12px] font-normal leading-relaxed outline-none"
                 style={{
                   background: "var(--surface)",
                   border: "1px solid var(--border-2)",
@@ -829,13 +829,13 @@ export default function Sidebar({
               >
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <span
-                    className="text-[10px] font-[800] tracking-[-0.01em]"
+                    className="text-[10px] font-normal tracking-[-0.01em]"
                     style={{ color: "var(--text-faint)" }}
                   >
                     이모티콘 빠른 입력
                   </span>
                   <span
-                    className="text-[10px] font-[700]"
+                    className="text-[10px] font-normal"
                     style={{ color: "var(--text-disabled)" }}
                   >
                     클릭하면 추가
@@ -870,7 +870,7 @@ export default function Sidebar({
                     setSloganDraft(slogan);
                     setSloganEditing(false);
                   }}
-                  className="rounded-[9px] px-2.5 py-1.5 text-[11px] font-bold"
+                  className="rounded-[9px] px-2.5 py-1.5 text-[11px] font-normal"
                   style={{
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
@@ -883,7 +883,7 @@ export default function Sidebar({
                   type="button"
                   onClick={saveSlogan}
                   disabled={sloganSaving}
-                  className="inline-flex items-center gap-1 rounded-[9px] px-2.5 py-1.5 text-[11px] font-bold text-white disabled:opacity-60"
+                  className="inline-flex items-center gap-1 rounded-[9px] px-2.5 py-1.5 text-[11px] font-normal text-white disabled:opacity-60"
                   style={{ background: "var(--accent)" }}
                 >
                   <Check size={12} /> {sloganSaving ? "저장중" : "저장"}
@@ -892,7 +892,7 @@ export default function Sidebar({
             </div>
           ) : (
             <p
-              className="mt-2 whitespace-pre-wrap break-words text-[12px] font-[820] leading-[1.55] tracking-[-0.02em]"
+              className="mt-2 whitespace-pre-wrap break-words text-[12px] font-normal leading-[1.55] tracking-[-0.02em]"
               style={{ color: "var(--text-strong)" }}
             >
               {slogan || "슬로건을 입력해보세요."}
@@ -914,7 +914,7 @@ export default function Sidebar({
               setChatOpen((prev) => !prev);
               window.setTimeout(() => void refreshChatUnread(), 450);
             }}
-            className="relative flex h-10 items-center justify-center gap-2 rounded-[12px] text-[12px] font-[760]"
+            className="relative flex h-10 items-center justify-center gap-2 rounded-[12px] text-[12px] font-normal"
             style={{
               background: chatOpen
                 ? "var(--accent-subtle)"
@@ -933,7 +933,7 @@ export default function Sidebar({
             <MessageCircle size={16} /> 채팅
             {chatUnreadCount > 0 && (
               <span
-                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-normal text-white"
                 style={{ background: "var(--danger)" }}
               >
                 {chatUnreadCount > 99 ? "99+" : chatUnreadCount}
@@ -947,7 +947,7 @@ export default function Sidebar({
               setChatOpen(false);
               onBellClick?.();
             }}
-            className="relative flex h-10 items-center justify-center gap-2 rounded-[12px] text-[12px] font-[760]"
+            className="relative flex h-10 items-center justify-center gap-2 rounded-[12px] text-[12px] font-normal"
             style={{
               background: showPanel
                 ? "var(--accent-subtle)"
@@ -961,7 +961,7 @@ export default function Sidebar({
             <Bell size={16} /> 알림
             {unreadCount > 0 && (
               <span
-                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-normal text-white"
                 style={{ background: "var(--danger)" }}
               >
                 {unreadCount > 99 ? "99+" : unreadCount}
@@ -1031,7 +1031,7 @@ export default function Sidebar({
         <button
           type="button"
           onClick={toggleDark}
-          className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-[650] transition-colors"
+          className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-normal transition-colors"
           style={{ color: "var(--text-subtle)" }}
         >
           <span
@@ -1048,7 +1048,7 @@ export default function Sidebar({
         <button
           type="button"
           onClick={handleLogout}
-          className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-[650] transition-colors"
+          className="flex h-9 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-normal transition-colors"
           style={{ color: "var(--text-subtle)" }}
         >
           <span
