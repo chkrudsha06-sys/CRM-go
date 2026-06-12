@@ -145,12 +145,12 @@ function getCell(row: HyosungRow, ...keys: string[]) {
 }
 
 function buildExternalPaymentId(payment: Omit<NormalizedPayment, "externalPaymentId">) {
+  // 회원번호 + 청구월 고정 식별자 (결제일/금액/상태는 버전마다 달라질 수 있어 제외)
   return [
     "HYOSUNG_CMS",
     payment.memberNumber || "NO_MEMBER",
     payment.memberName || "NO_NAME",
     payment.billingMonth || "NO_MONTH",
-    payment.paidAt || "NO_DATE",
   ]
     .map((value) => String(value).trim().replace(/\s+/g, "").replace(/[|]/g, ""))
     .join("_");
@@ -184,7 +184,6 @@ function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayme
   };
 
   const isPaid =
-    paymentWithoutId.collectionStatus === "완납" &&
     paymentWithoutId.paymentStatus === "결제완료" &&
     paymentWithoutId.paidAmount > 0;
 
