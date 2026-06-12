@@ -5,7 +5,11 @@
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  background: #000;
+  background-color: #000;
+  background-image: url("/login-network-bg.jpg");
+  background-size: 100% 100%;
+  background-position: center center;
+  background-repeat: no-repeat;
   font-family: "Pretendard", sans-serif;
   display: flex;
   align-items: center;
@@ -20,7 +24,7 @@
   overflow: hidden;
   transform: scale(var(--scene-scale));
   transform-origin: center center;
-  background: #000;
+  background: transparent;
 }
 
 .backgroundLayer {
@@ -28,7 +32,7 @@
   inset: 0;
   z-index: 0;
   background-image: url("/login-network-bg.jpg");
-  background-size: cover;
+  background-size: 100% 100%;
   background-position: center center;
   background-repeat: no-repeat;
   opacity: 1;
@@ -45,16 +49,16 @@
   height: 1010px;
   transform: translate(-50%, -50%);
   background: #0a0a0c;
-  border: 4px solid rgba(37, 99, 255, 0.95);
+  border: 7px solid #2f3238;
   border-radius: 30px;
   display: grid;
   grid-template-columns: 455px 1fr;
   overflow: hidden;
   box-sizing: border-box;
   box-shadow:
-    0 0 0 1px rgba(76, 195, 236, 0.2),
-    0 0 34px rgba(37, 99, 255, 0.28),
-    0 46px 120px rgba(0, 0, 0, 0.62);
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 34px rgba(80, 84, 92, 0.26),
+    0 46px 120px rgba(0, 0, 0, 0.68);
 }
 
 /* ═════════ 좌측: 영상 패널 ═════════ */
