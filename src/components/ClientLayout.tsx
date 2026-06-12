@@ -1,7 +1,6 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
-import DailyActivityReminderPopup from "@/components/DailyActivityReminderPopup";
 import { logout, validateSession, getCurrentUser, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Bell, Menu, Send, Truck, X } from "lucide-react";
@@ -63,7 +62,9 @@ function NotifToast({ notif, onClose }: { notif: Notification; onClose: () => vo
   const handleClick = () => {
     onClose();
     if (notif.source_type === "완판트럭") router.push("/wanpan-truck");
-    if ((notif.source_type === "결제&업무요청" || notif.source_type === "업무전달" || notif.source_type === "결제요청")) router.push("/tasks");
+    if (notif.source_type === "결제&업무요청" || notif.source_type === "업무전달" || notif.source_type === "결제요청") {
+      router.push("/tasks");
+    }
   };
 
   return (
@@ -392,7 +393,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <p className="line-clamp-1 text-[13px] font-[760] tracking-[-0.03em]" style={{ color: "var(--text)" }}>
               {getMobileTitle(pathname)}
             </p>
-            <p className="crm-tiny">{user.name} · {user.title}</p>
+            <p className="crm-tiny">
+              {user.name} · {user.title}
+            </p>
           </div>
         </div>
 
@@ -411,18 +414,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         >
           <Bell size={16} />
           {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white" style={{ background: "var(--danger)" }}>
+            <span
+              className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+              style={{ background: "var(--danger)" }}
+            >
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </button>
       </div>
 
-      <main className="min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">
-        {children}
-      </main>
-
-      <DailyActivityReminderPopup user={user} />
+      <main className="min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">{children}</main>
 
       <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col gap-3">
         {toastQueue.slice(0, 3).map((notification) => (
@@ -449,7 +451,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               <div className="flex gap-3">
                 <div
                   className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px]"
-                  style={{ background: "var(--purple-bg)", border: "1px solid var(--purple-border)", color: "var(--purple-text)" }}
+                  style={{
+                    background: "var(--purple-bg)",
+                    border: "1px solid var(--purple-border)",
+                    color: "var(--purple-text)",
+                  }}
                 >
                   <Send size={15} />
                 </div>
@@ -476,7 +482,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   </p>
                   <span
                     className="mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold"
-                    style={{ background: "var(--purple-bg)", border: "1px solid var(--purple-border)", color: "var(--purple-text)" }}
+                    style={{
+                      background: "var(--purple-bg)",
+                      border: "1px solid var(--purple-border)",
+                      color: "var(--purple-text)",
+                    }}
                   >
                     결제&업무요청
                   </span>
