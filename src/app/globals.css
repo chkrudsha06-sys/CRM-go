@@ -763,58 +763,58 @@ a {
 
 .crm-title {
   font-size: var(--fs-page-title) !important;
-  font-weight: var(--fw-title) !important;
+  font-weight: 700 !important;
   letter-spacing: -0.052em !important;
 }
 
 .crm-subtitle {
   font-size: 13px !important;
-  font-weight: 570 !important;
+  font-weight: 400 !important;
   letter-spacing: -0.02em !important;
   line-height: 1.5 !important;
 }
 
 .crm-section-title {
   font-size: var(--fs-section-title) !important;
-  font-weight: var(--fw-section) !important;
+  font-weight: 600 !important;
 }
 
 .crm-card-title {
   font-size: var(--fs-card-title) !important;
-  font-weight: var(--fw-strong) !important;
+  font-weight: 600 !important;
 }
 
 .crm-body {
   font-size: var(--fs-body) !important;
-  font-weight: var(--fw-body) !important;
+  font-weight: 400 !important;
   line-height: 1.66 !important;
 }
 
 .crm-row-main {
   font-size: var(--fs-row-main) !important;
-  font-weight: var(--fw-strong) !important;
+  font-weight: 400 !important;
   letter-spacing: -0.032em !important;
 }
 
 .crm-row-sub {
   font-size: var(--fs-row-sub) !important;
-  font-weight: 610 !important;
+  font-weight: 400 !important;
 }
 
 .crm-meta {
   font-size: var(--fs-meta) !important;
-  font-weight: 650 !important;
+  font-weight: 400 !important;
 }
 
 .crm-tiny {
   font-size: var(--fs-tiny) !important;
-  font-weight: 670 !important;
+  font-weight: 400 !important;
 }
 
 .btn-premium {
   height: 36px !important;
   font-size: var(--fs-button) !important;
-  font-weight: var(--fw-ui) !important;
+  font-weight: 400 !important;
   letter-spacing: -0.02em !important;
 }
 
@@ -822,27 +822,27 @@ a {
 .crm-table .badge-premium {
   height: 24px !important;
   font-size: var(--fs-badge) !important;
-  font-weight: 740 !important;
+  font-weight: 400 !important;
 }
 
 .crm-table thead th {
   height: 44px !important;
   font-size: 11.8px !important;
-  font-weight: 760 !important;
+  font-weight: 400 !important;
   letter-spacing: -0.01em !important;
 }
 
 .crm-table tbody td {
   height: 66px !important;
   font-size: 13.6px !important;
-  font-weight: 590 !important;
+  font-weight: 400 !important;
 }
 
 input,
 textarea,
 select {
   font-size: 13.3px !important;
-  font-weight: 610 !important;
+  font-weight: 400 !important;
   letter-spacing: -0.018em !important;
 }
 
@@ -851,7 +851,7 @@ select {
 .crm-search {
   height: 38px !important;
   font-size: 13px !important;
-  font-weight: 660 !important;
+  font-weight: 400 !important;
 }
 
 .slide-panel-body {
@@ -861,9 +861,19 @@ select {
 
 .slide-panel-header h2 {
   font-family: var(--font-sans) !important;
-  font-weight: 790 !important;
+  font-weight: 600 !important;
   letter-spacing: -0.052em !important;
 }
+
+/* ── Dashboard: blanket 400 reset + re-bold only titles & values ── */
+.premium-page,
+.premium-page * {
+  font-weight: 400 !important;
+}
+/* Tailwind bold classes re-enabled inside dashboard (titles & values keep these) */
+.premium-page .font-semibold { font-weight: 600 !important; }
+.premium-page .font-bold { font-weight: 700 !important; }
+.premium-page .crm-title { font-weight: 700 !important; }
 
 /* Sidebar text is defined mostly in component classes; this raises it globally */
 aside nav a,
