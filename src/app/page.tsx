@@ -18,6 +18,7 @@ import {
   Clock3,
   CreditCard,
   Database,
+  FileDown,
   FileText,
   Filter,
   LineChart,
@@ -221,6 +222,35 @@ function isInMonth(value: string | null | undefined, selectedMonth: string) {
   return date >= start && date < end;
 }
 
+type FilterMode = "daily" | "weekly" | "monthly";
+
+function getFilterRange(mode: FilterMode, monthNum: number, year: number): { start: Date; end: Date } {
+  if (mode === "daily") {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    const e = new Date(d); e.setHours(23, 59, 59, 999);
+    return { start: d, end: e };
+  }
+  if (mode === "weekly") {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dow = today.getDay();
+    const mon = new Date(today); mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
+    return { start: mon, end: sun };
+  }
+  const start = new Date(year, monthNum - 1, 1);
+  const end = new Date(year, monthNum, 0, 23, 59, 59, 999);
+  return { start, end };
+}
+
+function isInRange(value: string | null | undefined, start: Date, end: Date) {
+  const date = parseDate(value);
+  if (!date) return false;
+  return date >= start && date <= end;
+}
+
+const FILTER_MODE_LABELS: Record<FilterMode, string> = { daily: "당일", weekly: "주간", monthly: "월간" };
+const MONTH_NUMS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
 function daysBetween(from?: string | null, to = new Date()) {
   const date = parseDate(from);
   if (!date) return null;
@@ -324,12 +354,12 @@ function isGradeContact(contact: ContactRow, gradeName: string) {
   return normalizeText(contact.customer_grade).includes(normalizeText(gradeName));
 }
 
-function isContractedInMonth(contact: ContactRow, selectedMonth: string) {
-  return isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth));
+function isContractedInMonth(contact: ContactRow, start: Date, end: Date) {
+  return isContracted(contact) && (isInRange(contact.contract_date, start, end) || isInRange(contact.updated_at, start, end) || isInRange(contact.created_at, start, end));
 }
 
-function touchedInMonth(contact: ContactRow, selectedMonth: string) {
-  return isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth);
+function touchedInMonth(contact: ContactRow, start: Date, end: Date) {
+  return isInRange(contact.vip_transferred_at, start, end) || isInRange(contact.updated_at, start, end) || isInRange(contact.created_at, start, end);
 }
 
 function isContracted(contact: ContactRow) {
@@ -351,19 +381,19 @@ function latestActivityDate(contact: ContactRow, notesByContact: Map<string, Not
   return latestNote || contact.updated_at || contact.created_at || null;
 }
 
-function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, selectedMonth: string) {
+function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, start: Date, end: Date) {
   const activity = normalizeText(contact.activity_type);
   const notes = notesByContact.get(String(contact.id)) || [];
   const hasTypedNote = notes.some((note) => {
     const content = normalizeText(note.content);
-    const inMonth = isInMonth(note.created_at || note.note_date, selectedMonth);
+    const inMonth = isInRange(note.created_at || note.note_date, start, end);
     return inMonth && (content.includes("TM") || content.includes("콜드톡") || content.includes("활동완료") || content.includes("녹취"));
   });
   return (
     activity.includes("TM") ||
     activity.includes("콜드톡") ||
     Boolean(contact.has_tm) ||
-    isInMonth(contact.tm_date, selectedMonth) ||
+    isInRange(contact.tm_date, start, end) ||
     hasTypedNote
   );
 }
@@ -554,8 +584,10 @@ export default function HomePage() {
   const [kpis, setKpis] = useState<KpiRow[]>([]);
   const [me, setMe] = useState<CRMUserLite | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
+  const [filterMode, setFilterMode] = useState<FilterMode>("monthly");
+  const [filterMonthNum, setFilterMonthNum] = useState(new Date().getMonth() + 1);
+  const [filterYear] = useState(new Date().getFullYear());
   const [ownerFilter, setOwnerFilter] = useState("전체");
-  const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -611,6 +643,19 @@ export default function HomePage() {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  /* 필터 범위 계산 */
+  const filterRange = useMemo(() => getFilterRange(filterMode, filterMonthNum, filterYear), [filterMode, filterMonthNum, filterYear]);
+  const rangeStart = filterRange.start;
+  const rangeEnd = filterRange.end;
+
+  useEffect(() => {
+    if (filterMode === "monthly") {
+      setSelectedMonth(`${filterYear}-${String(filterMonthNum).padStart(2, "0")}`);
+    } else {
+      setSelectedMonth(monthKey(new Date()));
+    }
+  }, [filterMode, filterMonthNum, filterYear]);
 
   const openCustomerEdit = useCallback((contactId: number, issue: string) => {
     const target = contacts.find((row) => Number(row.id) === Number(contactId));
@@ -685,53 +730,43 @@ export default function HomePage() {
   }, [notes]);
 
   const visibleContacts = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    return contacts.filter((contact) => {
-      const ownerMatch = rowMatchesOwner(contact, activeOwner);
-      if (!ownerMatch) return false;
-      if (!q) return true;
-      return [contact.name, contact.phone, contact.title, contact.intake_route, contact.assigned_to, contact.consultant, contact.memo]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [contacts, activeOwner, keyword]);
+    return contacts.filter((contact) => rowMatchesOwner(contact, activeOwner));
+  }, [contacts, activeOwner]);
 
   const visibleSales = useMemo(() => {
     return sales.filter((row) => salesMatchesOwner(row, activeOwner));
   }, [sales, activeOwner]);
 
   const monthContacts = useMemo(() => {
-    return visibleContacts.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+    return visibleContacts.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
   }, [visibleContacts, selectedMonth]);
 
   const monthSales = useMemo(() => {
-    return visibleSales.filter((row) => isInMonth(row.payment_date || row.created_at, selectedMonth));
+    return visibleSales.filter((row) => isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
   }, [visibleSales, selectedMonth]);
 
   const monthNotes = useMemo(() => {
     const visibleIds = new Set(visibleContacts.map((contact) => String(contact.id)));
-    return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInMonth(note.created_at || note.note_date, selectedMonth));
+    return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInRange(note.created_at || note.note_date, rangeStart, rangeEnd));
   }, [notes, visibleContacts, selectedMonth]);
 
   const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
 
   const stats = useMemo(() => {
-    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, selectedMonth)).length;
+    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, rangeStart, rangeEnd)).length;
     const tmCount = monthContacts.filter((contact) => {
       const activity = normalizeText(contact.activity_type);
-      return activity.includes("TM") || Boolean(contact.has_tm) || isInMonth(contact.tm_date, selectedMonth);
+      return activity.includes("TM") || Boolean(contact.has_tm) || isInRange(contact.tm_date, rangeStart, rangeEnd);
     }).length;
     const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
-    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, selectedMonth)).length;
+    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, rangeStart, rangeEnd)).length;
     const master = vipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
     const challenger = vipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
     const bronze = vipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
-    const masterThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, selectedMonth)).length;
-    const challengerThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, selectedMonth)).length;
-    const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
-    const contracts = vipContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
+    const masterThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
+    const challengerThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
+    const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
+    const contracts = vipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd)).length;
 
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -869,13 +904,10 @@ export default function HomePage() {
   const teamRows = useMemo(() => {
     return EXECUTION_PART_NAMES.map((owner) => {
       const ownerContacts = contacts.filter((contact) => rowMatchesOwner(contact, owner));
-      const ownerVisible = ownerContacts.filter((contact) => {
-        if (!keyword.trim()) return true;
-        return [contact.name, contact.phone, contact.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword.toLowerCase());
-      });
-      const ownerMonthContacts = ownerVisible.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+      const ownerVisible = ownerContacts;
+      const ownerMonthContacts = ownerVisible.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
       const ownerVip = ownerVisible.filter(isVipContact);
-      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInMonth(row.payment_date || row.created_at, selectedMonth));
+      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
       const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       const masterChallenger = ownerVisible.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length;
       const bronze = ownerVisible.filter((contact) => isGradeContact(contact, "브론즈")).length;
@@ -887,12 +919,12 @@ export default function HomePage() {
         lead: ownerStage("리드"),
         prospect: ownerStage("프로스펙팅"),
         closing: ownerStage("딜클로징"),
-        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length,
+        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInRange(contact.contract_date, rangeStart, rangeEnd) || isInRange(contact.updated_at, rangeStart, rangeEnd))).length,
         churn: ownerStage("이탈/탈퇴"),
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
       };
     });
-  }, [contacts, keyword, sales, selectedMonth]);
+  }, [contacts, sales, selectedMonth]);
 
   /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
   const intakeRows = useMemo(() => {
@@ -907,7 +939,7 @@ export default function HomePage() {
       .map(([route, rows]) => {
         const contract = rows.filter(isContracted).length;
         const vip = rows.filter(isVipContact).length;
-        const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, selectedMonth)).length;
+        const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, rangeStart, rangeEnd)).length;
         return {
           route,
           total: rows.length,
@@ -969,9 +1001,17 @@ export default function HomePage() {
 
   const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales;
 
-  const selectedMonthLabel = MONTH_LABEL_FORMAT.format(getMonthWindow(selectedMonth).start);
+  const filterLabel = filterMode === "daily"
+    ? `${filterYear}.${String(rangeStart.getMonth() + 1).padStart(2, "0")}.${String(rangeStart.getDate()).padStart(2, "0")} (당일)`
+    : filterMode === "weekly"
+      ? `${filterYear}.${String(rangeStart.getMonth() + 1).padStart(2, "0")}.${String(rangeStart.getDate()).padStart(2, "0")}~${String(rangeEnd.getDate()).padStart(2, "0")} (주간)`
+      : `${filterYear}.${String(filterMonthNum).padStart(2, "0")} (월간)`;
   const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
+
+  const handlePdfSave = useCallback(() => {
+    window.print();
+  }, []);
 
   const gradeJoinRows = [
     { label: "마스터", value: stats.masterThisMonth, total: stats.master, tone: "warning" as ToneName },
@@ -984,32 +1024,48 @@ export default function HomePage() {
       <div className="premium-shell px-5 py-5 md:px-7 md:py-6">
 
         {/* ── 헤더 ── */}
-        <header className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <header className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between print:mb-6">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="crm-title">대시보드</h1>
               <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
-              <Badge tone="muted" icon={CalendarDays}>{selectedMonthLabel}</Badge>
+              <Badge tone="muted" icon={CalendarDays}>{filterLabel}</Badge>
             </div>
-            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션 → 매출까지 당월 영업 흐름을 한 화면에서 봅니다.</p>
+            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션 → 매출까지 영업 흐름을 한 화면에서 봅니다.</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-[240px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="고객명, 연락처, 메모 검색"
-                className="crm-search w-full pl-9 pr-3"
-              />
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {/* 당일 · 주간 · 월간 토글 */}
+            <div className="inline-flex overflow-hidden rounded-[10px] border" style={{ borderColor: "var(--border)" }}>
+              {(["daily", "weekly", "monthly"] as FilterMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setFilterMode(mode)}
+                  className="px-3 py-2 text-[13px] transition-colors"
+                  style={{
+                    background: filterMode === mode ? "var(--accent-subtle)" : "var(--surface-2)",
+                    color: filterMode === mode ? "var(--accent-text)" : "var(--text-subtle)",
+                    fontWeight: filterMode === mode ? 600 : 400,
+                  }}
+                >
+                  {FILTER_MODE_LABELS[mode]}
+                </button>
+              ))}
             </div>
 
-            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="crm-search w-[130px] px-3">
-              {monthOptions().map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
-            </select>
+            {/* 월간 드롭다운 (월간 모드 시에만 표시) */}
+            {filterMode === "monthly" && (
+              <select
+                value={filterMonthNum}
+                onChange={(event) => setFilterMonthNum(Number(event.target.value))}
+                className="crm-search w-[100px] px-3"
+              >
+                {MONTH_NUMS.map((m) => (
+                  <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+            )}
 
             <select
               value={activeOwner}
@@ -1021,8 +1077,8 @@ export default function HomePage() {
               {EXECUTION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
 
-            <button type="button" onClick={fetchDashboard} className="btn-premium btn-secondary">
-              <RefreshCw size={14} /> 새로고침
+            <button type="button" onClick={handlePdfSave} className="btn-premium btn-primary">
+              <FileDown size={14} /> PDF 저장
             </button>
           </div>
         </header>
@@ -1063,7 +1119,7 @@ export default function HomePage() {
               </Panel>
 
               <Panel className="flex h-full flex-col">
-                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급별 가입현황" desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급별 가입현황" desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{filterLabel}</Badge>} />
                 <div className="flex flex-1 flex-col justify-center gap-2 p-4">
                   {gradeJoinRows.map((row) => {
                     const c = toneStyle(row.tone);
