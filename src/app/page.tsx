@@ -224,18 +224,57 @@ function isInMonth(value: string | null | undefined, selectedMonth: string) {
 
 type FilterMode = "daily" | "weekly" | "monthly";
 
-function getFilterRange(mode: FilterMode, monthNum: number, year: number): { start: Date; end: Date } {
+function getMonthWeeks(year: number, month: number): { week: number; start: Date; end: Date; label: string }[] {
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const weeks: { week: number; start: Date; end: Date; label: string }[] = [];
+  let weekStart = new Date(firstDay);
+  let weekNum = 1;
+
+  while (weekStart <= lastDay) {
+    const dow = weekStart.getDay();
+    const daysToSun = dow === 0 ? 0 : 7 - dow;
+    let weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + daysToSun);
+    if (weekEnd > lastDay) weekEnd = new Date(lastDay);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const s = new Date(weekStart); s.setHours(0, 0, 0, 0);
+    weeks.push({
+      week: weekNum,
+      start: s,
+      end: weekEnd,
+      label: `${weekNum}주차 (${s.getDate()}일~${weekEnd.getDate()}일)`,
+    });
+
+    weekNum++;
+    const nextMon = new Date(weekEnd);
+    nextMon.setDate(weekEnd.getDate() + 1);
+    nextMon.setHours(0, 0, 0, 0);
+    weekStart = nextMon;
+  }
+  return weeks;
+}
+
+function getCurrentWeekNum(year: number, month: number): number {
+  const weeks = getMonthWeeks(year, month);
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  for (const w of weeks) {
+    if (today >= w.start && today <= w.end) return w.week;
+  }
+  return weeks.length;
+}
+
+function getFilterRange(mode: FilterMode, monthNum: number, year: number, weekNum?: number): { start: Date; end: Date } {
   if (mode === "daily") {
     const d = new Date(); d.setHours(0, 0, 0, 0);
     const e = new Date(d); e.setHours(23, 59, 59, 999);
     return { start: d, end: e };
   }
   if (mode === "weekly") {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const dow = today.getDay();
-    const mon = new Date(today); mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
-    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
-    return { start: mon, end: sun };
+    const weeks = getMonthWeeks(year, monthNum);
+    const target = weeks.find((w) => w.week === (weekNum || 1)) || weeks[0];
+    return { start: target.start, end: target.end };
   }
   const start = new Date(year, monthNum - 1, 1);
   const end = new Date(year, monthNum, 0, 23, 59, 59, 999);
@@ -586,6 +625,7 @@ export default function HomePage() {
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
   const [filterMode, setFilterMode] = useState<FilterMode>("monthly");
   const [filterMonthNum, setFilterMonthNum] = useState(new Date().getMonth() + 1);
+  const [filterWeekNum, setFilterWeekNum] = useState(() => getCurrentWeekNum(new Date().getFullYear(), new Date().getMonth() + 1));
   const [filterYear] = useState(new Date().getFullYear());
   const [ownerFilter, setOwnerFilter] = useState("전체");
   const [loading, setLoading] = useState(true);
@@ -648,7 +688,8 @@ export default function HomePage() {
   }, [fetchDashboard]);
 
   /* 필터 범위 계산 */
-  const filterRange = useMemo(() => getFilterRange(filterMode, filterMonthNum, filterYear), [filterMode, filterMonthNum, filterYear]);
+  const filterRange = useMemo(() => getFilterRange(filterMode, filterMonthNum, filterYear, filterWeekNum), [filterMode, filterMonthNum, filterYear, filterWeekNum]);
+  const monthWeeks = useMemo(() => getMonthWeeks(filterYear, filterMonthNum), [filterYear, filterMonthNum]);
   const rangeStart = filterRange.start;
   const rangeEnd = filterRange.end;
 
@@ -773,9 +814,11 @@ export default function HomePage() {
     const coldTalkCount = monthCustomerDb.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
 
     /* VIP 기반 (누적 — 파이프라인3과 동일) */
+    const vipTransferred = vipContacts.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
     const master = vipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
     const challenger = vipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
     const bronze = vipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
+    const graded = master + challenger + bronze;
     const masterThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
     const challengerThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
     const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
@@ -801,7 +844,7 @@ export default function HomePage() {
     const contractRate = percent(retention, Math.max(vipContacts.length, 1));
 
     return {
-      firstTouch, tmCount, coldTalkCount,
+      firstTouch, tmCount, coldTalkCount, vipTransferred, graded,
       master, challenger, bronze,
       masterThisMonth, challengerThisMonth, bronzeThisMonth,
       contracts, churnCount, churnRate,
@@ -815,9 +858,9 @@ export default function HomePage() {
   const funnelStages = useMemo(() => {
     return [
       { label: "고객DB 신규", value: monthCustomerDb.length, sub: "기간 내 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthCustomerDb.length) },
-      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: null },
-      { label: "VIP 전체", value: stats.vipTotal, sub: `리드 ${stats.stageCounts["리드"] || 0} · 프로스 ${stats.stageCounts["프로스펙팅"] || 0} · 클로징 ${stats.stageCounts["딜클로징"] || 0}`, tone: "purple" as ToneName, rate: percent(stats.retention, Math.max(stats.vipTotal, 1)) },
-      { label: "계약 · 리텐션", value: stats.retention, sub: `당월 신규계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
+      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: percent(stats.vipTransferred, Math.max(stats.firstTouch, 1)) },
+      { label: "VIP 전체", value: stats.vipTotal, sub: `마스터 ${stats.master} · 챌린저 ${stats.challenger} · 브론즈 ${stats.bronze}`, tone: "purple" as ToneName, rate: percent(stats.graded, Math.max(stats.vipTotal, 1)) },
+      { label: "계약 · 리텐션", value: stats.retention, sub: `기간 내 신규계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
     ];
   }, [monthCustomerDb.length, stats]);
 
@@ -1014,10 +1057,11 @@ export default function HomePage() {
 
   const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales;
 
+  const periodPrefix = filterMode === "daily" ? "당일" : filterMode === "weekly" ? "주간" : "당월";
   const filterLabel = filterMode === "daily"
     ? `${filterYear}.${String(rangeStart.getMonth() + 1).padStart(2, "0")}.${String(rangeStart.getDate()).padStart(2, "0")} (당일)`
     : filterMode === "weekly"
-      ? `${filterYear}.${String(rangeStart.getMonth() + 1).padStart(2, "0")}.${String(rangeStart.getDate()).padStart(2, "0")}~${String(rangeEnd.getDate()).padStart(2, "0")} (주간)`
+      ? `${filterYear}.${String(filterMonthNum).padStart(2, "0")} ${filterWeekNum}주차 (${String(rangeStart.getDate()).padStart(2, "0")}~${String(rangeEnd.getDate()).padStart(2, "0")}일)`
       : `${filterYear}.${String(filterMonthNum).padStart(2, "0")} (월간)`;
   const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
@@ -1230,15 +1274,28 @@ export default function HomePage() {
               ))}
             </div>
 
-            {/* 월간 드롭다운 (월간 모드 시에만 표시) */}
-            {filterMode === "monthly" && (
+            {/* 월 드롭다운 (월간·주간 모드에서 표시) */}
+            {(filterMode === "monthly" || filterMode === "weekly") && (
               <select
                 value={filterMonthNum}
-                onChange={(event) => setFilterMonthNum(Number(event.target.value))}
+                onChange={(event) => { setFilterMonthNum(Number(event.target.value)); setFilterWeekNum(1); }}
                 className="crm-search w-[100px] px-3"
               >
                 {MONTH_NUMS.map((m) => (
                   <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+            )}
+
+            {/* 주차 드롭다운 (주간 모드에서만 표시) */}
+            {filterMode === "weekly" && (
+              <select
+                value={filterWeekNum}
+                onChange={(event) => setFilterWeekNum(Number(event.target.value))}
+                className="crm-search w-[160px] px-3"
+              >
+                {monthWeeks.map((w) => (
+                  <option key={w.week} value={w.week}>{w.label}</option>
                 ))}
               </select>
             )}
@@ -1278,7 +1335,7 @@ export default function HomePage() {
                 <PanelTitle
                   icon={LineChart}
                   tone="info"
-                  title="당월 영업 퍼널"
+                  title={`${periodPrefix} 영업 퍼널`}
                   desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션"
                   right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
                 />
@@ -1295,7 +1352,7 @@ export default function HomePage() {
               </Panel>
 
               <Panel className="flex h-full flex-col">
-                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급별 가입현황" desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{filterLabel}</Badge>} />
+                <PanelTitle icon={BadgeCheck} tone="warning" title={`${periodPrefix} 등급별 가입현황`} desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{filterLabel}</Badge>} />
                 <div className="flex flex-1 flex-col justify-center gap-2 p-4">
                   {gradeJoinRows.map((row) => {
                     const c = toneStyle(row.tone);
@@ -1320,7 +1377,7 @@ export default function HomePage() {
 
                 {/* 담당자별 파이프라인 현황 */}
                 <Panel>
-                  <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
+                  <PanelTitle icon={Users} tone="purple" title={`${periodPrefix} 담당자별 파이프라인 현황`} desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
                   <div className="overflow-x-auto p-2">
                     <table className="w-full border-separate" style={{ borderSpacing: "0 4px", tableLayout: "fixed" }}>
                       <colgroup>
@@ -1377,7 +1434,7 @@ export default function HomePage() {
                 {/* 유입경로별 성과 + 등급별 계약전환율 */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="h-full">
-                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="DB 입력 대비 VIP 전환 현황" />
+                    <PanelTitle icon={TrendingUp} tone="success" title={`${periodPrefix} 유입경로별 성과`} desc="DB 입력 대비 VIP 전환 현황" />
                     <div className="p-4">
                       {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
                         <div className="space-y-2">
@@ -1405,7 +1462,7 @@ export default function HomePage() {
                   </Panel>
 
                   <Panel className="h-full">
-                    <PanelTitle icon={Activity} tone="purple" title="등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
+                    <PanelTitle icon={Activity} tone="purple" title={`${periodPrefix} 등급별 계약전환율`} desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
                     <div className="space-y-2.5 p-4">
                       {gradeContractRows.map((row) => (
                         <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
@@ -1438,7 +1495,7 @@ export default function HomePage() {
                 {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="분양회 모집 · 분양회 회비" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                    <PanelTitle icon={Target} tone="warning" title="당월 KPI 목표 대비 달성률" desc="분양회 모집 · 분양회 회비" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
                     <div className="flex flex-1 flex-col justify-center gap-2.5 p-4">
                       {kpiRows.map((row) => {
                         const hasGoal = row.goal > 0;
@@ -1460,7 +1517,7 @@ export default function HomePage() {
                   </Panel>
 
                   <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc={`분양회 월회비 · LMS · 호갱노노 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                    <PanelTitle icon={BarChart3} tone="cyan" title={`${periodPrefix} 매출 구성`} desc={`분양회 월회비 · LMS · 호갱노노 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
                     <div className="flex flex-1 flex-col justify-center gap-3 p-4">
                       <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                         {salesBreakdown.filter((item) => item.value > 0).map((item) => (
@@ -1549,7 +1606,7 @@ export default function HomePage() {
 
                 {/* 활동량 요약 */}
                 <Panel>
-                  <PanelTitle icon={PhoneCall} tone="info" title="활동량 요약" desc="당월 첫 접촉과 활동노트 기준" />
+                  <PanelTitle icon={PhoneCall} tone="info" title={`${periodPrefix} 활동량 요약`} desc="당월 첫 접촉과 활동노트 기준" />
                   <div className="space-y-2.5 p-4">
                     <div className="grid grid-cols-2 gap-2.5">
                       <StatBox label="첫 접촉 완료" value={`${stats.firstTouch}건`} sub={`TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`} tone="info" />
@@ -1567,7 +1624,7 @@ export default function HomePage() {
 
                 {/* 최근 활동노트 */}
                 <Panel>
-                  <PanelTitle icon={Clock3} tone="muted" title="최근 활동노트" desc="녹취 요약 및 수동 기록" />
+                  <PanelTitle icon={Clock3} tone="muted" title={`${periodPrefix} 활동노트`} desc="녹취 요약 및 수동 기록" />
                   <div className="max-h-[360px] overflow-y-auto p-2">
                     {monthNotes.length === 0 ? <EmptyBlock title="당월 활동노트가 없습니다" desc="고객 상세 또는 녹취 요약을 통해 활동노트가 쌓이면 표시됩니다." /> : monthNotes.slice(0, 8).map((note) => {
                       const contact = visibleContacts.find((row) => String(row.id) === String(note.contact_id));
