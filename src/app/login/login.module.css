@@ -1,26 +1,60 @@
-/* 분양의신 CRM 로그인 페이지 — 영상 패널 + 계정요청 모달 */
+/* 분양의신 CRM 로그인 페이지 — 고정 캔버스 스케일 방식 */
 
 .page {
-  min-height: 100vh;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #000;
   font-family: "Pretendard", sans-serif;
-  background: #e9ecf2;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(36px, 6vw, 120px);
+}
+
+.scene {
+  position: relative;
+  width: 2560px;
+  height: 1440px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  transform: scale(var(--scene-scale));
+  transform-origin: center center;
+  background: #000;
+}
+
+.backgroundLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("/login-network-bg.jpg");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  opacity: 1;
+  filter: none;
+  pointer-events: none;
 }
 
 .panel {
-  width: 100%;
-  max-width: 1240px;
-  height: calc(100vh - clamp(72px, 12vw, 240px));
-  min-height: 640px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 1450px;
+  height: 1010px;
+  transform: translate(-50%, -50%);
   background: #0a0a0c;
-  border-radius: 28px;
+  border: 4px solid rgba(37, 99, 255, 0.95);
+  border-radius: 30px;
   display: grid;
-  grid-template-columns: minmax(360px, 36%) 1fr;
+  grid-template-columns: 455px 1fr;
   overflow: hidden;
-  box-shadow: 0 40px 100px rgba(20, 24, 40, 0.25);
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 1px rgba(76, 195, 236, 0.2),
+    0 0 34px rgba(37, 99, 255, 0.28),
+    0 46px 120px rgba(0, 0, 0, 0.62);
 }
 
 /* ═════════ 좌측: 영상 패널 ═════════ */
@@ -48,7 +82,12 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: radial-gradient(120% 90% at 30% 20%, #1b3a52 0%, #0e1722 55%, #0a0d12 100%);
+  background: radial-gradient(
+    120% 90% at 30% 20%,
+    #1b3a52 0%,
+    #0e1722 55%,
+    #0a0d12 100%
+  );
   color: rgba(255, 255, 255, 0.75);
   text-align: center;
   padding: 32px;
@@ -109,7 +148,7 @@
 }
 
 .formLogo img {
-  width: 52px;
+  width: 58px;
   height: auto;
 }
 
@@ -117,7 +156,12 @@
   position: absolute;
   inset: auto 0 0 0;
   height: 52%;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.25) 55%, transparent 100%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.72) 0%,
+    rgba(0, 0, 0, 0.25) 55%,
+    transparent 100%
+  );
   z-index: 2;
   pointer-events: none;
 }
@@ -176,7 +220,7 @@
 }
 
 .captionSlide h2 {
-  font-size: clamp(30px, 3.4vw, 46px);
+  font-size: 42px;
   font-weight: 800;
   line-height: 1.12;
   letter-spacing: -0.02em;
@@ -184,7 +228,7 @@
 
 .captionSlide p {
   margin-top: 14px;
-  font-size: clamp(14px, 1.3vw, 17px);
+  font-size: 16px;
   line-height: 1.65;
   color: rgba(255, 255, 255, 0.88);
   max-width: 520px;
@@ -195,18 +239,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px clamp(28px, 5vw, 90px);
+  padding: 40px 120px;
 }
 
 .formInner {
   width: 100%;
-  max-width: 440px;
+  max-width: 520px;
 }
 
 .formTitle {
   text-align: center;
   color: #f4f5f7;
-  font-size: clamp(28px, 3vw, 38px);
+  font-size: 38px;
   font-weight: 700;
   letter-spacing: -0.01em;
   margin-bottom: 10px;
@@ -382,7 +426,7 @@
 
 /* ═════════ 계정요청 모달 ═════════ */
 .modalOverlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(4, 5, 8, 0.72);
   backdrop-filter: blur(4px);
@@ -394,8 +438,8 @@
 }
 
 .modal {
-  width: min(480px, 100%);
-  max-height: calc(100vh - 48px);
+  width: 480px;
+  max-height: calc(100% - 48px);
   overflow-y: auto;
   background: #121217;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -538,14 +582,4 @@
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-}
-
-@media (max-width: 980px) {
-  .panel {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-  .mediaSide {
-    min-height: 380px;
-  }
 }
