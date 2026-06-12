@@ -872,176 +872,6 @@ function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValu
   );
 }
 
-function DailyActivityPrompt({
-  mode,
-  intro,
-  goal,
-  result,
-  workItems,
-  saving,
-  disabled,
-  onGoalChange,
-  onResultChange,
-  onTaskTextChange,
-  onTaskAdd,
-  onTaskRemove,
-  onTaskToggle,
-  onSaveGoal,
-  onSaveResult,
-  onClose,
-}: {
-  mode: "goal" | "mid" | "result";
-  intro: boolean;
-  goal: FormValues;
-  result: FormValues;
-  workItems: WorkItem[];
-  saving: boolean;
-  disabled?: boolean;
-  onGoalChange: (key: ActivityKey | "meeting_confirmed", value: number) => void;
-  onResultChange: (key: ActivityKey | "meeting_confirmed", value: number) => void;
-  onTaskTextChange: (id: string, text: string) => void;
-  onTaskAdd: () => void;
-  onTaskRemove: (id: string) => void;
-  onTaskToggle: (id: string) => void;
-  onSaveGoal: () => void;
-  onSaveResult: () => void;
-  onClose: () => void;
-}) {
-  const isGoal = mode === "goal";
-  const isMid = mode === "mid";
-  const title = isGoal
-    ? "오늘의 목표를 세워볼까요?"
-    : isMid
-      ? "오후 중간 체크 시간입니다"
-      : "결과값을 입력할 시간입니다!";
-  const message = isGoal
-    ? "금일의 목표를 정하고, 시간을 잘 분배하여 하루를 알차게 운영해보세요. 오늘의 일과가 끝나면 활동 결과 입력하는 것도 잊지 마시구요!"
-    : isMid
-      ? "금일 계획한 목표를 잘 이루고 계시나요? 결과 입력시간은 17시30분 입니다. 꼭 잊지 말고 다시한번 체크해보세요!"
-      : "금일 계획한 업무를 모두 처리했는지 확인하시고 기록해주세요!";
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <div
-        className="max-h-[92vh] w-full max-w-[980px] overflow-hidden rounded-[28px] border shadow-2xl"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      >
-        {intro ? (
-          <div className="flex min-h-[430px] flex-col items-center justify-center px-8 py-10 text-center">
-            <div
-              className="mb-5 flex h-28 w-28 items-center justify-center rounded-[36px] text-[54px] shadow-lg"
-              style={{ background: "linear-gradient(135deg,#fef3c7,#f0abfc,#93c5fd)" }}
-            >
-              {isGoal ? "🦊" : isMid ? "🐥" : "🦝"}
-            </div>
-            <p className="text-[28px] font-[900] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
-              {title}
-            </p>
-            <p className="mt-3 max-w-[560px] text-[15px] font-[700] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-              잠깐 웃고 시작해요. 오늘도 무리하지 말고, 해야 할 일을 하나씩 정리해봅시다.
-            </p>
-          </div>
-        ) : (
-          <div className="max-h-[92vh] overflow-y-auto p-6">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div className="flex min-w-0 items-start gap-4">
-                <div
-                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] text-[28px]"
-                  style={{ background: "var(--accent-subtle)" }}
-                >
-                  {isGoal ? "🦊" : isMid ? "🐥" : "🦝"}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[24px] font-[900] tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
-                    {title}
-                  </p>
-                  <p className="mt-2 max-w-[760px] text-[14px] font-[700] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                    {message}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
-                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-              >
-                ×
-              </button>
-            </div>
-
-            {isMid ? (
-              <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-                <WorkItemsResultChecklist
-                  items={workItems}
-                  disabled={disabled}
-                  onToggle={onTaskToggle}
-                />
-                <AutoResultNotice goal={goal} result={result} />
-              </div>
-            ) : isGoal ? (
-                <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Sparkles size={17} />
-                      <p className="crm-section-title">당일 활동목표 입력</p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {ACTIVITY_FIELDS.map((field) => (
-                        <NumberInput
-                          key={field.key}
-                          label={field.goalLabel}
-                          value={goal[field.key]}
-                          unit={field.unit}
-                          disabled={disabled}
-                          onChange={(value) => onGoalChange(field.key, value)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <WorkItemsEditor
-                      items={workItems}
-                      disabled={disabled}
-                      onTextChange={onTaskTextChange}
-                      onAdd={onTaskAdd}
-                      onRemove={onTaskRemove}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-                  <WorkItemsResultChecklist
-                    items={workItems}
-                    disabled={disabled}
-                    onToggle={onTaskToggle}
-                  />
-                  <AutoResultNotice goal={goal} result={result} />
-                </div>
-              )}
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="btn-premium btn-secondary">
-                나중에
-              </button>
-              {isGoal && (
-                <button type="button" onClick={onSaveGoal} disabled={saving} className="btn-premium btn-primary">
-                  <Save size={14} /> {saving ? "저장 중..." : "목표 저장"}
-                </button>
-              )}
-              {(mode === "mid" || mode === "result") && (
-                <button type="button" onClick={onSaveResult} disabled={saving} className="btn-premium btn-primary">
-                  <Save size={14} /> {saving ? "저장 중..." : mode === "mid" ? "중간점검 저장" : "최종 확인 저장"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function DailyActivityPage() {
   const [user, setUser] = useState<CRMUser | null>(null);
   const [date, setDate] = useState(todayString());
@@ -1055,8 +885,6 @@ export default function DailyActivityPage() {
   const [goal, setGoal] = useState<FormValues>({ ...EMPTY_VALUES });
   const [result, setResult] = useState<FormValues>({ ...EMPTY_VALUES });
   const [workItems, setWorkItems] = useState<WorkItem[]>(createEmptyWorkItems());
-  const [promptMode, setPromptMode] = useState<"goal" | "mid" | "result" | null>(null);
-  const [promptIntro, setPromptIntro] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(EXEC_MEMBERS[0].name);
 
   const access = useMemo(() => roleAccess(user), [user]);
@@ -1161,13 +989,6 @@ export default function DailyActivityPage() {
   }, [access.canViewAll, currentMember, user]);
 
   useEffect(() => {
-    if (!promptMode) return;
-    setPromptIntro(true);
-    const timer = window.setTimeout(() => setPromptIntro(false), 1250);
-    return () => window.clearTimeout(timer);
-  }, [promptMode]);
-
-  useEffect(() => {
     let alive = true;
     const refreshAutoResult = async () => {
       const next = await loadAutoResultCounts(date, user?.name);
@@ -1181,62 +1002,6 @@ export default function DailyActivityPage() {
     };
   }, [date, user?.name]);
 
-  useEffect(() => {
-    if (!currentMember || loading || date !== todayString()) return;
-
-    const checkPrompt = () => {
-      if (promptMode) return;
-      const now = new Date();
-      const minutes = now.getHours() * 60 + now.getMinutes();
-      const baseKey = `daily-activity-prompt-${currentMember.name}-${date}`;
-
-      if (
-        minutes >= 17 * 60 + 30 &&
-        !isResultEntered(myRow) &&
-        !localStorage.getItem(`${baseKey}-result`)
-      ) {
-        setPromptMode("result");
-        return;
-      }
-
-      if (
-        minutes >= 15 * 60 &&
-        minutes < 17 * 60 + 30 &&
-        !localStorage.getItem(`${baseKey}-mid`)
-      ) {
-        setPromptMode("mid");
-        return;
-      }
-
-      if (
-        minutes >= 9 * 60 &&
-        minutes < 10 * 60 &&
-        !isGoalEntered(myRow) &&
-        !localStorage.getItem(`${baseKey}-goal`)
-      ) {
-        setPromptMode("goal");
-      }
-    };
-
-    checkPrompt();
-    const interval = window.setInterval(checkPrompt, 60_000);
-    return () => window.clearInterval(interval);
-  }, [currentMember, date, loading, myRow, promptMode]);
-
-  const closePrompt = (mode: "goal" | "mid" | "result") => {
-    if (currentMember) {
-      localStorage.setItem(
-        `daily-activity-prompt-${currentMember.name}-${date}-${mode}`,
-        "1",
-      );
-    }
-    setPromptMode(null);
-  };
-
-  const saveFromPrompt = async (mode: "goal" | "mid" | "result") => {
-    await handleSave();
-    closePrompt(mode);
-  };
 
   const showToast = (message: string) => {
     setToast(message);
@@ -1946,27 +1711,6 @@ export default function DailyActivityPage() {
         )}
       </div>
 
-
-      {promptMode && (
-        <DailyActivityPrompt
-          mode={promptMode}
-          intro={promptIntro}
-          goal={goal}
-          result={result}
-          workItems={workItems}
-          saving={saving}
-          disabled={isOutsideMeeting}
-          onGoalChange={(key, value) => setGoal((current) => ({ ...current, [key]: value }))}
-          onResultChange={(key, value) => setResult((current) => ({ ...current, [key]: value }))}
-          onTaskTextChange={updateWorkItemText}
-          onTaskAdd={addWorkItem}
-          onTaskRemove={removeWorkItem}
-          onTaskToggle={toggleWorkItemDone}
-          onSaveGoal={() => saveFromPrompt("goal")}
-          onSaveResult={() => saveFromPrompt(promptMode)}
-          onClose={() => closePrompt(promptMode)}
-        />
-      )}
 
       {toast && (
         <div
