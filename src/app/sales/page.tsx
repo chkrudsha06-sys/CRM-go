@@ -467,6 +467,12 @@ function normalizeBillingMonth(value: unknown) {
   return `${match[1]}/${match[2].padStart(2, "0")}`;
 }
 
+function cleanCmsIdentityText(value: unknown) {
+  const text = cellText(value);
+  if (!text || text === "-" || text === "–" || text === "—") return "";
+  return text;
+}
+
 function makeHyosungExternalId(row: {
   memberNumber: string;
   memberName: string;
@@ -502,20 +508,29 @@ function buildSalesMemoFromHyosung(row: HyosungCmsPreviewRow) {
 
 function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
   return rows
-    .map((raw, index): HyosungCmsPreviewRow => {
-      const memberNumber = cellText(raw["회원번호"]);
-      const contractNumber = cellText(raw["계약번호"]);
-      const memberName = cellText(raw["회원명"]);
+    .map((raw, index): HyosungCmsPreviewRow | null => {
+      const memberNumber = cleanCmsIdentityText(raw["회원번호"]);
+      const contractNumber = cleanCmsIdentityText(raw["계약번호"]);
+      const memberName = cleanCmsIdentityText(raw["회원명"]);
+      const memberPhone = cleanCmsIdentityText(raw["납부자 휴대전화"] || raw["휴대전화"] || raw["연락처"]);
       const billingMonth = normalizeBillingMonth(raw["청구월"]);
       const paidAt = normalizeCmsDate(raw["결제일"] || raw["결제일(납부기간)"] || raw["청구완납일자"]);
       const paidAmount = cellNumber(raw["수납금액"]);
-      const collectionStatus = cellText(raw["수납상태"]);
-      const paymentStatus = cellText(raw["결제상태"]);
+      const collectionStatus = cleanCmsIdentityText(raw["수납상태"]);
+      const paymentStatus = cleanCmsIdentityText(raw["결제상태"]);
+      const rowText = Object.values(raw).map(cellText).join(" ");
+      const isSummaryRow = /합계|총계|소계|total/i.test(rowText) && !memberNumber && !memberName && !memberPhone;
+      const hasMemberIdentity = Boolean(memberNumber || memberName || memberPhone || contractNumber);
+
+      if (!hasMemberIdentity || isSummaryRow) return null;
+
       const rowForId = {
         memberNumber,
+        contractNumber,
         memberName,
         billingMonth,
         paidAt,
+        paidAmount,
       };
 
       return {
@@ -524,13 +539,13 @@ function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
         memberNumber,
         contractNumber,
         memberName,
-        memberPhone: cellText(raw["납부자 휴대전화"]),
+        memberPhone,
         billingMonth,
-        productName: cellText(raw["상품"]),
+        productName: cleanCmsIdentityText(raw["상품"] || raw["상품명"]),
         collectionStatus,
         paymentStatus,
-        paymentType: cellText(raw["결제방식"]),
-        paymentMethod: cellText(raw["결제수단"]),
+        paymentType: cleanCmsIdentityText(raw["결제방식"]),
+        paymentMethod: cleanCmsIdentityText(raw["결제수단"]),
         promisedAt: normalizeCmsDate(raw["약정일"]),
         paidAt,
         completedAt: normalizeCmsDate(raw["청구완납일자"]),
@@ -541,15 +556,15 @@ function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
         unpaidAmount: cellNumber(raw["미납금액"]),
         canceledAmount: cellNumber(raw["취소금액"]),
         refundAmount: cellNumber(raw["환불금액"]),
-        resultMessage: cellText(raw["결제결과"]),
-        memberType: cellText(raw["회원구분"]),
-        managerName: cellText(raw["담당관리자"]),
+        resultMessage: cleanCmsIdentityText(raw["결제결과"] || raw["비고"]),
+        memberType: cleanCmsIdentityText(raw["회원구분"]),
+        managerName: cleanCmsIdentityText(raw["담당관리자"]),
         isPaid: collectionStatus === "완납" && paymentStatus === "결제완료" && paidAmount > 0,
         isDuplicate: false,
         rawData: raw,
       };
     })
-    .filter((row) => row.memberName || row.memberPhone || row.memberNumber || row.paidAmount > 0);
+    .filter((row): row is HyosungCmsPreviewRow => Boolean(row));
 }
 
 function normalizePaymentItem(value?: string | null) {
@@ -993,7 +1008,7 @@ function HyosungUploadModal({
                   </div>
                 </label>
                 <p className="mt-2 text-[12px] font-[750] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  결제실패·미납 건은 매출로 잡지 않고 수집 로그에만 보관합니다.
+                  결제실패·미납 건과 합계 행은 매출로 잡지 않고 업로드 대상에서 제외합니다.
                 </p>
               </div>
 
@@ -1413,12 +1428,38 @@ export default function SalesPage() {
       if (ids.length > 0) {
         const { data, error } = await supabase
           .from("external_payment_records")
-          .select("external_payment_id")
+          .select("external_payment_id,sales_record_id,import_status")
           .eq("provider", HYOSUNG_PROVIDER)
           .in("external_payment_id", ids);
 
         if (error) throw new Error(`중복 수납내역 조회 실패: ${getErrorMessage(error)}`);
-        (data || []).forEach((row) => duplicateIds.add(String(row.external_payment_id)));
+
+        const logRows = data || [];
+        const linkedSalesIds = Array.from(
+          new Set(
+            logRows
+              .map((row) => Number(row.sales_record_id))
+              .filter((id) => Number.isFinite(id) && id > 0)
+          )
+        );
+        const aliveSalesIds = new Set<number>();
+
+        if (linkedSalesIds.length > 0) {
+          const { data: aliveSales, error: aliveSalesError } = await supabase
+            .from("ad_executions")
+            .select("id")
+            .in("id", linkedSalesIds);
+
+          if (aliveSalesError) throw new Error(`기존 매출 확인 실패: ${getErrorMessage(aliveSalesError)}`);
+          (aliveSales || []).forEach((row) => aliveSalesIds.add(Number(row.id)));
+        }
+
+        logRows.forEach((row) => {
+          const salesId = Number(row.sales_record_id);
+          if (Number.isFinite(salesId) && aliveSalesIds.has(salesId)) {
+            duplicateIds.add(String(row.external_payment_id));
+          }
+        });
       }
 
       const paidRows = parsedRows.filter((row) => row.isPaid && row.memberNumber && row.memberName && row.paidAt);
@@ -1466,9 +1507,8 @@ export default function SalesPage() {
   };
 
   const handleHyosungImport = async () => {
-    const importTargets = hyosungRows.filter((row) => !row.isDuplicate);
-    const salesTargets = importTargets.filter((row) => row.isPaid);
-    if (salesTargets.length === 0) return alert("통합매출로 반영할 결제완료 수납내역이 없습니다.");
+    const importTargets = hyosungRows.filter((row) => row.isPaid && !row.isDuplicate);
+    if (importTargets.length === 0) return alert("통합매출로 반영할 결제완료 수납내역이 없습니다.");
 
     setHyosungSaving(true);
     let importedLogs = 0;
@@ -1499,8 +1539,8 @@ export default function SalesPage() {
           member_type: row.memberType || null,
           manager_name: row.managerName || null,
           match_status: "pending",
-          import_status: row.isPaid ? "paid" : "failed",
-          import_message: row.isPaid ? "통합매출 반영 대상" : row.resultMessage || "결제실패 또는 미납",
+          import_status: "paid",
+          import_message: "통합매출 반영 대상",
           raw_data: row.rawData,
         };
 
@@ -1516,10 +1556,25 @@ export default function SalesPage() {
         importedLogs += 1;
 
         if (paymentLog?.sales_record_id) {
-          continue;
-        }
+          const { data: aliveSales, error: aliveSalesError } = await supabase
+            .from("ad_executions")
+            .select("id")
+            .eq("id", paymentLog.sales_record_id)
+            .maybeSingle();
 
-        if (!row.isPaid) continue;
+          if (aliveSalesError) throw new Error(`기존 매출 확인 실패: ${getErrorMessage(aliveSalesError)}`);
+
+          if (aliveSales?.id) {
+            continue;
+          }
+
+          const { error: resetLogError } = await supabase
+            .from("external_payment_records")
+            .update({ sales_record_id: null, import_status: "reset_for_reimport", import_message: "연결된 통합매출이 없어 재반영 허용" })
+            .eq("id", paymentLog.id);
+
+          if (resetLogError) throw new Error(`기존 수집 로그 초기화 실패: ${getErrorMessage(resetLogError)}`);
+        }
 
         if (row.memberNumber && row.memberName && row.paidAt) {
           const { data: existingSales, error: existingSalesError } = await supabase
@@ -1548,14 +1603,15 @@ export default function SalesPage() {
 
         const salesPayload = {
           member_name: row.memberName || null,
+          bunyanghoe_number: row.memberNumber || null,
           execution_amount: row.paidAmount || 0,
           vat_amount: row.paidAmount || 0,
           refund_amount: row.refundAmount || 0,
           channel: "효성CMS",
           contract_route: "분양회",
           payment_date: row.paidAt || new Date().toISOString().slice(0, 10),
-          team_member: null,
-          consultant: null,
+          team_member: row.managerName || null,
+          consultant: row.memberPhone || null,
           memo: buildSalesMemoFromHyosung(row),
         };
 
@@ -1577,7 +1633,8 @@ export default function SalesPage() {
         }
       }
 
-      const nextRows = hyosungRows.map((row) => (row.isDuplicate ? row : { ...row, isDuplicate: true }));
+      const importedIds = new Set(importTargets.map((row) => row.externalPaymentId));
+      const nextRows = hyosungRows.map((row) => (importedIds.has(row.externalPaymentId) ? { ...row, isDuplicate: true } : row));
       setHyosungRows(nextRows);
       updateHyosungSummary(nextRows, { importedLogs, createdSales });
       alert(`효성CMS 수납내역 반영 완료\n수집 로그: ${importedLogs.toLocaleString()}건\n통합매출 생성: ${createdSales.toLocaleString()}건`);
