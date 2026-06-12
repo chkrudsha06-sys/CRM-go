@@ -512,11 +512,11 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   );
 }
 
-/** 퍼널 박스 (가로 축소 · 세로 확장 · 텍스트 확대) */
+/** 퍼널 박스 (전체 폭 균등 분배 · 세로 확장 · 텍스트 확대) */
 function FunnelBox({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: ToneName }) {
   const c = toneStyle(tone);
   return (
-    <div className="w-full max-w-[180px] rounded-[12px] border px-4 py-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+    <div className="min-w-0 flex-1 rounded-[12px] border px-4 py-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
       <div className="flex items-center gap-1.5">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
         <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
@@ -529,10 +529,10 @@ function FunnelBox({ label, value, sub, tone }: { label: string; value: number; 
   );
 }
 
-/** 퍼널 커넥터 (고정 폭 · 겹침 방지) */
+/** 퍼널 커넥터 (고정 폭 + 양쪽 마진으로 박스와 간격 확보) */
 function FunnelConnector({ rate }: { rate: number | null | undefined }) {
   return (
-    <div className="flex w-[72px] shrink-0 items-center justify-center">
+    <div className="mx-3 flex w-[66px] shrink-0 items-center justify-center">
       {rate !== null && rate !== undefined ? (
         <span
           className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.02em]"
@@ -1051,7 +1051,7 @@ export default function HomePage() {
                   right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
                 />
                 <div className="p-4">
-                  <div className="flex flex-col items-center gap-2 lg:flex-row lg:justify-center lg:gap-0">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
                     {funnelStages.map((stage) => (
                       <Fragment key={stage.label}>
                         <FunnelBox label={stage.label} value={stage.value} sub={stage.sub} tone={stage.tone} />
