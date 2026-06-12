@@ -493,7 +493,7 @@ export default function MemoPage() {
               <p className="crm-subtitle mt-2">텍스트 메모와 간단한 스프레드시트를 저장하고, 이전 기록을 빠르게 불러와 수정합니다.</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 xl:min-w-[560px]">
+            <div className="stat-grid grid grid-cols-3 gap-2 xl:min-w-[560px]">
               <StatCard icon={<FileText size={17} />} label="텍스트 메모" value={textCount} tone="info" />
               <StatCard icon={<Grid3X3 size={17} />} label="스프레드시트" value={sheetCount} tone="success" />
               <StatCard icon={<Clock size={17} />} label="전체 기록" value={memos.length} tone="purple" />
