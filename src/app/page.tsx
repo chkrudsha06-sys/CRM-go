@@ -108,6 +108,8 @@ type KpiRow = Record<string, any> & {
   ad_operation_revenue?: number | null;
 };
 
+type ToneName = "info" | "success" | "warning" | "danger" | "purple" | "cyan" | "muted" | "bronze";
+
 type ActionItem = {
   key: string;
   type: string;
@@ -118,22 +120,20 @@ type ActionItem = {
   priority: number;
 };
 
-type ToneName = "info" | "success" | "warning" | "danger" | "purple" | "cyan" | "muted";
-
-type FunnelRow = {
-  label: string;
-  value: number;
-  sub: string;
-  tone: ToneName;
-};
+type StageKey = "리드" | "프로스펙팅" | "딜클로징" | "리텐션" | "이탈/탈퇴";
 
 const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
-const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
-const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
-const CORE_VIP_GRADES = ["마스터", "챌린저", "브론즈"];
 const MONTH_LABEL_FORMAT = new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit" });
 const TODAY = new Date();
+
+const PIPELINE_STAGES: { key: StageKey; label: string; desc: string; tone: ToneName }[] = [
+  { key: "리드", label: "리드", desc: "VIP 이관 후 초기 관리", tone: "info" },
+  { key: "프로스펙팅", label: "프로스펙팅", desc: "관심·니즈 확인", tone: "purple" },
+  { key: "딜클로징", label: "클로징", desc: "계약 전환 집중", tone: "warning" },
+  { key: "리텐션", label: "리텐션", desc: "계약완료·정기결제", tone: "success" },
+  { key: "이탈/탈퇴", label: "Churn", desc: "이탈·탈퇴 고객", tone: "danger" },
+];
 
 function normalizePersonName(value?: string | null) {
   return String(value || "")
@@ -248,12 +248,6 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(date);
 }
 
-function formatDateTime(value?: string | null) {
-  const date = parseDate(value);
-  if (!date) return "-";
-  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
-}
-
 function timeAgo(value?: string | null) {
   const date = parseDate(value);
   if (!date) return "-";
@@ -300,43 +294,46 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
   return "other";
 }
 
+function normalizeStage(value?: string | null): StageKey {
+  const v = normalizeText(value);
+  if (!v) return "리드";
+  if (v === normalizeText("딜크로징") || v === normalizeText("딜클로징") || v === normalizeText("클로징")) return "딜클로징";
+  if (v === normalizeText("계약완료") || v === normalizeText("리텐션")) return "리텐션";
+  if (v === normalizeText("예약완료")) return "딜클로징";
+  if (v === normalizeText("탈퇴") || v === normalizeText("이탈") || v === normalizeText("이탈/탈퇴") || v.toLowerCase() === "churn") return "이탈/탈퇴";
+  if (v === normalizeText("프로스펙팅")) return "프로스펙팅";
+  return "리드";
+}
+
 function isVipContact(contact: ContactRow) {
   const source = normalizeText(contact.crm_db_source);
-  const stage = normalizeText(contact.management_stage);
+  const stage = normalizeStage(contact.management_stage);
   const grade = normalizeText(contact.customer_grade);
-  return source === "vip_activity" || PIPELINE_STAGES.map(normalizeText).includes(stage) || Boolean(grade && grade !== normalizeText("심사미진행"));
+  return source === "vip_activity" || PIPELINE_STAGES.some((item) => item.key === stage) || Boolean(grade && grade !== normalizeText("심사미진행"));
 }
 
-function isHighValueContact(contact: ContactRow) {
+function gradeToken(contact: ContactRow) {
   const grade = normalizeText(contact.customer_grade);
-  return HIGH_VALUE_GRADES.some((token) => grade.includes(normalizeText(token)));
+  if (grade.includes("마스터")) return "마스터";
+  if (grade.includes("챌린저")) return "챌린저";
+  if (grade.includes("브론즈")) return "브론즈";
+  if (!grade || grade === normalizeText("심사미진행")) return "심사미진행";
+  return contact.customer_grade || "기타";
 }
 
-function isCoreVipGrade(contact: ContactRow) {
-  const grade = normalizeText(contact.customer_grade);
-  return CORE_VIP_GRADES.some((token) => grade.includes(normalizeText(token)));
-}
-
-function isGradeContact(contact: ContactRow, gradeName: string) {
-  return normalizeText(contact.customer_grade).includes(normalizeText(gradeName));
-}
-
-function isContractedInMonth(contact: ContactRow, selectedMonth: string) {
-  return isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth));
-}
-
-function touchedInMonth(contact: ContactRow, selectedMonth: string) {
-  return isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth);
+function isPriorityGrade(contact: ContactRow) {
+  const grade = gradeToken(contact);
+  return grade === "마스터" || grade === "챌린저" || grade === "브론즈";
 }
 
 function isContracted(contact: ContactRow) {
-  return normalizeText(contact.meeting_result) === normalizeText("계약완료") || normalizeText(contact.management_stage) === normalizeText("리텐션");
+  return normalizeText(contact.meeting_result) === normalizeText("계약완료") || normalizeStage(contact.management_stage) === "리텐션";
 }
 
 function isChurned(contact: ContactRow) {
-  const stage = normalizeText(contact.management_stage);
+  const stage = normalizeStage(contact.management_stage);
   const result = normalizeText(contact.meeting_result);
-  return stage.includes("이탈") || stage.includes("탈퇴") || result === normalizeText("계약거부") || result === normalizeText("미팅불발");
+  return stage === "이탈/탈퇴" || result === normalizeText("계약거부") || result === normalizeText("미팅불발");
 }
 
 function latestActivityDate(contact: ContactRow, notesByContact: Map<string, NoteRow[]>) {
@@ -348,21 +345,24 @@ function latestActivityDate(contact: ContactRow, notesByContact: Map<string, Not
   return latestNote || contact.updated_at || contact.created_at || null;
 }
 
-function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, selectedMonth: string) {
+function isTmTouch(contact: ContactRow) {
+  const activity = normalizeText(contact.activity_type).toLowerCase();
+  return activity.includes("tm") || Boolean(contact.has_tm) || Boolean(contact.tm_date);
+}
+
+function isColdTalkTouch(contact: ContactRow) {
   const activity = normalizeText(contact.activity_type);
+  return activity.includes("콜드톡") || activity.includes("카톡") || activity.includes("문자");
+}
+
+function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, selectedMonth: string) {
   const notes = notesByContact.get(String(contact.id)) || [];
   const hasTypedNote = notes.some((note) => {
     const content = normalizeText(note.content);
     const inMonth = isInMonth(note.created_at || note.note_date, selectedMonth);
-    return inMonth && (content.includes("TM") || content.includes("콜드톡") || content.includes("활동완료") || content.includes("녹취"));
+    return inMonth && (content.includes("TM") || content.includes("콜드톡") || content.includes("활동완료") || content.includes("녹취") || content.includes("통화"));
   });
-  return (
-    activity.includes("TM") ||
-    activity.includes("콜드톡") ||
-    Boolean(contact.has_tm) ||
-    isInMonth(contact.tm_date, selectedMonth) ||
-    hasTypedNote
-  );
+  return isTmTouch(contact) || isColdTalkTouch(contact) || isInMonth(contact.tm_date, selectedMonth) || hasTypedNote;
 }
 
 function parsePaymentDay(value?: string | null) {
@@ -396,12 +396,6 @@ function ddayLabel(diff: number) {
   return `D+${Math.abs(diff)}`;
 }
 
-function paymentLabel(contact: ContactRow) {
-  const channel = contact.payment_channel || "결제채널 미입력";
-  const day = parsePaymentDay(contact.regular_payment_date);
-  return `${channel} · ${day ? `매월 ${day}일` : "결제일 미입력"}`;
-}
-
 function monthOptions() {
   const base = new Date();
   return Array.from({ length: 7 }, (_, index) => {
@@ -418,16 +412,24 @@ function toneStyle(tone: ToneName) {
     danger: { bg: "var(--danger-bg)", text: "var(--danger-text)", border: "var(--danger-border)", dot: "var(--danger)", bar: "linear-gradient(90deg,#FB7185,#F43F5E)" },
     purple: { bg: "var(--purple-bg)", text: "var(--purple-text)", border: "var(--purple-border)", dot: "var(--purple)", bar: "linear-gradient(90deg,#8B7CF6,#60A5FA)" },
     cyan: { bg: "var(--cyan-bg)", text: "var(--cyan-text)", border: "var(--cyan-border)", dot: "var(--cyan)", bar: "linear-gradient(90deg,#22D3EE,#34D399)" },
+    bronze: { bg: "rgba(180, 113, 48, .12)", text: "#d99a5b", border: "rgba(180, 113, 48, .30)", dot: "#d99a5b", bar: "linear-gradient(90deg,#B87333,#F59E0B)" },
     muted: { bg: "var(--surface-3)", text: "var(--text-subtle)", border: "var(--border)", dot: "var(--text-faint)", bar: "linear-gradient(90deg,var(--text-faint),var(--border))" },
   };
   return map[tone];
+}
+
+function gradeTone(grade: string): ToneName {
+  if (grade === "마스터") return "warning";
+  if (grade === "챌린저") return "purple";
+  if (grade === "브론즈") return "bronze";
+  return "muted";
 }
 
 function Badge({ children, tone = "muted", icon: Icon }: { children: ReactNode; tone?: ToneName; icon?: ElementType }) {
   const c = toneStyle(tone);
   return (
     <span
-      className="inline-flex min-h-[24px] items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-semibold"
+      className="inline-flex min-h-[22px] items-center gap-1.5 rounded-[8px] px-2 text-[11px] font-semibold tracking-[-0.01em]"
       style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       {Icon ? <Icon size={12} /> : <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.dot }} />}
@@ -452,35 +454,16 @@ function Panel({ children, className = "" }: { children: ReactNode; className?: 
 
 function PanelTitle({ icon, tone, title, desc, right }: { icon: ElementType; tone: ToneName; title: string; desc?: string; right?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+    <div className="flex items-center justify-between gap-3 border-b px-4 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
       <div className="flex min-w-0 items-center gap-3">
         <IconBox icon={icon} tone={tone} />
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{title}</p>
-          {desc && <p className="mt-1 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
+          <p className="text-[15px] font-semibold tracking-[-0.015em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+          {desc && <p className="mt-0.5 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
         </div>
       </div>
       {right}
     </div>
-  );
-}
-
-function MetricCard({ title, value, sub, icon, tone, href }: { title: string; value: string | number; sub: string; icon: ElementType; tone: ToneName; href?: string }) {
-  const Wrapper: any = href ? "a" : "div";
-  return (
-    <Wrapper href={href} className="premium-card premium-card-hover block min-h-[126px] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <IconBox icon={icon} tone={tone} />
-        {href ? <ChevronRight size={15} style={{ color: "var(--text-faint)" }} /> : null}
-      </div>
-      <div className="mt-5">
-        <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{title}</p>
-        <p className="mt-1 text-[26px] font-semibold leading-none tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
-          {typeof value === "number" ? value.toLocaleString() : value}
-        </p>
-        <p className="mt-2 truncate text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>{sub}</p>
-      </div>
-    </Wrapper>
   );
 }
 
@@ -494,14 +477,33 @@ function ProgressBar({ value, total, tone = "info" }: { value: number; total: nu
   );
 }
 
+function MetricCard({ title, value, sub, icon, tone, href }: { title: string; value: string | number; sub: string; icon: ElementType; tone: ToneName; href?: string }) {
+  const Wrapper: any = href ? "a" : "div";
+  return (
+    <Wrapper href={href} className="premium-card premium-card-hover block min-h-[112px] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <IconBox icon={icon} tone={tone} />
+        {href ? <ChevronRight size={15} style={{ color: "var(--text-faint)" }} /> : null}
+      </div>
+      <div className="mt-4">
+        <p className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{title}</p>
+        <p className="mt-1 text-[25px] font-semibold leading-none tracking-[-0.035em]" style={{ color: "var(--text-strong)" }}>
+          {typeof value === "number" ? value.toLocaleString() : value}
+        </p>
+        <p className="mt-2 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+      </div>
+    </Wrapper>
+  );
+}
+
 function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="flex min-h-[150px] flex-col items-center justify-center p-6 text-center">
+    <div className="flex min-h-[132px] flex-col items-center justify-center p-5 text-center">
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--surface-3)", color: "var(--text-faint)" }}>
         <FileText size={18} />
       </div>
-      <p className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{title}</p>
-      <p className="mt-1 max-w-[300px] text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+      <p className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+      <p className="mt-1 max-w-[320px] text-[12px] font-medium leading-relaxed tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{desc}</p>
     </div>
   );
 }
@@ -595,18 +597,10 @@ export default function HomePage() {
     });
   }, [contacts, activeOwner, keyword]);
 
-  const visibleSales = useMemo(() => {
-    return sales.filter((row) => salesMatchesOwner(row, activeOwner));
-  }, [sales, activeOwner]);
+  const visibleSales = useMemo(() => sales.filter((row) => salesMatchesOwner(row, activeOwner)), [sales, activeOwner]);
 
-  const monthContacts = useMemo(() => {
-    return visibleContacts.filter((contact) => isInMonth(contact.created_at, selectedMonth));
-  }, [visibleContacts, selectedMonth]);
-
-  const monthSales = useMemo(() => {
-    return visibleSales.filter((row) => isInMonth(row.payment_date || row.created_at, selectedMonth));
-  }, [visibleSales, selectedMonth]);
-
+  const monthContacts = useMemo(() => visibleContacts.filter((contact) => isInMonth(contact.created_at, selectedMonth)), [visibleContacts, selectedMonth]);
+  const monthSales = useMemo(() => visibleSales.filter((row) => isInMonth(row.payment_date || row.created_at, selectedMonth)), [visibleSales, selectedMonth]);
   const monthNotes = useMemo(() => {
     const visibleIds = new Set(visibleContacts.map((contact) => String(contact.id)));
     return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInMonth(note.created_at || note.note_date, selectedMonth));
@@ -615,17 +609,27 @@ export default function HomePage() {
   const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
 
   const stats = useMemo(() => {
+    const tmTouch = monthContacts.filter(isTmTouch).length;
+    const coldTalk = monthContacts.filter(isColdTalkTouch).length;
     const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, selectedMonth)).length;
-    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, selectedMonth)).length;
-    const highValue = visibleContacts.filter((contact) => isHighValueContact(contact)).length;
-    const highValueThisMonth = visibleContacts.filter((contact) => isHighValueContact(contact) && touchedInMonth(contact, selectedMonth)).length;
-    const coreVip = visibleContacts.filter((contact) => isCoreVipGrade(contact)).length;
-    const coreVipThisMonth = visibleContacts.filter((contact) => isCoreVipGrade(contact) && touchedInMonth(contact, selectedMonth)).length;
-    const master = visibleContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
-    const challenger = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
-    const bronze = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
-    const bronzeThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
-    const contracts = visibleContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
+
+    const vipThisMonth = visibleContacts.filter((contact) =>
+      isVipContact(contact) && (isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))
+    ).length;
+
+    const priorityContacts = vipContacts.filter(isPriorityGrade);
+    const bronze = vipContacts.filter((contact) => gradeToken(contact) === "브론즈").length;
+    const challenger = vipContacts.filter((contact) => gradeToken(contact) === "챌린저").length;
+    const master = vipContacts.filter((contact) => gradeToken(contact) === "마스터").length;
+    const gradeReviewed = vipContacts.filter((contact) => gradeToken(contact) !== "심사미진행").length;
+    const priorityThisMonth = visibleContacts.filter((contact) =>
+      isPriorityGrade(contact) && (isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))
+    ).length;
+
+    const contracts = visibleContacts.filter((contact) =>
+      isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))
+    ).length;
+    const allContracts = visibleContacts.filter(isContracted).length;
     const churn = visibleContacts.filter((contact) => isChurned(contact) && (isInMonth(contact.churn_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length;
 
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -637,25 +641,50 @@ export default function HomePage() {
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
     const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
-      acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      acc[stage.key] = vipContacts.filter((contact) => normalizeStage(contact.management_stage) === stage.key).length;
       return acc;
-    }, {} as Record<string, number>);
+    }, {} as Record<StageKey, number>);
 
-    const retention = stageCounts["리텐션"] || visibleContacts.filter(isContracted).length;
+    const activePipeline = stageCounts["리드"] + stageCounts["프로스펙팅"] + stageCounts["딜클로징"];
+    const retention = stageCounts["리텐션"] || allContracts;
     const churnRate = percent(stageCounts["이탈/탈퇴"] || 0, Math.max(vipContacts.length, 1));
 
+    const paymentDueSoon = visibleContacts.filter((contact) => {
+      if (!isContracted(contact)) return false;
+      const day = parsePaymentDay(contact.regular_payment_date);
+      if (!day) return false;
+      const { diff } = getNextPaymentInfo(day);
+      return diff >= 0 && diff <= 4;
+    }).length;
+
+    const missingPayment = visibleContacts.filter((contact) => isContracted(contact) && (!contact.payment_channel || !parsePaymentDay(contact.regular_payment_date))).length;
+
+    const inactive = visibleContacts.filter((contact) => {
+      const stage = normalizeStage(contact.management_stage);
+      if (!["리드", "프로스펙팅", "딜클로징"].includes(stage)) return false;
+      const inactiveDays = daysBetween(latestActivityDate(contact, notesByContact));
+      return inactiveDays !== null && inactiveDays >= 7;
+    }).length;
+
+    const closingDelayed = visibleContacts.filter((contact) => {
+      if (normalizeStage(contact.management_stage) !== "딜클로징") return false;
+      const stayDays = daysBetween(contact.updated_at || contact.vip_transferred_at || contact.created_at);
+      return stayDays !== null && stayDays >= 5;
+    }).length;
+
     return {
+      tmTouch,
+      coldTalk,
       firstTouch,
       vipThisMonth,
-      highValue,
-      highValueThisMonth,
-      coreVip,
-      coreVipThisMonth,
-      master,
-      challenger,
+      priorityContacts: priorityContacts.length,
+      priorityThisMonth,
+      gradeReviewed,
       bronze,
-      bronzeThisMonth,
+      challenger,
+      master,
       contracts,
+      allContracts,
       churn,
       membershipSales,
       lmsSales,
@@ -665,35 +694,57 @@ export default function HomePage() {
       refund,
       totalSales,
       stageCounts,
+      activePipeline,
       retention,
       churnRate,
+      paymentDueSoon,
+      missingPayment,
+      inactive,
+      closingDelayed,
       currentPipelineTotal: vipContacts.length,
     };
   }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
 
-  const acquisitionRows = useMemo<FunnelRow[]>(() => {
+  const topFunnelRows = useMemo(() => {
     return [
-      { label: "신규고객DB", value: monthContacts.length, sub: "당월 신규 등록 DB", tone: "info" },
-      { label: "첫접촉완료", value: stats.firstTouch, sub: "TM·콜드톡·활동노트 발생", tone: "cyan" },
+      {
+        label: "고객DB",
+        value: monthContacts.length,
+        desc: `TM ${stats.tmTouch} · 콜드톡 ${stats.coldTalk}`,
+        rate: 100,
+        tone: "info" as ToneName,
+      },
+      {
+        label: "첫 접촉 완료",
+        value: stats.firstTouch,
+        desc: "최초 TM·콜드톡 확인",
+        rate: percent(stats.firstTouch, monthContacts.length),
+        tone: "cyan" as ToneName,
+      },
+      {
+        label: "VIP DB 이관",
+        value: stats.vipThisMonth,
+        desc: "고객DB에서 VIP활동DB로 이관",
+        rate: percent(stats.vipThisMonth, monthContacts.length),
+        tone: "purple" as ToneName,
+      },
+      {
+        label: "자동등급 심사",
+        value: stats.gradeReviewed,
+        desc: `마스터 ${stats.master} · 챌린저 ${stats.challenger} · 브론즈 ${stats.bronze}`,
+        rate: percent(stats.gradeReviewed, Math.max(stats.currentPipelineTotal, 1)),
+        tone: "warning" as ToneName,
+      },
     ];
-  }, [monthContacts.length, stats.firstTouch]);
+  }, [monthContacts.length, stats]);
 
-  const vipGradeSummaryRows = useMemo<FunnelRow[]>(() => {
-    return [
-      { label: "VIP 이관DB", value: stats.vipThisMonth, sub: `현재 VIP ${stats.currentPipelineTotal}명`, tone: "purple" },
-      { label: "마스터·챌린저", value: stats.master + stats.challenger, sub: `마스터 ${stats.master} · 챌린저 ${stats.challenger}`, tone: "warning" },
-      { label: "브론즈 등록DB", value: stats.bronze, sub: `당월 등록/변경 ${stats.bronzeThisMonth}명`, tone: "success" },
-    ];
-  }, [stats.bronze, stats.bronzeThisMonth, stats.challenger, stats.currentPipelineTotal, stats.master, stats.vipThisMonth]);
-
-  const pipelineRows = useMemo<FunnelRow[]>(() => {
-    return [
-      { label: "리드", value: stats.stageCounts["리드"] || 0, sub: "초기 분류 고객", tone: "info" },
-      { label: "프로스펙팅", value: stats.stageCounts["프로스펙팅"] || 0, sub: "상담·니즈 확인", tone: "purple" },
-      { label: "클로징", value: stats.stageCounts["딜클로징"] || 0, sub: "계약 전환 집중", tone: "warning" },
-      { label: "리텐션", value: stats.retention, sub: "계약·사후관리", tone: "success" },
-    ];
-  }, [stats.retention, stats.stageCounts]);
+  const pipelineFunnelRows = useMemo(() => {
+    return PIPELINE_STAGES.map((stage) => ({
+      ...stage,
+      value: stats.stageCounts[stage.key] || 0,
+      rate: percent(stats.stageCounts[stage.key] || 0, Math.max(stats.currentPipelineTotal, 1)),
+    }));
+  }, [stats]);
 
   const actionItems = useMemo<ActionItem[]>(() => {
     const items: ActionItem[] = [];
@@ -708,7 +759,7 @@ export default function HomePage() {
             type: ddayLabel(diff),
             tone: diff === 0 ? "danger" : "warning",
             title: contact.name || "고객명 없음",
-            desc: paymentLabel(contact),
+            desc: `${contact.payment_channel || "결제채널 미입력"} · 매월 ${day}일`,
             href: "/pipeline3",
             priority: diff,
           });
@@ -721,47 +772,48 @@ export default function HomePage() {
           type: "결제정보 누락",
           tone: "danger",
           title: contact.name || "고객명 없음",
-          desc: "계약완료 고객이지만 결제채널 또는 결제일이 없습니다.",
+          desc: "계약완료 고객이지만 결제채널 또는 정기결제일이 없습니다.",
           href: "/pipeline3",
           priority: 1,
         });
       }
 
-      const stage = normalizeText(contact.management_stage);
+      const stage = normalizeStage(contact.management_stage);
       const latest = latestActivityDate(contact, notesByContact);
       const inactiveDays = daysBetween(latest);
-      if (["리드", "프로스펙팅", "딜클로징"].some((item) => stage === normalizeText(item)) && inactiveDays !== null && inactiveDays >= 7) {
+      if (["리드", "프로스펙팅", "딜클로징"].includes(stage) && inactiveDays !== null && inactiveDays >= 7) {
         items.push({
           key: `inactive-${contact.id}`,
           type: "장기 미활동",
           tone: "warning",
           title: contact.name || "고객명 없음",
-          desc: `${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
+          desc: `${stage === "딜클로징" ? "클로징" : stage} · 최근 활동 ${inactiveDays}일 전`,
           href: "/pipeline3",
           priority: 4 + inactiveDays,
         });
       }
 
       const closingDays = daysBetween(contact.updated_at || contact.vip_transferred_at || contact.created_at);
-      if (stage === normalizeText("딜클로징") && closingDays !== null && closingDays >= 5) {
+      if (stage === "딜클로징" && closingDays !== null && closingDays >= 5) {
         items.push({
           key: `closing-${contact.id}`,
           type: "클로징 지연",
           tone: "danger",
           title: contact.name || "고객명 없음",
-          desc: `딜클로징 ${closingDays}일째 체류 중입니다.`,
+          desc: `클로징 ${closingDays}일째 체류 중입니다.`,
           href: "/pipeline3",
           priority: 2 + closingDays,
         });
       }
 
-      if (isHighValueContact(contact) && !isContracted(contact) && !isChurned(contact)) {
+      if (isPriorityGrade(contact) && !isContracted(contact) && !isChurned(contact)) {
+        const grade = gradeToken(contact);
         items.push({
-          key: `high-${contact.id}`,
-          type: "1% 미전환",
-          tone: "purple",
+          key: `grade-${contact.id}`,
+          type: `${grade} 미전환`,
+          tone: gradeTone(grade),
           title: contact.name || "고객명 없음",
-          desc: `${contact.customer_grade || "고등급"} · 현재 ${contact.management_stage || "관리구간 미지정"}`,
+          desc: `${grade} DB · 현재 ${normalizeStage(contact.management_stage) === "딜클로징" ? "클로징" : normalizeStage(contact.management_stage)}`,
           href: "/pipeline3",
           priority: 8,
         });
@@ -774,7 +826,7 @@ export default function HomePage() {
       .forEach((item) => {
         if (!unique.has(item.key)) unique.set(item.key, item);
       });
-    return Array.from(unique.values()).slice(0, 10);
+    return Array.from(unique.values()).slice(0, 12);
   }, [notesByContact, visibleContacts]);
 
   const paymentDdays = useMemo(() => {
@@ -782,24 +834,26 @@ export default function HomePage() {
       .filter((contact) => isContracted(contact) && parsePaymentDay(contact.regular_payment_date))
       .map((contact) => {
         const day = parsePaymentDay(contact.regular_payment_date) || 1;
-        const info = getNextPaymentInfo(day);
-        return { contact, day, ...info };
+        const { due, diff } = getNextPaymentInfo(day);
+        return { contact, day, due, diff };
       })
+      .filter((item) => item.diff >= 0 && item.diff <= 4)
       .sort((a, b) => a.diff - b.diff)
-      .slice(0, 12);
+      .slice(0, 8);
   }, [visibleContacts]);
 
   const teamRows = useMemo(() => {
-    return EXECUTION_PART_NAMES.map((owner) => {
-      const ownerContacts = contacts.filter((contact) => rowMatchesOwner(contact, owner));
-      const ownerVisible = ownerContacts.filter((contact) => {
-        if (!keyword.trim()) return true;
-        return [contact.name, contact.phone, contact.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword.toLowerCase());
-      });
+    const owners = activeOwner === "전체" ? EXECUTION_PART_NAMES : [activeOwner];
+    return owners.map((owner) => {
+      const ownerVisible = contacts.filter((contact) => rowMatchesOwner(contact, owner));
       const ownerMonthContacts = ownerVisible.filter((contact) => isInMonth(contact.created_at, selectedMonth));
       const ownerVip = ownerVisible.filter(isVipContact);
       const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInMonth(row.payment_date || row.created_at, selectedMonth));
-      const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      const ownerStage = (stage: StageKey) => ownerVip.filter((contact) => normalizeStage(contact.management_stage) === stage).length;
+      const ownerContracts = ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length;
+      const ownerBronze = ownerVip.filter((contact) => gradeToken(contact) === "브론즈").length;
+      const ownerChallenger = ownerVip.filter((contact) => gradeToken(contact) === "챌린저").length;
+      const ownerMaster = ownerVip.filter((contact) => gradeToken(contact) === "마스터").length;
       return {
         owner,
         db: ownerMonthContacts.length,
@@ -809,11 +863,15 @@ export default function HomePage() {
         closing: ownerStage("딜클로징"),
         retention: ownerStage("리텐션"),
         churn: ownerStage("이탈/탈퇴"),
-        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length,
+        contracts: ownerContracts,
+        bronze: ownerBronze,
+        challenger: ownerChallenger,
+        master: ownerMaster,
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
+        conversion: percent(ownerContracts, Math.max(ownerVip.length, 1)),
       };
     });
-  }, [contacts, keyword, sales, selectedMonth]);
+  }, [activeOwner, contacts, sales, selectedMonth]);
 
   const intakeRows = useMemo(() => {
     const groups = new Map<string, ContactRow[]>();
@@ -826,40 +884,48 @@ export default function HomePage() {
     return Array.from(groups.entries())
       .map(([route, rows]) => {
         const monthRows = rows.filter((row) => isInMonth(row.created_at, selectedMonth) || isInMonth(row.vip_transferred_at, selectedMonth));
-        const baseRows = monthRows.length ? monthRows : rows;
-        const contract = rows.filter(isContracted).length;
         const vip = rows.filter(isVipContact).length;
-        const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, selectedMonth)).length;
-        return { route, count: baseRows.length, total: rows.length, firstTouch, vip, contract, rate: percent(contract, rows.length) };
+        const contract = rows.filter(isContracted).length;
+        const master = rows.filter((row) => gradeToken(row) === "마스터").length;
+        const challenger = rows.filter((row) => gradeToken(row) === "챌린저").length;
+        const bronze = rows.filter((row) => gradeToken(row) === "브론즈").length;
+        return {
+          route,
+          count: monthRows.length || rows.length,
+          total: rows.length,
+          vip,
+          contract,
+          master,
+          challenger,
+          bronze,
+          vipRate: percent(vip, rows.length),
+          contractRate: percent(contract, rows.length),
+        };
       })
       .sort((a, b) => b.contract - a.contract || b.vip - a.vip || b.count - a.count)
       .slice(0, 7);
-  }, [notesByContact, selectedMonth, visibleContacts]);
+  }, [selectedMonth, visibleContacts]);
 
   const gradeRows = useMemo(() => {
-    const groups = new Map<string, ContactRow[]>();
-    vipContacts.forEach((contact) => {
-      const key = contact.customer_grade || "심사미진행";
-      const list = groups.get(key) || [];
-      list.push(contact);
-      groups.set(key, list);
+    const priorityOrder = ["마스터", "챌린저", "브론즈"];
+    const rows = priorityOrder.map((grade) => {
+      const contactsByGrade = vipContacts.filter((contact) => gradeToken(contact) === grade);
+      const contracts = contactsByGrade.filter(isContracted).length;
+      return { grade, count: contactsByGrade.length, contracts, rate: percent(contracts, contactsByGrade.length), tone: gradeTone(grade) };
     });
 
-    const rows = Array.from(groups.entries()).map(([grade, rows]) => {
-      const contracts = rows.filter(isContracted).length;
-      const priority = normalizeText(grade).includes(normalizeText("마스터"))
-        ? 1
-        : normalizeText(grade).includes(normalizeText("챌린저"))
-          ? 2
-          : normalizeText(grade).includes(normalizeText("브론즈"))
-            ? 3
-            : 9;
-      return { grade, count: rows.length, contracts, rate: percent(contracts, rows.length), priority };
-    });
+    const otherRows = Array.from(
+      vipContacts.reduce((map, contact) => {
+        const grade = gradeToken(contact);
+        if (priorityOrder.includes(grade) || grade === "심사미진행") return map;
+        const list = map.get(grade) || [];
+        list.push(contact);
+        map.set(grade, list);
+        return map;
+      }, new Map<string, ContactRow[]>())
+    ).map(([grade, rows]) => ({ grade, count: rows.length, contracts: rows.filter(isContracted).length, rate: percent(rows.filter(isContracted).length, rows.length), tone: "muted" as ToneName }));
 
-    return rows
-      .sort((a, b) => a.priority - b.priority || b.rate - a.rate || b.count - a.count)
-      .slice(0, 6);
+    return [...rows, ...otherRows.sort((a, b) => b.count - a.count)].slice(0, 6);
   }, [vipContacts]);
 
   const kpiTarget = useMemo(() => {
@@ -877,7 +943,6 @@ export default function HomePage() {
       { label: "분양회 회비", value: stats.membershipSales, goal: Number(target?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
       { label: "연계매출", value: stats.linkedSales, goal: Number(target?.linked_revenue || 0), unit: "원", tone: "info" as ToneName, money: true },
       { label: "광고특전", value: stats.lmsSales + stats.hogangSales, goal: Number(target?.special_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
-      { label: "브론즈 DB", value: stats.bronzeThisMonth, goal: 0, unit: "명", tone: "success" as ToneName },
       { label: "완판트럭 DB", value: monthContacts.filter((contact) => normalizeText(contact.intake_route).includes(normalizeText("완판트럭"))).length, goal: Number(target?.wanpan_truck_count || 0), unit: "건", tone: "cyan" as ToneName },
     ];
   }, [kpiTarget, monthContacts, stats]);
@@ -888,42 +953,30 @@ export default function HomePage() {
   return (
     <div className="premium-page h-full overflow-y-auto">
       <div className="premium-shell px-5 py-5 md:px-7 md:py-6">
-        <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <header className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Badge tone="purple" icon={Sparkles}>당월 영업 지휘센터</Badge>
+              <Badge tone="purple" icon={Sparkles}>영업 인사이트</Badge>
               <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
               <Badge tone="muted" icon={CalendarDays}>{selectedMonthLabel}</Badge>
             </div>
-            <h1 className="crm-title">대시보드</h1>
-            <p className="crm-subtitle mt-1">
-              고객DB → 첫접촉 → VIP 이관/브론즈 등록 → 파이프라인 → 계약/리텐션 → 매출/KPI 흐름을 한 화면에서 확인합니다.
+            <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.025em] md:text-[30px]" style={{ color: "var(--text-strong)" }}>대시보드</h1>
+            <p className="mt-1 text-[13px] font-medium leading-relaxed tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+              고객DB → 첫 접촉 → VIP 이관/자동등급 → 파이프라인3 → 계약/리텐션 → 매출까지 한눈에 확인합니다.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-[280px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="고객명, 연락처, 메모 검색"
-                className="crm-search w-full pl-9 pr-3"
-              />
+              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="고객명, 연락처, 메모 검색" className="crm-search w-full pl-9 pr-3 tracking-[-0.01em]" />
             </div>
 
-            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="crm-search w-[150px] px-3">
-              {monthOptions().map((option) => (
-                <option key={option.key} value={option.key}>{option.label}</option>
-              ))}
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="crm-search w-[150px] px-3 tracking-[-0.01em]">
+              {monthOptions().map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
 
-            <select
-              value={activeOwner}
-              disabled={fixedOwner}
-              onChange={(event) => setOwnerFilter(event.target.value)}
-              className="crm-search w-[150px] px-3 disabled:opacity-70"
-            >
+            <select value={activeOwner} disabled={fixedOwner} onChange={(event) => setOwnerFilter(event.target.value)} className="crm-search w-[150px] px-3 tracking-[-0.01em] disabled:opacity-70">
               <option value="전체">전체 담당자</option>
               {EXECUTION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
@@ -940,228 +993,84 @@ export default function HomePage() {
           </div>
         )}
 
-        <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-          <MetricCard title="당월 신규DB" value={monthContacts.length} sub={`첫 접촉 ${stats.firstTouch}명 · ${percent(stats.firstTouch, monthContacts.length)}%`} icon={Database} tone="info" href="/customer-db" />
-          <MetricCard title="VIP 이관" value={stats.vipThisMonth} sub={`현재 VIP ${stats.currentPipelineTotal}명`} icon={ShieldCheck} tone="purple" href="/contacts" />
-          <MetricCard title="핵심등급DB" value={stats.coreVip} sub={`마스터 ${stats.master} · 챌린저 ${stats.challenger}`} icon={Target} tone="warning" href="/pipeline3" />
-          <MetricCard title="브론즈 등록DB" value={stats.bronze} sub={`당월 등록/변경 ${stats.bronzeThisMonth}명`} icon={UserCheck} tone="success" href="/pipeline3" />
-          <MetricCard title="계약완료" value={stats.contracts} sub={`리텐션 ${stats.retention}명`} icon={BadgeCheck} tone="success" href="/pipeline3" />
-          <MetricCard title="이탈/탈퇴" value={stats.churn} sub={`현재 이탈률 ${stats.churnRate}%`} icon={TrendingDown} tone="danger" href="/pipeline3" />
-          <MetricCard title="당월 순매출" value={money(stats.totalSales)} sub={`환불 ${moneyFull(stats.refund)}`} icon={CircleDollarSign} tone="cyan" href="/sales" />
-          <MetricCard title="광고특전" value={money(stats.lmsSales + stats.hogangSales)} sub={`LMS ${money(stats.lmsSales)} · 호갱노노 ${money(stats.hogangSales)}`} icon={Zap} tone="purple" href="/sales" />
-        </section>
-
         {loading ? (
-          <div className="flex min-h-[520px] items-center justify-center">
+          <div className="flex min-h-[620px] items-center justify-center">
             <Loader2 className="animate-spin" size={32} style={{ color: "var(--accent)" }} />
           </div>
         ) : (
-          <div className="grid gap-5 2xl:grid-cols-[1.22fr_.78fr]">
-            <div className="space-y-5">
-              <Panel>
-                <PanelTitle icon={LineChart} tone="info" title="당월 영업 퍼널" desc="신규DB/첫접촉은 사전 구간으로 분리하고, 실제 영업퍼널은 리드·프로스펙팅·클로징·리텐션 기준으로 봅니다." right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
-                <div className="space-y-4 p-4">
-                  <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-5">
-                    <div className="xl:col-span-2">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>사전 DB 구간</p>
-                        <Badge tone="cyan">신규 · 첫접촉</Badge>
+          <div className="space-y-4">
+            <Panel>
+              <PanelTitle icon={LineChart} tone="info" title="당월 영업 퍼널" desc="고객DB 발굴부터 계약/리텐션과 Churn까지의 전체 흐름" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+              <div className="space-y-4 p-4">
+                <div className="grid gap-3 lg:grid-cols-4">
+                  {topFunnelRows.map((row, index) => (
+                    <div key={row.label} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge tone={row.tone}>{index === 0 ? "시작" : `${row.rate}%`}</Badge>
+                        {index < topFunnelRows.length - 1 ? <ArrowRight size={14} style={{ color: "var(--text-faint)" }} /> : <CheckCircle2 size={14} style={{ color: "var(--success-text)" }} />}
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {acquisitionRows.map((row) => (
-                          <div key={row.label} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                            <div className="flex items-center justify-between gap-2">
-                              <Badge tone={row.tone}>{row.label}</Badge>
-                              <span className="text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>{row.label === "첫접촉완료" ? `${percent(row.value, monthContacts.length)}%` : "기준DB"}</span>
-                            </div>
-                            <p className="mt-4 text-[28px] font-semibold leading-none tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
-                            <p className="mt-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{row.sub}</p>
-                            <div className="mt-4"><ProgressBar value={row.value} total={row.label === "첫접촉완료" ? Math.max(monthContacts.length, 1) : Math.max(row.value, 1)} tone={row.tone} /></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="xl:col-span-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>VIP 이관/등급화 구간</p>
-                        <Badge tone="success">브론즈 포함</Badge>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {vipGradeSummaryRows.map((row) => (
-                          <div key={row.label} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                            <Badge tone={row.tone}>{row.label}</Badge>
-                            <p className="mt-4 text-[28px] font-semibold leading-none tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
-                            <p className="mt-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{row.sub}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[18px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>파이프라인 본 구간</p>
-                        <p className="mt-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>숫자 순번 표기를 제거하고 CRM 파이프라인 단계명으로만 구분합니다.</p>
-                      </div>
-                      <Badge tone="purple">리드 → 프로스펙팅 → 클로징 → 리텐션</Badge>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-4">
-                      {pipelineRows.map((row, index) => {
-                        const previous = index === 0 ? stats.currentPipelineTotal : pipelineRows[index - 1]?.value || 0;
-                        const rate = percent(row.value, Math.max(previous, 1));
-                        return (
-                          <div key={row.label} className="rounded-[16px] border p-4" style={{ background: "var(--surface-1)", borderColor: "var(--border-subtle)" }}>
-                            <div className="flex items-center justify-between gap-2">
-                              <Badge tone={row.tone}>{row.label}</Badge>
-                              <span className="text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>{index === 0 ? `${percent(row.value, Math.max(stats.currentPipelineTotal, 1))}%` : `${rate}%`}</span>
-                            </div>
-                            <p className="mt-4 text-[30px] font-semibold leading-none tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
-                            <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{row.sub}</p>
-                            <div className="mt-4"><ProgressBar value={row.value} total={index === 0 ? Math.max(stats.currentPipelineTotal, 1) : Math.max(previous, 1)} tone={row.tone} /></div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </Panel>
-
-              <Panel>
-                <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="가로 스크롤 없이 담당자별 신규DB·VIP·파이프라인·계약·매출을 한 화면에서 확인합니다." right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
-                <div className="grid gap-3 p-4">
-                  {teamRows.map((row) => (
-                    <div key={row.owner} className="rounded-[16px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                      <div className="grid items-center gap-3 xl:grid-cols-[120px_repeat(8,minmax(0,1fr))]">
-                        <div className="min-w-0">
-                          <Badge tone={normalizePersonName(row.owner) === normalizePersonName(activeOwner) ? "purple" : "muted"} icon={UserCheck}>{row.owner}</Badge>
-                        </div>
-                        {[
-                          { label: "신규", value: row.db, tone: "info" as ToneName },
-                          { label: "VIP", value: row.vip, tone: "purple" as ToneName },
-                          { label: "리드", value: row.lead, tone: "info" as ToneName },
-                          { label: "프로스펙팅", value: row.prospect, tone: "purple" as ToneName },
-                          { label: "클로징", value: row.closing, tone: "warning" as ToneName },
-                          { label: "계약", value: row.contracts, tone: "success" as ToneName },
-                          { label: "이탈", value: row.churn, tone: "danger" as ToneName },
-                          { label: "매출", value: money(row.sales), tone: "cyan" as ToneName },
-                        ].map((item) => (
-                          <div key={`${row.owner}-${item.label}`} className="min-w-0 rounded-[12px] px-2 py-2 text-center" style={{ background: "var(--surface-1)" }}>
-                            <p className="truncate text-[10px] font-semibold" style={{ color: toneStyle(item.tone).text }}>{item.label}</p>
-                            <p className="mt-1 truncate text-[13px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{item.value}</p>
-                          </div>
-                        ))}
-                      </div>
+                      <p className="mt-4 text-[28px] font-semibold leading-none tracking-[-0.035em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
+                      <p className="mt-2 text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text)" }}>{row.label}</p>
+                      <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.desc}</p>
+                      <div className="mt-3"><ProgressBar value={row.value} total={index === 0 ? Math.max(row.value, 1) : Math.max(topFunnelRows[index - 1].value, 1)} tone={row.tone} /></div>
                     </div>
                   ))}
                 </div>
-              </Panel>
 
-              <div className="grid items-stretch gap-5 xl:grid-cols-[.95fr_1.05fr]">
-                <Panel className="h-full">
-                  <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="가로로 길게 늘어지지 않도록 카드형으로 재정렬" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
-                  <div className="grid gap-3 p-4 sm:grid-cols-2">
-                    {kpiRows.map((row) => {
-                      const hasGoal = row.goal > 0;
-                      return (
-                        <div key={row.label} className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="truncate text-[12px] font-semibold" style={{ color: "var(--text)" }}>{row.label}</p>
-                            <Badge tone={row.tone}>{hasGoal ? `${percent(row.value, row.goal)}%` : "집계"}</Badge>
-                          </div>
-                          <p className="truncate text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
-                          <p className="mt-1 truncate text-[11px] font-medium" style={{ color: "var(--text-subtle)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "미설정"}</p>
-                          <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </Panel>
-
-                <Panel className="h-full">
-                  <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc="통합매출관리 기준 당월 순매출" right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
-                  <div className="space-y-4 p-4">
-                    {[
-                      { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
-                      { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
-                      { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
-                      { label: "연계매출", value: stats.linkedSales, tone: "success" as ToneName },
-                      { label: "기타/별도입금", value: stats.otherSales, tone: "muted" as ToneName },
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <div className="mb-2 flex items-center justify-between gap-3 text-[12px] font-semibold">
-                          <span style={{ color: "var(--text)" }}>{item.label}</span>
-                          <span style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
-                        </div>
-                        <ProgressBar value={item.value} total={Math.max(stats.totalSales, 1)} tone={item.tone} />
+                <div className="grid gap-3 lg:grid-cols-5">
+                  {pipelineFunnelRows.map((row) => (
+                    <a key={row.key} href="/pipeline3" className="rounded-[16px] border p-4 transition-all hover:-translate-y-0.5 hover:bg-white/[.035]" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge tone={row.tone}>{row.label}</Badge>
+                        <span className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{row.rate}%</span>
                       </div>
-                    ))}
-                  </div>
-                </Panel>
+                      <p className="mt-4 text-[26px] font-semibold leading-none tracking-[-0.035em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
+                      <p className="mt-2 text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.desc}</p>
+                      <div className="mt-3"><ProgressBar value={row.value} total={Math.max(stats.currentPipelineTotal, 1)} tone={row.tone} /></div>
+                    </a>
+                  ))}
+                </div>
               </div>
+            </Panel>
 
-              <div className="grid items-stretch gap-5 xl:grid-cols-[1.15fr_.85fr]">
-                <Panel className="h-full">
-                  <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="글자 간격을 줄이고 DB→VIP→계약 흐름만 명확하게 표시" />
-                  <div className="p-4">
-                    {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
-                      <div className="space-y-3">
-                        {intakeRows.map((row) => (
-                          <div key={row.route} className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <p className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                              <Badge tone={row.rate >= 20 ? "success" : row.rate >= 8 ? "warning" : "muted"}>{row.rate}% 계약</Badge>
-                            </div>
-                            <div className="grid grid-cols-4 gap-2 text-center text-[12px] font-semibold">
-                              <div className="rounded-[10px] py-2" style={{ background: "var(--surface-1)" }}><p style={{ color: "var(--text-subtle)" }}>DB</p><p style={{ color: "var(--text-strong)" }}>{row.count}</p></div>
-                              <div className="rounded-[10px] py-2" style={{ background: "var(--surface-1)" }}><p style={{ color: "var(--text-subtle)" }}>첫접촉</p><p style={{ color: "var(--text-strong)" }}>{row.firstTouch}</p></div>
-                              <div className="rounded-[10px] py-2" style={{ background: "var(--surface-1)" }}><p style={{ color: "var(--text-subtle)" }}>VIP</p><p style={{ color: "var(--text-strong)" }}>{row.vip}</p></div>
-                              <div className="rounded-[10px] py-2" style={{ background: "var(--surface-1)" }}><p style={{ color: "var(--text-subtle)" }}>계약</p><p style={{ color: "var(--success-text)" }}>{row.contract}</p></div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </Panel>
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+              <MetricCard title="당월 고객DB" value={monthContacts.length} sub={`첫 접촉 ${stats.firstTouch}명 · ${percent(stats.firstTouch, monthContacts.length)}%`} icon={Database} tone="info" href="/customer-db" />
+              <MetricCard title="VIP 이관DB" value={stats.vipThisMonth} sub={`현재 VIP ${stats.currentPipelineTotal}명`} icon={ShieldCheck} tone="purple" href="/contacts" />
+              <MetricCard title="브론즈 등록DB" value={stats.bronze} sub="중요 육성 DB" icon={BadgeCheck} tone="bronze" href="/contacts" />
+              <MetricCard title="챌린저·마스터" value={stats.challenger + stats.master} sub={`챌린저 ${stats.challenger} · 마스터 ${stats.master}`} icon={Target} tone="warning" href="/pipeline3" />
+              <MetricCard title="계약완료" value={stats.contracts} sub={`리텐션 ${stats.retention}명`} icon={CheckCircle2} tone="success" href="/pipeline3" />
+              <MetricCard title="Churn" value={stats.churn} sub={`이탈률 ${stats.churnRate}%`} icon={TrendingDown} tone="danger" href="/pipeline3" />
+              <MetricCard title="당월 순매출" value={money(stats.totalSales)} sub={`환불 ${moneyFull(stats.refund)}`} icon={CircleDollarSign} tone="cyan" href="/sales" />
+              <MetricCard title="정기결제 D-4" value={stats.paymentDueSoon} sub={`결제정보 누락 ${stats.missingPayment}명`} icon={CalendarClock} tone="warning" href="/pipeline3" />
+            </section>
 
-                <Panel className="h-full">
-                  <PanelTitle icon={Activity} tone="purple" title="자동등급별 계약전환율" desc="마스터·챌린저·브론즈를 세로형으로 비교" />
-                  <div className="space-y-3 p-4">
-                    {gradeRows.length === 0 ? <EmptyBlock title="등급 데이터가 없습니다" desc="VIP활동DB에서 고객등급을 판정하면 여기에 표시됩니다." /> : gradeRows.map((row) => (
-                      <div key={row.grade} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                        <div className="flex items-center justify-between gap-3">
-                          <Badge tone={isGradeContact({ customer_grade: row.grade } as ContactRow, "브론즈") ? "success" : isHighValueContact({ customer_grade: row.grade } as ContactRow) ? "warning" : "muted"}>{row.grade}</Badge>
-                          <span className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{row.contracts}/{row.count}명</span>
-                        </div>
-                        <div className="mt-3 flex items-end justify-between gap-3">
-                          <div>
-                            <p className="text-[28px] font-semibold leading-none tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{row.rate}%</p>
-                            <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>계약전환율</p>
-                          </div>
-                          <div className="w-[52%]"><ProgressBar value={row.contracts} total={row.count} tone={row.rate >= 20 ? "success" : row.priority <= 3 ? "warning" : "purple"} /></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
-              </div>
-            </div>
-
-            <div className="space-y-5">
+            <div className="grid gap-4 2xl:grid-cols-[1.05fr_.95fr]">
               <Panel>
-                <PanelTitle icon={AlertTriangle} tone="danger" title="오늘 챙겨야 할 고객" desc="D-DAY, 장기미활동, 클로징 지연, 결제정보 누락" right={<Badge tone="danger">{actionItems.length}건</Badge>} />
-                <div className="max-h-[560px] overflow-y-auto p-2">
-                  {actionItems.length === 0 ? <EmptyBlock title="오늘 긴급 관리 고객이 없습니다" desc="결제 D-DAY 또는 장기미활동 고객이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => (
+                <PanelTitle icon={AlertTriangle} tone="danger" title="크리티컬 관리 이슈" desc="장기미활동, 클로징 지연, 결제정보 누락, 정기결제 도래 고객" right={<Badge tone="danger">{actionItems.length}건</Badge>} />
+                <div className="grid gap-3 p-4 md:grid-cols-4">
+                  {[
+                    { label: "정기결제 D-4", value: stats.paymentDueSoon, tone: "warning" as ToneName, icon: CalendarClock },
+                    { label: "장기미활동", value: stats.inactive, tone: "warning" as ToneName, icon: Clock3 },
+                    { label: "클로징 지연", value: stats.closingDelayed, tone: "danger" as ToneName, icon: Target },
+                    { label: "결제정보 누락", value: stats.missingPayment, tone: "danger" as ToneName, icon: CreditCard },
+                  ].map((item) => (
+                    <a key={item.label} href="/pipeline3" className="rounded-[16px] border p-4 transition-all hover:bg-white/[.035]" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <IconBox icon={item.icon} tone={item.tone} size="sm" />
+                      <p className="mt-4 text-[25px] font-semibold leading-none tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{item.value}</p>
+                      <p className="mt-2 text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{item.label}</p>
+                    </a>
+                  ))}
+                </div>
+                <div className="max-h-[300px] overflow-y-auto px-2 pb-2">
+                  {actionItems.length === 0 ? <EmptyBlock title="현재 긴급 관리 이슈가 없습니다" desc="D-4 결제, 장기미활동, 클로징 지연이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => (
                     <a key={item.key} href={item.href} className="flex gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
-                      <IconBox icon={item.tone === "danger" ? AlertTriangle : item.tone === "purple" ? Target : CalendarClock} tone={item.tone} size="sm" />
+                      <IconBox icon={item.tone === "danger" ? AlertTriangle : item.type.includes("D-") || item.type === "D-DAY" ? CalendarClock : Target} tone={item.tone} size="sm" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <Badge tone={item.tone}>{item.type}</Badge>
-                          <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{item.title}</p>
+                          <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{item.title}</p>
                         </div>
-                        <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
+                        <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
                       </div>
                       <ChevronRight size={14} style={{ color: "var(--text-faint)" }} />
                     </a>
@@ -1170,61 +1079,177 @@ export default function HomePage() {
               </Panel>
 
               <Panel>
-                <PanelTitle icon={CalendarClock} tone="warning" title="자동이체 결제 D-DAY" desc="계약/리텐션 고객의 다음 결제일 기준" right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
-                <div className="max-h-[430px] overflow-y-auto p-2">
-                  {paymentDdays.length === 0 ? <EmptyBlock title="결제일 등록 고객이 없습니다" desc="계약전환 시 결제채널과 결제일을 입력하면 자동으로 계산됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
+                <PanelTitle icon={BarChart3} tone="cyan" title="통합매출관리 매출 현황" desc="분양회 월회비, LMS, 호갱노노, 연계매출 집계" right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                <div className="space-y-3 p-4">
+                  <div className="rounded-[18px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>당월 순매출</p>
+                    <p className="mt-2 text-[32px] font-semibold leading-none tracking-[-0.035em]" style={{ color: "var(--text-strong)" }}>{moneyFull(stats.totalSales)}</p>
+                    <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>환불/차감 {moneyFull(stats.refund)}</p>
+                  </div>
+                  {[
+                    { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
+                    { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
+                    { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
+                    { label: "연계매출", value: stats.linkedSales, tone: "success" as ToneName },
+                    { label: "기타/별도입금", value: stats.otherSales, tone: "muted" as ToneName },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="mb-2 flex items-center justify-between gap-3 text-[12px] font-semibold tracking-[-0.01em]">
+                        <span style={{ color: "var(--text)" }}>{item.label}</span>
+                        <span style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
+                      </div>
+                      <ProgressBar value={item.value} total={Math.max(stats.totalSales, 1)} tone={item.tone} />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+
+            <div className="grid gap-4 2xl:grid-cols-[1.16fr_.84fr]">
+              <Panel>
+                <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="스크롤 없이 담당자별 DB·등급·파이프라인·매출을 한 번에 확인" right={<Badge tone="info" icon={Filter}>{isAdminUser(me) || activeOwner === "전체" ? "관리자 뷰" : "개인 뷰"}</Badge>} />
+                <div className="grid gap-3 p-4 xl:grid-cols-2">
+                  {teamRows.map((row) => (
+                    <div key={row.owner} className="rounded-[18px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <Badge tone={normalizePersonName(row.owner) === normalizePersonName(activeOwner) ? "purple" : "muted"} icon={UserCheck}>{row.owner}</Badge>
+                          <p className="mt-3 text-[24px] font-semibold leading-none tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{row.sales ? money(row.sales) : "매출 0원"}</p>
+                          <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>VIP 대비 계약전환율 {row.conversion}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>당월 신규DB</p>
+                          <p className="mt-1 text-[22px] font-semibold leading-none" style={{ color: "var(--text-strong)" }}>{row.db}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-4 gap-2 text-center text-[12px] font-semibold tracking-[-0.01em]">
+                        <div className="rounded-[12px] p-2" style={{ background: "var(--surface-3)" }}><p style={{ color: "var(--text-subtle)" }}>VIP</p><p style={{ color: "var(--text-strong)" }}>{row.vip}</p></div>
+                        <div className="rounded-[12px] p-2" style={{ background: "var(--surface-3)" }}><p style={{ color: "#d99a5b" }}>브론즈</p><p style={{ color: "var(--text-strong)" }}>{row.bronze}</p></div>
+                        <div className="rounded-[12px] p-2" style={{ background: "var(--surface-3)" }}><p style={{ color: "var(--purple-text)" }}>챌린저</p><p style={{ color: "var(--text-strong)" }}>{row.challenger}</p></div>
+                        <div className="rounded-[12px] p-2" style={{ background: "var(--surface-3)" }}><p style={{ color: "var(--warning-text)" }}>마스터</p><p style={{ color: "var(--text-strong)" }}>{row.master}</p></div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-5 gap-2 text-center text-[12px] font-semibold tracking-[-0.01em]">
+                        <div><p style={{ color: "var(--text-subtle)" }}>리드</p><p style={{ color: "var(--text-strong)" }}>{row.lead}</p></div>
+                        <div><p style={{ color: "var(--text-subtle)" }}>프로스펙팅</p><p style={{ color: "var(--text-strong)" }}>{row.prospect}</p></div>
+                        <div><p style={{ color: "var(--text-subtle)" }}>클로징</p><p style={{ color: "var(--text-strong)" }}>{row.closing}</p></div>
+                        <div><p style={{ color: "var(--success-text)" }}>계약</p><p style={{ color: "var(--text-strong)" }}>{row.contracts || row.retention}</p></div>
+                        <div><p style={{ color: "var(--danger-text)" }}>Churn</p><p style={{ color: "var(--text-strong)" }}>{row.churn}</p></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel>
+                <PanelTitle icon={Activity} tone="purple" title="자동등급별 계약전환율" desc="브론즈·챌린저·마스터 DB의 실제 계약 전환 성과" />
+                <div className="space-y-3 p-4">
+                  {gradeRows.length === 0 ? <EmptyBlock title="등급 데이터가 없습니다" desc="VIP활동DB에서 자동등급 심사를 진행하면 표시됩니다." /> : gradeRows.map((row) => (
+                    <div key={row.grade} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge tone={row.tone}>{row.grade}</Badge>
+                        <span className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{row.contracts}/{row.count}명 계약</span>
+                      </div>
+                      <div className="mt-4 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-[30px] font-semibold leading-none tracking-[-0.035em]" style={{ color: "var(--text-strong)" }}>{row.rate}%</p>
+                          <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>계약전환율</p>
+                        </div>
+                        <p className="text-right text-[12px] font-semibold" style={{ color: "var(--text-muted)" }}>보유 {row.count}명</p>
+                      </div>
+                      <div className="mt-3"><ProgressBar value={row.contracts} total={row.count} tone={row.tone} /></div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+
+            <div className="grid gap-4 2xl:grid-cols-[1fr_1fr]">
+              <Panel>
+                <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="DB 유입경로별 VIP 이관율과 계약률" />
+                <div className="p-4">
+                  {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
+                    <div className="space-y-3">
+                      {intakeRows.map((row) => (
+                        <div key={row.route} className="rounded-[16px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                            <div className="flex shrink-0 gap-2">
+                              <Badge tone={row.vipRate >= 40 ? "success" : row.vipRate >= 20 ? "warning" : "muted"}>VIP {row.vipRate}%</Badge>
+                              <Badge tone={row.contractRate >= 20 ? "success" : row.contractRate >= 8 ? "warning" : "muted"}>계약 {row.contractRate}%</Badge>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-center text-[12px] font-semibold tracking-[-0.01em]">
+                            <div><p style={{ color: "var(--text-subtle)" }}>DB</p><p style={{ color: "var(--text-strong)" }}>{row.count}</p></div>
+                            <div><p style={{ color: "var(--text-subtle)" }}>VIP</p><p style={{ color: "var(--text-strong)" }}>{row.vip}</p></div>
+                            <div><p style={{ color: "#d99a5b" }}>브론즈</p><p style={{ color: "var(--text-strong)" }}>{row.bronze}</p></div>
+                            <div><p style={{ color: "var(--success-text)" }}>계약</p><p style={{ color: "var(--text-strong)" }}>{row.contract}</p></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Panel>
+
+              <Panel>
+                <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="오른쪽으로 길게 늘리지 않고 핵심 목표만 압축 표시" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                <div className="grid gap-3 p-4 md:grid-cols-2">
+                  {kpiRows.map((row) => {
+                    const hasGoal = row.goal > 0;
+                    return (
+                      <div key={row.label} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text)" }}>{row.label}</p>
+                          <Badge tone={hasGoal && row.value >= row.goal ? "success" : row.tone}>{hasGoal ? `${percent(row.value, row.goal)}%` : "목표 없음"}</Badge>
+                        </div>
+                        <p className="mt-4 text-[20px] font-semibold leading-tight tracking-[-0.025em]" style={{ color: "var(--text-strong)" }}>
+                          {row.money ? money(row.value) : `${row.value.toLocaleString()}${row.unit}`}
+                        </p>
+                        <p className="mt-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>
+                          목표 {hasGoal ? (row.money ? money(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "미설정"}
+                        </p>
+                        <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            </div>
+
+            <div className="grid gap-4 2xl:grid-cols-[.95fr_1.05fr]">
+              <Panel>
+                <PanelTitle icon={CalendarClock} tone="warning" title="정기결제 도래 고객" desc="계약/리텐션 고객 중 4일 이내 정기결제 예정" right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
+                <div className="max-h-[360px] overflow-y-auto p-2">
+                  {paymentDdays.length === 0 ? <EmptyBlock title="4일 이내 정기결제 도래 고객이 없습니다" desc="계약자별 정기결제일을 입력하면 D-4부터 표시됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
                     <a key={contact.id} href="/pipeline3" className="flex items-center gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
-                      <div className="flex h-11 w-14 shrink-0 flex-col items-center justify-center rounded-[14px]" style={{ background: diff <= 4 ? "var(--warning-bg)" : "var(--surface-3)", color: diff <= 4 ? "var(--warning-text)" : "var(--text-subtle)", border: `1px solid ${diff <= 4 ? "var(--warning-border)" : "var(--border)"}` }}>
+                      <div className="flex h-11 w-14 shrink-0 flex-col items-center justify-center rounded-[14px]" style={{ background: diff <= 1 ? "var(--danger-bg)" : "var(--warning-bg)", color: diff <= 1 ? "var(--danger-text)" : "var(--warning-text)", border: `1px solid ${diff <= 1 ? "var(--danger-border)" : "var(--warning-border)"}` }}>
                         <span className="text-[11px] font-semibold">{ddayLabel(diff)}</span>
                         <span className="text-[10px] font-medium">{formatDate(toDateKey(due))}</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{contact.name || "고객명 없음"}</p>
-                        <p className="mt-1 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
+                        <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{contact.name || "고객명 없음"}</p>
+                        <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
                       </div>
-                      <Badge tone={diff <= 4 ? "warning" : "muted"}>{contactOwner(contact)}</Badge>
+                      <Badge tone="muted">{contactOwner(contact)}</Badge>
                     </a>
                   ))}
                 </div>
               </Panel>
 
               <Panel>
-                <PanelTitle icon={PhoneCall} tone="info" title="활동량 요약" desc="당월 첫 접촉과 활동노트 기준" />
-                <div className="grid grid-cols-2 gap-3 p-4">
-                  <div className="rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <IconBox icon={MessageCircle} tone="info" size="sm" />
-                    <p className="mt-4 text-[24px] font-semibold leading-none" style={{ color: "var(--text-strong)" }}>{stats.firstTouch}</p>
-                    <p className="mt-2 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>첫 접촉 완료</p>
-                  </div>
-                  <div className="rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <IconBox icon={FileText} tone="purple" size="sm" />
-                    <p className="mt-4 text-[24px] font-semibold leading-none" style={{ color: "var(--text-strong)" }}>{monthNotes.length}</p>
-                    <p className="mt-2 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트</p>
-                  </div>
-                  <div className="col-span-2 rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>첫 접촉률</p>
-                      <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthContacts.length)}%</p>
-                    </div>
-                    <ProgressBar value={stats.firstTouch} total={monthContacts.length} tone="cyan" />
-                  </div>
-                </div>
-              </Panel>
-
-              <Panel>
-                <PanelTitle icon={Clock3} tone="muted" title="최근 활동노트" desc="녹취 요약 및 수동 기록" />
-                <div className="max-h-[430px] overflow-y-auto p-2">
-                  {monthNotes.length === 0 ? <EmptyBlock title="당월 활동노트가 없습니다" desc="고객 상세 또는 녹취 요약을 통해 활동노트가 쌓이면 표시됩니다." /> : monthNotes.slice(0, 8).map((note) => {
+                <PanelTitle icon={Clock3} tone="muted" title="최근 활동노트" desc="고객DB/VIP활동DB/파이프라인에서 쌓인 최근 접촉 기록" />
+                <div className="max-h-[360px] overflow-y-auto p-2">
+                  {monthNotes.length === 0 ? <EmptyBlock title="당월 활동노트가 없습니다" desc="고객 상세 또는 녹취 요약을 통해 활동노트가 쌓이면 표시됩니다." /> : monthNotes.slice(0, 9).map((note) => {
                     const contact = visibleContacts.find((row) => String(row.id) === String(note.contact_id));
                     return (
                       <a key={note.id} href="/contacts" className="flex gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
                         <IconBox icon={Activity} tone="purple" size="sm" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
+                            <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
                             <span className="shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>{timeAgo(note.created_at || note.note_date)}</span>
                           </div>
-                          <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
+                          <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
                         </div>
                       </a>
                     );
