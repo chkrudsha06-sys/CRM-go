@@ -1,1225 +1,1459 @@
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;750;800&display=swap");
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* =========================================================
-   Cycle-like CRM v3.1
-   Light-mode clarity + spacing + typography tuning
-   ========================================================= */
-
-:root {
-  color-scheme: dark;
-
-  --font-sans: Pretendard, Inter, "Noto Sans KR", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-
-  /* Typography scale - calm but highly readable */
-  --fs-page-title: clamp(23px, 1.34vw, 29px);
-  --fs-section-title: clamp(15px, 0.86vw, 17px);
-  --fs-card-title: 14.5px;
-  --fs-body: 13.5px;
-  --fs-row-main: 14px;
-  --fs-row-sub: 12.8px;
-  --fs-meta: 12.4px;
-  --fs-tiny: 11.5px;
-  --fs-button: 12.8px;
-  --fs-badge: 11.6px;
-
-  --fw-title: 780;
-  --fw-section: 740;
-  --fw-strong: 720;
-  --fw-body: 560;
-  --fw-ui: 700;
-
-  --bg: #08090b;
-  --bg-2: #0b0d10;
-  --bg-3: #0f1116;
-
-  --surface: #101114;
-  --surface-2: #14161b;
-  --surface-3: #191c22;
-  --surface-4: #20242c;
-  --surface-hover: #171a20;
-  --surface-selected: #1b2030;
-
-  --glass: rgba(16, 17, 20, 0.78);
-  --overlay: rgba(0, 0, 0, 0.58);
-
-  --border-subtle: rgba(255, 255, 255, 0.045);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-2: rgba(255, 255, 255, 0.13);
-  --border-strong: rgba(255, 255, 255, 0.2);
-
-  --text-strong: #fafafa;
-  --text: #f4f4f5;
-  --text-muted: #bcc1cc;
-  --text-subtle: #939aa7;
-  --text-faint: #67707e;
-  --text-disabled: #474e5a;
-
-  --accent: #8b7cf6;
-  --accent-2: #a78bfa;
-  --accent-3: #60a5fa;
-  --accent-text: #dcd6ff;
-  --accent-subtle: rgba(139, 124, 246, 0.12);
-  --accent-bg: rgba(139, 124, 246, 0.17);
-  --accent-border: rgba(167, 139, 250, 0.34);
-
-  --success: #34d399;
-  --success-text: #b8f7dc;
-  --success-bg: rgba(52, 211, 153, 0.11);
-  --success-border: rgba(52, 211, 153, 0.26);
-
-  --info: #60a5fa;
-  --info-text: #c9ddff;
-  --info-bg: rgba(96, 165, 250, 0.11);
-  --info-border: rgba(96, 165, 250, 0.26);
-
-  --cyan: #22d3ee;
-  --cyan-text: #bef4ff;
-  --cyan-bg: rgba(34, 211, 238, 0.1);
-  --cyan-border: rgba(34, 211, 238, 0.24);
-
-  --warning: #fbbf24;
-  --warning-text: #fde9a8;
-  --warning-bg: rgba(251, 191, 36, 0.11);
-  --warning-border: rgba(251, 191, 36, 0.26);
-
-  --danger: #fb7185;
-  --danger-text: #ffd0d7;
-  --danger-bg: rgba(251, 113, 133, 0.11);
-  --danger-border: rgba(251, 113, 133, 0.26);
-
-  --purple: #c084fc;
-  --purple-text: #ead4ff;
-  --purple-bg: rgba(192, 132, 252, 0.11);
-  --purple-border: rgba(192, 132, 252, 0.26);
-
-  --radius-xs: 7px;
-  --radius-sm: 9px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-2xl: 26px;
-
-  --page-max: 1840px;
-  --panel-width: 660px;
-  --header-height: 76px;
-  --filter-height: 58px;
-
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 18px 54px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 28px 90px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 36px 120px rgba(0, 0, 0, 0.5);
-
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Light mode: 밝게만 바꾸는 것이 아니라 전용 대비 설계 */
-[data-theme="light"] {
-  color-scheme: light;
-
-  --bg: #f3f5f8;
-  --bg-2: #eef1f5;
-  --bg-3: #e8edf3;
-
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #f1f5f9;
-  --surface-4: #e7edf5;
-  --surface-hover: #f4f7fb;
-  --surface-selected: #edf2ff;
-
-  --glass: rgba(255, 255, 255, 0.88);
-  --overlay: rgba(15, 23, 42, 0.34);
-
-  --border-subtle: rgba(15, 23, 42, 0.075);
-  --border: rgba(15, 23, 42, 0.12);
-  --border-2: rgba(15, 23, 42, 0.18);
-  --border-strong: rgba(15, 23, 42, 0.28);
-
-  --text-strong: #0f172a;
-  --text: #1e293b;
-  --text-muted: #475569;
-  --text-subtle: #64748b;
-  --text-faint: #94a3b8;
-  --text-disabled: #cbd5e1;
-
-  --accent: #6658f6;
-  --accent-2: #7c6df7;
-  --accent-3: #2563eb;
-  --accent-text: #463bd5;
-  --accent-subtle: rgba(102, 88, 246, 0.105);
-  --accent-bg: rgba(102, 88, 246, 0.14);
-  --accent-border: rgba(102, 88, 246, 0.28);
-
-  --success: #059669;
-  --success-text: #047857;
-  --success-bg: rgba(5, 150, 105, 0.105);
-  --success-border: rgba(5, 150, 105, 0.24);
-
-  --info: #2563eb;
-  --info-text: #1d4ed8;
-  --info-bg: rgba(37, 99, 235, 0.095);
-  --info-border: rgba(37, 99, 235, 0.23);
-
-  --cyan: #0891b2;
-  --cyan-text: #0e7490;
-  --cyan-bg: rgba(8, 145, 178, 0.095);
-  --cyan-border: rgba(8, 145, 178, 0.23);
-
-  --warning: #b45309;
-  --warning-text: #92400e;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(217, 119, 6, 0.24);
-
-  --danger: #e11d48;
-  --danger-text: #be123c;
-  --danger-bg: rgba(225, 29, 72, 0.09);
-  --danger-border: rgba(225, 29, 72, 0.22);
-
-  --purple: #7e22ce;
-  --purple-text: #6b21a8;
-  --purple-bg: rgba(126, 34, 206, 0.095);
-  --purple-border: rgba(126, 34, 206, 0.23);
-
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.045);
-  --shadow-sm: 0 8px 24px rgba(15, 23, 42, 0.075);
-  --shadow-md: 0 18px 48px rgba(15, 23, 42, 0.11);
-  --shadow-lg: 0 28px 76px rgba(15, 23, 42, 0.16);
-  --shadow-xl: 0 36px 110px rgba(15, 23, 42, 0.22);
-}
-
-* { box-sizing: border-box; }
-
-html {
-  height: 100%;
-  background: var(--bg);
-  font-family: var(--font-sans);
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-}
-
-body {
-  min-height: 100%;
-  margin: 0;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(139, 124, 246, 0.11), transparent 30%),
-    radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.08), transparent 28%),
-    linear-gradient(180deg, var(--bg), var(--bg-2) 48%, var(--bg));
-  color: var(--text);
-  font-family: var(--font-sans);
-  overflow: hidden;
-}
-
-[data-theme="light"] body {
-  background:
-    radial-gradient(circle at 18% 0%, rgba(102, 88, 246, 0.105), transparent 30%),
-    radial-gradient(circle at 88% 12%, rgba(37, 99, 235, 0.075), transparent 28%),
-    linear-gradient(180deg, #f7f9fc 0%, #eef1f5 52%, #f4f6f9 100%);
-}
-
-button, input, textarea, select { font-family: inherit; }
-button { cursor: pointer; }
-button:disabled { cursor: not-allowed; }
-a { color: inherit; text-decoration: none; }
-
-::selection { background: rgba(139, 124, 246, 0.35); color: var(--text-strong); }
-
-* { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.42) transparent; }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.34); border: 3px solid transparent; border-radius: 999px; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.46); border: 3px solid transparent; background-clip: padding-box; }
-
-input, textarea, select {
-  background: var(--surface-2);
-  border-color: var(--border);
-  color: var(--text);
-}
-
-[data-theme="light"] input,
-[data-theme="light"] textarea,
-[data-theme="light"] select {
-  background: #ffffff;
-  border-color: var(--border);
-  color: var(--text);
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.035);
-}
-
-input::placeholder, textarea::placeholder { color: var(--text-faint); }
-input:focus, textarea:focus, select:focus {
-  border-color: var(--accent-border) !important;
-  box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.13);
-}
-[data-theme="light"] input:focus,
-[data-theme="light"] textarea:focus,
-[data-theme="light"] select:focus {
-  border-color: var(--accent-border) !important;
-  box-shadow: 0 0 0 3px rgba(102, 88, 246, 0.14), 0 2px 8px rgba(15, 23, 42, 0.07);
-}
-option, optgroup { background: var(--surface); color: var(--text); }
-
-.premium-page {
-  position: relative;
-  min-height: 100%;
-  color: var(--text);
-  background:
-    radial-gradient(circle at 30% -5%, rgba(139, 124, 246, 0.095), transparent 32%),
-    radial-gradient(circle at 80% 5%, rgba(96, 165, 250, 0.06), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 240px);
-}
-[data-theme="light"] .premium-page {
-  background:
-    radial-gradient(circle at 28% -5%, rgba(102, 88, 246, 0.08), transparent 32%),
-    radial-gradient(circle at 80% 5%, rgba(37, 99, 235, 0.055), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 260px);
-}
-.premium-page::before {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.46), transparent 42%);
-}
-[data-theme="light"] .premium-page::before {
-  background-image:
-    linear-gradient(rgba(15, 23, 42, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.22), transparent 45%);
-}
-
-.premium-shell { width: min(100%, var(--page-max)); margin: 0 auto; }
-
-.premium-header {
-  position: relative;
-  z-index: 2;
-  min-height: var(--header-height);
-  background: linear-gradient(180deg, rgba(16, 17, 20, 0.86), rgba(16, 17, 20, 0.66)), rgba(16, 17, 20, 0.52);
-  border-bottom: 1px solid var(--border-subtle);
-  backdrop-filter: blur(18px);
-}
-[data-theme="light"] .premium-header {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82)), rgba(255, 255, 255, 0.86);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.035);
-}
-
-.premium-filterbar {
-  position: relative;
-  z-index: 2;
-  min-height: var(--filter-height);
-  background: linear-gradient(180deg, rgba(12, 14, 18, 0.72), rgba(12, 14, 18, 0.58)), rgba(12, 14, 18, 0.55);
-  border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
-  backdrop-filter: blur(16px);
-}
-[data-theme="light"] .premium-filterbar {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.9)), #ffffff;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.035), 0 8px 20px rgba(15, 23, 42, 0.035);
-}
-
-.premium-hero {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-2xl);
-  background:
-    radial-gradient(circle at 16% 0%, rgba(139, 124, 246, 0.24), transparent 34%),
-    radial-gradient(circle at 92% 10%, rgba(96, 165, 250, 0.16), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)), var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-[data-theme="light"] .premium-hero {
-  border-color: var(--border);
-  background:
-    radial-gradient(circle at 15% 0%, rgba(102, 88, 246, 0.14), transparent 34%),
-    radial-gradient(circle at 92% 8%, rgba(37, 99, 235, 0.09), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.88)), #ffffff;
-  box-shadow: var(--shadow-sm);
-}
-.premium-hero::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent 28%), linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 42%);
-}
-
-.premium-card {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.012)), var(--surface);
-  box-shadow: var(--shadow-xs);
-}
-[data-theme="light"] .premium-card {
-  border-color: var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.9)), #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.045), 0 10px 28px rgba(15, 23, 42, 0.055);
-}
-.premium-card-hover { transition: transform 180ms var(--ease), border-color 180ms var(--ease), background 180ms var(--ease), box-shadow 180ms var(--ease); }
-.premium-card-hover:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-2);
-  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.016)), var(--surface-hover);
-  box-shadow: var(--shadow-sm);
-}
-[data-theme="light"] .premium-card-hover:hover {
-  border-color: var(--border-2);
-  background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff;
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05), 0 14px 34px rgba(15, 23, 42, 0.085);
-}
-.premium-panel, .premium-glass, .premium-section {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.036), rgba(255, 255, 255, 0.012)), var(--surface);
-  box-shadow: var(--shadow-md);
-}
-[data-theme="light"] .premium-panel,
-[data-theme="light"] .premium-glass,
-[data-theme="light"] .premium-section {
-  background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff;
-  box-shadow: var(--shadow-md);
-}
-
-.crm-title { margin: 0; color: var(--text-strong); font-size: clamp(21px, 1.24vw, 26px); font-weight: 780; letter-spacing: -0.056em; line-height: 1.08; }
-.crm-subtitle { margin: 0; color: var(--text-subtle); font-size: 13px; font-weight: 590; letter-spacing: -0.018em; line-height: 1.45; }
-.crm-section-title { margin: 0; color: var(--text-strong); font-size: var(--fs-section-title); font-weight: var(--fw-title); letter-spacing: -0.038em; line-height: 1.25; }
-.crm-card-title { margin: 0; color: var(--text); font-size: 14px; font-weight: var(--fw-section); letter-spacing: -0.03em; line-height: 1.28; }
-.crm-body { color: var(--text-muted); font-size: 13px; font-weight: 560; letter-spacing: -0.012em; line-height: 1.62; }
-.crm-meta { color: var(--text-subtle); font-size: 12px; font-weight: 650; letter-spacing: -0.012em; line-height: 1.35; }
-.crm-tiny { color: var(--text-faint); font-size: 11px; font-weight: 680; letter-spacing: -0.005em; line-height: 1.35; }
-.crm-row-main { color: var(--text); font-size: 13.5px; font-weight: var(--fw-section); letter-spacing: -0.025em; line-height: 1.25; }
-.crm-row-sub { color: var(--text-subtle); font-size: 12px; font-weight: 610; letter-spacing: -0.01em; line-height: 1.35; }
-[data-theme="light"] .crm-tiny { color: #7b8798; }
-.crm-row-center { display: flex; align-items: center; }
-
-.btn-premium {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  white-space: nowrap;
-  border-radius: 10px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  font-size: 12px;
-  font-weight: var(--fw-section);
-  letter-spacing: -0.015em;
-  line-height: 1;
-  transition: transform 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease), color 160ms var(--ease), box-shadow 160ms var(--ease), opacity 160ms var(--ease);
-}
-.btn-premium:hover { transform: translateY(-1px); }
-.btn-premium:active { transform: translateY(0); }
-.btn-primary {
-  color: #fff;
-  border-color: rgba(167, 139, 250, 0.34);
-  background: linear-gradient(180deg, rgba(255,255,255,.16), transparent), linear-gradient(135deg, #8b7cf6, #6d6cf2 48%, #4f8df7);
-  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.24), inset 0 1px 0 rgba(255,255,255,.22);
-}
-.btn-primary:hover { border-color: rgba(216, 210, 255, 0.44); box-shadow: 0 14px 34px rgba(99,102,241,.32), inset 0 1px 0 rgba(255,255,255,.26); }
-.btn-secondary {
-  color: var(--text-muted);
-  border-color: var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,.038), rgba(255,255,255,.01)), var(--surface-2);
-}
-.btn-secondary:hover {
-  color: var(--text);
-  border-color: var(--border-2);
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.018)), var(--surface-3);
-}
-[data-theme="light"] .btn-secondary {
-  color: var(--text-muted);
-  border-color: rgba(15, 23, 42, 0.13);
-  background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.045);
-}
-[data-theme="light"] .btn-secondary:hover {
-  color: var(--text);
-  border-color: rgba(15, 23, 42, 0.2);
-  background: linear-gradient(180deg, #ffffff, #f1f5f9), #ffffff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.075);
-}
-.btn-danger { color: var(--danger-text); border-color: var(--danger-border); background: var(--danger-bg); }
-.btn-danger:hover { color: var(--danger-text); border-color: rgba(225,29,72,.34); background: rgba(225,29,72,.12); }
-.btn-ghost { color: var(--text-subtle); border-color: transparent; background: transparent; }
-.btn-ghost:hover { color: var(--text); border-color: var(--border); background: var(--surface-2); }
-
-.badge-premium {
-  display: inline-flex;
-  height: 23px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  white-space: nowrap;
-  border-radius: 7px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  background: var(--surface-3);
-  color: var(--text-subtle);
-  font-size: 11px;
-  font-weight: var(--fw-title);
-  letter-spacing: -0.01em;
-}
-.badge-success { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
-.badge-info { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
-.badge-cyan { color: var(--cyan-text); background: var(--cyan-bg); border-color: var(--cyan-border); }
-.badge-warning { color: var(--warning-text); background: var(--warning-bg); border-color: var(--warning-border); }
-.badge-danger { color: var(--danger-text); background: var(--danger-bg); border-color: var(--danger-border); }
-.badge-purple { color: var(--purple-text); background: var(--purple-bg); border-color: var(--purple-border); }
-.badge-muted { color: var(--text-subtle); background: var(--surface-3); border-color: var(--border); }
-
-.crm-avatar, .crm-avatar-sm, .crm-avatar-lg {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-  color: #fff;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 8px 20px rgba(0,0,0,.18);
-}
-.crm-avatar { width: 34px; height: 34px; border-radius: 11px; font-size: 13px; }
-.crm-avatar-sm { width: 26px; height: 26px; border-radius: 8px; font-size: 11px; }
-.crm-avatar-lg { width: 50px; height: 50px; border-radius: 16px; font-size: 18px; }
-
-.premium-icon, .premium-icon-sm, .premium-icon-lg {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.01)), var(--surface-2);
-  color: var(--text-muted);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
-}
-[data-theme="light"] .premium-icon,
-[data-theme="light"] .premium-icon-sm,
-[data-theme="light"] .premium-icon-lg {
-  background: linear-gradient(180deg, #ffffff, #f1f5f9), #ffffff;
-  border-color: var(--border);
-  color: var(--text-muted);
-}
-.premium-icon { width: 38px; height: 38px; border-radius: 12px; }
-.premium-icon-sm { width: 30px; height: 30px; border-radius: 9px; }
-.premium-icon-lg { width: 48px; height: 48px; border-radius: 15px; }
-
-.crm-table-wrap {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255,255,255,.028), rgba(255,255,255,.008)), var(--surface);
-  box-shadow: var(--shadow-xs);
-}
-[data-theme="light"] .crm-table-wrap {
-  border-color: var(--border);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.045), 0 12px 32px rgba(15, 23, 42, 0.055);
-}
-.crm-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-.crm-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  height: 44px;
-  padding: 0 15px;
-  text-align: left;
-  vertical-align: middle;
-  background: linear-gradient(180deg, rgba(20,22,26,.98), rgba(20,22,26,.94)), var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 780;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-[data-theme="light"] .crm-table thead th {
-  background: linear-gradient(180deg, #f8fafc, #f1f5f9), #f8fafc;
-  border-bottom-color: rgba(15, 23, 42, 0.13);
-  color: #64748b;
-}
-.crm-table tbody td {
-  height: 66px;
-  padding: 0 15px;
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 590;
-}
-[data-theme="light"] .crm-table tbody td { border-bottom-color: rgba(15, 23, 42, 0.075); color: var(--text-muted); }
-.crm-table tbody tr { transition: background 140ms var(--ease), box-shadow 140ms var(--ease); }
-.crm-table tbody tr:hover { background: rgba(255,255,255,.028); }
-[data-theme="light"] .crm-table tbody tr:hover { background: #f8fafc; }
-.crm-table tbody tr[data-selected="true"] { background: linear-gradient(90deg, rgba(139,124,246,.16), rgba(139,124,246,.045)), var(--surface-selected); }
-[data-theme="light"] .crm-table tbody tr[data-selected="true"] { background: linear-gradient(90deg, rgba(102,88,246,.12), rgba(102,88,246,.035)), #eef2ff; }
-.crm-table tbody tr:last-child td { border-bottom: 0; }
-.crm-table th:first-child { border-top-left-radius: var(--radius-lg); }
-.crm-table th:last-child { border-top-right-radius: var(--radius-lg); }
-
-.slide-panel-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: radial-gradient(circle at 80% 20%, rgba(139,124,246,.08), transparent 34%), var(--overlay);
-  backdrop-filter: blur(5px);
-  animation: overlayIn 180ms var(--ease) both;
-}
-.slide-panel {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  bottom: 10px;
-  z-index: 80;
-  display: flex;
-  width: min(var(--panel-width), calc(100vw - 20px));
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border-2);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012)), var(--surface);
-  box-shadow: var(--shadow-xl);
-  animation: slidePanelIn 260ms var(--ease-soft) both;
-}
-[data-theme="light"] .slide-panel { background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff; border-color: rgba(15, 23, 42, 0.18); }
-.slide-panel-header {
-  flex-shrink: 0;
-  padding: 22px 22px 16px;
-  background: radial-gradient(circle at 16% 0%, rgba(139,124,246,.12), transparent 42%), linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--surface);
-  border-bottom: 1px solid var(--border-subtle);
-}
-[data-theme="light"] .slide-panel-header { background: radial-gradient(circle at 16% 0%, rgba(102,88,246,.09), transparent 42%), linear-gradient(180deg, #ffffff, #f8fafc), #ffffff; border-bottom-color: var(--border); }
-.slide-panel-body { min-height: 0; flex: 1; overflow-y: auto; padding: 20px 22px; background: var(--bg-2); }
-[data-theme="light"] .slide-panel-body { background: #f3f5f8; }
-.slide-panel-footer {
-  flex-shrink: 0;
-  padding: 16px 22px 18px;
-  border-top: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, rgba(16,17,20,.68), rgba(16,17,20,.92)), var(--surface);
-}
-[data-theme="light"] .slide-panel-footer { border-top-color: var(--border); background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(248,250,252,.96)), #ffffff; }
-
-.crm-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: radial-gradient(circle at 50% 10%, rgba(139,124,246,.12), transparent 32%), rgba(0,0,0,.68);
-  backdrop-filter: blur(7px);
-  animation: overlayIn 160ms var(--ease) both;
-}
-[data-theme="light"] .crm-modal-overlay { background: radial-gradient(circle at 50% 10%, rgba(102,88,246,.12), transparent 32%), rgba(15,23,42,.38); }
-.crm-modal {
-  width: min(100%, 780px);
-  max-height: min(88vh, 900px);
-  overflow: hidden;
-  border: 1px solid var(--border-2);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.012)), var(--surface);
-  box-shadow: var(--shadow-xl);
-  animation: modalIn 220ms var(--ease-soft) both;
-}
-[data-theme="light"] .crm-modal { background: linear-gradient(180deg, #ffffff, #f8fafc), #ffffff; border-color: rgba(15,23,42,.18); }
-
-.crm-filter-pill {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  padding: 0 11px;
-  font-size: 12px;
-  font-weight: var(--fw-section);
-  white-space: nowrap;
-}
-.crm-filter-pill[data-active="true"] { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent-text); }
-.crm-search {
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 650;
-  outline: none;
-}
-
-/* Fixed Tailwind utility visibility overrides */
-.premium-page :where(input, select, textarea) { min-height: 36px; font-weight: 640; }
-.premium-page :where(.h-8) { min-height: 32px; }
-.premium-page :where(.h-9) { min-height: 36px; }
-.premium-page :where(.text-\[11px\]) { font-size: 11.25px; }
-.premium-page :where(.text-\[12px\]) { font-size: 12px; }
-.premium-page :where(.text-\[13px\]) { font-size: 13px; }
-.premium-page :where(.text-\[14px\]) { font-size: 14px; }
-
-[data-theme="light"] .premium-page :where(.text-slate-400, .text-gray-400, .text-zinc-400) { color: #64748b !important; }
-[data-theme="light"] .premium-page :where(.text-slate-500, .text-gray-500, .text-zinc-500) { color: #475569 !important; }
-[data-theme="light"] .premium-page :where(.border, .border-white\/10, .border-slate-200, .border-gray-200) { border-color: var(--border) !important; }
-
-[data-theme="light"] aside,
-[data-theme="light"] nav {
-  --sidebar-bg: #ffffff;
-  --sidebar-border: rgba(15, 23, 42, 0.12);
-  --sidebar-text: #334155;
-  --sidebar-muted: #64748b;
-  --sidebar-active: #eef2ff;
-}
-
-.line-clamp-1, .line-clamp-2, .line-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
-.line-clamp-1 { -webkit-line-clamp: 1; }
-.line-clamp-2 { -webkit-line-clamp: 2; }
-.line-clamp-3 { -webkit-line-clamp: 3; }
-.crm-divider { height: 1px; background: var(--border-subtle); }
-.crm-focus-ring { outline: none; }
-.crm-focus-ring:focus-visible { box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.22); }
-
-@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slidePanelIn { from { opacity: 0; transform: translateX(28px) scale(0.985); } to { opacity: 1; transform: translateX(0) scale(1); } }
-@keyframes crmSlideIn { from { opacity: 0.72; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-@keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
-
-@media (min-width: 1800px) {
-  :root { --panel-width: 700px; }
-  .crm-table tbody td { height: 68px; }
-  .crm-title { font-size: 26px; }
-}
-
-@media (max-width: 1280px) {
-  :root { --panel-width: 600px; }
-  .premium-header { min-height: 70px; }
-  .crm-title { font-size: 21px; }
-  .crm-subtitle { font-size: 12px; }
-}
-
-@media (max-width: 768px) {
-  body { overflow: auto; }
-  .premium-page { min-height: 100vh; }
-  .premium-header, .premium-filterbar { min-height: auto; }
-  .crm-title { font-size: 20px; }
-  .crm-section-title { font-size: 15px; }
-  .btn-premium { height: 34px; padding: 0 10px; font-size: 12px; }
-  .premium-card { border-radius: 15px; }
-  .slide-panel { top: 0; right: 0; bottom: 0; width: 100vw; max-width: 100vw; border-radius: 0; border-right: 0; border-top: 0; border-bottom: 0; }
-  .slide-panel-header { padding: 18px 16px 14px; }
-  .slide-panel-body { padding: 16px; }
-  .slide-panel-footer { padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); }
-  .crm-modal-overlay { align-items: stretch; padding: 10px; }
-  .crm-modal { max-height: calc(100vh - 20px); border-radius: 18px; }
-}
-
-@media (max-width: 480px) {
-  .crm-avatar-lg { width: 44px; height: 44px; border-radius: 14px; font-size: 16px; }
-  .crm-row-main { font-size: 13px; }
-  .crm-row-sub { font-size: 11.5px; }
-  .crm-meta, .crm-tiny { font-size: 11px; }
-}
-
-
-/* =========================================================
-   Pretendard Readability Override v3.2
-   한글 CRM 시안성 우선: 메뉴/테이블/필터/패널 폰트 일괄 안정화
-   ========================================================= */
-
-body,
-button,
-input,
-textarea,
-select,
-table,
-a {
-  font-family: var(--font-sans) !important;
-}
-
-.premium-header,
-.premium-filterbar,
-.premium-card,
-.premium-panel,
-.crm-table-wrap,
-.slide-panel,
-.crm-modal {
-  font-family: var(--font-sans) !important;
-}
-
-.crm-title {
-  font-size: var(--fs-page-title) !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.052em !important;
-}
-
-.crm-subtitle {
-  font-size: 13px !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.02em !important;
-  line-height: 1.5 !important;
-}
-
-.crm-section-title {
-  font-size: var(--fs-section-title) !important;
-  font-weight: 600 !important;
-}
-
-.crm-card-title {
-  font-size: var(--fs-card-title) !important;
-  font-weight: 600 !important;
-}
-
-.crm-body {
-  font-size: var(--fs-body) !important;
-  font-weight: 400 !important;
-  line-height: 1.66 !important;
-}
-
-.crm-row-main {
-  font-size: var(--fs-row-main) !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.032em !important;
-}
-
-.crm-row-sub {
-  font-size: var(--fs-row-sub) !important;
-  font-weight: 400 !important;
-}
-
-.crm-meta {
-  font-size: var(--fs-meta) !important;
-  font-weight: 400 !important;
-}
-
-.crm-tiny {
-  font-size: var(--fs-tiny) !important;
-  font-weight: 400 !important;
-}
-
-.btn-premium {
-  height: 36px !important;
-  font-size: var(--fs-button) !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.02em !important;
-}
-
-.badge-premium,
-.crm-table .badge-premium {
-  height: 24px !important;
-  font-size: var(--fs-badge) !important;
-  font-weight: 400 !important;
-}
-
-.crm-table thead th {
-  height: 44px !important;
-  font-size: 11.8px !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.01em !important;
-}
-
-.crm-table tbody td {
-  height: 66px !important;
-  font-size: 13.6px !important;
-  font-weight: 400 !important;
-}
-
-input,
-textarea,
-select {
-  font-size: 13.3px !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.018em !important;
-}
-
-.premium-filterbar input,
-.premium-filterbar select,
-.crm-search {
-  height: 38px !important;
-  font-size: 13px !important;
-  font-weight: 400 !important;
-}
-
-.slide-panel-body {
-  font-size: 13.6px !important;
-  line-height: 1.66 !important;
-}
-
-.slide-panel-header h2 {
-  font-family: var(--font-sans) !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.052em !important;
-}
-
-/* ── Dashboard: blanket 400 reset + re-bold only titles & values ── */
-.premium-page,
-.premium-page * {
-  font-weight: 400 !important;
-}
-/* Tailwind bold classes re-enabled inside dashboard (titles & values keep these) */
-.premium-page .font-semibold { font-weight: 600 !important; }
-.premium-page .font-bold { font-weight: 700 !important; }
-.premium-page .crm-title { font-weight: 700 !important; }
-
-/* Sidebar text is defined mostly in component classes; this raises it globally */
-aside nav a,
-aside nav button,
-aside [role="button"] {
-  font-family: var(--font-sans) !important;
-  font-size: 14px !important;
-  font-weight: 400 !important;
-  letter-spacing: -0.028em !important;
-}
-
-aside p,
-aside span,
-aside button,
-aside a,
-aside h1,
-aside h2,
-aside h3,
-aside label,
-aside textarea {
-  font-weight: 400 !important;
-}
-
-aside .crm-avatar,
-aside .crm-avatar-sm,
-aside .crm-avatar-lg {
-  font-weight: 400 !important;
-}
-
-aside p,
-aside span {
-  font-family: var(--font-sans) !important;
-}
-
-@media (min-width: 1800px) {
-  :root {
-    --fs-page-title: 29px;
-    --fs-section-title: 17px;
-    --fs-card-title: 15px;
-    --fs-body: 14px;
-    --fs-row-main: 14.5px;
-    --fs-row-sub: 13px;
-    --fs-meta: 12.8px;
-    --fs-button: 13px;
+"use client";
+
+import { supabase } from "@/lib/supabase";
+import { getCurrentUser } from "@/lib/auth";
+import type { ElementType, ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  BadgeCheck,
+  BarChart3,
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  CreditCard,
+  Database,
+  FileText,
+  Filter,
+  LineChart,
+  Loader2,
+  MessageCircle,
+  PhoneCall,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  UserCheck,
+  Users,
+  WalletCards,
+  X,
+  Zap,
+} from "lucide-react";
+
+type CRMUserLite = {
+  name?: string;
+  title?: string;
+  role?: string;
+  id?: string;
+};
+
+type ContactRow = Record<string, any> & {
+  id: number;
+  name?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  intake_route?: string | null;
+  activity_type?: string | null;
+  has_tm?: boolean | null;
+  tm_date?: string | null;
+  meeting_result?: string | null;
+  management_stage?: string | null;
+  customer_grade?: string | null;
+  crm_db_source?: string | null;
+  vip_transferred_at?: string | null;
+  assigned_to?: string | null;
+  consultant?: string | null;
+  contract_date?: string | null;
+  reservation_date?: string | null;
+  churn_date?: string | null;
+  regular_payment_date?: string | null;
+  payment_channel?: string | null;
+  memo?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type NoteRow = Record<string, any> & {
+  id: number;
+  contact_id: number;
+  note_date?: string | null;
+  content?: string | null;
+  author?: string | null;
+  created_at?: string | null;
+};
+
+type SalesRow = Record<string, any> & {
+  id: number;
+  member_name?: string | null;
+  execution_amount?: number | null;
+  vat_amount?: number | null;
+  refund_amount?: number | null;
+  channel?: string | null;
+  contract_route?: string | null;
+  payment_date?: string | null;
+  team_member?: string | null;
+  consultant?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type KpiRow = Record<string, any> & {
+  year: number;
+  month: number;
+  week: number;
+  scope: "team" | "execution" | "operation";
+  target_name: string;
+  recruit_count?: number | null;
+  bunyanghoe_revenue?: number | null;
+  linked_revenue?: number | null;
+  special_revenue?: number | null;
+  wanpan_truck_count?: number | null;
+  ad_operation_revenue?: number | null;
+};
+
+type ActionItem = {
+  key: string;
+  type: string;
+  tone: ToneName;
+  title: string;
+  desc: string;
+  href: string;
+  priority: number;
+};
+
+type ToneName = "info" | "success" | "warning" | "danger" | "purple" | "cyan" | "muted";
+
+type FunnelRow = {
+  label: string;
+  value: number;
+  sub: string;
+  tone: ToneName;
+};
+
+const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
+const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
+const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
+const CORE_VIP_GRADES = ["마스터", "챌린저", "브론즈"];
+const PAYMENT_CHANNEL_OPTIONS = ["자동이체 (효성CMS)", "카드 (사이다페이)", "기타 (별도입금)"];
+const PAYMENT_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
+const MONTH_LABEL_FORMAT = new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit" });
+const TODAY = new Date();
+
+function normalizePersonName(value?: string | null) {
+  return String(value || "")
+    .replace(/님|팀장|파트장|본부장|대표|메인|어쏘|CX|어시|관리자/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function readUserFromStorage(): CRMUserLite | null {
+  try {
+    const current = getCurrentUser();
+    if (current) return current;
+    const raw = localStorage.getItem("crm_user");
+    if (!raw) return null;
+    return JSON.parse(raw) as CRMUserLite;
+  } catch {
+    return null;
   }
 }
 
-@media (max-width: 768px) {
-  :root {
-    --fs-page-title: 21px;
-    --fs-section-title: 15px;
-    --fs-card-title: 14px;
-    --fs-body: 13.2px;
-    --fs-row-main: 13.5px;
-    --fs-row-sub: 12.3px;
-    --fs-button: 12.5px;
-  }
-
-  .crm-table tbody td {
-    height: 60px !important;
-  }
+function isExecutionUser(user?: CRMUserLite | null) {
+  const role = String(user?.role || "").toLowerCase();
+  const name = normalizePersonName(user?.name);
+  return role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
-/* =========================================================
-   Large Monitor Responsive Visibility Layer v3.6
-   - Removes fixed centered workspace max-width on 27"+ / QHD / 4K
-   - Scales typography and cards for large monitors
-   - Keeps smaller 24" screens compact
-   ========================================================= */
-
-:root {
-  --crm-page-gutter: clamp(16px, 1.05vw, 34px);
-  --crm-card-gap: clamp(12px, 0.82vw, 22px);
-  --crm-density-scale: 1;
+function isAdminUser(user?: CRMUserLite | null) {
+  const role = String(user?.role || "").toLowerCase();
+  const name = normalizePersonName(user?.name);
+  return role === "admin" || ADMIN_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
-.premium-page,
-.premium-page > div,
-.premium-page main {
-  width: 100% !important;
-  max-width: none !important;
+function contactOwner(row: Pick<ContactRow, "assigned_to" | "consultant">) {
+  return row.assigned_to || row.consultant || "미지정";
 }
 
-.premium-shell {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
+function rowMatchesOwner(row: Pick<ContactRow, "assigned_to" | "consultant">, owner: string) {
+  if (!owner || owner === "전체") return true;
+  const target = normalizePersonName(owner);
+  return normalizePersonName(row.assigned_to) === target || normalizePersonName(row.consultant) === target;
 }
 
-@media (min-width: 1440px) {
-  :root {
-    --page-max: calc(100vw - 32px);
-  }
-
-  .premium-shell {
-    width: 100% !important;
-    max-width: none !important;
-  }
-
-  .premium-page :where(.px-5, .lg\:px-7, .md\:px-7) {
-    padding-left: var(--crm-page-gutter) !important;
-    padding-right: var(--crm-page-gutter) !important;
-  }
+function salesMatchesOwner(row: SalesRow, owner: string) {
+  if (!owner || owner === "전체") return true;
+  const target = normalizePersonName(owner);
+  return normalizePersonName(row.team_member) === target || normalizePersonName(row.consultant) === target;
 }
 
-@media (min-width: 1800px) {
-  :root {
-    --page-max: calc(100vw - 44px);
-    --crm-page-gutter: clamp(24px, 1.12vw, 40px);
-    --crm-card-gap: clamp(14px, 0.86vw, 24px);
-    --fs-page-title: clamp(30px, 1.36vw, 38px);
-    --fs-section-title: 18px;
-    --fs-card-title: 15.8px;
-    --fs-body: 14.7px;
-    --fs-row-main: 15.3px;
-    --fs-row-sub: 13.8px;
-    --fs-meta: 13.3px;
-    --fs-tiny: 12.3px;
-    --fs-button: 13.6px;
-    --fs-badge: 12.3px;
-  }
-
-  body {
-    font-size: 15px !important;
-  }
-
-  aside.hidden.w-\[296px\],
-  aside[class*="w-[296px]"] {
-    width: clamp(296px, 12.2vw, 340px) !important;
-  }
-
-  aside nav a,
-  aside nav button,
-  aside [role="button"] {
-    height: 42px !important;
-    font-size: 14.8px !important;
-  }
-
-  aside .crm-tiny,
-  aside .text-\[11px\] {
-    font-size: 12.2px !important;
-  }
-
-  aside .text-\[15px\] {
-    font-size: 16px !important;
-  }
-
-  aside .text-\[16px\] {
-    font-size: 17px !important;
-  }
-
-  .premium-page :where(.px-5, .lg\:px-7, .md\:px-7) {
-    padding-left: var(--crm-page-gutter) !important;
-    padding-right: var(--crm-page-gutter) !important;
-  }
-
-  .premium-page :where(.py-5, .md\:py-6) {
-    padding-top: clamp(20px, 1.05vw, 32px) !important;
-    padding-bottom: clamp(20px, 1.05vw, 32px) !important;
-  }
-
-  .premium-header {
-    min-height: 86px !important;
-  }
-
-  .premium-filterbar {
-    min-height: 62px !important;
-  }
-
-  .premium-card,
-  .premium-panel,
-  .premium-hero,
-  .crm-table-wrap {
-    border-radius: 18px !important;
-  }
-
-  .premium-card :where(.text-\[22px\]) {
-    font-size: 26px !important;
-  }
-
-  .crm-title {
-    font-size: var(--fs-page-title) !important;
-    letter-spacing: -0.06em !important;
-  }
-
-  .crm-subtitle {
-    font-size: 14.2px !important;
-  }
-
-  .crm-section-title {
-    font-size: var(--fs-section-title) !important;
-  }
-
-  .crm-card-title {
-    font-size: var(--fs-card-title) !important;
-  }
-
-  .crm-body,
-  .premium-page p,
-  .premium-page span,
-  .premium-page div,
-  .premium-page label {
-    letter-spacing: -0.02em;
-  }
-
-  .crm-row-main {
-    font-size: var(--fs-row-main) !important;
-  }
-
-  .crm-row-sub {
-    font-size: var(--fs-row-sub) !important;
-  }
-
-  .crm-meta {
-    font-size: var(--fs-meta) !important;
-  }
-
-  .crm-tiny {
-    font-size: var(--fs-tiny) !important;
-  }
-
-  .btn-premium {
-    height: 38px !important;
-    min-height: 38px !important;
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-    font-size: var(--fs-button) !important;
-  }
-
-  .badge-premium {
-    height: 25px !important;
-    font-size: var(--fs-badge) !important;
-  }
-
-  input,
-  textarea,
-  select,
-  .crm-search,
-  .premium-filterbar input,
-  .premium-filterbar select {
-    min-height: 40px !important;
-    font-size: 14px !important;
-  }
-
-  .crm-table thead th {
-    height: 48px !important;
-    font-size: 12.4px !important;
-  }
-
-  .crm-table tbody td {
-    height: 72px !important;
-    font-size: 14.5px !important;
-  }
-
-  .crm-avatar {
-    width: 38px !important;
-    height: 38px !important;
-    border-radius: 12px !important;
-    font-size: 14px !important;
-  }
-
-  .crm-avatar-sm {
-    width: 30px !important;
-    height: 30px !important;
-    border-radius: 10px !important;
-    font-size: 12px !important;
-  }
-
-  .premium-icon,
-  .premium-icon-sm {
-    transform: scale(1.04);
-  }
-
-  .premium-page :where(.gap-3) {
-    gap: var(--crm-card-gap) !important;
-  }
-
-  .premium-page :where(.gap-4) {
-    gap: clamp(16px, 0.9vw, 26px) !important;
-  }
+function parseDate(value?: string | null) {
+  if (!value) return null;
+  const normalized = String(value).length === 10 ? `${value}T00:00:00` : String(value);
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-@media (min-width: 2200px) {
-  :root {
-    --page-max: calc(100vw - 56px);
-    --crm-page-gutter: clamp(30px, 1.18vw, 52px);
-    --fs-page-title: clamp(34px, 1.28vw, 44px);
-    --fs-section-title: 19px;
-    --fs-card-title: 16.5px;
-    --fs-body: 15.3px;
-    --fs-row-main: 16px;
-    --fs-row-sub: 14.3px;
-    --fs-meta: 13.8px;
-    --fs-tiny: 12.8px;
-    --fs-button: 14px;
-    --fs-badge: 12.8px;
-  }
-
-  body {
-    font-size: 15.6px !important;
-  }
-
-  aside.hidden.w-\[296px\],
-  aside[class*="w-[296px]"] {
-    width: clamp(320px, 12vw, 360px) !important;
-  }
-
-  aside nav a,
-  aside nav button,
-  aside [role="button"] {
-    height: 44px !important;
-    font-size: 15.2px !important;
-  }
-
-  .premium-header {
-    min-height: 92px !important;
-  }
-
-  .premium-filterbar {
-    min-height: 66px !important;
-  }
-
-  .premium-card :where(.text-\[22px\]) {
-    font-size: 28px !important;
-  }
-
-  .crm-table tbody td {
-    height: 76px !important;
-  }
+function toDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-@media (min-width: 2560px) {
-  :root {
-    --page-max: calc(100vw - 64px);
-    --crm-page-gutter: 42px;
-  }
-
-  .premium-page :where(.premium-card, .premium-panel, .premium-hero, .crm-table-wrap) {
-    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.18);
-  }
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-@media (max-width: 1439px) {
-  .premium-shell {
-    width: 100% !important;
-    max-width: none !important;
+function getMonthWindow(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const end = new Date(year, month, 1, 0, 0, 0, 0);
+  return { start, end, year, month };
+}
+
+function isInMonth(value: string | null | undefined, selectedMonth: string) {
+  const date = parseDate(value);
+  if (!date) return false;
+  const { start, end } = getMonthWindow(selectedMonth);
+  return date >= start && date < end;
+}
+
+function daysBetween(from?: string | null, to = new Date()) {
+  const date = parseDate(from);
+  if (!date) return null;
+  return Math.floor((to.getTime() - date.getTime()) / 86_400_000);
+}
+
+function money(value?: number | null) {
+  const n = Number(value || 0);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 100_000_000) return `${sign}${(abs / 100_000_000).toFixed(abs % 100_000_000 === 0 ? 0 : 1)}억`;
+  if (abs >= 10_000) return `${sign}${Math.round(abs / 10_000).toLocaleString()}만원`;
+  return `${sign}${abs.toLocaleString()}원`;
+}
+
+function moneyFull(value?: number | null) {
+  return `${Number(value || 0).toLocaleString()}원`;
+}
+
+function percent(value: number, total: number) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function formatDate(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function formatDateTime(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function timeAgo(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  const diff = Date.now() - date.getTime();
+  const min = Math.floor(diff / 60_000);
+  const hour = Math.floor(min / 60);
+  const day = Math.floor(hour / 24);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  if (hour < 24) return `${hour}시간 전`;
+  if (day < 30) return `${day}일 전`;
+  return formatDate(value);
+}
+
+function effectiveSales(row: SalesRow) {
+  const execution = Number(row.execution_amount || 0);
+  const vat = Number(row.vat_amount || 0);
+  const refund = Number(row.refund_amount || 0);
+  const base = vat && vat !== execution ? vat : execution;
+  return Math.max(base - refund, 0);
+}
+
+function refundSales(row: SalesRow) {
+  return Number(row.refund_amount || 0);
+}
+
+function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked" | "other" {
+  const channel = normalizeText(row.channel);
+  const route = normalizeText(row.contract_route);
+  const item = normalizeText(row.payment_item || row.payment_type || row.item_name || row.memo);
+
+  if (route.includes("연계매출") || route.includes("하이타겟")) return "linked";
+  if (channel.includes("LMS") || item.includes("LMS")) return "lms";
+  if (channel.includes("호갱노노") || item.includes("호갱노노")) return "hogang";
+  if (
+    route.includes("분양회") ||
+    channel.includes("효성CMS") ||
+    channel.includes("사이다페이") ||
+    item.includes("월회비") ||
+    item.includes("회비")
+  ) {
+    return "membership";
   }
+  return "other";
+}
+
+function isVipContact(contact: ContactRow) {
+  const source = normalizeText(contact.crm_db_source);
+  const stage = normalizeText(contact.management_stage);
+  const grade = normalizeText(contact.customer_grade);
+  return source === "vip_activity" || PIPELINE_STAGES.map(normalizeText).includes(stage) || Boolean(grade && grade !== normalizeText("심사미진행"));
+}
+
+function isHighValueContact(contact: ContactRow) {
+  const grade = normalizeText(contact.customer_grade);
+  return HIGH_VALUE_GRADES.some((token) => grade.includes(normalizeText(token)));
+}
+
+function isCoreVipGrade(contact: ContactRow) {
+  const grade = normalizeText(contact.customer_grade);
+  return CORE_VIP_GRADES.some((token) => grade.includes(normalizeText(token)));
+}
+
+function isGradeContact(contact: ContactRow, gradeName: string) {
+  return normalizeText(contact.customer_grade).includes(normalizeText(gradeName));
+}
+
+function isContractedInMonth(contact: ContactRow, selectedMonth: string) {
+  return isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth));
+}
+
+function touchedInMonth(contact: ContactRow, selectedMonth: string) {
+  return isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth);
+}
+
+function isContracted(contact: ContactRow) {
+  return normalizeText(contact.meeting_result) === normalizeText("계약완료") || normalizeText(contact.management_stage) === normalizeText("리텐션");
+}
+
+function isChurned(contact: ContactRow) {
+  const stage = normalizeText(contact.management_stage);
+  const result = normalizeText(contact.meeting_result);
+  return stage.includes("이탈") || stage.includes("탈퇴") || result === normalizeText("계약거부") || result === normalizeText("미팅불발");
+}
+
+function latestActivityDate(contact: ContactRow, notesByContact: Map<string, NoteRow[]>) {
+  const notes = notesByContact.get(String(contact.id)) || [];
+  const latestNote = notes
+    .map((note) => note.created_at || note.note_date)
+    .filter(Boolean)
+    .sort((a, b) => new Date(String(b)).getTime() - new Date(String(a)).getTime())[0];
+  return latestNote || contact.updated_at || contact.created_at || null;
+}
+
+function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, selectedMonth: string) {
+  const activity = normalizeText(contact.activity_type);
+  const notes = notesByContact.get(String(contact.id)) || [];
+  const hasTypedNote = notes.some((note) => {
+    const content = normalizeText(note.content);
+    const inMonth = isInMonth(note.created_at || note.note_date, selectedMonth);
+    return inMonth && (content.includes("TM") || content.includes("콜드톡") || content.includes("활동완료") || content.includes("녹취"));
+  });
+  return (
+    activity.includes("TM") ||
+    activity.includes("콜드톡") ||
+    Boolean(contact.has_tm) ||
+    isInMonth(contact.tm_date, selectedMonth) ||
+    hasTypedNote
+  );
+}
+
+function parsePaymentDay(value?: string | null) {
+  if (!value) return null;
+  const match = String(value).match(/\d+/);
+  if (!match) return null;
+  const day = Number(match[0]);
+  if (!Number.isFinite(day) || day < 1 || day > 31) return null;
+  return day;
+}
+
+function getNextPaymentInfo(day: number, now = TODAY) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const lastDayThisMonth = new Date(year, month + 1, 0).getDate();
+  let due = new Date(year, month, Math.min(day, lastDayThisMonth), 0, 0, 0, 0);
+
+  const todayOnly = new Date(year, month, now.getDate(), 0, 0, 0, 0);
+  if (due < todayOnly) {
+    const nextLast = new Date(year, month + 2, 0).getDate();
+    due = new Date(year, month + 1, Math.min(day, nextLast), 0, 0, 0, 0);
+  }
+
+  const diff = Math.round((due.getTime() - todayOnly.getTime()) / 86_400_000);
+  return { due, diff };
+}
+
+function ddayLabel(diff: number) {
+  if (diff === 0) return "D-DAY";
+  if (diff > 0) return `D-${diff}`;
+  return `D+${Math.abs(diff)}`;
+}
+
+function paymentLabel(contact: ContactRow) {
+  const channel = contact.payment_channel || "결제채널 미입력";
+  const day = parsePaymentDay(contact.regular_payment_date);
+  return `${channel} · ${day ? `매월 ${day}일` : "결제일 미입력"}`;
+}
+
+function monthOptions() {
+  const base = new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(base.getFullYear(), base.getMonth() - 4 + index, 1);
+    return { key: monthKey(date), label: MONTH_LABEL_FORMAT.format(date) };
+  }).reverse();
+}
+
+function toneStyle(tone: ToneName) {
+  const map: Record<ToneName, { bg: string; text: string; border: string; dot: string; bar: string }> = {
+    info: { bg: "var(--info-bg)", text: "var(--info-text)", border: "var(--info-border)", dot: "var(--info)", bar: "linear-gradient(90deg,#60A5FA,#22D3EE)" },
+    success: { bg: "var(--success-bg)", text: "var(--success-text)", border: "var(--success-border)", dot: "var(--success)", bar: "linear-gradient(90deg,#34D399,#22D3EE)" },
+    warning: { bg: "var(--warning-bg)", text: "var(--warning-text)", border: "var(--warning-border)", dot: "var(--warning)", bar: "linear-gradient(90deg,#FBBF24,#FB7185)" },
+    danger: { bg: "var(--danger-bg)", text: "var(--danger-text)", border: "var(--danger-border)", dot: "var(--danger)", bar: "linear-gradient(90deg,#FB7185,#F43F5E)" },
+    purple: { bg: "var(--purple-bg)", text: "var(--purple-text)", border: "var(--purple-border)", dot: "var(--purple)", bar: "linear-gradient(90deg,#8B7CF6,#60A5FA)" },
+    cyan: { bg: "var(--cyan-bg)", text: "var(--cyan-text)", border: "var(--cyan-border)", dot: "var(--cyan)", bar: "linear-gradient(90deg,#22D3EE,#34D399)" },
+    muted: { bg: "var(--surface-3)", text: "var(--text-subtle)", border: "var(--border)", dot: "var(--text-faint)", bar: "linear-gradient(90deg,var(--text-faint),var(--border))" },
+  };
+  return map[tone];
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 통일 디자인 시스템 (전 카드 공통 규격)
+ *  - 카드 헤더: px-4 py-3 / 타이틀 14px tracking-[-0.02em] / 설명 12px
+ *  - 메인 숫자: 20~22px tracking-[-0.04em] / 라벨 11px · 서브 12px
+ *  - 서브카드: rounded-[12px] p-3 surface-2 / 그리드 갭: 외부 gap-4 · 내부 gap-2.5
+ * ───────────────────────────────────────────────────────────── */
+
+type DashboardActionItem = ActionItem & { contactId: number };
+
+function Badge({ children, tone = "muted", icon: Icon }: { children: ReactNode; tone?: ToneName; icon?: ElementType }) {
+  const c = toneStyle(tone);
+  return (
+    <span
+      className="inline-flex min-h-[22px] items-center gap-1 rounded-[7px] px-2 text-[11px] font-normal tracking-[-0.01em]"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+    >
+      {Icon ? <Icon size={11} /> : <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.dot }} />}
+      {children}
+    </span>
+  );
+}
+
+function IconBox({ icon: Icon, tone = "info", size = "md" }: { icon: ElementType; tone?: ToneName; size?: "sm" | "md" }) {
+  const c = toneStyle(tone);
+  const cls = size === "sm" ? "h-7 w-7 rounded-[9px]" : "h-9 w-9 rounded-[11px]";
+  return (
+    <div className={`inline-flex shrink-0 items-center justify-center ${cls}`} style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>
+      <Icon size={size === "sm" ? 13 : 16} />
+    </div>
+  );
+}
+
+function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`premium-card overflow-hidden ${className}`}>{children}</section>;
+}
+
+function PanelTitle({ icon, tone, title, desc, right }: { icon: ElementType; tone: ToneName; title: string; desc?: string; right?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <IconBox icon={icon} tone={tone} size="sm" />
+        <div className="min-w-0">
+          <p className="text-[14px] font-semibold leading-tight tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+          {desc && <p className="mt-0.5 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function StatBox({ label, value, sub, tone = "muted" }: { label: string; value: number | string; sub?: string; tone?: ToneName }) {
+  const c = toneStyle(tone);
+  return (
+    <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <p className="truncate text-[11px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
+      <p className="mt-1.5 truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </p>
+      {sub && <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>}
+    </div>
+  );
+}
+
+function ProgressBar({ value, total, tone = "info" }: { value: number; total: number; tone?: ToneName }) {
+  const c = toneStyle(tone);
+  const width = Math.min(100, percent(value, total || value || 1));
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+      <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, background: c.bar }} />
+    </div>
+  );
+}
+
+function EmptyBlock({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div className="flex min-h-[120px] flex-col items-center justify-center p-5 text-center">
+      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "var(--surface-3)", color: "var(--text-faint)" }}>
+        <FileText size={15} />
+      </div>
+      <p className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+      <p className="mt-1 max-w-[280px] text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+    </div>
+  );
+}
+
+/** 퍼널 박스 (전체 폭 균등 분배 · 세로 확장 · 텍스트 확대) */
+function FunnelBox({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: ToneName }) {
+  const c = toneStyle(tone);
+  return (
+    <div className="min-w-0 flex-1 rounded-[12px] border px-4 py-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="flex items-center gap-1.5">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
+        <p className="truncate text-[13px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
+      </div>
+      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+        {value.toLocaleString()}<span className="ml-0.5 text-[14px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
+      </p>
+      <p className="mt-2 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+    </div>
+  );
+}
+
+/** 퍼널 커넥터 (고정 폭 + 양쪽 마진으로 박스와 간격 확보) */
+function FunnelConnector({ rate }: { rate: number | null | undefined }) {
+  return (
+    <div className="mx-3 flex w-[66px] shrink-0 items-center justify-center">
+      {rate !== null && rate !== undefined ? (
+        <span
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.02em]"
+          style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
+        >
+          {rate}%<ArrowRight size={12} />
+        </span>
+      ) : (
+        <ArrowRight size={14} style={{ color: "var(--text-faint)" }} />
+      )}
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
+  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const [sales, setSales] = useState<SalesRow[]>([]);
+  const [kpis, setKpis] = useState<KpiRow[]>([]);
+  const [me, setMe] = useState<CRMUserLite | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
+  const [ownerFilter, setOwnerFilter] = useState("전체");
+  const [keyword, setKeyword] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
+  const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
+  const [editIssue, setEditIssue] = useState("");
+  const [editForm, setEditForm] = useState({ name: "", title: "", phone: "", management_stage: "", payment_channel: "", regular_payment_date: "", memo: "" });
+  const [quickNote, setQuickNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage("");
+
+    const currentUser = readUserFromStorage();
+    setMe(currentUser);
+
+    if (isExecutionUser(currentUser)) {
+      setOwnerFilter(currentUser?.name || "전체");
+    }
+
+    const { year, month } = getMonthWindow(selectedMonth);
+
+    try {
+      const [contactRes, noteRes, salesRes, kpiRes] = await Promise.all([
+        supabase.from("contacts").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("contact_notes").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", 0),
+      ]);
+
+      if (contactRes.error) throw contactRes.error;
+      if (noteRes.error) console.warn("contact_notes:", noteRes.error.message);
+      if (salesRes.error) console.warn("ad_executions:", salesRes.error.message);
+      if (kpiRes.error) console.warn("kpi_settings:", kpiRes.error.message);
+
+      setContacts(((contactRes.data || []) as unknown) as ContactRow[]);
+      setNotes(((noteRes.data || []) as unknown) as NoteRow[]);
+      setSales(((salesRes.data || []) as unknown) as SalesRow[]);
+      setKpis(((kpiRes.data || []) as unknown) as KpiRow[]);
+    } catch (error: any) {
+      console.error(error);
+      setErrorMessage(error?.message || "대시보드 데이터를 불러오지 못했습니다.");
+      setContacts([]);
+      setNotes([]);
+      setSales([]);
+      setKpis([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, [fetchDashboard]);
+
+  const openCustomerEdit = useCallback((contactId: number, issue: string) => {
+    const target = contacts.find((row) => Number(row.id) === Number(contactId));
+    if (!target) return;
+    setEditTarget(target);
+    setEditIssue(issue);
+    setQuickNote("");
+    setEditForm({
+      name: target.name || "",
+      title: target.title || "",
+      phone: target.phone || "",
+      management_stage: target.management_stage || "",
+      payment_channel: target.payment_channel || "",
+      regular_payment_date: target.regular_payment_date || "",
+      memo: target.memo || "",
+    });
+  }, [contacts]);
+
+  const saveCustomerEdit = useCallback(async () => {
+    if (!editTarget) return;
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, any> = {
+        name: editForm.name.trim() || null,
+        title: editForm.title.trim() || null,
+        phone: editForm.phone.trim() || null,
+        management_stage: editForm.management_stage || null,
+        payment_channel: editForm.payment_channel.trim() || null,
+        regular_payment_date: editForm.regular_payment_date.trim() || null,
+        memo: editForm.memo.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("contacts").update(payload).eq("id", editTarget.id);
+      if (error) throw error;
+
+      if (quickNote.trim()) {
+        const { error: noteError } = await supabase.from("contact_notes").insert({
+          contact_id: editTarget.id,
+          content: quickNote.trim(),
+          note_date: toDateKey(new Date()),
+          author: me?.name || null,
+        });
+        if (noteError) console.warn("contact_notes insert:", noteError.message);
+      }
+
+      setEditTarget(null);
+      setQuickNote("");
+      await fetchDashboard();
+    } catch (error: any) {
+      console.error(error);
+      setErrorMessage(error?.message || "고객 정보를 저장하지 못했습니다.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editForm, editTarget, fetchDashboard, me?.name, quickNote]);
+
+  const fixedOwner = isExecutionUser(me);
+  const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
+
+  const notesByContact = useMemo(() => {
+    const map = new Map<string, NoteRow[]>();
+    notes.forEach((note) => {
+      const key = String(note.contact_id);
+      const list = map.get(key) || [];
+      list.push(note);
+      map.set(key, list);
+    });
+    map.forEach((list) => {
+      list.sort((a, b) => new Date(String(b.created_at || b.note_date || 0)).getTime() - new Date(String(a.created_at || a.note_date || 0)).getTime());
+    });
+    return map;
+  }, [notes]);
+
+  const visibleContacts = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    return contacts.filter((contact) => {
+      const ownerMatch = rowMatchesOwner(contact, activeOwner);
+      if (!ownerMatch) return false;
+      if (!q) return true;
+      return [contact.name, contact.phone, contact.title, contact.intake_route, contact.assigned_to, contact.consultant, contact.memo]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [contacts, activeOwner, keyword]);
+
+  const visibleSales = useMemo(() => {
+    return sales.filter((row) => salesMatchesOwner(row, activeOwner));
+  }, [sales, activeOwner]);
+
+  const monthContacts = useMemo(() => {
+    return visibleContacts.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+  }, [visibleContacts, selectedMonth]);
+
+  const monthSales = useMemo(() => {
+    return visibleSales.filter((row) => isInMonth(row.payment_date || row.created_at, selectedMonth));
+  }, [visibleSales, selectedMonth]);
+
+  const monthNotes = useMemo(() => {
+    const visibleIds = new Set(visibleContacts.map((contact) => String(contact.id)));
+    return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInMonth(note.created_at || note.note_date, selectedMonth));
+  }, [notes, visibleContacts, selectedMonth]);
+
+  const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
+
+  const stats = useMemo(() => {
+    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, selectedMonth)).length;
+    const tmCount = monthContacts.filter((contact) => {
+      const activity = normalizeText(contact.activity_type);
+      return activity.includes("TM") || Boolean(contact.has_tm) || isInMonth(contact.tm_date, selectedMonth);
+    }).length;
+    const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
+    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, selectedMonth)).length;
+    const master = visibleContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
+    const challenger = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
+    const bronze = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
+    const masterThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, selectedMonth)).length;
+    const challengerThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, selectedMonth)).length;
+    const bronzeThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
+    const contracts = visibleContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
+
+    const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
+    const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
+
+    const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
+      acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const retention = stageCounts["리텐션"] || visibleContacts.filter(isContracted).length;
+    const churnCount = stageCounts["이탈/탈퇴"] || 0;
+    const churnRate = percent(churnCount, Math.max(vipContacts.length, 1));
+    const activePipeline = (stageCounts["리드"] || 0) + (stageCounts["프로스펙팅"] || 0) + (stageCounts["딜클로징"] || 0);
+    const contractRate = percent(retention, Math.max(vipContacts.length, 1));
+
+    return {
+      firstTouch, tmCount, coldTalkCount, vipThisMonth,
+      master, challenger, bronze,
+      masterThisMonth, challengerThisMonth, bronzeThisMonth,
+      contracts, churnCount, churnRate,
+      membershipSales, lmsSales, hogangSales, refund, totalSales,
+      stageCounts, retention, activePipeline, contractRate,
+      currentPipelineTotal: vipContacts.length,
+    };
+  }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
+
+  /* 당월 영업 퍼널: 4단계 */
+  const funnelStages = useMemo(() => {
+    return [
+      { label: "고객DB 신규", value: monthContacts.length, sub: "당월 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthContacts.length) },
+      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: percent(stats.vipThisMonth, Math.max(stats.firstTouch, 1)) },
+      { label: "VIP 이관·등급심사", value: stats.vipThisMonth, sub: `현재 VIP ${stats.currentPipelineTotal}명`, tone: "purple" as ToneName, rate: percent(stats.retention, Math.max(stats.vipThisMonth, 1)) },
+      { label: "계약 · 리텐션", value: stats.retention, sub: `당월 계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
+    ];
+  }, [monthContacts.length, stats]);
+
+  /* 오늘 챙겨야 할 고객 (크리티컬 통합 리스트) */
+  const { actionItems, criticalCounts } = useMemo(() => {
+    const items: DashboardActionItem[] = [];
+    const counts = { payment: 0, missing: 0, inactive: 0, closing: 0 };
+
+    visibleContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
+      const day = parsePaymentDay(contact.regular_payment_date);
+      if (isContracted(contact) && day) {
+        const { diff } = getNextPaymentInfo(day);
+        if (diff >= 0 && diff <= 4) {
+          counts.payment += 1;
+          items.push({
+            key: `pay-${contact.id}`,
+            type: `결제 ${ddayLabel(diff)}`,
+            tone: diff === 0 ? "danger" : "warning",
+            title: contact.name || "고객명 없음",
+            desc: paymentLabel(contact),
+            href: "/pipeline3",
+            priority: diff,
+            contactId,
+          });
+        }
+      }
+
+      if (isContracted(contact) && (!contact.payment_channel || !parsePaymentDay(contact.regular_payment_date))) {
+        counts.missing += 1;
+        items.push({
+          key: `missing-payment-${contact.id}`,
+          type: "결제정보 누락",
+          tone: "danger",
+          title: contact.name || "고객명 없음",
+          desc: "결제채널 또는 결제일이 비어 있습니다. 클릭해 바로 입력하세요.",
+          href: "/pipeline3",
+          priority: 1,
+          contactId,
+        });
+      }
+
+      const stage = normalizeText(contact.management_stage);
+      const latest = latestActivityDate(contact, notesByContact);
+      const inactiveDays = daysBetween(latest);
+      if (["리드", "프로스펙팅", "딜클로징"].some((item) => stage === normalizeText(item)) && inactiveDays !== null && inactiveDays >= 7) {
+        counts.inactive += 1;
+        items.push({
+          key: `inactive-${contact.id}`,
+          type: "장기 미활동",
+          tone: "warning",
+          title: contact.name || "고객명 없음",
+          desc: `${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
+          href: "/pipeline3",
+          priority: 4 + inactiveDays,
+          contactId,
+        });
+      }
+
+      const closingDays = daysBetween(contact.updated_at || contact.vip_transferred_at || contact.created_at);
+      if (stage === normalizeText("딜클로징") && closingDays !== null && closingDays >= 5) {
+        counts.closing += 1;
+        items.push({
+          key: `closing-${contact.id}`,
+          type: "클로징 지연",
+          tone: "danger",
+          title: contact.name || "고객명 없음",
+          desc: `딜클로징 ${closingDays}일째 체류 중입니다.`,
+          href: "/pipeline3",
+          priority: 2 + closingDays,
+          contactId,
+        });
+      }
+    });
+
+    const unique = new Map<string, DashboardActionItem>();
+    items
+      .sort((a, b) => a.priority - b.priority)
+      .forEach((item) => {
+        if (!unique.has(item.key)) unique.set(item.key, item);
+      });
+    return { actionItems: Array.from(unique.values()).slice(0, 14), criticalCounts: counts };
+  }, [notesByContact, visibleContacts]);
+
+  const paymentDdays = useMemo(() => {
+    return visibleContacts
+      .filter((contact) => isContracted(contact) && parsePaymentDay(contact.regular_payment_date))
+      .map((contact) => {
+        const day = parsePaymentDay(contact.regular_payment_date) || 1;
+        const info = getNextPaymentInfo(day);
+        return { contact, day, ...info };
+      })
+      .sort((a, b) => a.diff - b.diff)
+      .slice(0, 12);
+  }, [visibleContacts]);
+
+  const paymentDueSoonCount = useMemo(() => paymentDdays.filter((row) => row.diff >= 0 && row.diff <= 4).length, [paymentDdays]);
+
+  const teamRows = useMemo(() => {
+    return EXECUTION_PART_NAMES.map((owner) => {
+      const ownerContacts = contacts.filter((contact) => rowMatchesOwner(contact, owner));
+      const ownerVisible = ownerContacts.filter((contact) => {
+        if (!keyword.trim()) return true;
+        return [contact.name, contact.phone, contact.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword.toLowerCase());
+      });
+      const ownerMonthContacts = ownerVisible.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+      const ownerVip = ownerVisible.filter(isVipContact);
+      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInMonth(row.payment_date || row.created_at, selectedMonth));
+      const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      const masterChallenger = ownerVisible.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length;
+      const bronze = ownerVisible.filter((contact) => isGradeContact(contact, "브론즈")).length;
+      return {
+        owner,
+        db: ownerMonthContacts.length,
+        masterChallenger,
+        bronze,
+        lead: ownerStage("리드"),
+        prospect: ownerStage("프로스펙팅"),
+        closing: ownerStage("딜클로징"),
+        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length,
+        churn: ownerStage("이탈/탈퇴"),
+        sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
+      };
+    });
+  }, [contacts, keyword, sales, selectedMonth]);
+
+  /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
+  const intakeRows = useMemo(() => {
+    const groups = new Map<string, ContactRow[]>();
+    visibleContacts.forEach((contact) => {
+      const key = contact.intake_route || "유입경로 미지정";
+      const list = groups.get(key) || [];
+      list.push(contact);
+      groups.set(key, list);
+    });
+    return Array.from(groups.entries())
+      .map(([route, rows]) => {
+        const contract = rows.filter(isContracted).length;
+        const vip = rows.filter(isVipContact).length;
+        const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, selectedMonth)).length;
+        return {
+          route,
+          total: rows.length,
+          firstTouch,
+          vip,
+          contract,
+          touchRate: percent(firstTouch, rows.length),
+          vipRate: percent(vip, rows.length),
+        };
+      })
+      .sort((a, b) => b.vip - a.vip || b.vipRate - a.vipRate || b.total - a.total)
+      .slice(0, 7);
+  }, [notesByContact, selectedMonth, visibleContacts]);
+
+  /* 등급별 계약전환율: 마스터·챌린저·브론즈 계약건수 + 계약 유입경로 */
+  const gradeContractRows = useMemo(() => {
+    return CORE_VIP_GRADES.map((grade) => {
+      const rows = vipContacts.filter((contact) => isGradeContact(contact, grade));
+      const contracted = rows.filter(isContracted);
+      const routeCounts = new Map<string, number>();
+      contracted.forEach((contact) => {
+        const key = contact.intake_route || "경로 미지정";
+        routeCounts.set(key, (routeCounts.get(key) || 0) + 1);
+      });
+      const routes = Array.from(routeCounts.entries()).sort((a, b) => b[1] - a[1]);
+      return {
+        grade,
+        count: rows.length,
+        contracts: contracted.length,
+        rate: percent(contracted.length, rows.length),
+        routes,
+        tone: (grade === "마스터" ? "warning" : grade === "챌린저" ? "purple" : "success") as ToneName,
+      };
+    });
+  }, [vipContacts]);
+
+  const kpiTarget = useMemo(() => {
+    const userName = activeOwner === "전체" ? "team" : activeOwner;
+    const target = activeOwner === "전체"
+      ? kpis.find((row) => row.scope === "team" && row.target_name === "team")
+      : kpis.find((row) => row.scope === "execution" && normalizePersonName(row.target_name) === normalizePersonName(userName));
+    return target || null;
+  }, [activeOwner, kpis]);
+
+  /* KPI: 분양회 모집 · 분양회 회비 2종만 */
+  const kpiRows = useMemo(() => {
+    return [
+      { label: "분양회 모집", value: stats.contracts, goal: Number(kpiTarget?.recruit_count || 0), unit: "명", tone: "success" as ToneName, money: false },
+      { label: "분양회 회비", value: stats.membershipSales, goal: Number(kpiTarget?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
+    ];
+  }, [kpiTarget, stats.contracts, stats.membershipSales]);
+
+  /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 3종만 */
+  const salesBreakdown = useMemo(() => ([
+    { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
+    { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
+    { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
+  ]), [stats.hogangSales, stats.lmsSales, stats.membershipSales]);
+
+  const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales;
+
+  const selectedMonthLabel = MONTH_LABEL_FORMAT.format(getMonthWindow(selectedMonth).start);
+  const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
+  const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
+
+  const gradeJoinRows = [
+    { label: "마스터", value: stats.masterThisMonth, total: stats.master, tone: "warning" as ToneName },
+    { label: "챌린저", value: stats.challengerThisMonth, total: stats.challenger, tone: "purple" as ToneName },
+    { label: "브론즈", value: stats.bronzeThisMonth, total: stats.bronze, tone: "success" as ToneName },
+  ];
+
+  return (
+    <div className="premium-page h-full overflow-y-auto">
+      <div className="premium-shell px-5 py-5 md:px-7 md:py-6">
+
+        {/* ── 헤더 ── */}
+        <header className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="crm-title">대시보드</h1>
+              <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
+              <Badge tone="muted" icon={CalendarDays}>{selectedMonthLabel}</Badge>
+            </div>
+            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션 → 매출까지 당월 영업 흐름을 한 화면에서 봅니다.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-[240px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
+              <input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="고객명, 연락처, 메모 검색"
+                className="crm-search w-full pl-9 pr-3"
+              />
+            </div>
+
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="crm-search w-[130px] px-3">
+              {monthOptions().map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
+
+            <select
+              value={activeOwner}
+              disabled={fixedOwner}
+              onChange={(event) => setOwnerFilter(event.target.value)}
+              className="crm-search w-[130px] px-3 disabled:opacity-70"
+            >
+              <option value="전체">전체 담당자</option>
+              {EXECUTION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+
+            <button type="button" onClick={fetchDashboard} className="btn-premium btn-secondary">
+              <RefreshCw size={14} /> 새로고침
+            </button>
+          </div>
+        </header>
+
+        {errorMessage && (
+          <div className="mb-4 rounded-[12px] border px-4 py-3 text-[13px] font-normal" style={{ background: "var(--danger-bg)", borderColor: "var(--danger-border)", color: "var(--danger-text)" }}>
+            {errorMessage}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex min-h-[520px] items-center justify-center">
+            <Loader2 className="animate-spin" size={32} style={{ color: "var(--accent)" }} />
+          </div>
+        ) : (
+          <div className="space-y-4">
+
+            {/* ── ① 최상단: 당월 영업 퍼널(좌) + 당월 등급 가입 현황(우) ── */}
+            <div className="grid items-stretch gap-4 2xl:grid-cols-[1fr_300px]">
+              <Panel className="h-full">
+                <PanelTitle
+                  icon={LineChart}
+                  tone="info"
+                  title="당월 영업 퍼널"
+                  desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션"
+                  right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
+                />
+                <div className="p-4">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
+                    {funnelStages.map((stage) => (
+                      <Fragment key={stage.label}>
+                        <FunnelBox label={stage.label} value={stage.value} sub={stage.sub} tone={stage.tone} />
+                        {!stage.isLast && <FunnelConnector rate={stage.rate} />}
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              </Panel>
+
+              <Panel className="flex h-full flex-col">
+                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급별 가입현황" desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+                <div className="flex flex-1 flex-col justify-center gap-2 p-4">
+                  {gradeJoinRows.map((row) => {
+                    const c = toneStyle(row.tone);
+                    return (
+                      <div key={row.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        <Badge tone={row.tone}>{row.label}</Badge>
+                        <div className="flex items-baseline gap-1.5">
+                          <p className="text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--text-faint)" }}>/ 누적 {row.total}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            </div>
+
+            {/* ── ② 본문 그리드 ── */}
+            <div className="grid gap-4 2xl:grid-cols-[1.25fr_.75fr]">
+              {/* 좌측 */}
+              <div className="space-y-4">
+
+                {/* 담당자별 파이프라인 현황 */}
+                <Panel>
+                  <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
+                  <div className="overflow-x-auto p-2">
+                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px" }}>
+                      <thead>
+                        <tr>
+                          <th className="w-[72px] px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
+                          <th className="border-r px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>리드</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>프로스펙팅</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>클로징</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--success-text)" }}>계약</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--danger-text)" }}>이탈</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--cyan-text)" }}>매출</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamRows.map((row) => {
+                          const isMine = normalizePersonName(row.owner) === normalizePersonName(activeOwner);
+                          const cellCls = "px-1.5 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.02em]";
+                          return (
+                            <tr key={row.owner} style={{ background: isMine ? "var(--surface-selected)" : "var(--surface-2)" }}>
+                              <td className="rounded-l-[10px] px-1.5 py-2.5 text-center text-[12px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.db}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.masterChallenger}</td>
+                              <td className={`${cellCls} border-r`} style={{ color: "var(--text)", borderColor: "var(--border)" }}>{row.bronze}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.lead}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.prospect}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.closing}</td>
+                              <td className={cellCls} style={{ color: "var(--success-text)" }}>{row.contracts}</td>
+                              <td className={cellCls} style={{ color: row.churn > 0 ? "var(--danger-text)" : "var(--text-faint)" }}>{row.churn}</td>
+                              <td className={`${cellCls} rounded-r-[10px]`} style={{ color: "var(--cyan-text)" }}>{money(row.sales)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Panel>
+
+
+                {/* 유입경로별 성과 + 등급별 계약전환율 */}
+                <div className="grid items-stretch gap-4 xl:grid-cols-2">
+                  <Panel className="h-full">
+                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="DB 입력 대비 VIP 전환 현황" />
+                    <div className="p-4">
+                      {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
+                        <div className="space-y-2">
+                          {intakeRows.map((row) => (
+                            <div key={row.route} className="rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                              <div className="flex items-center gap-3">
+                                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                  DB입력 <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
+                                </p>
+                                <ArrowRight size={13} style={{ color: "var(--text-faint)" }} />
+                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                  VIP전환 <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
+                                </p>
+                                <Badge tone={row.vipRate >= 60 ? "success" : row.vipRate >= 30 ? "warning" : "muted"}>{row.vipRate}%</Badge>
+                              </div>
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.vipRate)}%`, background: toneStyle("purple").bar }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Panel>
+
+                  <Panel className="h-full">
+                    <PanelTitle icon={Activity} tone="purple" title="등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
+                    <div className="space-y-2.5 p-4">
+                      {gradeContractRows.map((row) => (
+                        <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <Badge tone={row.tone}>{row.grade}</Badge>
+                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                계약 {row.contracts}건 <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[12px]">%</span></p>
+                          </div>
+                          <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
+                            {row.routes.length === 0 ? (
+                              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
+                            ) : row.routes.map(([route, count]) => (
+                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[11px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
+                                {route} {count}건
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                </div>
+
+                {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
+                <div className="grid items-stretch gap-4 xl:grid-cols-2">
+                  <Panel className="flex h-full flex-col">
+                    <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="분양회 모집 · 분양회 회비" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                    <div className="flex flex-1 flex-col justify-center gap-2.5 p-4">
+                      {kpiRows.map((row) => {
+                        const hasGoal = row.goal > 0;
+                        return (
+                          <div key={row.label} className="rounded-[12px] border p-3.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
+                              <Badge tone={row.tone}>{hasGoal ? `달성 ${percent(row.value, row.goal)}%` : "목표 미설정"}</Badge>
+                            </div>
+                            <div className="mt-2 flex items-baseline justify-between gap-3">
+                              <p className="truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
+                              <p className="shrink-0 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "—"}</p>
+                            </div>
+                            <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Panel>
+
+                  <Panel className="flex h-full flex-col">
+                    <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc={`분양회 월회비 · LMS · 호갱노노 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                    <div className="flex flex-1 flex-col justify-center gap-3 p-4">
+                      <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                        {salesBreakdown.filter((item) => item.value > 0).map((item) => (
+                          <div key={item.label} style={{ width: `${percent(item.value, Math.max(coreSalesTotal, 1))}%`, background: toneStyle(item.tone).bar }} />
+                        ))}
+                      </div>
+                      {salesBreakdown.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: toneStyle(item.tone).dot }} />
+                            <span className="truncate text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>{item.label}</span>
+                          </div>
+                          <div className="flex shrink-0 items-baseline gap-2.5">
+                            <span className="text-[14px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
+                            <span className="w-9 text-right text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                </div>
+              </div>
+
+              {/* 우측 */}
+              <div className="space-y-4">
+
+                {/* 오늘 챙겨야 할 고객: 크리티컬 4종 통합 + 클릭 시 즉시수정 팝업 */}
+                <Panel>
+                  <PanelTitle icon={AlertTriangle} tone="danger" title="오늘 챙겨야 할 고객" desc="클릭하면 팝업에서 바로 수정 · 파이프라인3 자동 연동" right={<Badge tone={totalCritical > 0 ? "danger" : "muted"}>{totalCritical}건</Badge>} />
+                  <div className="flex flex-wrap gap-1.5 border-b px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                    <Badge tone={criticalCounts.payment > 0 ? "warning" : "muted"}>결제임박 {criticalCounts.payment}</Badge>
+                    <Badge tone={criticalCounts.missing > 0 ? "danger" : "muted"}>결제누락 {criticalCounts.missing}</Badge>
+                    <Badge tone={criticalCounts.inactive > 0 ? "warning" : "muted"}>장기미활동 {criticalCounts.inactive}</Badge>
+                    <Badge tone={criticalCounts.closing > 0 ? "danger" : "muted"}>클로징지연 {criticalCounts.closing}</Badge>
+                  </div>
+                  <div className="max-h-[440px] overflow-y-auto p-2">
+                    {actionItems.length === 0 ? <EmptyBlock title="오늘 긴급 관리 고객이 없습니다" desc="결제 D-DAY 또는 장기미활동 고객이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => {
+                      const target = contacts.find((row) => Number(row.id) === item.contactId);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => openCustomerEdit(item.contactId, item.type)}
+                          className="flex w-full items-start gap-2.5 rounded-[12px] p-2.5 text-left transition-colors hover:bg-white/[.04]"
+                        >
+                          <IconBox icon={item.tone === "danger" ? AlertTriangle : CalendarClock} tone={item.tone} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <Badge tone={item.tone}>{item.type}</Badge>
+                              <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                {item.title}
+                                {target?.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {target.title}</span> : null}
+                              </p>
+                            </div>
+                            <p className="mt-1 line-clamp-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
+                          </div>
+                          <ChevronRight size={13} className="mt-1.5 shrink-0" style={{ color: "var(--text-faint)" }} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Panel>
+
+                {/* 정기결제 D-DAY */}
+                <Panel>
+                  <PanelTitle icon={CreditCard} tone="warning" title="정기결제 D-DAY" desc={`D-4 이내 ${paymentDueSoonCount}건 · 계약/리텐션 고객 기준`} right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
+                  <div className="max-h-[360px] overflow-y-auto p-2">
+                    {paymentDdays.length === 0 ? <EmptyBlock title="결제일 등록 고객이 없습니다" desc="계약전환 시 결제채널과 결제일을 입력하면 자동으로 계산됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
+                      <button key={contact.id} type="button" onClick={() => openCustomerEdit(Number(contact.id), `결제 ${ddayLabel(diff)}`)} className="flex w-full items-center gap-2.5 rounded-[12px] p-2.5 text-left transition-colors hover:bg-white/[.04]">
+                        <div className="flex h-10 w-[52px] shrink-0 flex-col items-center justify-center rounded-[10px]" style={{ background: diff === 0 ? "var(--danger-bg)" : diff <= 4 ? "var(--warning-bg)" : "var(--surface-3)", color: diff === 0 ? "var(--danger-text)" : diff <= 4 ? "var(--warning-text)" : "var(--text-subtle)", border: `1px solid ${diff === 0 ? "var(--danger-border)" : diff <= 4 ? "var(--warning-border)" : "var(--border)"}` }}>
+                          <span className="text-[11px] font-semibold leading-none">{ddayLabel(diff)}</span>
+                          <span className="mt-0.5 text-[10px] font-medium leading-none">{formatDate(toDateKey(due))}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                            {contact.name || "고객명 없음"}
+                            {contact.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {contact.title}</span> : null}
+                          </p>
+                          <p className="mt-0.5 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
+                        </div>
+                        <Badge tone={diff <= 4 ? "warning" : "muted"}>{contactOwner(contact)}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                </Panel>
+
+                {/* 활동량 요약 */}
+                <Panel>
+                  <PanelTitle icon={PhoneCall} tone="info" title="활동량 요약" desc="당월 첫 접촉과 활동노트 기준" />
+                  <div className="space-y-2.5 p-4">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <StatBox label="첫 접촉 완료" value={`${stats.firstTouch}건`} sub={`TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`} tone="info" />
+                      <StatBox label="활동노트" value={`${monthNotes.length}건`} sub="녹취 요약 · 수동 기록" tone="purple" />
+                    </div>
+                    <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>첫 접촉률</p>
+                        <p className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthContacts.length)}%</p>
+                      </div>
+                      <ProgressBar value={stats.firstTouch} total={monthContacts.length} tone="cyan" />
+                    </div>
+                  </div>
+                </Panel>
+
+                {/* 최근 활동노트 */}
+                <Panel>
+                  <PanelTitle icon={Clock3} tone="muted" title="최근 활동노트" desc="녹취 요약 및 수동 기록" />
+                  <div className="max-h-[360px] overflow-y-auto p-2">
+                    {monthNotes.length === 0 ? <EmptyBlock title="당월 활동노트가 없습니다" desc="고객 상세 또는 녹취 요약을 통해 활동노트가 쌓이면 표시됩니다." /> : monthNotes.slice(0, 8).map((note) => {
+                      const contact = visibleContacts.find((row) => String(row.id) === String(note.contact_id));
+                      return (
+                        <a key={note.id} href="/contacts" className="flex gap-2.5 rounded-[12px] p-2.5 transition-colors hover:bg-white/[.04]">
+                          <IconBox icon={Activity} tone="purple" size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
+                              <span className="shrink-0 text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>{timeAgo(note.created_at || note.note_date)}</span>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </Panel>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 고객 즉시수정 팝업 (파이프라인3 contacts 테이블 직접 갱신 → 상호 연동) ── */}
+        {editTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="팝업 닫기"
+              onClick={() => !savingEdit && setEditTarget(null)}
+              className="absolute inset-0 cursor-default backdrop-blur-[2px]"
+              style={{ background: "var(--overlay)", animation: "overlayIn 160ms ease-out" }}
+            />
+            <div
+              className="relative flex max-h-[90vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[18px] border"
+              style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)", animation: "modalIn 200ms ease-out" }}
+            >
+              {/* 팝업 헤더 */}
+              <div className="flex items-start justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <Badge tone="danger">{editIssue}</Badge>
+                    {editTarget.customer_grade ? <Badge tone={isHighValueContact(editTarget) ? "warning" : "success"}>{editTarget.customer_grade}</Badge> : null}
+                    {editTarget.intake_route ? <Badge tone="muted">{editTarget.intake_route}</Badge> : null}
+                  </div>
+                  <h2 className="truncate text-[19px] font-semibold tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+                    {editTarget.name || "고객명 없음"}
+                    {editTarget.title ? <span className="ml-1.5 text-[14px] font-medium" style={{ color: "var(--text-muted)" }}>{editTarget.title}</span> : null}
+                  </h2>
+                  <p className="mt-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>ID {editTarget.id} · {editTarget.phone || "연락처 미입력"} · 담당 {contactOwner(editTarget)}</p>
+                </div>
+                <button type="button" onClick={() => !savingEdit && setEditTarget(null)} className="btn-premium btn-secondary h-9 w-9 shrink-0 p-0">
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* 팝업 본문: 즉시 수정 필드 */}
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>고객명</span>
+                    <input value={editForm.name} onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))} className="crm-search w-full px-3" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>직급</span>
+                    <input value={editForm.title} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="예: 본부장" className="crm-search w-full px-3" />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>연락처</span>
+                    <input value={editForm.phone} onChange={(event) => setEditForm((prev) => ({ ...prev, phone: event.target.value }))} className="crm-search w-full px-3" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>관리구간</span>
+                    <select value={editForm.management_stage} onChange={(event) => setEditForm((prev) => ({ ...prev, management_stage: event.target.value }))} className="crm-search w-full px-3">
+                      <option value="">미지정</option>
+                      {PIPELINE_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: editIssue.includes("결제") ? "var(--warning-border)" : "var(--border-subtle)" }}>
+                  <p className="mb-2 text-[11px] font-normal" style={{ color: editIssue.includes("결제") ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                    결제 정보 {editIssue.includes("결제") ? "· 이 항목을 채우면 알림이 해제됩니다" : ""}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                      <select value={editForm.payment_channel} onChange={(event) => setEditForm((prev) => ({ ...prev, payment_channel: event.target.value }))} className="crm-search w-full px-3">
+                        <option value="">선택해주세요</option>
+                        {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                      <select value={editForm.regular_payment_date} onChange={(event) => setEditForm((prev) => ({ ...prev, regular_payment_date: event.target.value }))} className="crm-search w-full px-3">
+                        <option value="">선택해주세요</option>
+                        {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>메모</span>
+                  <textarea value={editForm.memo} onChange={(event) => setEditForm((prev) => ({ ...prev, memo: event.target.value }))} rows={2} className="crm-search w-full resize-none px-3 py-2" />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>활동노트 빠른 작성 <span style={{ color: "var(--text-faint)" }}>(입력 시 활동 기록으로 저장 → 장기미활동 해제)</span></span>
+                  <textarea value={quickNote} onChange={(event) => setQuickNote(event.target.value)} rows={2} placeholder="예: TM 재접촉 완료, 다음주 미팅 예정" className="crm-search w-full resize-none px-3 py-2" />
+                </label>
+              </div>
+
+              {/* 팝업 푸터 */}
+              <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <a href="/pipeline3" className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>파이프라인3에서 전체 상세보기 →</a>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={savingEdit} onClick={() => setEditTarget(null)} className="btn-premium btn-secondary">취소</button>
+                  <button type="button" disabled={savingEdit} onClick={saveCustomerEdit} className="btn-premium btn-primary">
+                    {savingEdit ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 저장
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
