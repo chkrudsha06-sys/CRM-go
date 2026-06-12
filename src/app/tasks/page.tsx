@@ -2723,7 +2723,7 @@ export default function TasksPage() {
       </div>
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="stat-grid grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard
             label="전체 업무"
             value={stats.total}
