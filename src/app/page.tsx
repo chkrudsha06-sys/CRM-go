@@ -682,15 +682,23 @@ export default function HomePage() {
 
       /* 당일 일별활동 목표/달성 */
       const todayKey = new Date().toISOString().slice(0, 10);
-      const userName = currentUser?.name || "";
-      if (userName) {
-        const { data: dagData } = await supabase
+      const dagUserName = currentUser?.name || "";
+      try {
+        const { data: dagRows, error: dagError } = await supabase
           .from("daily_activity_goals")
           .select("*")
-          .eq("work_date", todayKey)
-          .eq("owner_name", userName)
-          .maybeSingle();
-        setDailyGoal((dagData as DailyGoalRow) || null);
+          .eq("work_date", todayKey);
+        if (dagError) {
+          console.warn("daily_activity_goals 조회 실패:", dagError.message);
+        } else {
+          const myRow = (dagRows || []).find((r: any) => r.owner_name === dagUserName);
+          setDailyGoal((myRow as DailyGoalRow) || null);
+          if (!myRow && dagUserName) {
+            console.info(`[대시보드] ${todayKey} / ${dagUserName} 일별활동 데이터 없음. 전체 ${(dagRows || []).length}건 조회됨.`);
+          }
+        }
+      } catch (dagErr) {
+        console.warn("daily_activity_goals 예외:", dagErr);
       }
       setNotes(((noteRes.data || []) as unknown) as NoteRow[]);
       setSales(((salesRes.data || []) as unknown) as SalesRow[]);
