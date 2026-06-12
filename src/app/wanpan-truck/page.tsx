@@ -1547,7 +1547,7 @@ export default function WanpanTruckPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[760px]">
+            <div className="stat-grid grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[760px]">
               <StatCard
                 icon={<Route size={17} />}
                 label="전체 회차"
