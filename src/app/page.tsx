@@ -1009,15 +1009,178 @@ export default function HomePage() {
   const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
 
-  const handlePdfSave = useCallback(() => {
-    window.print();
-  }, []);
-
   const gradeJoinRows = [
     { label: "마스터", value: stats.masterThisMonth, total: stats.master, tone: "warning" as ToneName },
     { label: "챌린저", value: stats.challengerThisMonth, total: stats.challenger, tone: "purple" as ToneName },
     { label: "브론즈", value: stats.bronzeThisMonth, total: stats.bronze, tone: "success" as ToneName },
   ];
+
+  const handlePdfSave = useCallback(() => {
+    const d = (n: number) => String(n).padStart(2, "0");
+    const now = new Date();
+    const printDate = `${now.getFullYear()}.${d(now.getMonth() + 1)}.${d(now.getDate())} ${d(now.getHours())}:${d(now.getMinutes())}`;
+
+    const funnelHtml = funnelStages.map((s, i) => {
+      const arrow = !s.isLast && s.rate !== null && s.rate !== undefined ? `<td style="text-align:center;color:#6b21a8;font-weight:600;font-size:13px;width:60px;">${s.rate}% →</td>` : (!s.isLast ? `<td style="text-align:center;color:#94a3b8;width:40px;">→</td>` : "");
+      return `<td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;vertical-align:top;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">${s.label}</div>
+        <div style="font-size:24px;font-weight:600;color:#0f172a;">${s.value.toLocaleString()}<span style="font-size:13px;color:#64748b;margin-left:2px;">건</span></div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${s.sub}</div>
+      </td>${arrow}`;
+    }).join("");
+
+    const gradeJoinHtml = gradeJoinRows.map((g) => `<span style="display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;margin-right:8px;font-size:13px;"><strong>${g.label}</strong> ${g.value}건 <span style="color:#94a3b8;font-size:11px;">/ 누적 ${g.total}</span></span>`).join("");
+
+    const teamHeader = ["담당자","DB입력","마스터·챌린저DB","브론즈DB","리드","프로스펙팅","클로징","계약","이탈","매출"];
+    const teamTh = teamHeader.map((h, i) => {
+      const borderR = i === 3 ? "border-right:2px solid #cbd5e1;" : "";
+      const color = h === "계약" ? "#047857" : h === "이탈" ? "#be123c" : h === "매출" ? "#0e7490" : "#64748b";
+      return `<th style="padding:8px 6px;font-size:11px;font-weight:400;color:${color};text-align:center;border-bottom:1px solid #e2e8f0;${borderR}">${h}</th>`;
+    }).join("");
+    const teamTr = teamRows.map((r) => {
+      const vals = [r.db, r.masterChallenger, r.bronze, r.lead, r.prospect, r.closing, r.contracts, r.churn, money(r.sales)];
+      const tds = vals.map((v, i) => {
+        const borderR = i === 2 ? "border-right:2px solid #e2e8f0;" : "";
+        const color = i === 6 ? "#047857" : i === 7 && Number(v) > 0 ? "#be123c" : i === 8 ? "#0e7490" : "#1e293b";
+        return `<td style="padding:10px 6px;text-align:center;font-size:13px;color:${color};${borderR}">${v}</td>`;
+      }).join("");
+      return `<tr><td style="padding:10px 6px;font-size:12px;font-weight:500;color:#0f172a;">${r.owner}</td>${tds}</tr>`;
+    }).join("");
+
+    const intakeHtml = intakeRows.map((r) => `<tr>
+      <td style="padding:8px 6px;font-size:13px;color:#0f172a;">${r.route}</td>
+      <td style="padding:8px 6px;text-align:center;font-size:13px;">${r.total}건</td>
+      <td style="padding:8px 6px;text-align:center;font-size:13px;color:#6b21a8;">${r.vip}건</td>
+      <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;color:#047857;">${r.vipRate}%</td>
+    </tr>`).join("");
+
+    const gradeHtml = gradeContractRows.map((r) => {
+      const routes = r.routes.length ? r.routes.map(([route, count]) => `${route} ${count}건`).join(", ") : "—";
+      return `<tr>
+        <td style="padding:8px 6px;font-size:13px;font-weight:500;color:#0f172a;">${r.grade}</td>
+        <td style="padding:8px 6px;text-align:center;font-size:13px;">${r.count}건</td>
+        <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;color:#047857;">${r.contracts}건</td>
+        <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;">${r.rate}%</td>
+        <td style="padding:8px 6px;font-size:11px;color:#64748b;">${routes}</td>
+      </tr>`;
+    }).join("");
+
+    const criticalHtml = actionItems.length === 0
+      ? `<p style="text-align:center;color:#94a3b8;padding:16px 0;">긴급 관리 대상 고객 없음</p>`
+      : actionItems.slice(0, 12).map((item) => {
+          const target = contacts.find((c) => Number(c.id) === item.contactId);
+          return `<tr>
+            <td style="padding:6px;font-size:12px;color:#be123c;font-weight:500;">${item.type}</td>
+            <td style="padding:6px;font-size:12px;color:#0f172a;">${item.title}${target?.title ? ` · ${target.title}` : ""}</td>
+            <td style="padding:6px;font-size:11px;color:#64748b;">${item.desc}</td>
+          </tr>`;
+        }).join("");
+
+    const kpiHtml = kpiRows.map((r) => {
+      const hasGoal = r.goal > 0;
+      return `<tr>
+        <td style="padding:8px 6px;font-size:13px;">${r.label}</td>
+        <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${r.money ? moneyFull(r.value) : `${r.value.toLocaleString()}${r.unit}`}</td>
+        <td style="padding:8px 6px;text-align:right;font-size:13px;color:#64748b;">${hasGoal ? (r.money ? moneyFull(r.goal) : `${r.goal.toLocaleString()}${r.unit}`) : "—"}</td>
+        <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;color:#047857;">${hasGoal ? `${percent(r.value, r.goal)}%` : "—"}</td>
+      </tr>`;
+    }).join("");
+
+    const salesHtml = salesBreakdown.map((s) => `<tr>
+      <td style="padding:8px 6px;font-size:13px;">${s.label}</td>
+      <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${moneyFull(s.value)}</td>
+      <td style="padding:8px 6px;text-align:right;font-size:13px;color:#64748b;">${percent(s.value, Math.max(coreSalesTotal, 1))}%</td>
+    </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/>
+    <title>분양회 CRM 대시보드 리포트</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+    <style>
+      @page { size: A4; margin: 12mm 10mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; }
+      body { padding: 0; color: #1e293b; font-size: 13px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.04em; color: #0f172a; }
+      h2 { font-size: 14px; font-weight: 600; color: #0f172a; margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 2px solid #0f172a; letter-spacing: -0.02em; }
+      table { width: 100%; border-collapse: collapse; }
+      .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+      .header-right { text-align: right; font-size: 12px; color: #64748b; }
+      .section { margin-bottom: 14px; page-break-inside: avoid; }
+      .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8; }
+    </style></head><body>
+
+    <div class="header">
+      <div>
+        <h1>분양회 CRM 대시보드 리포트</h1>
+        <p style="margin-top:4px;font-size:12px;color:#64748b;">광고인㈜ 대외협력팀 · ${dashboardScopeLabel}</p>
+      </div>
+      <div class="header-right">
+        <p><strong>조회 기간:</strong> ${filterLabel}</p>
+        <p><strong>출력 일시:</strong> ${printDate}</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>영업 퍼널</h2>
+      <table style="table-layout:auto;"><tr>${funnelHtml}</tr></table>
+      <div style="margin-top:8px;">${gradeJoinHtml}</div>
+    </div>
+
+    <div class="section">
+      <h2>담당자별 파이프라인 현황</h2>
+      <table><thead><tr>${teamTh}</tr></thead><tbody>${teamTr}</tbody></table>
+    </div>
+
+    <div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <h2>유입경로별 성과</h2>
+        <table>
+          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">유입경로</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">DB입력</th><th style="text-align:center;padding:6px;font-size:11px;color:#6b21a8;border-bottom:1px solid #e2e8f0;">VIP전환</th><th style="text-align:center;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">전환율</th></tr></thead>
+          <tbody>${intakeHtml}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>등급별 계약전환율</h2>
+        <table>
+          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">등급</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">보유</th><th style="text-align:center;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">계약</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">전환율</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">계약 유입경로</th></tr></thead>
+          <tbody>${gradeHtml}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <h2>KPI 달성률</h2>
+        <table>
+          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">항목</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">실적</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">목표</th><th style="text-align:right;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">달성률</th></tr></thead>
+          <tbody>${kpiHtml}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>매출 구성</h2>
+        <table>
+          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">항목</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">금액</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">비중</th></tr></thead>
+          <tbody>${salesHtml}</tbody>
+          <tfoot><tr style="border-top:1px solid #e2e8f0;"><td style="padding:8px 6px;font-size:13px;font-weight:600;">합계</td><td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${moneyFull(coreSalesTotal)}</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    ${actionItems.length > 0 ? `<div class="section">
+      <h2>긴급 관리 대상 (${actionItems.length}건)</h2>
+      <table>
+        <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#be123c;border-bottom:1px solid #e2e8f0;width:90px;">유형</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;width:140px;">고객</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">상세</th></tr></thead>
+        <tbody>${criticalHtml}</tbody>
+      </table>
+    </div>` : ""}
+
+    <div class="footer">분양회 CRM · 광고인㈜ 대외협력팀 · ${printDate} 출력</div>
+
+    <script>window.onload = function() { setTimeout(function() { window.print(); }, 400); }<\/script>
+    </body></html>`;
+
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  }, [actionItems, contacts, coreSalesTotal, dashboardScopeLabel, filterLabel, funnelStages, gradeContractRows, gradeJoinRows, intakeRows, kpiRows, salesBreakdown, teamRows]);
 
   return (
     <div className="premium-page h-full overflow-y-auto">
@@ -1146,10 +1309,22 @@ export default function HomePage() {
                 <Panel>
                   <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
                   <div className="overflow-x-auto p-2">
-                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px" }}>
+                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px", tableLayout: "fixed" }}>
+                      <colgroup>
+                        <col style={{ width: "7%" }} />{/* 담당자 */}
+                        <col style={{ width: "5.5%" }} />{/* DB입력 */}
+                        <col style={{ width: "10%" }} />{/* 마스터·챌린저DB */}
+                        <col style={{ width: "6.5%" }} />{/* 브론즈DB */}
+                        <col style={{ width: "11%" }} />{/* 리드 */}
+                        <col style={{ width: "13%" }} />{/* 프로스펙팅 */}
+                        <col style={{ width: "11%" }} />{/* 클로징 */}
+                        <col style={{ width: "11%" }} />{/* 계약 */}
+                        <col style={{ width: "11%" }} />{/* 이탈 */}
+                        <col style={{ width: "14%" }} />{/* 매출 */}
+                      </colgroup>
                       <thead>
                         <tr>
-                          <th className="w-[72px] px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
+                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
                           <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
                           <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
                           <th className="border-r px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
