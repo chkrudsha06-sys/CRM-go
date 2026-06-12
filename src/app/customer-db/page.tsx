@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -539,64 +539,77 @@ function NoteComposer({
   onAdd,
   defaultType,
 }: {
-  onAdd: (note: Omit<CustomerDbNote, "id" | "createdAt">) => void;
+  onAdd: (note: Omit<CustomerDbNote, "id" | "createdAt"> & { sensitivity?: string }) => void;
   defaultType: ActivityType;
 }) {
   const [noteDate, setNoteDate] = useState(today());
   const [activityType, setActivityType] = useState<ActivityType>(defaultType);
   const [content, setContent] = useState("");
+  const [sensitivity, setSensitivity] = useState("감도없음");
 
   const handleAdd = () => {
     if (!content.trim()) return;
     onAdd({
       noteDate,
       activityType,
-      content: content.trim(),
+      content: `[${sensitivity}] ${content.trim()}`,
       author: "현재 사용자",
     });
     setContent("");
     setNoteDate(today());
+    setSensitivity("감도없음");
   };
 
   return (
     <div
       className="space-y-1.5 rounded-[12px] border px-2.5 py-2"
-      style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+      style={{ background: "var(--surface)", borderColor: "var(--border)" }}
     >
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-[13px] font-[650]" style={{ color: "var(--text-strong)" }}>활동노트 작성</p>
-          <p className="crm-tiny mt-0.5">TM 또는 콜드톡 활동을 기록합니다.</p>
-        </div>
+        <p className="text-[12px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>활동노트 작성</p>
         <input
           type="date"
           value={noteDate}
           onChange={(event) => setNoteDate(event.target.value)}
-          className="h-8 rounded-[9px] border px-2.5 text-[12px] font-[550] outline-none"
-          style={{
-            background: "var(--surface)",
-            borderColor: "var(--border-subtle)",
-            color: "var(--text-strong)",
-          }}
+          className="h-7 rounded-[8px] border px-2 text-[11px] outline-none"
+          style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }}
         />
       </div>
 
       <ActivityTypeSelector value={activityType} onChange={setActivityType} />
 
+      <div className="border-t pt-1.5" style={{ borderColor: "var(--border-subtle)" }}>
+        <p className="mb-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>고객감도</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {["감도없음", "재TM진행"].map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setSensitivity(opt)}
+              className="h-8 rounded-[8px] border text-[12px] transition-colors"
+              style={{
+                background: sensitivity === opt ? "var(--accent-subtle)" : "var(--surface-2)",
+                borderColor: sensitivity === opt ? "var(--accent-border)" : "var(--border-subtle)",
+                color: sensitivity === opt ? "var(--accent-text)" : "var(--text-muted)",
+                fontWeight: sensitivity === opt ? 600 : 400,
+              }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <textarea
         value={content}
         onChange={(event) => setContent(event.target.value)}
         placeholder="활동 내용을 입력하세요."
-        rows={3}
-        className="min-h-[92px] w-full resize-none rounded-[10px] border px-3 py-2.5 text-[12.5px] font-semibold leading-5 outline-none"
-        style={{
-          background: "var(--surface)",
-          borderColor: "var(--border-subtle)",
-          color: "var(--text-strong)",
-        }}
+        rows={2}
+        className="min-h-[56px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] leading-5 outline-none"
+        style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }}
       />
-      <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-9 w-full text-[12px]">
-        <Plus size={14} /> 저장
+      <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-8 w-full text-[12px]">
+        <Plus size={13} /> 저장
       </button>
     </div>
   );
@@ -892,6 +905,7 @@ export default function CustomerDbPage() {
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
   const [filterActivity, setFilterActivity] = useState("");
+  const [filterTitle, setFilterTitle] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
@@ -998,6 +1012,11 @@ export default function CustomerDbPage() {
     const cold = records.filter((record) => record.activity_type === "콜드톡").length;
     const today = new Date().toISOString().slice(0, 10);
     const todayCount = records.filter((record) => String(record.created_at || "").slice(0, 10) === today).length;
+    const totalActivity = tm + cold;
+    const todayNotes = records.filter((record) => {
+      const notes = record.notes || [];
+      return notes.some((n) => String(n.noteDate || "").slice(0, 10) === today);
+    }).length;
     const routeCounts = INTAKE_ROUTES
       .map((route) => ({
         route,
@@ -1005,7 +1024,7 @@ export default function CustomerDbPage() {
       }))
       .filter((item) => item.count > 0);
 
-    return { total: records.length, tm, cold, todayCount, routeCounts };
+    return { total: records.length, tm, cold, todayCount, totalActivity, todayActivity: todayNotes, routeCounts };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -1027,9 +1046,9 @@ export default function CustomerDbPage() {
             .toLowerCase()
             .includes(keyword);
 
-      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute) && (!filterActivity || record.activity_type === filterActivity);
+      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute) && (!filterActivity || record.activity_type === filterActivity) && (!filterTitle || record.title === filterTitle);
     });
-  }, [records, search, filterRoute, filterActivity]);
+  }, [records, search, filterRoute, filterActivity, filterTitle]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / 10));
   const pagedRecords = useMemo(() => {
@@ -1582,73 +1601,53 @@ export default function CustomerDbPage() {
         </div>
       </section>
 
-      <section className="mb-4 flex flex-wrap items-center gap-3">
-        {stats.routeCounts.map((item) => (
-          <div key={item.route} className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{item.route}</span>
-            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{item.count}건</span>
-          </div>
-        ))}
-        <div className="ml-auto flex items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-            <PhoneCall size={13} style={{ color: "var(--info-text)" }} />
-            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>TM</span>
-            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.tm}건</span>
-          </div>
-          <div className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-1.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-            <MessageCircle size={13} style={{ color: "var(--purple-text)" }} />
-            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>콜드톡</span>
-            <span className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.cold}건</span>
-          </div>
+      <section className="mb-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <div className="rounded-[12px] border px-3.5 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+          <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 등록DB</p>
+          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.total}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+        </div>
+        <div className="rounded-[12px] border px-3.5 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+          <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>당일 등록DB</p>
+          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.todayCount}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+        </div>
+        <div className="rounded-[12px] border px-3.5 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+          <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 활동진행</p>
+          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.totalActivity}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span>
+            <span className="ml-2 text-[11px]" style={{ color: "var(--text-faint)" }}>TM {stats.tm} · 콜드톡 {stats.cold}</span>
+          </p>
+        </div>
+        <div className="rounded-[12px] border px-3.5 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+          <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>당일 활동진행</p>
+          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.todayActivity}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
         </div>
       </section>
 
-      <section className="mb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative block min-w-0 flex-1">
+      <section className="mb-3">
+        <div className="flex items-center gap-2">
+          <label className="relative block w-1/2">
             <Search
-              size={16}
+              size={15}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
               style={{ color: "var(--text-faint)" }}
             />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="고객명, 연락처, 소속회사, 메모, 활동노트 검색"
+              placeholder="고객명, 연락처, 소속회사, 메모 검색"
               className="crm-search h-10 w-full pl-9 pr-3"
             />
           </label>
-          <div className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-            <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 DB</span>
-            <span className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.total}건</span>
-          </div>
-          <div className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-            <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>당일등록</span>
-            <span className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{stats.todayCount || 0}건</span>
-          </div>
-          <select
-            value={filterRoute}
-            onChange={(event) => setFilterRoute(event.target.value)}
-            className="crm-search h-10 w-[150px] px-3"
-          >
-            <option value="">전체 유입경로</option>
-            {INTAKE_ROUTES.map((route) => (
-              <option key={route} value={route}>
-                {route}
-              </option>
-            ))}
+          <select value={filterTitle} onChange={(event) => setFilterTitle(event.target.value)} className="crm-search h-10 w-[120px] px-3">
+            <option value="">전체 직급</option>
+            {TITLE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select
-            value={filterActivity}
-            onChange={(event) => setFilterActivity(event.target.value)}
-            className="crm-search h-10 w-[150px] px-3"
-          >
+          <select value={filterRoute} onChange={(event) => setFilterRoute(event.target.value)} className="crm-search h-10 w-[140px] px-3">
+            <option value="">전체 유입경로</option>
+            {INTAKE_ROUTES.map((route) => <option key={route} value={route}>{route}</option>)}
+          </select>
+          <select value={filterActivity} onChange={(event) => setFilterActivity(event.target.value)} className="crm-search h-10 w-[140px] px-3">
             <option value="">전체 활동항목</option>
-            {ACTIVITY_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
+            {ACTIVITY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
         </div>
       </section>
@@ -1871,60 +1870,58 @@ export default function CustomerDbPage() {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <section className="premium-card p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[14px] font-[650]" style={{ color: "var(--text-strong)" }}>고객 기본정보</p>
-                    <p className="crm-tiny mt-0.5">원천 고객 정보</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-9 px-3 text-[12px]">
-                      <ArrowRight size={14} /> VIP활동DB 이관
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <section className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>고객 기본정보</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-8 px-2.5 text-[11px]">
+                      <ArrowRight size={12} /> VIP DB이관
                     </button>
-                    <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-9 px-3 text-[12px]">
-                      <Edit3 size={14} /> 수정
+                    <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]">
+                      <Edit3 size={12} /> 수정
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteRecord(selectedRecord)}
-                      className="btn-premium h-9 px-3 text-[12px]"
-                      style={{
-                        color: "var(--danger-text)",
-                        background: "var(--danger-bg)",
-                        border: "1px solid var(--danger-border)",
-                      }}
-                    >
-                      <Trash2 size={14} /> 삭제
+                    <button type="button" onClick={() => deleteRecord(selectedRecord)} className="btn-premium h-8 px-2.5 text-[11px]" style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}>
+                      <Trash2 size={12} /> 삭제
                     </button>
                   </div>
                 </div>
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <DetailBlock label="고객명" value={selectedRecord.name} />
-                  <DetailBlock label="직급" value={selectedRecord.title} />
-                  <DetailBlock label="연락처" value={selectedRecord.phone} />
-                  <DetailBlock label="유입경로" value={selectedRecord.intake_route} badge />
-                  <DetailBlock label="활동항목" value={selectedRecord.activity_type} badge />
-                  <DetailBlock label="소속회사" value={selectedRecord.company} />
-                  <DetailBlock label="담당자" value={selectedRecord.assigned_to} />
-                  <DetailBlock label="등록일" value={dateLabel(selectedRecord.created_at)} />
-                  <DetailBlock label="수정일" value={dateLabel(selectedRecord.updated_at)} />
+                <div className="grid grid-cols-[72px_1fr_72px_1fr] gap-x-2 gap-y-1 text-[12px]">
+                  {[
+                    ["고객명", fmt(selectedRecord.name)],
+                    ["직급", fmt(selectedRecord.title)],
+                    ["연락처", fmt(selectedRecord.phone)],
+                    ["유입경로", fmt(selectedRecord.intake_route)],
+                    ["활동항목", fmt(selectedRecord.activity_type)],
+                    ["소속회사", fmt(selectedRecord.company)],
+                    ["담당자", fmt(selectedRecord.assigned_to)],
+                    ["등록일", dateLabel(selectedRecord.created_at)],
+                  ].map(([label, value]) => (
+                    <Fragment key={label}>
+                      <span style={{ color: "var(--text-faint)" }}>{label}</span>
+                      <span style={{ color: "var(--text-strong)" }}>{value}</span>
+                    </Fragment>
+                  ))}
                 </div>
               </section>
 
-              <section className="premium-card mt-3 p-4">
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <MessageCircle size={17} style={{ color: "var(--accent)" }} />
-                  <p className="crm-section-title">메모</p>
+              <section className="mt-2 rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <MessageCircle size={14} style={{ color: "var(--accent)" }} />
+                    <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>메모</p>
+                  </div>
+                  <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-7 px-2 text-[11px]">
+                    <Edit3 size={11} /> 수정
+                  </button>
                 </div>
                 <MemoPreview memo={selectedRecord.memo} />
               </section>
 
-              <section className="premium-card mt-3 p-4">
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <FileText size={17} style={{ color: "var(--accent)" }} />
-                  <p className="crm-section-title">활동노트</p>
+              <section className="mt-2 rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-1 flex items-center gap-1.5">
+                  <FileText size={14} style={{ color: "var(--accent)" }} />
+                  <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>활동노트</p>
                 </div>
                 <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
                 <div className="mt-1.5">
