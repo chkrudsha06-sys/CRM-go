@@ -1,1858 +1,1138 @@
 "use client";
 
-import EmptyState from "@/components/EmptyState";
 import { supabase } from "@/lib/supabase";
+import { getCurrentUser } from "@/lib/auth";
 import type { ElementType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  BarChart3,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock,
+  CircleDollarSign,
+  Clock3,
   CreditCard,
+  Database,
   FileText,
-  LayoutDashboard,
+  Filter,
+  LineChart,
+  Loader2,
   MessageCircle,
-  PackageCheck,
+  PhoneCall,
   RefreshCw,
   Search,
-  Settings2,
+  ShieldCheck,
   Sparkles,
   Target,
+  TrendingDown,
   TrendingUp,
   UserCheck,
   Users,
-  Wallet,
+  WalletCards,
   Zap,
 } from "lucide-react";
 
-type Contact = {
-  id: number;
-  name: string;
-  title: string | null;
-  phone: string | null;
-  customer_type: string | null;
-  tm_sensitivity: string | null;
-  prospect_type: string | null;
-  meeting_date: string | null;
-  meeting_date_text: string | null;
-  meeting_address: string | null;
-  meeting_result: string | null;
-  management_stage: string | null;
-  assigned_to: string | null;
-  consultant: string | null;
-  memo: string | null;
-  contract_date: string | null;
-  reservation_date: string | null;
-  intake_route: string | null;
-  created_at: string;
-  updated_at?: string | null;
-  meeting_registered_at?: string | null;
+type CRMUserLite = {
+  name?: string;
+  title?: string;
+  role?: string;
+  id?: string;
 };
 
-type Task = {
+type ContactRow = Record<string, any> & {
   id: number;
-  category: string | null;
-  content: string | null;
-  priority: string | null;
-  assignee: string | null;
-  requester: string | null;
-  status: string | null;
-  tagged: string[] | null;
-  created_at: string;
+  name?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  intake_route?: string | null;
+  activity_type?: string | null;
+  has_tm?: boolean | null;
+  tm_date?: string | null;
+  meeting_result?: string | null;
+  management_stage?: string | null;
+  customer_grade?: string | null;
+  crm_db_source?: string | null;
+  vip_transferred_at?: string | null;
+  assigned_to?: string | null;
+  consultant?: string | null;
+  contract_date?: string | null;
+  reservation_date?: string | null;
+  churn_date?: string | null;
+  regular_payment_date?: string | null;
+  payment_channel?: string | null;
+  memo?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
 };
 
-type AdExecution = {
-  id: number;
-  member_name: string | null;
-  execution_amount: number | null;
-  vat_amount: number | null;
-  refund_amount: number | null;
-  channel: string | null;
-  contract_route: string | null;
-  payment_date: string | null;
-  team_member: string | null;
-  consultant: string | null;
-  created_at: string;
-  updated_at?: string | null;
-};
-
-type Note = {
+type NoteRow = Record<string, any> & {
   id: number;
   contact_id: number;
-  content: string | null;
-  created_at: string;
+  note_date?: string | null;
+  content?: string | null;
+  author?: string | null;
+  created_at?: string | null;
+};
+
+type SalesRow = Record<string, any> & {
+  id: number;
+  member_name?: string | null;
+  execution_amount?: number | null;
+  vat_amount?: number | null;
+  refund_amount?: number | null;
+  channel?: string | null;
+  contract_route?: string | null;
+  payment_date?: string | null;
+  team_member?: string | null;
+  consultant?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
 };
 
-type NoteContact = Contact;
-
-type UserInfo = {
-  name?: string;
-  role?: string;
+type KpiRow = Record<string, any> & {
+  year: number;
+  month: number;
+  week: number;
+  scope: "team" | "execution" | "operation";
+  target_name: string;
+  recruit_count?: number | null;
+  bunyanghoe_revenue?: number | null;
+  linked_revenue?: number | null;
+  special_revenue?: number | null;
+  wanpan_truck_count?: number | null;
+  ad_operation_revenue?: number | null;
 };
 
-type DailyActivityRow = {
-  id: number;
-  work_date: string;
-  owner_name: string;
-  owner_title: string | null;
-  owner_role: string | null;
-  is_outside_meeting: boolean;
-  goal_consultant_db: number | null;
-  goal_second_touch: number | null;
-  goal_new_tm: number | null;
-  goal_manage_tm: number | null;
-  goal_coldtalk: number | null;
-  goal_media_mix: number | null;
-  goal_meeting_confirmed: number | null;
-  goal_work_items: { id: string; text: string; done: boolean }[] | null;
-  result_consultant_db: number | null;
-  result_second_touch: number | null;
-  result_new_tm: number | null;
-  result_manage_tm: number | null;
-  result_coldtalk: number | null;
-  result_media_mix: number | null;
-  result_meeting_confirmed: number | null;
-  created_at: string;
-  updated_at: string;
+type ActionItem = {
+  key: string;
+  type: string;
+  tone: ToneName;
+  title: string;
+  desc: string;
+  href: string;
+  priority: number;
 };
 
+type ToneName = "info" | "success" | "warning" | "danger" | "purple" | "cyan" | "muted";
 
-const TODAY = new Date().toISOString().slice(0, 10);
+type FunnelRow = {
+  label: string;
+  value: number;
+  sub: string;
+  tone: ToneName;
+};
 
-const EXECUTION_PART_NAMES = ["조계현", "기여운", "최연전", "이세호"];
+const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
+const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
+const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
+const MONTH_LABEL_FORMAT = new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit" });
+const TODAY = new Date();
 
 function normalizePersonName(value?: string | null) {
-  return (value || "")
-    .replace(/님|팀장|파트장|메인|어쏘|CX|어시|본부장|대표/g, "")
+  return String(value || "")
+    .replace(/님|팀장|파트장|본부장|대표|메인|어쏘|CX|어시|관리자/g, "")
     .replace(/\s+/g, "")
     .trim();
 }
 
-function isExecutionPartUser(user: UserInfo | null) {
-  const userName = normalizePersonName(user?.name);
-  const userRole = (user?.role || "").toLowerCase();
-
-  return (
-    EXECUTION_PART_NAMES.some((name) => normalizePersonName(name) === userName) ||
-    userRole === "exec" ||
-    userRole === "execution" ||
-    userRole.includes("실행")
-  );
+function normalizeText(value?: string | null) {
+  return String(value || "").replace(/\s+/g, "").trim();
 }
 
-function isOwnedByUser(contact: Pick<Contact, "assigned_to" | "consultant">, user: UserInfo | null) {
-  const userName = normalizePersonName(user?.name);
-  if (!userName) return false;
-
-  return (
-    normalizePersonName(contact.assigned_to) === userName ||
-    normalizePersonName(contact.consultant) === userName
-  );
-}
-
-const VIP_ACTIVITY_DB_ROUTES = [
-  { key: "bunyangeuisin", label: "분양의신DB", aliases: ["분양의신DB"], icon: Users, tone: "purple" },
-  { key: "consultantVip", label: "컨설턴트VIP DB", aliases: ["컨설턴트VIP DB", "컨설턴트 VIP DB", "컨설턴트VIP", "컨설턴트 VIP"], icon: UserCheck, tone: "info" },
-  { key: "wanpanTruck", label: "완판트럭DB", aliases: ["완판트럭DB", "완판트럭"], icon: PackageCheck, tone: "warning" },
-  { key: "bunyangLine", label: "분양라인DB", aliases: ["분양라인DB", "분양라인"], icon: Target, tone: "cyan" },
-  { key: "bunyanghoeMgm", label: "분양회MGM", aliases: ["분양회MGM", "분양회 MGM"], icon: BadgeCheck, tone: "success" },
-  { key: "partnershipActivity", label: "대협팀 활동", aliases: ["대협팀 활동", "대협팀활동"], icon: Activity, tone: "purple" },
-] as const;
-
-function normalizeDbRoute(value?: string | null) {
-  return (value || "").replace(/\s+/g, "").trim();
-}
-
-function getMonthRange() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const start = new Date(year, month, 1);
-  const end = new Date(year, month + 1, 1);
-  return { start, end };
-}
-
-function isCurrentMonthDate(value?: string | null) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  const { start, end } = getMonthRange();
-  return date >= start && date < end;
-}
-
-
-const DEFAULT_WORKSPACE_HREFS = [
-  "/contacts",
-  "/pipeline",
-  "/tasks",
-  "/content-manage",
-  "/sales",
-  "/rewards",
-];
-
-const WORKSPACE_LINKS = [
-  {
-    title: "고객DB",
-    desc: "고객 정보와 상담 히스토리",
-    href: "/contacts",
-    icon: Users,
-    tone: "info",
-  },
-  {
-    title: "고객등록",
-    desc: "신규 고객 입력과 관리",
-    href: "/customer-register",
-    icon: UserCheck,
-    tone: "cyan",
-  },
-  {
-    title: "파이프라인",
-    desc: "영업 단계와 다음 액션",
-    href: "/pipeline",
-    icon: Target,
-    tone: "warning",
-  },
-  {
-    title: "업무전달",
-    desc: "요청과 처리 스레드",
-    href: "/tasks",
-    icon: MessageCircle,
-    tone: "purple",
-  },
-  {
-    title: "일별활동기록",
-    desc: "목표와 결과 기록",
-    href: "/daily-activity",
-    icon: CheckCircle2,
-    tone: "success",
-  },
-  {
-    title: "완판트럭",
-    desc: "촬영과 발주 관리",
-    href: "/wanpan-truck",
-    icon: PackageCheck,
-    tone: "warning",
-  },
-  {
-    title: "컨텐츠관리",
-    desc: "PR패키지 제작 흐름",
-    href: "/content-manage",
-    icon: PackageCheck,
-    tone: "success",
-  },
-  {
-    title: "운영캘린더",
-    desc: "미팅과 운영 일정",
-    href: "/calendar",
-    icon: CalendarDays,
-    tone: "cyan",
-  },
-  {
-    title: "매출관리",
-    desc: "실매출과 집행 내역",
-    href: "/sales",
-    icon: CreditCard,
-    tone: "cyan",
-  },
-  {
-    title: "리워드",
-    desc: "리워드와 마일리지",
-    href: "/rewards",
-    icon: Wallet,
-    tone: "danger",
-  },
-  {
-    title: "메모장",
-    desc: "메모와 스프레드시트",
-    href: "/memo",
-    icon: FileText,
-    tone: "purple",
-  },
-];
-
-function formatFullDate(value?: string | null) {
-  if (!value) return "-";
-
+function readUserFromStorage(): CRMUserLite | null {
   try {
-    return new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString(
-      "ko-KR",
-      {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      },
-    );
+    const current = getCurrentUser();
+    if (current) return current;
+    const raw = localStorage.getItem("crm_user");
+    if (!raw) return null;
+    return JSON.parse(raw) as CRMUserLite;
   } catch {
-    return value;
+    return null;
   }
 }
 
-function formatShortDate(value?: string | null) {
-  if (!value) return "-";
-
-  try {
-    return new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString(
-      "ko-KR",
-      {
-        month: "2-digit",
-        day: "2-digit",
-      },
-    );
-  } catch {
-    return value;
-  }
+function isExecutionUser(user?: CRMUserLite | null) {
+  const role = String(user?.role || "").toLowerCase();
+  const name = normalizePersonName(user?.name);
+  return role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
-function timeAgo(value?: string | null) {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  const diff = Date.now() - date.getTime();
-  const min = Math.floor(diff / 60000);
-  const hour = Math.floor(min / 60);
-  const day = Math.floor(hour / 24);
-
-  if (min < 1) return "방금 전";
-  if (min < 60) return `${min}분 전`;
-  if (hour < 24) return `${hour}시간 전`;
-  if (day < 7) return `${day}일 전`;
-
-  return formatShortDate(value);
+function isAdminUser(user?: CRMUserLite | null) {
+  const role = String(user?.role || "").toLowerCase();
+  const name = normalizePersonName(user?.name);
+  return role === "admin" || ADMIN_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
-function dateKey(value: Date) {
-  const y = value.getFullYear();
-  const m = String(value.getMonth() + 1).padStart(2, "0");
-  const d = String(value.getDate()).padStart(2, "0");
+function contactOwner(row: Pick<ContactRow, "assigned_to" | "consultant">) {
+  return row.assigned_to || row.consultant || "미지정";
+}
+
+function rowMatchesOwner(row: Pick<ContactRow, "assigned_to" | "consultant">, owner: string) {
+  if (!owner || owner === "전체") return true;
+  const target = normalizePersonName(owner);
+  return normalizePersonName(row.assigned_to) === target || normalizePersonName(row.consultant) === target;
+}
+
+function salesMatchesOwner(row: SalesRow, owner: string) {
+  if (!owner || owner === "전체") return true;
+  const target = normalizePersonName(owner);
+  return normalizePersonName(row.team_member) === target || normalizePersonName(row.consultant) === target;
+}
+
+function parseDate(value?: string | null) {
+  if (!value) return null;
+  const normalized = String(value).length === 10 ? `${value}T00:00:00` : String(value);
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toDateKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-function isSameDateValue(value?: string | null, target = TODAY) {
-  if (!value) return false;
-  return value.slice(0, 10) === target;
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-const KOREA_PUBLIC_HOLIDAYS_2026 = new Set([
-  "2026-01-01",
-  "2026-02-16",
-  "2026-02-17",
-  "2026-02-18",
-  "2026-03-02",
-  "2026-05-05",
-  "2026-05-25",
-  "2026-06-03",
-  "2026-06-06",
-  "2026-07-17",
-  "2026-08-17",
-  "2026-09-24",
-  "2026-09-25",
-  "2026-09-26",
-  "2026-10-05",
-  "2026-10-09",
-  "2026-12-25",
-]);
-
-function isWeekendOrHoliday(value = new Date()) {
-  const day = value.getDay();
-  return (
-    day === 0 || day === 6 || KOREA_PUBLIC_HOLIDAYS_2026.has(dateKey(value))
-  );
+function getMonthWindow(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const end = new Date(year, month, 1, 0, 0, 0, 0);
+  return { start, end, year, month };
 }
 
-function meetingRegisteredAgo(contact: Contact) {
-  return timeAgo(contact.meeting_registered_at || contact.updated_at || contact.created_at);
+function isInMonth(value: string | null | undefined, selectedMonth: string) {
+  const date = parseDate(value);
+  if (!date) return false;
+  const { start, end } = getMonthWindow(selectedMonth);
+  return date >= start && date < end;
+}
+
+function daysBetween(from?: string | null, to = new Date()) {
+  const date = parseDate(from);
+  if (!date) return null;
+  return Math.floor((to.getTime() - date.getTime()) / 86_400_000);
 }
 
 function money(value?: number | null) {
-  const n = value || 0;
-
-  if (!n) return "0원";
-  if (n >= 100_000_000) {
-    const v = n / 100_000_000;
-    return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}억`;
-  }
-  if (n >= 10_000) return `${Math.floor(n / 10_000).toLocaleString()}만`;
-
-  return `${n.toLocaleString()}원`;
+  const n = Number(value || 0);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 100_000_000) return `${sign}${(abs / 100_000_000).toFixed(abs % 100_000_000 === 0 ? 0 : 1)}억`;
+  if (abs >= 10_000) return `${sign}${Math.round(abs / 10_000).toLocaleString()}만원`;
+  return `${sign}${abs.toLocaleString()}원`;
 }
 
-function effectiveSales(row: AdExecution) {
-  const execution = row.execution_amount || 0;
-  const vat = row.vat_amount || 0;
-  const refund = row.refund_amount || 0;
+function moneyFull(value?: number | null) {
+  return `${Number(value || 0).toLocaleString()}원`;
+}
+
+function percent(value: number, total: number) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function formatDate(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function formatDateTime(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function timeAgo(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  const diff = Date.now() - date.getTime();
+  const min = Math.floor(diff / 60_000);
+  const hour = Math.floor(min / 60);
+  const day = Math.floor(hour / 24);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  if (hour < 24) return `${hour}시간 전`;
+  if (day < 30) return `${day}일 전`;
+  return formatDate(value);
+}
+
+function effectiveSales(row: SalesRow) {
+  const execution = Number(row.execution_amount || 0);
+  const vat = Number(row.vat_amount || 0);
+  const refund = Number(row.refund_amount || 0);
   const base = vat && vat !== execution ? vat : execution;
   return Math.max(base - refund, 0);
 }
 
-function avatarBg(name?: string | null) {
-  const gradients = [
-    "linear-gradient(135deg,#8B7CF6,#60A5FA)",
-    "linear-gradient(135deg,#60A5FA,#22D3EE)",
-    "linear-gradient(135deg,#34D399,#22D3EE)",
-    "linear-gradient(135deg,#FBBF24,#FB7185)",
-    "linear-gradient(135deg,#C084FC,#8B7CF6)",
-    "linear-gradient(135deg,#FB7185,#C084FC)",
-  ];
-
-  if (!name) return gradients[0];
-  const idx =
-    name.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0) %
-    gradients.length;
-  return gradients[idx];
+function refundSales(row: SalesRow) {
+  return Number(row.refund_amount || 0);
 }
 
-function toneStyle(tone: string) {
-  const map: Record<
-    string,
-    { bg: string; color: string; border: string; dot: string }
-  > = {
-    success: {
-      bg: "var(--success-bg)",
-      color: "var(--success-text)",
-      border: "var(--success-border)",
-      dot: "var(--success)",
-    },
-    info: {
-      bg: "var(--info-bg)",
-      color: "var(--info-text)",
-      border: "var(--info-border)",
-      dot: "var(--info)",
-    },
-    cyan: {
-      bg: "var(--cyan-bg)",
-      color: "var(--cyan-text)",
-      border: "var(--cyan-border)",
-      dot: "var(--cyan)",
-    },
-    warning: {
-      bg: "var(--warning-bg)",
-      color: "var(--warning-text)",
-      border: "var(--warning-border)",
-      dot: "var(--warning)",
-    },
-    danger: {
-      bg: "var(--danger-bg)",
-      color: "var(--danger-text)",
-      border: "var(--danger-border)",
-      dot: "var(--danger)",
-    },
-    purple: {
-      bg: "var(--purple-bg)",
-      color: "var(--purple-text)",
-      border: "var(--purple-border)",
-      dot: "var(--purple)",
-    },
-    muted: {
-      bg: "var(--surface-3)",
-      color: "var(--text-subtle)",
-      border: "var(--border)",
-      dot: "var(--text-faint)",
-    },
+function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked" | "other" {
+  const channel = normalizeText(row.channel);
+  const route = normalizeText(row.contract_route);
+  const item = normalizeText(row.payment_item || row.payment_type || row.item_name || row.memo);
+
+  if (route.includes("연계매출") || route.includes("하이타겟")) return "linked";
+  if (channel.includes("LMS") || item.includes("LMS")) return "lms";
+  if (channel.includes("호갱노노") || item.includes("호갱노노")) return "hogang";
+  if (
+    route.includes("분양회") ||
+    channel.includes("효성CMS") ||
+    channel.includes("사이다페이") ||
+    item.includes("월회비") ||
+    item.includes("회비")
+  ) {
+    return "membership";
+  }
+  return "other";
+}
+
+function isVipContact(contact: ContactRow) {
+  const source = normalizeText(contact.crm_db_source);
+  const stage = normalizeText(contact.management_stage);
+  const grade = normalizeText(contact.customer_grade);
+  return source === "vip_activity" || PIPELINE_STAGES.map(normalizeText).includes(stage) || Boolean(grade && grade !== normalizeText("심사미진행"));
+}
+
+function isHighValueContact(contact: ContactRow) {
+  const grade = normalizeText(contact.customer_grade);
+  return HIGH_VALUE_GRADES.some((token) => grade.includes(normalizeText(token)));
+}
+
+function isContracted(contact: ContactRow) {
+  return normalizeText(contact.meeting_result) === normalizeText("계약완료") || normalizeText(contact.management_stage) === normalizeText("리텐션");
+}
+
+function isChurned(contact: ContactRow) {
+  const stage = normalizeText(contact.management_stage);
+  const result = normalizeText(contact.meeting_result);
+  return stage.includes("이탈") || stage.includes("탈퇴") || result === normalizeText("계약거부") || result === normalizeText("미팅불발");
+}
+
+function latestActivityDate(contact: ContactRow, notesByContact: Map<string, NoteRow[]>) {
+  const notes = notesByContact.get(String(contact.id)) || [];
+  const latestNote = notes
+    .map((note) => note.created_at || note.note_date)
+    .filter(Boolean)
+    .sort((a, b) => new Date(String(b)).getTime() - new Date(String(a)).getTime())[0];
+  return latestNote || contact.updated_at || contact.created_at || null;
+}
+
+function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, selectedMonth: string) {
+  const activity = normalizeText(contact.activity_type);
+  const notes = notesByContact.get(String(contact.id)) || [];
+  const hasTypedNote = notes.some((note) => {
+    const content = normalizeText(note.content);
+    const inMonth = isInMonth(note.created_at || note.note_date, selectedMonth);
+    return inMonth && (content.includes("TM") || content.includes("콜드톡") || content.includes("활동완료") || content.includes("녹취"));
+  });
+  return (
+    activity.includes("TM") ||
+    activity.includes("콜드톡") ||
+    Boolean(contact.has_tm) ||
+    isInMonth(contact.tm_date, selectedMonth) ||
+    hasTypedNote
+  );
+}
+
+function parsePaymentDay(value?: string | null) {
+  if (!value) return null;
+  const match = String(value).match(/\d+/);
+  if (!match) return null;
+  const day = Number(match[0]);
+  if (!Number.isFinite(day) || day < 1 || day > 31) return null;
+  return day;
+}
+
+function getNextPaymentInfo(day: number, now = TODAY) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const lastDayThisMonth = new Date(year, month + 1, 0).getDate();
+  let due = new Date(year, month, Math.min(day, lastDayThisMonth), 0, 0, 0, 0);
+
+  const todayOnly = new Date(year, month, now.getDate(), 0, 0, 0, 0);
+  if (due < todayOnly) {
+    const nextLast = new Date(year, month + 2, 0).getDate();
+    due = new Date(year, month + 1, Math.min(day, nextLast), 0, 0, 0, 0);
+  }
+
+  const diff = Math.round((due.getTime() - todayOnly.getTime()) / 86_400_000);
+  return { due, diff };
+}
+
+function ddayLabel(diff: number) {
+  if (diff === 0) return "D-DAY";
+  if (diff > 0) return `D-${diff}`;
+  return `D+${Math.abs(diff)}`;
+}
+
+function paymentLabel(contact: ContactRow) {
+  const channel = contact.payment_channel || "결제채널 미입력";
+  const day = parsePaymentDay(contact.regular_payment_date);
+  return `${channel} · ${day ? `매월 ${day}일` : "결제일 미입력"}`;
+}
+
+function monthOptions() {
+  const base = new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(base.getFullYear(), base.getMonth() - 4 + index, 1);
+    return { key: monthKey(date), label: MONTH_LABEL_FORMAT.format(date) };
+  }).reverse();
+}
+
+function toneStyle(tone: ToneName) {
+  const map: Record<ToneName, { bg: string; text: string; border: string; dot: string; bar: string }> = {
+    info: { bg: "var(--info-bg)", text: "var(--info-text)", border: "var(--info-border)", dot: "var(--info)", bar: "linear-gradient(90deg,#60A5FA,#22D3EE)" },
+    success: { bg: "var(--success-bg)", text: "var(--success-text)", border: "var(--success-border)", dot: "var(--success)", bar: "linear-gradient(90deg,#34D399,#22D3EE)" },
+    warning: { bg: "var(--warning-bg)", text: "var(--warning-text)", border: "var(--warning-border)", dot: "var(--warning)", bar: "linear-gradient(90deg,#FBBF24,#FB7185)" },
+    danger: { bg: "var(--danger-bg)", text: "var(--danger-text)", border: "var(--danger-border)", dot: "var(--danger)", bar: "linear-gradient(90deg,#FB7185,#F43F5E)" },
+    purple: { bg: "var(--purple-bg)", text: "var(--purple-text)", border: "var(--purple-border)", dot: "var(--purple)", bar: "linear-gradient(90deg,#8B7CF6,#60A5FA)" },
+    cyan: { bg: "var(--cyan-bg)", text: "var(--cyan-text)", border: "var(--cyan-border)", dot: "var(--cyan)", bar: "linear-gradient(90deg,#22D3EE,#34D399)" },
+    muted: { bg: "var(--surface-3)", text: "var(--text-subtle)", border: "var(--border)", dot: "var(--text-faint)", bar: "linear-gradient(90deg,var(--text-faint),var(--border))" },
   };
-
-  return map[tone] || map.muted;
+  return map[tone];
 }
 
-function resultTone(value?: string | null) {
-  if (value === "계약완료") return "success";
-  if (value === "예약완료") return "purple";
-  if (value === "미팅후가망관리") return "warning";
-  if (value === "계약거부" || value === "미팅불발") return "danger";
-  if (value === "서류만수취") return "info";
-  return "muted";
-}
-
-function taskTone(value?: string | null) {
-  if (value === "완료") return "success";
-  if (value === "진행중") return "warning";
-  if (value === "접수") return "cyan";
-  if (value === "요청") return "info";
-  return "muted";
-}
-
-function Badge({
-  children,
-  tone = "muted",
-  icon: Icon,
-}: {
-  children: ReactNode;
-  tone?: string;
-  icon?: ElementType;
-}) {
+function Badge({ children, tone = "muted", icon: Icon }: { children: ReactNode; tone?: ToneName; icon?: ElementType }) {
   const c = toneStyle(tone);
-
   return (
     <span
-      className="inline-flex h-[23px] items-center justify-center gap-1.5 rounded-[7px] px-2.5 text-[11px] font-bold"
-      style={{
-        background: c.bg,
-        color: c.color,
-        border: `1px solid ${c.border}`,
-      }}
+      className="inline-flex min-h-[24px] items-center gap-1.5 rounded-[8px] px-2.5 text-[11px] font-semibold"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
-      {Icon ? (
-        <Icon size={12} />
-      ) : (
-        <span
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: c.dot }}
-        />
-      )}
+      {Icon ? <Icon size={12} /> : <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.dot }} />}
       {children}
     </span>
   );
 }
 
-function PremiumIcon({
-  icon: Icon,
-  tone = "info",
-  size = "md",
-}: {
-  icon: ElementType;
-  tone?: string;
-  size?: "sm" | "md" | "lg";
-}) {
+function IconBox({ icon: Icon, tone = "info", size = "md" }: { icon: ElementType; tone?: ToneName; size?: "sm" | "md" | "lg" }) {
   const c = toneStyle(tone);
-  const cls =
-    size === "lg"
-      ? "h-12 w-12 rounded-[15px]"
-      : size === "sm"
-        ? "h-8 w-8 rounded-[10px]"
-        : "h-10 w-10 rounded-[12px]";
-
+  const cls = size === "lg" ? "h-12 w-12 rounded-[16px]" : size === "sm" ? "h-8 w-8 rounded-[10px]" : "h-10 w-10 rounded-[13px]";
   return (
-    <div
-      className={`inline-flex flex-shrink-0 items-center justify-center ${cls}`}
-      style={{
-        background: `linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)), ${c.bg}`,
-        border: `1px solid ${c.border}`,
-        color: c.color,
-      }}
-    >
-      <Icon size={size === "lg" ? 22 : size === "sm" ? 14 : 18} />
+    <div className={`inline-flex shrink-0 items-center justify-center ${cls}`} style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}>
+      <Icon size={size === "lg" ? 22 : size === "sm" ? 15 : 18} />
     </div>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  icon,
-  tone,
-  href,
-  sub,
-  compact = false,
-}: {
-  label: string;
-  value: string | number;
-  icon: ElementType;
-  tone: string;
-  href: string;
-  sub?: string;
-  compact?: boolean;
-}) {
-  return (
-    <a
-      href={href}
-      className={`premium-card premium-card-hover flex flex-col justify-between ${compact ? "min-h-[92px] p-3" : "min-h-[104px] p-4"}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <PremiumIcon icon={icon} tone={tone} size={compact ? "sm" : "md"} />
-        <ChevronRight size={14} style={{ color: "var(--text-faint)" }} />
-      </div>
+function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`premium-card overflow-hidden ${className}`}>{children}</section>;
+}
 
-      <div className={compact ? "mt-3 min-w-0" : "mt-5 min-w-0"}>
-        <p className="crm-tiny">{label}</p>
-        <p
-          className={`${compact ? "mt-1 text-[20px]" : "mt-1 text-[24px]"} font-[760] leading-none tracking-[-0.06em]`}
-          style={{ color: "var(--text-strong)" }}
-        >
+function PanelTitle({ icon, tone, title, desc, right }: { icon: ElementType; tone: ToneName; title: string; desc?: string; right?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b px-4 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="flex min-w-0 items-center gap-3">
+        <IconBox icon={icon} tone={tone} />
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+          {desc && <p className="mt-1 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function MetricCard({ title, value, sub, icon, tone, href }: { title: string; value: string | number; sub: string; icon: ElementType; tone: ToneName; href?: string }) {
+  const Wrapper: any = href ? "a" : "div";
+  return (
+    <Wrapper href={href} className="premium-card premium-card-hover block min-h-[126px] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <IconBox icon={icon} tone={tone} />
+        {href ? <ChevronRight size={15} style={{ color: "var(--text-faint)" }} /> : null}
+      </div>
+      <div className="mt-5">
+        <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{title}</p>
+        <p className="mt-1 text-[26px] font-semibold leading-none tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
-        {sub && <p className="crm-meta mt-2 truncate">{sub}</p>}
+        <p className="mt-2 truncate text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>{sub}</p>
       </div>
-    </a>
+    </Wrapper>
   );
 }
 
-function WorkspaceLink({ item }: { item: (typeof WORKSPACE_LINKS)[number] }) {
+function ProgressBar({ value, total, tone = "info" }: { value: number; total: number; tone?: ToneName }) {
+  const c = toneStyle(tone);
+  const width = Math.min(100, percent(value, total || value || 1));
   return (
-    <a
-      href={item.href}
-      className="premium-card premium-card-hover group flex items-center gap-3 p-3"
-    >
-      <PremiumIcon icon={item.icon} tone={item.tone} size="sm" />
-      <div className="min-w-0 flex-1">
-        <p className="crm-row-main truncate">{item.title}</p>
-        <p className="crm-row-sub mt-0.5 truncate">{item.desc}</p>
-      </div>
-      <ArrowRight
-        size={14}
-        className="opacity-0 transition-opacity group-hover:opacity-100"
-        style={{ color: "var(--text-subtle)" }}
-      />
-    </a>
-  );
-}
-
-function ContactRow({
-  contact,
-  mode = "recent",
-}: {
-  contact: Contact;
-  mode?: "recent" | "meeting";
-}) {
-  const rightLabel =
-    mode === "meeting"
-      ? meetingRegisteredAgo(contact)
-      : timeAgo(contact.created_at);
-
-  return (
-    <a
-      href="/contacts"
-      className="flex items-center gap-3 rounded-[14px] p-3 transition-all hover:bg-white/[.035]"
-    >
-      <div
-        className="crm-avatar"
-        style={{ background: avatarBg(contact.name) }}
-      >
-        {contact.name?.[0] || "고"}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="crm-row-main truncate">{contact.name}</p>
-          <Badge tone={resultTone(contact.meeting_result)}>
-            {contact.meeting_result || "미정"}
-          </Badge>
-        </div>
-        <p className="crm-row-sub mt-0.5 truncate">
-          {contact.title || "-"} · {contact.phone || "-"} · 담당{" "}
-          {contact.assigned_to || "-"}
-        </p>
-      </div>
-
-      <span className="crm-tiny flex-shrink-0">{rightLabel}</span>
-    </a>
-  );
-}
-
-function TaskRow({ task }: { task: Task }) {
-  return (
-    <a
-      href="/tasks"
-      className="flex gap-3 rounded-[14px] p-3 transition-all hover:bg-white/[.035]"
-    >
-      <PremiumIcon
-        icon={MessageCircle}
-        tone={taskTone(task.status)}
-        size="sm"
-      />
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={taskTone(task.status)}>{task.status || "요청"}</Badge>
-          <Badge tone="muted">{task.category || "업무"}</Badge>
-          {task.priority && (
-            <Badge
-              tone={
-                task.priority === "긴급"
-                  ? "danger"
-                  : task.priority === "높음"
-                    ? "warning"
-                    : "info"
-              }
-            >
-              {task.priority}
-            </Badge>
-          )}
-        </div>
-        <p
-          className="mt-2 line-clamp-2 text-[13px] font-semibold leading-relaxed"
-          style={{ color: "var(--text)" }}
-        >
-          {task.content || "내용 없음"}
-        </p>
-        <p className="crm-row-sub mt-2 truncate">
-          {task.requester || "-"} → {task.assignee || "-"} ·{" "}
-          {timeAgo(task.created_at)}
-        </p>
-      </div>
-    </a>
-  );
-}
-
-function numberValue(value?: number | null) {
-  return Number(value || 0);
-}
-
-function activeGoalWorkItems(row?: DailyActivityRow | null) {
-  if (!row || !Array.isArray(row.goal_work_items)) return [];
-  return row.goal_work_items.filter((item) => item?.text?.trim());
-}
-
-function totalDailyGoal(row?: DailyActivityRow | null) {
-  if (!row || row.is_outside_meeting) return 0;
-  return (
-    numberValue(row.goal_new_tm) +
-    numberValue(row.goal_coldtalk) +
-    numberValue(row.goal_consultant_db) +
-    numberValue(row.goal_second_touch)
-  );
-}
-
-function totalDailyResult(row?: DailyActivityRow | null) {
-  if (!row || row.is_outside_meeting) return 0;
-  return (
-    numberValue(row.result_new_tm) +
-    numberValue(row.result_coldtalk) +
-    numberValue(row.result_consultant_db) +
-    numberValue(row.result_second_touch)
-  );
-}
-
-function DailyGoalChip({
-  label,
-  value,
-  result,
-  unit = "건",
-}: {
-  label: string;
-  value: number;
-  result?: number;
-  unit?: string;
-}) {
-  return (
-    <div
-      className="rounded-[13px] border px-3 py-2"
-      style={{
-        background: "var(--surface-2)",
-        borderColor: "var(--border-subtle)",
-      }}
-    >
-      <p className="crm-tiny">{label}</p>
-      <p
-        className="mt-1 text-[18px] font-[820] tracking-[-0.05em]"
-        style={{ color: "var(--text-strong)" }}
-      >
-        <span>{value.toLocaleString()}</span>
-        <span className="ml-0.5 text-[12px] font-bold" style={{ color: "var(--text-subtle)" }}>
-          {unit}
-        </span>
-        {typeof result === "number" && (
-          <span className="ml-2 text-[12px] font-bold" style={{ color: "var(--success-text)" }}>
-            / 달성 {result.toLocaleString()}
-          </span>
-        )}
-      </p>
+    <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+      <div className="h-full rounded-full" style={{ width: `${width}%`, background: c.bar }} />
     </div>
   );
 }
 
-function MyDailyActivityCard({
-  row,
-  todayMeetingCount,
-}: {
-  row?: DailyActivityRow | null;
-  todayMeetingCount: number;
-}) {
-  const workItems = activeGoalWorkItems(row);
-
+function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   return (
-    <section className="premium-card overflow-hidden">
-      <div
-        className="flex items-center justify-between gap-3 px-4 py-4"
-        style={{ borderBottom: "1px solid var(--border-subtle)" }}
-      >
-        <div className="flex min-w-0 items-center gap-2">
-          <PremiumIcon icon={Target} tone="warning" />
-          <div className="min-w-0">
-            <p className="crm-section-title">내 오늘 활동목표</p>
-            <p className="crm-tiny">일별활동기록에 저장한 본인 목표값 기준</p>
-          </div>
-        </div>
-        <a href="/daily-activity" className="btn-premium btn-secondary">
-          기록하기
-        </a>
+    <div className="flex min-h-[150px] flex-col items-center justify-center p-6 text-center">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--surface-3)", color: "var(--text-faint)" }}>
+        <FileText size={18} />
       </div>
-
-      {!row ? (
-        <div className="p-5">
-          <EmptyState
-            icon="🎯"
-            title="오늘 입력한 활동목표가 없습니다"
-            description="일별활동기록에서 오늘 목표를 저장하면 대시보드에 바로 표시됩니다"
-          />
-        </div>
-      ) : row.is_outside_meeting ? (
-        <div className="p-5">
-          <div
-            className="rounded-[16px] border p-4"
-            style={{
-              background: "var(--warning-bg)",
-              borderColor: "var(--warning-border)",
-              color: "var(--warning-text)",
-            }}
-          >
-            <p className="text-[15px] font-[820]">오늘은 외근/미팅 기준으로 기록되었습니다.</p>
-            <p className="mt-2 text-[12px] font-semibold leading-relaxed">
-              활동목표 입력 대상에서 제외된 날로 표시됩니다. 오늘 예정 미팅은 {todayMeetingCount.toLocaleString()}건입니다.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="p-4">
-          <div className="mb-3 grid gap-3 sm:grid-cols-3">
-            <DailyGoalChip label="오늘 미팅 예정" value={todayMeetingCount} unit="건" />
-            <DailyGoalChip label="목표 합계" value={totalDailyGoal(row)} unit="건" />
-            <DailyGoalChip label="달성 합계" value={totalDailyResult(row)} unit="건" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DailyGoalChip
-              label="당일 TM"
-              value={numberValue(row.goal_new_tm)}
-              result={numberValue(row.result_new_tm)}
-              unit="건"
-            />
-            <DailyGoalChip
-              label="당일 콜드톡"
-              value={numberValue(row.goal_coldtalk)}
-              result={numberValue(row.result_coldtalk)}
-              unit="건"
-            />
-            <DailyGoalChip
-              label="브론즈 DB 확보"
-              value={numberValue(row.goal_consultant_db)}
-              result={numberValue(row.result_consultant_db)}
-              unit="개"
-            />
-            <DailyGoalChip
-              label="1% DB 확보"
-              value={numberValue(row.goal_second_touch)}
-              result={numberValue(row.result_second_touch)}
-              unit="개"
-            />
-          </div>
-
-          {workItems.length > 0 && (
-            <div className="mt-4 rounded-[14px] border p-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
-              <p className="crm-tiny mb-2">오늘 활동 체크리스트</p>
-              <div className="space-y-2">
-                {workItems.slice(0, 5).map((item, index) => (
-                  <div key={item.id || index} className="flex items-start gap-2 text-[12px] font-semibold" style={{ color: "var(--text-muted)" }}>
-                    <span className={`badge-premium ${item.done ? "badge-success" : "badge-muted"}`}>
-                      {item.done ? "완료" : "대기"}
-                    </span>
-                    <span className="min-w-0 flex-1 leading-relaxed">{item.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
+      <p className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{title}</p>
+      <p className="mt-1 max-w-[300px] text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+    </div>
   );
-}
-
-function ActivityNote({
-  note,
-  contact,
-}: {
-  note: Note;
-  contact?: NoteContact;
-}) {
-  const manager = contact?.assigned_to || contact?.consultant || "-";
-
-  return (
-    <a
-      href="/contacts"
-      className="flex gap-3 rounded-[14px] p-3 transition-all hover:bg-white/[.035]"
-    >
-      <PremiumIcon icon={Activity} tone="purple" size="sm" />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="crm-row-main truncate">
-              {contact?.name || `고객 #${note.contact_id}`}
-            </p>
-            <p className="crm-row-sub mt-1 truncate">
-              {contact?.title || "직급 정보 없음"} · 담당 {manager}
-            </p>
-          </div>
-          <span className="crm-tiny flex-shrink-0 text-right">
-            {timeAgo(note.created_at)}
-          </span>
-        </div>
-
-        <p
-          className="mt-2 line-clamp-2 text-[12.5px] font-medium leading-relaxed"
-          style={{ color: "var(--text-muted)" }}
-        >
-          {note.content || "활동노트 내용 없음"}
-        </p>
-      </div>
-    </a>
-  );
-}
-
-function getTimeBasedDashboardMessage(user?: UserInfo | null) {
-  const now = new Date();
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const isWednesday = now.getDay() === 3;
-  const lunchEnd = isWednesday ? 14 * 60 : 13 * 60 + 30;
-
-  const name = user?.name || "담당자";
-  const role = user?.role || "shared";
-  const honorificNameMap: Record<string, string> = {
-    문시욱: "문시욱 대표님",
-    김정후: "김정후 본부장님",
-    김창완: "김창완 팀장님",
-    최웅: "최웅 파트장님",
-    조계현: "조계현 메인님",
-    이세호: "이세호 어쏘님",
-    기여운: "기여운 어쏘님",
-    최연전: "최연전 CX님",
-    김재영: "김재영 어시님",
-    최은정: "최은정 어시님",
-  };
-  const isExec =
-    role === "exec" || ["조계현", "이세호", "기여운", "최연전"].includes(name);
-  const isOps = role === "ops" || ["최은정", "김재영"].includes(name);
-  const isAdmin =
-    role === "admin" || ["문시욱", "김정후", "김창완", "최웅"].includes(name);
-  const displayName = honorificNameMap[name] || `${name}님`;
-
-  if (isWeekendOrHoliday(now)) {
-    const weekendMessages = [
-      {
-        title: `${displayName}, 쉬는 날에도 흐름을 놓치지 않는 당신을 진심으로 응원합니다.`,
-        desc: "오늘은 잠시 속도를 낮춰도 괜찮은 날입니다. 그럼에도 고객과 팀을 생각하는 마음이 결국 더 단단한 결과로 이어질 거예요.",
-      },
-      {
-        title: `${displayName}, 휴일에도 묵묵히 움직이는 그 마음을 응원합니다.`,
-        desc: "쉬는 날의 작은 확인 하나가 다음 영업일의 큰 여유가 됩니다. 무리하지 말고 필요한 흐름만 가볍게 점검해 주세요.",
-      },
-      {
-        title: `${displayName}, 쉬는 날에도 책임감을 잃지 않는 모습이 멋집니다.`,
-        desc: "오늘의 노력은 조용하지만 분명히 쌓이고 있습니다. 잠깐의 휴식도 좋은 성과를 만드는 중요한 과정입니다.",
-      },
-    ];
-    return weekendMessages[now.getDate() % weekendMessages.length];
-  }
-
-  const period =
-    minutes >= 9 * 60 + 30 && minutes < 10 * 60
-      ? "morningBrief"
-      : minutes >= 10 * 60 && minutes < 12 * 60 + 30
-        ? "morning"
-        : minutes >= 12 * 60 + 30 && minutes < lunchEnd
-          ? "lunch"
-          : minutes >= lunchEnd && minutes < 18 * 60
-            ? "afternoon"
-            : minutes >= 18 * 60 && minutes < 18 * 60 + 30
-              ? "closing"
-              : "default";
-
-  if (period === "lunch") {
-    return {
-      title: `${displayName}, 꿀같은 점심시간 잠시동안 업무를 내려놓고 휴식을 취할 시간입니다.`,
-      desc: isWednesday
-        ? "수요일 점심시간은 12:30부터 14:00까지입니다. 오후의 집중력을 위해 잠시 숨을 고르고 편안하게 재충전해 주세요."
-        : "점심시간은 12:30부터 13:30까지입니다. 오전의 긴장을 내려놓고 오후의 흐름을 위해 편안하게 재충전해 주세요.",
-    };
-  }
-
-  if (isAdmin) {
-    const adminMessages: Record<string, { title: string; desc: string }> = {
-      morningBrief: {
-        title: `${displayName}, 오늘의 조직 흐름이 조용히 정렬되기 시작하는 시간입니다.`,
-        desc: "숫자보다 먼저 사람과 흐름을 바라보고, 실행파트와 운영파트가 같은 방향으로 움직일 수 있는 하루의 기준을 확인해 주세요.",
-      },
-      morning: {
-        title: `${displayName}, 오전에는 팀의 리듬과 고객 흐름을 넓게 바라볼 시간입니다.`,
-        desc: "고객 유입, 미팅 예정, 파이프라인, 매출 흐름을 가볍게 점검하며 오늘 조직이 집중해야 할 방향을 읽어보세요.",
-      },
-      lunch: {
-        title: `${displayName}, 잠시 속도를 낮추고 오후의 판단을 선명하게 준비할 시간입니다.`,
-        desc: isWednesday
-          ? "수요일은 점심시간이 14:00까지입니다. 여유 있는 호흡으로 오전 흐름을 정리하고 오후의 핵심 장면을 준비해 주세요."
-          : "오전의 움직임을 가볍게 되돌아보고, 오후에는 어떤 고객과 어떤 의사결정이 중요할지 차분히 정리해 주세요.",
-      },
-      afternoon: {
-        title: `${displayName}, 오후에는 결과로 이어질 가능성을 조용히 관찰할 시간입니다.`,
-        desc: "실행파트의 고객 접점, 운영파트의 지원 흐름, 미팅 확정과 계약 가능성을 함께 보며 필요한 판단 포인트를 확인해 주세요.",
-      },
-      closing: {
-        title: `${displayName}, 오늘의 흐름이 어떤 결과로 남았는지 정리할 시간입니다.`,
-        desc: "고객, 업무, 매출, 미팅 흐름을 차분히 확인하고 내일 더 좋은 움직임으로 이어질 수 있는 단서를 남겨보세요.",
-      },
-      default: {
-        title: `${displayName}, 오늘의 CRM 흐름을 한눈에 바라볼 수 있습니다.`,
-        desc: "대시보드는 고객, 미팅, 업무, 매출의 핵심 지표를 조용히 정리해 조직의 현재 상태를 보여줍니다.",
-      },
-    };
-    return adminMessages[period];
-  }
-
-  if (isOps) {
-    const opsMessages: Record<string, { title: string; desc: string }> = {
-      morningBrief: {
-        title: `${displayName}, 오늘 회원 요청과 실행 지원 흐름을 먼저 정렬할 시간입니다.`,
-        desc: "분양회 회원 요청사항, 컨텐츠 진행상태, 실행파트 지원 포인트를 확인하고 오늘 운영 우선순위를 잡아주세요.",
-      },
-      morning: {
-        title: `${displayName}, 오전에는 회원 요청사항을 기반으로 운영 흐름을 안정화할 시간입니다.`,
-        desc: "회원 요청, 컨텐츠 제작, 업무전달, 실행파트가 움직일 수 있는 계획과 전략을 먼저 정리해 주세요.",
-      },
-      lunch: {
-        title: `${displayName}, 점심시간에는 오전 요청 처리 흐름과 오후 지원 계획을 점검하세요.`,
-        desc: isWednesday
-          ? "수요일은 점심시간이 14:00까지입니다. 오후 시작 전 회원 요청, 컨텐츠 제공 구성, 실행 지원 전략을 여유 있게 정리해 주세요."
-          : "오후에 집중할 고객 요청사항과 실행파트 지원 포인트를 정리하면 업무 흐름이 더 가볍게 이어집니다.",
-      },
-      afternoon: {
-        title: `${displayName}, 오후에는 고객 요청사항 관리와 프로세스 개선에 집중할 시간입니다.`,
-        desc: "분양회 회원에게 제공될 구성, 실행파트의 전략적 움직임, 업무 간소화 포인트를 중심으로 운영 품질을 높여주세요.",
-      },
-      closing: {
-        title: `${displayName}, 오늘 처리한 요청과 내일 이어질 운영 흐름을 정리할 시간입니다.`,
-        desc: "완료된 요청, 진행 중인 컨텐츠, 실행파트 지원 필요사항을 확인하고 내일의 운영 기준을 남겨주세요.",
-      },
-      default: {
-        title: `${displayName}, 오늘의 운영 흐름을 안정적으로 확인하세요.`,
-        desc: "회원 요청, 컨텐츠 진행, 실행 지원, 업무전달 상태를 기준으로 운영파트의 현재 흐름을 확인할 수 있습니다.",
-      },
-    };
-    return opsMessages[period];
-  }
-
-  if (isExec) {
-    const execMessages: Record<string, { title: string; desc: string }> = {
-      morningBrief: {
-        title: `${displayName}, 아침조례 이후 오늘의 활동목표와 고객 우선순위를 정렬할 시간입니다.`,
-        desc: "기 가입회원 관리, 오후 고객접점 강화 목표, 당일 활동목표를 기준으로 오늘의 움직임을 먼저 설계해 주세요.",
-      },
-      morning: {
-        title: `${displayName}, 오전에는 기 가입회원 관리와 당일 활동목표 셋팅에 집중하세요.`,
-        desc: "기존 회원의 요청과 관리 포인트를 확인하고, 오후 고객접점 강화를 위해 컨설턴트 DB·2차 접점·TM 목표를 명확히 잡아주세요.",
-      },
-      lunch: {
-        title: `${displayName}, 점심시간에는 오전 관리 흐름을 정리하고 오후 접점 전략을 준비하세요.`,
-        desc: isWednesday
-          ? "수요일은 점심시간이 14:00까지입니다. 오후 신규고객 창출, 입회 대상자 컨택, 미팅 일정 확보 흐름을 차분히 준비해 주세요."
-          : "오후에는 신규고객 창출과 입회 대상자 컨택이 중요합니다. 파이프라인과 미팅 가능 고객을 다시 확인해 주세요.",
-      },
-      afternoon: {
-        title: `${displayName}, 오후에는 신규고객 창출과 분양회 입회 대상자 컨택에 집중할 시간입니다.`,
-        desc: "분양회 회원 요청사항을 실행하고, 입회 대상자를 파이프라인 흐름대로 컨택해 미팅일정과 다음 액션을 만들어 주세요.",
-      },
-      closing: {
-        title: `${displayName}, 일과 마무리 전 오늘의 접점과 결과를 기록할 시간입니다.`,
-        desc: "신규 TM, 관리 TM, 2차 접점, 미팅 확정 결과를 정리하고 일별활동기록에 오늘의 결과를 남겨주세요.",
-      },
-      default: {
-        title: `${displayName}, 오늘의 고객 흐름과 다음 액션을 확인하세요.`,
-        desc: "기 가입회원 관리, 신규고객 창출, 파이프라인 컨택, 미팅 일정 확보 흐름을 기준으로 오늘의 실행 방향을 점검할 수 있습니다.",
-      },
-    };
-    return execMessages[period];
-  }
-
-  return {
-    title: `${displayName}, 오늘의 CRM 흐름을 한눈에 확인하세요.`,
-    desc: "고객, 업무, 미팅, 매출 지표를 기준으로 현재 운영상태를 빠르게 확인할 수 있습니다.",
-  };
 }
 
 export default function HomePage() {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [sales, setSales] = useState<AdExecution[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [noteContacts, setNoteContacts] = useState<NoteContact[]>([]);
-  const [myDailyActivity, setMyDailyActivity] = useState<DailyActivityRow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<UserInfo | null>(null);
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
+  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const [sales, setSales] = useState<SalesRow[]>([]);
+  const [kpis, setKpis] = useState<KpiRow[]>([]);
+  const [me, setMe] = useState<CRMUserLite | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
+  const [ownerFilter, setOwnerFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
-  const [workspaceEdit, setWorkspaceEdit] = useState(false);
-  const [workspaceSelected, setWorkspaceSelected] = useState<string[]>(
-    DEFAULT_WORKSPACE_HREFS,
-  );
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
+    setErrorMessage("");
 
-    let user: UserInfo | null = null;
+    const currentUser = readUserFromStorage();
+    setMe(currentUser);
+
+    if (isExecutionUser(currentUser)) {
+      setOwnerFilter(currentUser?.name || "전체");
+    }
+
+    const { year, month } = getMonthWindow(selectedMonth);
 
     try {
-      const raw = localStorage.getItem("crm_user");
-      if (raw) user = JSON.parse(raw) as UserInfo;
-    } catch {}
+      const [contactRes, noteRes, salesRes, kpiRes] = await Promise.all([
+        supabase.from("contacts").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("contact_notes").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(3000),
+        supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", 0),
+      ]);
 
-    setMe(user);
+      if (contactRes.error) throw contactRes.error;
+      if (noteRes.error) console.warn("contact_notes:", noteRes.error.message);
+      if (salesRes.error) console.warn("ad_executions:", salesRes.error.message);
+      if (kpiRes.error) console.warn("kpi_settings:", kpiRes.error.message);
 
-    const baseContactColumns =
-      "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,created_at";
-
-    const shouldLimitToOwnCustomers = isExecutionPartUser(user);
-
-    const buildContactQuery = (columns: string) => {
-      return supabase
-        .from("contacts")
-        .select(columns)
-        .order("created_at", { ascending: false })
-        .limit(700);
-    };
-
-    const contactQuery = buildContactQuery(`${baseContactColumns},updated_at,meeting_registered_at`);
-
-    const { start, end } = (() => {
-      const now = new Date();
-      const y = now.getFullYear();
-      const m = now.getMonth() + 1;
-      const first = `${y}-${String(m).padStart(2, "0")}-01`;
-      const last = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-      return { start: first, end: last };
-    })();
-
-    let [contactRes, taskRes, salesRes, noteRes] = await Promise.all([
-      contactQuery,
-      supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100),
-      supabase
-        .from("ad_executions")
-        .select("*")
-        .gte("payment_date", start)
-        .lte("payment_date", end)
-        .order("payment_date", { ascending: false })
-        .limit(100),
-      supabase
-        .from("contact_notes")
-        .select("id,contact_id,content,created_at")
-        .order("created_at", { ascending: false })
-        .limit(30),
-    ]);
-
-    const dailyActivityRes = user?.name
-      ? await supabase
-          .from("daily_activity_goals")
-          .select("*")
-          .eq("work_date", TODAY)
-          .eq("owner_name", user.name)
-          .maybeSingle()
-      : { data: null, error: null };
-
-    if (contactRes.error && contactRes.error.message.includes("meeting_registered_at")) {
-      contactRes = await buildContactQuery(`${baseContactColumns},updated_at`);
+      setContacts(((contactRes.data || []) as unknown) as ContactRow[]);
+      setNotes(((noteRes.data || []) as unknown) as NoteRow[]);
+      setSales(((salesRes.data || []) as unknown) as SalesRow[]);
+      setKpis(((kpiRes.data || []) as unknown) as KpiRow[]);
+    } catch (error: any) {
+      console.error(error);
+      setErrorMessage(error?.message || "대시보드 데이터를 불러오지 못했습니다.");
+      setContacts([]);
+      setNotes([]);
+      setSales([]);
+      setKpis([]);
+    } finally {
+      setLoading(false);
     }
-
-    if (contactRes.error && contactRes.error.message.includes("updated_at")) {
-      contactRes = await buildContactQuery(baseContactColumns);
-    }
-
-    if (contactRes.error) console.error("contacts:", contactRes.error.message);
-    if (taskRes.error) console.error("tasks:", taskRes.error.message);
-    if (salesRes.error) console.error("ad_executions:", salesRes.error.message);
-    if (noteRes.error) console.error("contact_notes:", noteRes.error.message);
-    if (dailyActivityRes.error) console.error("daily_activity_goals:", dailyActivityRes.error.message);
-
-    const allContactRows = ((contactRes.data || []) as unknown) as Contact[];
-    const dashboardContacts = shouldLimitToOwnCustomers
-      ? allContactRows.filter((contact) => isOwnedByUser(contact, user))
-      : allContactRows;
-
-    let noteRows = ((noteRes.data || []) as unknown) as Note[];
-
-    if (shouldLimitToOwnCustomers) {
-      const visibleContactIds = dashboardContacts
-        .map((contact) => contact.id)
-        .filter(Boolean);
-
-      if (visibleContactIds.length > 0) {
-        const ownNoteRes = await supabase
-          .from("contact_notes")
-          .select("id,contact_id,content,created_at")
-          .in("contact_id", visibleContactIds)
-          .order("created_at", { ascending: false })
-          .limit(30);
-
-        if (ownNoteRes.error) {
-          console.error("own contact_notes:", ownNoteRes.error.message);
-          const visibleIdSet = new Set(visibleContactIds.map((id) => String(id)));
-          noteRows = noteRows.filter((note) =>
-            visibleIdSet.has(String(note.contact_id)),
-          );
-        } else {
-          noteRows = ((ownNoteRes.data || []) as unknown) as Note[];
-        }
-      } else {
-        noteRows = [];
-      }
-    }
-
-    const noteContactIds = Array.from(
-      new Set(noteRows.map((note) => note.contact_id).filter(Boolean)),
-    );
-    let noteContactRows: NoteContact[] = [];
-
-    if (noteContactIds.length > 0) {
-      let noteContactRes: any = await supabase
-        .from("contacts")
-        .select(`${baseContactColumns},updated_at`)
-        .in("id", noteContactIds);
-
-      if (
-        noteContactRes.error &&
-        noteContactRes.error.message.includes("updated_at")
-      ) {
-        noteContactRes = await supabase
-          .from("contacts")
-          .select(baseContactColumns)
-          .in("id", noteContactIds);
-      }
-
-      if (noteContactRes.error) {
-        console.error("note contacts:", noteContactRes.error.message);
-      } else {
-        noteContactRows = ((noteContactRes.data || []) as unknown) as NoteContact[];
-      }
-    }
-
-    if (shouldLimitToOwnCustomers) {
-      noteContactRows = noteContactRows.filter((contact) =>
-        isOwnedByUser(contact, user),
-      );
-      const allowedNoteContactIds = new Set(
-        noteContactRows.map((contact) => String(contact.id)),
-      );
-      noteRows = noteRows.filter((note) =>
-        allowedNoteContactIds.has(String(note.contact_id)),
-      );
-    }
-
-    setContacts(dashboardContacts);
-    setTasks(((taskRes.data || []) as unknown) as Task[]);
-    setSales(((salesRes.data || []) as unknown) as AdExecution[]);
-    setNotes(noteRows);
-    setNoteContacts(noteContactRows);
-    setMyDailyActivity((dailyActivityRes.data || null) as DailyActivityRow | null);
-    setLoading(false);
-  }, []);
+  }, [selectedMonth]);
 
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("crm_dashboard_workspace_links");
-      if (!saved) return;
-      const parsed = JSON.parse(saved) as string[];
-      const valid = parsed.filter((href) =>
-        WORKSPACE_LINKS.some((item) => item.href === href),
-      );
-      if (valid.length > 0) setWorkspaceSelected(valid.slice(0, 8));
-    } catch {
-      // ignore invalid localStorage data
-    }
-  }, []);
+  const fixedOwner = isExecutionUser(me);
+  const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
 
-  const toggleWorkspaceLink = (href: string) => {
-    setWorkspaceSelected((prev) => {
-      const next = prev.includes(href)
-        ? prev.filter((item) => item !== href)
-        : [...prev, href].slice(0, 8);
-      localStorage.setItem(
-        "crm_dashboard_workspace_links",
-        JSON.stringify(next),
-      );
-      return next;
+  const notesByContact = useMemo(() => {
+    const map = new Map<string, NoteRow[]>();
+    notes.forEach((note) => {
+      const key = String(note.contact_id);
+      const list = map.get(key) || [];
+      list.push(note);
+      map.set(key, list);
     });
-  };
+    map.forEach((list) => {
+      list.sort((a, b) => new Date(String(b.created_at || b.note_date || 0)).getTime() - new Date(String(a.created_at || a.note_date || 0)).getTime());
+    });
+    return map;
+  }, [notes]);
 
-  const filteredContacts = useMemo(() => {
+  const visibleContacts = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    if (!q) return contacts;
-
-    return contacts.filter((contact) =>
-      [
-        contact.name,
-        contact.title,
-        contact.phone,
-        contact.memo,
-        contact.assigned_to,
-        contact.consultant,
-      ]
+    return contacts.filter((contact) => {
+      const ownerMatch = rowMatchesOwner(contact, activeOwner);
+      if (!ownerMatch) return false;
+      if (!q) return true;
+      return [contact.name, contact.phone, contact.title, contact.intake_route, contact.assigned_to, contact.consultant, contact.memo]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [contacts, keyword]);
+        .includes(q);
+    });
+  }, [contacts, activeOwner, keyword]);
 
-  const contactById = useMemo(() => {
-    const map = new Map<string, NoteContact>();
-    contacts.forEach((contact) => map.set(String(contact.id), contact));
-    noteContacts.forEach((contact) => map.set(String(contact.id), contact));
-    return map;
-  }, [contacts, noteContacts]);
+  const visibleSales = useMemo(() => {
+    return sales.filter((row) => salesMatchesOwner(row, activeOwner));
+  }, [sales, activeOwner]);
+
+  const monthContacts = useMemo(() => {
+    return visibleContacts.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+  }, [visibleContacts, selectedMonth]);
+
+  const monthSales = useMemo(() => {
+    return visibleSales.filter((row) => isInMonth(row.payment_date || row.created_at, selectedMonth));
+  }, [visibleSales, selectedMonth]);
+
+  const monthNotes = useMemo(() => {
+    const visibleIds = new Set(visibleContacts.map((contact) => String(contact.id)));
+    return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInMonth(note.created_at || note.note_date, selectedMonth));
+  }, [notes, visibleContacts, selectedMonth]);
+
+  const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
 
   const stats = useMemo(() => {
-    const todayMeetings = contacts.filter((c) =>
-      isSameDateValue(c.meeting_date),
-    );
-    const contracts = contacts.filter((c) => c.meeting_result === "계약완료");
-    const reservations = contacts.filter(
-      (c) => c.meeting_result === "예약완료",
-    );
-    const closing = contacts.filter(
-      (c) =>
-        c.management_stage === "딜크로징" || c.prospect_type === "즉가입가망",
-    );
-    const openTasks = tasks.filter((task) => task.status !== "완료");
-    const myTasks = tasks.filter(
-      (task) =>
-        task.assignee === me?.name || task.tagged?.includes(me?.name || ""),
-    );
+    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, selectedMonth)).length;
+    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && (isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))).length;
+    const highValue = visibleContacts.filter((contact) => isHighValueContact(contact)).length;
+    const highValueThisMonth = visibleContacts.filter((contact) => isHighValueContact(contact) && (isInMonth(contact.vip_transferred_at, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))).length;
+    const contracts = visibleContacts.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth) || isInMonth(contact.created_at, selectedMonth))).length;
+    const churn = visibleContacts.filter((contact) => isChurned(contact) && (isInMonth(contact.churn_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length;
 
-    const adSpecialSales = sales
-      .filter(
-        (row) =>
-          ["호갱노노", "LMS"].includes(row.channel || "") &&
-          row.contract_route !== "연계매출",
-      )
-      .reduce((sum, row) => sum + effectiveSales(row), 0);
+    const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const linkedSales = monthSales.filter((row) => salesCategory(row) === "linked").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const otherSales = monthSales.filter((row) => salesCategory(row) === "other").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
+    const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
-    const linkedHighTargetSales = sales
-      .filter((row) => row.contract_route === "연계매출")
-      .reduce((sum, row) => sum + effectiveSales(row), 0);
+    const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
+      acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      return acc;
+    }, {} as Record<string, number>);
 
-    const bunyanghoeMonthlyFee = sales
-      .filter((row) => row.contract_route === "분양회")
-      .reduce((sum, row) => sum + effectiveSales(row), 0);
-
-    const currentMonthContacts = contacts.filter((contact) =>
-      isCurrentMonthDate(contact.created_at),
-    );
-
-    const vipActivityDbCounts = VIP_ACTIVITY_DB_ROUTES.reduce(
-      (acc, route) => {
-        const aliases = route.aliases.map(normalizeDbRoute);
-        acc[route.key] = currentMonthContacts.filter((contact) =>
-          aliases.includes(normalizeDbRoute(contact.intake_route)),
-        ).length;
-        return acc;
-      },
-      {} as Record<(typeof VIP_ACTIVITY_DB_ROUTES)[number]["key"], number>,
-    );
-
-    const vipActivityDbTotal = VIP_ACTIVITY_DB_ROUTES.reduce(
-      (sum, route) => sum + (vipActivityDbCounts[route.key] || 0),
-      0,
-    );
+    const retention = stageCounts["리텐션"] || visibleContacts.filter(isContracted).length;
+    const churnRate = percent(stageCounts["이탈/탈퇴"] || 0, Math.max(vipContacts.length, 1));
 
     return {
-      customers: contacts.length,
-      todayMeetings: todayMeetings.length,
-      contracts: contracts.length,
-      reservations: reservations.length,
-      closing: closing.length,
-      openTasks: openTasks.length,
-      myTasks: myTasks.length,
-      adSpecialSales,
-      linkedHighTargetSales,
-      bunyanghoeMonthlyFee,
-      vipActivityDbCounts,
-      vipActivityDbTotal,
+      firstTouch,
+      vipThisMonth,
+      highValue,
+      highValueThisMonth,
+      contracts,
+      churn,
+      membershipSales,
+      lmsSales,
+      hogangSales,
+      linkedSales,
+      otherSales,
+      refund,
+      totalSales,
+      stageCounts,
+      retention,
+      churnRate,
+      currentPipelineTotal: vipContacts.length,
     };
-  }, [contacts, tasks, sales, me?.name]);
+  }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
 
-  const todayMeetings = useMemo(() => {
-    return contacts
-      .filter((c) => isSameDateValue(c.meeting_date))
-      .sort((a, b) =>
-        (meetingRegisteredAgo(b) || "").localeCompare(
-          meetingRegisteredAgo(a) || "",
-        ),
-      );
-  }, [contacts]);
+  const funnelRows = useMemo<FunnelRow[]>(() => {
+    return [
+      { label: "신규 고객DB", value: monthContacts.length, sub: "당월 최초 컨택 대상", tone: "info" },
+      { label: "첫 접촉 완료", value: stats.firstTouch, sub: "TM·콜드톡·활동노트", tone: "cyan" },
+      { label: "VIP 이관", value: stats.vipThisMonth, sub: "집중관리 DB 전환", tone: "purple" },
+      { label: "1% 대상자", value: stats.highValueThisMonth || stats.highValue, sub: "마스터·챌린저 기준", tone: "warning" },
+      { label: "리드", value: stats.stageCounts["리드"] || 0, sub: "초기 파이프라인", tone: "info" },
+      { label: "프로스펙팅", value: stats.stageCounts["프로스펙팅"] || 0, sub: "상담 진행 구간", tone: "purple" },
+      { label: "클로징", value: stats.stageCounts["딜클로징"] || 0, sub: "계약 전환 직전", tone: "warning" },
+      { label: "계약/리텐션", value: stats.retention, sub: "계약 및 사후관리", tone: "success" },
+    ];
+  }, [monthContacts.length, stats]);
 
-  const importantTasks = useMemo(() => {
-    return tasks
-      .filter((task) => task.status !== "완료")
-      .sort((a, b) => {
-        const priority = (value?: string | null) => {
-          if (value === "긴급") return 0;
-          if (value === "높음") return 1;
-          if (value === "보통") return 2;
-          return 3;
-        };
-        return priority(a.priority) - priority(b.priority);
+  const actionItems = useMemo<ActionItem[]>(() => {
+    const items: ActionItem[] = [];
+
+    visibleContacts.forEach((contact) => {
+      const day = parsePaymentDay(contact.regular_payment_date);
+      if (isContracted(contact) && day) {
+        const { diff } = getNextPaymentInfo(day);
+        if (diff >= 0 && diff <= 4) {
+          items.push({
+            key: `pay-${contact.id}`,
+            type: ddayLabel(diff),
+            tone: diff === 0 ? "danger" : "warning",
+            title: contact.name || "고객명 없음",
+            desc: paymentLabel(contact),
+            href: "/pipeline3",
+            priority: diff,
+          });
+        }
+      }
+
+      if (isContracted(contact) && (!contact.payment_channel || !parsePaymentDay(contact.regular_payment_date))) {
+        items.push({
+          key: `missing-payment-${contact.id}`,
+          type: "결제정보 누락",
+          tone: "danger",
+          title: contact.name || "고객명 없음",
+          desc: "계약완료 고객이지만 결제채널 또는 결제일이 없습니다.",
+          href: "/pipeline3",
+          priority: 1,
+        });
+      }
+
+      const stage = normalizeText(contact.management_stage);
+      const latest = latestActivityDate(contact, notesByContact);
+      const inactiveDays = daysBetween(latest);
+      if (["리드", "프로스펙팅", "딜클로징"].some((item) => stage === normalizeText(item)) && inactiveDays !== null && inactiveDays >= 7) {
+        items.push({
+          key: `inactive-${contact.id}`,
+          type: "장기 미활동",
+          tone: "warning",
+          title: contact.name || "고객명 없음",
+          desc: `${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
+          href: "/pipeline3",
+          priority: 4 + inactiveDays,
+        });
+      }
+
+      const closingDays = daysBetween(contact.updated_at || contact.vip_transferred_at || contact.created_at);
+      if (stage === normalizeText("딜클로징") && closingDays !== null && closingDays >= 5) {
+        items.push({
+          key: `closing-${contact.id}`,
+          type: "클로징 지연",
+          tone: "danger",
+          title: contact.name || "고객명 없음",
+          desc: `딜클로징 ${closingDays}일째 체류 중입니다.`,
+          href: "/pipeline3",
+          priority: 2 + closingDays,
+        });
+      }
+
+      if (isHighValueContact(contact) && !isContracted(contact) && !isChurned(contact)) {
+        items.push({
+          key: `high-${contact.id}`,
+          type: "1% 미전환",
+          tone: "purple",
+          title: contact.name || "고객명 없음",
+          desc: `${contact.customer_grade || "고등급"} · 현재 ${contact.management_stage || "관리구간 미지정"}`,
+          href: "/pipeline3",
+          priority: 8,
+        });
+      }
+    });
+
+    const unique = new Map<string, ActionItem>();
+    items
+      .sort((a, b) => a.priority - b.priority)
+      .forEach((item) => {
+        if (!unique.has(item.key)) unique.set(item.key, item);
+      });
+    return Array.from(unique.values()).slice(0, 10);
+  }, [notesByContact, visibleContacts]);
+
+  const paymentDdays = useMemo(() => {
+    return visibleContacts
+      .filter((contact) => isContracted(contact) && parsePaymentDay(contact.regular_payment_date))
+      .map((contact) => {
+        const day = parsePaymentDay(contact.regular_payment_date) || 1;
+        const info = getNextPaymentInfo(day);
+        return { contact, day, ...info };
       })
-      .slice(0, 6);
-  }, [tasks]);
+      .sort((a, b) => a.diff - b.diff)
+      .slice(0, 12);
+  }, [visibleContacts]);
 
-  const recentContacts = useMemo(() => {
-    return [...contacts]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 7);
-  }, [contacts]);
-  const recentNotes = notes.slice(0, 6);
-  const workspaceLinks = useMemo(() => {
-    const selected = WORKSPACE_LINKS.filter((item) =>
-      workspaceSelected.includes(item.href),
-    );
-    return selected.length > 0
-      ? selected
-      : WORKSPACE_LINKS.filter((item) =>
-          DEFAULT_WORKSPACE_HREFS.includes(item.href),
-        );
-  }, [workspaceSelected]);
-  const dashboardMessage = useMemo(
-    () => getTimeBasedDashboardMessage(me),
-    [me],
-  );
+  const teamRows = useMemo(() => {
+    return EXECUTION_PART_NAMES.map((owner) => {
+      const ownerContacts = contacts.filter((contact) => rowMatchesOwner(contact, owner));
+      const ownerVisible = ownerContacts.filter((contact) => {
+        if (!keyword.trim()) return true;
+        return [contact.name, contact.phone, contact.memo].filter(Boolean).join(" ").toLowerCase().includes(keyword.toLowerCase());
+      });
+      const ownerMonthContacts = ownerVisible.filter((contact) => isInMonth(contact.created_at, selectedMonth));
+      const ownerVip = ownerVisible.filter(isVipContact);
+      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInMonth(row.payment_date || row.created_at, selectedMonth));
+      const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      return {
+        owner,
+        db: ownerMonthContacts.length,
+        vip: ownerVip.length,
+        lead: ownerStage("리드"),
+        prospect: ownerStage("프로스펙팅"),
+        closing: ownerStage("딜클로징"),
+        retention: ownerStage("리텐션"),
+        churn: ownerStage("이탈/탈퇴"),
+        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInMonth(contact.contract_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length,
+        sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
+      };
+    });
+  }, [contacts, keyword, sales, selectedMonth]);
+
+  const intakeRows = useMemo(() => {
+    const groups = new Map<string, ContactRow[]>();
+    visibleContacts.forEach((contact) => {
+      const key = contact.intake_route || "유입경로 미지정";
+      const list = groups.get(key) || [];
+      list.push(contact);
+      groups.set(key, list);
+    });
+    return Array.from(groups.entries())
+      .map(([route, rows]) => {
+        const monthRows = rows.filter((row) => isInMonth(row.created_at, selectedMonth) || isInMonth(row.vip_transferred_at, selectedMonth));
+        const contract = rows.filter(isContracted).length;
+        const vip = rows.filter(isVipContact).length;
+        return { route, count: monthRows.length || rows.length, vip, contract, rate: percent(contract, rows.length) };
+      })
+      .sort((a, b) => b.contract - a.contract || b.count - a.count)
+      .slice(0, 6);
+  }, [selectedMonth, visibleContacts]);
+
+  const gradeRows = useMemo(() => {
+    const groups = new Map<string, ContactRow[]>();
+    vipContacts.forEach((contact) => {
+      const key = contact.customer_grade || "심사미진행";
+      const list = groups.get(key) || [];
+      list.push(contact);
+      groups.set(key, list);
+    });
+    return Array.from(groups.entries())
+      .map(([grade, rows]) => ({ grade, count: rows.length, contracts: rows.filter(isContracted).length, rate: percent(rows.filter(isContracted).length, rows.length) }))
+      .sort((a, b) => b.rate - a.rate || b.count - a.count)
+      .slice(0, 6);
+  }, [vipContacts]);
+
+  const kpiTarget = useMemo(() => {
+    const userName = activeOwner === "전체" ? "team" : activeOwner;
+    const target = activeOwner === "전체"
+      ? kpis.find((row) => row.scope === "team" && row.target_name === "team")
+      : kpis.find((row) => row.scope === "execution" && normalizePersonName(row.target_name) === normalizePersonName(userName));
+    return target || null;
+  }, [activeOwner, kpis]);
+
+  const kpiRows = useMemo(() => {
+    const target = kpiTarget;
+    return [
+      { label: "분양회 모집", value: stats.contracts, goal: Number(target?.recruit_count || 0), unit: "명", tone: "success" as ToneName },
+      { label: "분양회 회비", value: stats.membershipSales, goal: Number(target?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
+      { label: "연계매출", value: stats.linkedSales, goal: Number(target?.linked_revenue || 0), unit: "원", tone: "info" as ToneName, money: true },
+      { label: "광고특전", value: stats.lmsSales + stats.hogangSales, goal: Number(target?.special_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
+      { label: "완판트럭 DB", value: monthContacts.filter((contact) => normalizeText(contact.intake_route).includes(normalizeText("완판트럭"))).length, goal: Number(target?.wanpan_truck_count || 0), unit: "건", tone: "cyan" as ToneName },
+    ];
+  }, [kpiTarget, monthContacts, stats]);
+
+  const selectedMonthLabel = MONTH_LABEL_FORMAT.format(getMonthWindow(selectedMonth).start);
+  const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
 
   return (
     <div className="premium-page h-full overflow-y-auto">
       <div className="premium-shell px-5 py-5 md:px-7 md:py-6">
-        <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <header className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2">
-              <Badge tone="purple" icon={Sparkles}>
-                Cycle-like CRM v3
-              </Badge>
-              <Badge tone="muted">
-                <span
-                  className="inline-flex h-2 w-2 rounded-full"
-                  style={{
-                    background: me?.name
-                      ? "var(--success)"
-                      : "var(--text-disabled)",
-                    boxShadow: me?.name
-                      ? "0 0 0 3px rgba(52, 211, 153, 0.16)"
-                      : "none",
-                  }}
-                />
-                {me?.name ? `${me.name}님` : "Workspace"}
-              </Badge>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge tone="purple" icon={Sparkles}>당월 영업 지휘센터</Badge>
+              <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
+              <Badge tone="muted" icon={CalendarDays}>{selectedMonthLabel}</Badge>
             </div>
-            <h1 className="crm-title">오늘의 운영 루프</h1>
+            <h1 className="crm-title">대시보드</h1>
             <p className="crm-subtitle mt-1">
-              고객 유입, 미팅, 계약, 컨텐츠, 업무, 매출을 하나의 흐름으로
-              확인합니다.
+              고객DB → VIP 이관 → 파이프라인 → 계약/리텐션 → 매출/KPI까지 당월 흐름을 한 화면에서 확인합니다.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-[320px]">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: "var(--text-faint)" }}
-              />
+            <div className="relative w-full sm:w-[280px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
               <input
                 value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                placeholder="고객명, 연락처, 메모 검색..."
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="고객명, 연락처, 메모 검색"
                 className="crm-search w-full pl-9 pr-3"
               />
             </div>
 
-            <button
-              type="button"
-              onClick={fetchDashboard}
-              className="btn-premium btn-secondary"
-            >
-              <RefreshCw size={14} />
-              새로고침
-            </button>
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)} className="crm-search w-[150px] px-3">
+              {monthOptions().map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
 
-            <a href="/contacts" className="btn-premium btn-primary">
-              <Users size={14} />
-              고객DB 열기
-            </a>
+            <select
+              value={activeOwner}
+              disabled={fixedOwner}
+              onChange={(event) => setOwnerFilter(event.target.value)}
+              className="crm-search w-[150px] px-3 disabled:opacity-70"
+            >
+              <option value="전체">전체 담당자</option>
+              {EXECUTION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+
+            <button type="button" onClick={fetchDashboard} className="btn-premium btn-secondary">
+              <RefreshCw size={14} /> 새로고침
+            </button>
           </div>
         </header>
 
-        <section className="premium-hero mb-4 p-4 md:p-5">
-          <div className="relative z-[1] min-w-0">
-            <h2
-              className="max-w-5xl text-[28px] font-[760] leading-[1.25] tracking-[0.02em] md:text-[38px]"
-              style={{
-                color: "var(--text-strong)",
-                wordBreak: "keep-all",
-                overflowWrap: "normal",
-              }}
-            >
-              {dashboardMessage.title}
-            </h2>
-
-            <p
-              className="mt-3 max-w-3xl text-[13px] font-medium leading-[1.8] tracking-[0.005em] md:text-[14px]"
-              style={{ color: "var(--text-muted)" }}
-            >
-              {dashboardMessage.desc}
-            </p>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <a href="/pipeline" className="btn-premium btn-primary">
-                <Target size={14} />
-                파이프라인 확인
-              </a>
-              <a href="/tasks" className="btn-premium btn-secondary">
-                <MessageCircle size={14} />
-                업무전달 보기
-              </a>
-              <a href="/calendar" className="btn-premium btn-secondary">
-                <CalendarDays size={14} />
-                캘린더 열기
-              </a>
-            </div>
+        {errorMessage && (
+          <div className="mb-4 rounded-[16px] border px-4 py-3 text-[13px] font-semibold" style={{ background: "var(--danger-bg)", borderColor: "var(--danger-border)", color: "var(--danger-text)" }}>
+            {errorMessage}
           </div>
-        </section>
+        )}
 
-        <section className="mb-5 grid gap-4 xl:grid-cols-[1.15fr_.85fr]">
-          <div className="premium-card overflow-hidden">
-            <div
-              className="flex flex-col gap-1 border-b px-4 py-3 md:px-5"
-              style={{ borderColor: "var(--border-subtle)" }}
-            >
-              <div className="flex items-center gap-2">
-                <PremiumIcon icon={Users} tone="info" size="sm" />
-                <p className="crm-section-title">VIP 활동 DB</p>
-              </div>
-              <p className="crm-tiny">
-                분양의신DB, 컨설턴트VIP DB, 완판트럭DB, 분양라인DB,
-                분양회MGM, 대협팀 활동의 당월 DB 수취건을 구분해 확인합니다.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 2xl:grid-cols-4">
-              <MetricCard
-                label="당월 DB 합계"
-                value={stats.vipActivityDbTotal}
-                icon={Users}
-                tone="info"
-                href="/contacts"
-                sub="당월 수취"
-                compact
-              />
-              {VIP_ACTIVITY_DB_ROUTES.map((route) => (
-                <MetricCard
-                  key={route.key}
-                  label={route.label}
-                  value={stats.vipActivityDbCounts[route.key] || 0}
-                  icon={route.icon}
-                  tone={route.tone}
-                  href="/contacts"
-                  sub="당월 수취"
-                  compact
-                />
-              ))}
-              <MetricCard
-                label="오늘 미팅"
-                value={stats.todayMeetings}
-                icon={CalendarDays}
-                tone="cyan"
-                href="/calendar"
-                sub="당일 기준"
-                compact
-              />
-            </div>
-          </div>
-
-          <div className="premium-card overflow-hidden">
-            <div
-              className="flex flex-col gap-1 border-b px-4 py-3 md:px-5"
-              style={{ borderColor: "var(--border-subtle)" }}
-            >
-              <div className="flex items-center gap-2">
-                <PremiumIcon icon={TrendingUp} tone="success" size="sm" />
-                <p className="crm-section-title">당월 진척율</p>
-              </div>
-              <p className="crm-tiny">
-                광고특전, 하이타겟 연계매출, 분양회 월회비를 당월 기준으로
-                구분합니다.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-              <MetricCard
-                label="총매출(광고특전)"
-                value={money(stats.adSpecialSales)}
-                icon={TrendingUp}
-                tone="success"
-                href="/sales"
-                sub="호갱노노 + LMS"
-                compact
-              />
-              <MetricCard
-                label="연계매출(하이타겟)"
-                value={money(stats.linkedHighTargetSales)}
-                icon={CreditCard}
-                tone="purple"
-                href="/sales"
-                sub="하이타겟 당월 합산"
-                compact
-              />
-              <MetricCard
-                label="분양회월회비"
-                value={money(stats.bunyanghoeMonthlyFee)}
-                icon={Wallet}
-                tone="warning"
-                href="/sales"
-                sub="분양회 월회비 합산"
-                compact
-              />
-            </div>
-          </div>
+        <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+          <MetricCard title="당월 신규DB" value={monthContacts.length} sub={`첫 접촉 ${stats.firstTouch}명 · ${percent(stats.firstTouch, monthContacts.length)}%`} icon={Database} tone="info" href="/customer-db" />
+          <MetricCard title="VIP 이관" value={stats.vipThisMonth} sub={`현재 VIP ${stats.currentPipelineTotal}명`} icon={ShieldCheck} tone="purple" href="/contacts" />
+          <MetricCard title="1% 대상자" value={stats.highValue} sub={`당월 신규/변경 ${stats.highValueThisMonth}명`} icon={Target} tone="warning" href="/pipeline3" />
+          <MetricCard title="계약완료" value={stats.contracts} sub={`리텐션 ${stats.retention}명`} icon={BadgeCheck} tone="success" href="/pipeline3" />
+          <MetricCard title="이탈/탈퇴" value={stats.churn} sub={`현재 이탈률 ${stats.churnRate}%`} icon={TrendingDown} tone="danger" href="/pipeline3" />
+          <MetricCard title="당월 순매출" value={money(stats.totalSales)} sub={`환불 ${moneyFull(stats.refund)}`} icon={CircleDollarSign} tone="cyan" href="/sales" />
+          <MetricCard title="분양회 회비" value={money(stats.membershipSales)} sub="효성CMS·사이다페이" icon={WalletCards} tone="warning" href="/sales" />
+          <MetricCard title="광고특전" value={money(stats.lmsSales + stats.hogangSales)} sub={`LMS ${money(stats.lmsSales)} · 호갱노노 ${money(stats.hogangSales)}`} icon={Zap} tone="purple" href="/sales" />
         </section>
 
         {loading ? (
-          <div className="flex min-h-[420px] items-center justify-center">
-            <div
-              className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
-              style={{
-                borderColor: "var(--accent)",
-                borderTopColor: "transparent",
-              }}
-            />
+          <div className="flex min-h-[520px] items-center justify-center">
+            <Loader2 className="animate-spin" size={32} style={{ color: "var(--accent)" }} />
           </div>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+          <div className="grid gap-5 2xl:grid-cols-[1.28fr_.72fr]">
             <div className="space-y-5">
-              <MyDailyActivityCard
-                row={myDailyActivity}
-                todayMeetingCount={stats.todayMeetings}
-              />
-
-              <section className="premium-card overflow-hidden">
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-4"
-                  style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PremiumIcon icon={CalendarDays} tone="cyan" />
-                    <div className="min-w-0">
-                      <p className="crm-section-title">오늘의 미팅</p>
-                      <p className="crm-tiny">{formatFullDate(TODAY)} 기준</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="badge-premium badge-info">
-                      총 {todayMeetings.length}명
-                    </span>
-                    <a href="/calendar" className="btn-premium btn-secondary">
-                      전체보기
-                    </a>
-                  </div>
-                </div>
-
-                <div className="max-h-[365px] overflow-y-auto p-2">
-                  {todayMeetings.length === 0 ? (
-                    <div className="p-6">
-                      <EmptyState
-                        icon="📅"
-                        title="오늘 미팅이 없습니다"
-                        description="캘린더 또는 고객DB에서 다음 일정을 확인하세요"
-                      />
-                    </div>
-                  ) : (
-                    todayMeetings.map((contact) => (
-                      <ContactRow
-                        key={contact.id}
-                        contact={contact}
-                        mode="meeting"
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <section className="premium-card overflow-hidden">
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-4"
-                  style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PremiumIcon icon={MessageCircle} tone="purple" />
-                    <div className="min-w-0">
-                      <p className="crm-section-title">우선 처리 업무</p>
-                      <p className="crm-tiny">미완료 업무 중 우선순위 기준</p>
-                    </div>
-                  </div>
-                  <a href="/tasks" className="btn-premium btn-secondary">
-                    업무전달
-                  </a>
-                </div>
-
-                <div className="max-h-[365px] overflow-y-auto p-2">
-                  {importantTasks.length === 0 ? (
-                    <div className="p-6">
-                      <EmptyState
-                        icon="✅"
-                        title="미완료 업무가 없습니다"
-                        description="새로운 요청이 들어오면 이곳에 표시됩니다"
-                      />
-                    </div>
-                  ) : (
-                    importantTasks.map((task) => (
-                      <TaskRow key={task.id} task={task} />
-                    ))
-                  )}
-                </div>
-              </section>
-            </div>
-
-            <div className="space-y-5">
-              <section className="premium-card overflow-hidden">
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-4"
-                  style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PremiumIcon icon={LayoutDashboard} tone="info" />
-                    <div>
-                      <p className="crm-section-title">워크스페이스</p>
-                      <p className="crm-tiny">사용자가 자주 사용하는 메뉴</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setWorkspaceEdit((prev) => !prev)}
-                    className="btn-premium btn-secondary"
-                  >
-                    <Settings2 size={14} /> {workspaceEdit ? "완료" : "수정"}
-                  </button>
-                </div>
-
-                {workspaceEdit ? (
-                  <div className="grid max-h-[365px] gap-2 overflow-y-auto p-3 sm:grid-cols-2">
-                    {WORKSPACE_LINKS.map((item) => {
-                      const checked = workspaceSelected.includes(item.href);
+              <Panel>
+                <PanelTitle icon={LineChart} tone="info" title="당월 영업 퍼널" desc="고객DB에서 계약/리텐션까지 단계별 병목을 확인합니다." right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+                <div className="p-4">
+                  <div className="grid gap-3 lg:grid-cols-8">
+                    {funnelRows.map((row, index) => {
+                      const previous = index === 0 ? row.value : funnelRows[index - 1]?.value || 0;
+                      const rate = index === 0 ? 100 : percent(row.value, previous);
                       return (
-                        <button
-                          key={item.href}
-                          type="button"
-                          onClick={() => toggleWorkspaceLink(item.href)}
-                          className="premium-card premium-card-hover flex items-center gap-3 p-3 text-left"
-                          style={{
-                            borderColor: checked
-                              ? "var(--accent-border)"
-                              : "var(--border)",
-                          }}
-                        >
-                          <PremiumIcon
-                            icon={item.icon}
-                            tone={checked ? "purple" : item.tone}
-                            size="sm"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="crm-row-main truncate">
-                              {item.title}
-                            </p>
-                            <p className="crm-row-sub mt-0.5 truncate">
-                              {item.desc}
-                            </p>
+                        <div key={row.label} className="rounded-[16px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <Badge tone={row.tone}>{index + 1}</Badge>
+                            <span className="text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>{index === 0 ? "기준" : `${rate}%`}</span>
                           </div>
-                          <span
-                            className={`badge-premium ${checked ? "badge-purple" : "badge-muted"}`}
-                          >
-                            {checked ? "사용" : "제외"}
-                          </span>
-                        </button>
+                          <p className="mt-4 text-[21px] font-semibold leading-none tracking-[-0.05em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}</p>
+                          <p className="mt-2 text-[12px] font-semibold" style={{ color: "var(--text)" }}>{row.label}</p>
+                          <p className="mt-1 min-h-[30px] text-[11px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{row.sub}</p>
+                          <div className="mt-3"><ProgressBar value={row.value} total={index === 0 ? Math.max(row.value, 1) : Math.max(previous, 1)} tone={row.tone} /></div>
+                        </div>
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="grid gap-2 p-3 sm:grid-cols-2">
-                    {workspaceLinks.map((item) => (
-                      <WorkspaceLink key={item.href} item={item} />
+                </div>
+              </Panel>
+
+              <div className="grid gap-5 xl:grid-cols-[1fr_.9fr]">
+                <Panel>
+                  <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="현재 보유 고객 흐름과 당월 성과 비교" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[860px] text-left">
+                      <thead>
+                        <tr className="border-b text-[11px] font-semibold" style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}>
+                          <th className="px-4 py-3">담당자</th>
+                          <th className="px-3 py-3 text-right">신규DB</th>
+                          <th className="px-3 py-3 text-right">VIP</th>
+                          <th className="px-3 py-3 text-right">리드</th>
+                          <th className="px-3 py-3 text-right">프로스펙팅</th>
+                          <th className="px-3 py-3 text-right">클로징</th>
+                          <th className="px-3 py-3 text-right">계약</th>
+                          <th className="px-3 py-3 text-right">이탈</th>
+                          <th className="px-4 py-3 text-right">매출</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamRows.map((row) => (
+                          <tr key={row.owner} className="border-b text-[12px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text)" }}>
+                            <td className="px-4 py-3"><Badge tone={normalizePersonName(row.owner) === normalizePersonName(activeOwner) ? "purple" : "muted"} icon={UserCheck}>{row.owner}</Badge></td>
+                            <td className="px-3 py-3 text-right font-semibold">{row.db}</td>
+                            <td className="px-3 py-3 text-right font-semibold">{row.vip}</td>
+                            <td className="px-3 py-3 text-right">{row.lead}</td>
+                            <td className="px-3 py-3 text-right">{row.prospect}</td>
+                            <td className="px-3 py-3 text-right">{row.closing}</td>
+                            <td className="px-3 py-3 text-right" style={{ color: "var(--success-text)" }}>{row.contracts}</td>
+                            <td className="px-3 py-3 text-right" style={{ color: "var(--danger-text)" }}>{row.churn}</td>
+                            <td className="px-4 py-3 text-right font-semibold">{money(row.sales)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Panel>
+
+                <Panel>
+                  <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc="통합매출관리 기준 당월 순매출" right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                  <div className="space-y-4 p-4">
+                    {[
+                      { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
+                      { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
+                      { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
+                      { label: "연계매출", value: stats.linkedSales, tone: "success" as ToneName },
+                      { label: "기타/별도입금", value: stats.otherSales, tone: "muted" as ToneName },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div className="mb-2 flex items-center justify-between gap-3 text-[12px] font-semibold">
+                          <span style={{ color: "var(--text)" }}>{item.label}</span>
+                          <span style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
+                        </div>
+                        <ProgressBar value={item.value} total={Math.max(stats.totalSales, 1)} tone={item.tone} />
+                      </div>
                     ))}
                   </div>
-                )}
-              </section>
+                </Panel>
+              </div>
 
-              <section className="premium-card overflow-hidden">
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-4"
-                  style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PremiumIcon icon={Users} tone="success" />
-                    <div className="min-w-0">
-                      <p className="crm-section-title">최근 고객</p>
-                      <p className="crm-tiny">고객등록 기준 최근 등록 순</p>
-                    </div>
+              <div className="grid gap-5 xl:grid-cols-2">
+                <Panel>
+                  <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="KPI 설정 메뉴의 월간 목표와 자동 연동" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                  <div className="space-y-4 p-4">
+                    {kpiRows.map((row) => {
+                      const hasGoal = row.goal > 0;
+                      return (
+                        <div key={row.label} className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>{row.label}</p>
+                            <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>
+                              {row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`} / {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "목표 미설정"}
+                            </p>
+                          </div>
+                          <ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} />
+                          <p className="mt-2 text-right text-[11px] font-semibold" style={{ color: hasGoal && row.value >= row.goal ? "var(--success-text)" : "var(--text-subtle)" }}>
+                            {hasGoal ? `${percent(row.value, row.goal)}% 달성` : "KPI 설정 필요"}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <a href="/customer-register" className="btn-premium btn-secondary">
-                    고객등록
-                  </a>
-                </div>
+                </Panel>
 
+                <Panel>
+                  <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="어떤 DB가 계약까지 이어지는지 확인" />
+                  <div className="p-4">
+                    {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
+                      <div className="space-y-3">
+                        {intakeRows.map((row) => (
+                          <div key={row.route} className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                              <Badge tone={row.rate >= 20 ? "success" : row.rate >= 8 ? "warning" : "muted"}>{row.rate}% 계약률</Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center text-[12px] font-semibold">
+                              <div><p style={{ color: "var(--text-subtle)" }}>DB</p><p style={{ color: "var(--text-strong)" }}>{row.count}</p></div>
+                              <div><p style={{ color: "var(--text-subtle)" }}>VIP</p><p style={{ color: "var(--text-strong)" }}>{row.vip}</p></div>
+                              <div><p style={{ color: "var(--text-subtle)" }}>계약</p><p style={{ color: "var(--success-text)" }}>{row.contract}</p></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Panel>
+              </div>
+
+              <Panel>
+                <PanelTitle icon={Activity} tone="purple" title="자동등급별 계약전환율" desc="고객등급 판정 로직의 실제 성과를 검증합니다." />
+                <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+                  {gradeRows.length === 0 ? <div className="md:col-span-2 xl:col-span-3"><EmptyBlock title="등급 데이터가 없습니다" desc="VIP활동DB에서 고객등급을 판정하면 여기에 표시됩니다." /></div> : gradeRows.map((row) => (
+                    <div key={row.grade} className="rounded-[16px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge tone={isHighValueContact({ customer_grade: row.grade } as ContactRow) ? "warning" : "muted"}>{row.grade}</Badge>
+                        <span className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>{row.contracts}/{row.count}명</span>
+                      </div>
+                      <p className="mt-4 text-[28px] font-semibold leading-none tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{row.rate}%</p>
+                      <p className="mt-2 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>계약전환율</p>
+                      <div className="mt-3"><ProgressBar value={row.contracts} total={row.count} tone={row.rate >= 20 ? "success" : "purple"} /></div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+
+            <div className="space-y-5">
+              <Panel>
+                <PanelTitle icon={AlertTriangle} tone="danger" title="오늘 챙겨야 할 고객" desc="D-DAY, 장기미활동, 클로징 지연, 결제정보 누락" right={<Badge tone="danger">{actionItems.length}건</Badge>} />
+                <div className="max-h-[560px] overflow-y-auto p-2">
+                  {actionItems.length === 0 ? <EmptyBlock title="오늘 긴급 관리 고객이 없습니다" desc="결제 D-DAY 또는 장기미활동 고객이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => (
+                    <a key={item.key} href={item.href} className="flex gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
+                      <IconBox icon={item.tone === "danger" ? AlertTriangle : item.tone === "purple" ? Target : CalendarClock} tone={item.tone} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge tone={item.tone}>{item.type}</Badge>
+                          <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{item.title}</p>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
+                      </div>
+                      <ChevronRight size={14} style={{ color: "var(--text-faint)" }} />
+                    </a>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel>
+                <PanelTitle icon={CalendarClock} tone="warning" title="자동이체 결제 D-DAY" desc="계약/리텐션 고객의 다음 결제일 기준" right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
                 <div className="max-h-[430px] overflow-y-auto p-2">
-                  {recentContacts.length === 0 ? (
-                    <div className="p-6">
-                      <EmptyState
-                        icon="👥"
-                        title="고객이 없습니다"
-                        description="검색 조건을 변경해보세요"
-                      />
-                    </div>
-                  ) : (
-                    recentContacts.map((contact) => (
-                      <ContactRow key={contact.id} contact={contact} />
-                    ))
-                  )}
+                  {paymentDdays.length === 0 ? <EmptyBlock title="결제일 등록 고객이 없습니다" desc="계약전환 시 결제채널과 결제일을 입력하면 자동으로 계산됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
+                    <a key={contact.id} href="/pipeline3" className="flex items-center gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
+                      <div className="flex h-11 w-14 shrink-0 flex-col items-center justify-center rounded-[14px]" style={{ background: diff <= 4 ? "var(--warning-bg)" : "var(--surface-3)", color: diff <= 4 ? "var(--warning-text)" : "var(--text-subtle)", border: `1px solid ${diff <= 4 ? "var(--warning-border)" : "var(--border)"}` }}>
+                        <span className="text-[11px] font-semibold">{ddayLabel(diff)}</span>
+                        <span className="text-[10px] font-medium">{formatDate(toDateKey(due))}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{contact.name || "고객명 없음"}</p>
+                        <p className="mt-1 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
+                      </div>
+                      <Badge tone={diff <= 4 ? "warning" : "muted"}>{contactOwner(contact)}</Badge>
+                    </a>
+                  ))}
                 </div>
-              </section>
+              </Panel>
 
-              <section className="premium-card overflow-hidden">
-                <div
-                  className="flex items-center justify-between gap-3 px-4 py-4"
-                  style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PremiumIcon icon={FileText} tone="warning" />
-                    <div>
-                      <p className="crm-section-title">최근 활동노트</p>
-                      <p className="crm-tiny">고객 상담 기록</p>
+              <Panel>
+                <PanelTitle icon={PhoneCall} tone="info" title="활동량 요약" desc="당월 첫 접촉과 활동노트 기준" />
+                <div className="grid grid-cols-2 gap-3 p-4">
+                  <div className="rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <IconBox icon={MessageCircle} tone="info" size="sm" />
+                    <p className="mt-4 text-[24px] font-semibold leading-none" style={{ color: "var(--text-strong)" }}>{stats.firstTouch}</p>
+                    <p className="mt-2 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>첫 접촉 완료</p>
+                  </div>
+                  <div className="rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <IconBox icon={FileText} tone="purple" size="sm" />
+                    <p className="mt-4 text-[24px] font-semibold leading-none" style={{ color: "var(--text-strong)" }}>{monthNotes.length}</p>
+                    <p className="mt-2 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트</p>
+                  </div>
+                  <div className="col-span-2 rounded-[15px] border p-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>첫 접촉률</p>
+                      <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthContacts.length)}%</p>
                     </div>
+                    <ProgressBar value={stats.firstTouch} total={monthContacts.length} tone="cyan" />
                   </div>
                 </div>
+              </Panel>
 
+              <Panel>
+                <PanelTitle icon={Clock3} tone="muted" title="최근 활동노트" desc="녹취 요약 및 수동 기록" />
                 <div className="max-h-[430px] overflow-y-auto p-2">
-                  {recentNotes.length === 0 ? (
-                    <div className="p-6">
-                      <EmptyState
-                        icon="📝"
-                        title="활동노트가 없습니다"
-                        description="고객 상세에서 상담 기록을 남겨보세요"
-                      />
-                    </div>
-                  ) : (
-                    recentNotes.map((note) => (
-                      <ActivityNote
-                        key={note.id}
-                        note={note}
-                        contact={contactById.get(String(note.contact_id))}
-                      />
-                    ))
-                  )}
+                  {monthNotes.length === 0 ? <EmptyBlock title="당월 활동노트가 없습니다" desc="고객 상세 또는 녹취 요약을 통해 활동노트가 쌓이면 표시됩니다." /> : monthNotes.slice(0, 8).map((note) => {
+                    const contact = visibleContacts.find((row) => String(row.id) === String(note.contact_id));
+                    return (
+                      <a key={note.id} href="/contacts" className="flex gap-3 rounded-[15px] p-3 transition-all hover:bg-white/[.04]">
+                        <IconBox icon={Activity} tone="purple" size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
+                            <span className="shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>{timeAgo(note.created_at || note.note_date)}</span>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
+                        </div>
+                      </a>
+                    );
+                  })}
                 </div>
-              </section>
+              </Panel>
             </div>
           </div>
         )}
