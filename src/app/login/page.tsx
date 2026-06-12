@@ -152,12 +152,12 @@ export default function LoginPage() {
           )}
 
           <div className={styles.mediaLogo}>
-            {/* 분양의신 로고 자리 — 로고 SVG로 교체 */}
-            <svg viewBox="0 0 32 32" fill="none">
-              <path d="M7 7h11l-4 8H3l4-8z" fill="#4cc3ec" />
-              <path d="M14 17h11l-4 8H10l4-8z" fill="#2576b8" />
-            </svg>
-            분양의신
+            {/* 로고: public/wordmark.png */}
+            <img className={styles.wordmark} src="/wordmark.png" alt="분양의신" />
+            <div className={styles.logoText}>
+              <span>(주)광고인</span>
+              <span>대외협력팀</span>
+            </div>
           </div>
 
           <div className={styles.mediaShade} />
@@ -204,8 +204,12 @@ export default function LoginPage() {
         {/* ═════════ 우측: 로그인 ═════════ */}
         <section className={styles.formSide}>
           <div className={styles.formInner}>
+            <div className={styles.formLogo}>
+              {/* 아이콘 로고: public/logo.png */}
+              <img src="/logo.png" alt="분양의신 로고" />
+            </div>
             <h1 className={styles.formTitle}>다시 오셨군요!</h1>
-            <p className={styles.formSub}>분양의신 CRM 계정으로 로그인하세요</p>
+            <p className={styles.formSub}>분양의신 대외협력팀 CRM 계정으로 로그인하세요</p>
 
             <form onSubmit={handleLogin}>
               <div className={`${styles.field} ${styles.withIcon}`}>
