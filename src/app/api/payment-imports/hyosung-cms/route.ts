@@ -78,6 +78,12 @@ function toText(value: unknown) {
   return String(value).trim();
 }
 
+function cleanCmsIdentityText(value: unknown) {
+  const text = toText(value);
+  if (!text || text === "-" || text === "–" || text === "—") return "";
+  return text;
+}
+
 function toNumber(value: unknown) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
 
@@ -94,7 +100,7 @@ function normalizePhone(value: unknown) {
     return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
   }
 
-  return toText(value);
+  return cleanCmsIdentityText(value);
 }
 
 function normalizeDate(value: unknown) {
@@ -145,30 +151,40 @@ function getCell(row: HyosungRow, ...keys: string[]) {
 }
 
 function buildExternalPaymentId(payment: Omit<NormalizedPayment, "externalPaymentId">) {
-  // 회원번호 + 청구월 고정 식별자 (결제일/금액/상태는 버전마다 달라질 수 있어 제외)
   return [
     "HYOSUNG_CMS",
     payment.memberNumber || "NO_MEMBER",
     payment.memberName || "NO_NAME",
     payment.billingMonth || "NO_MONTH",
+    payment.paidAt || "NO_PAID_DATE",
   ]
     .map((value) => String(value).trim().replace(/\s+/g, "").replace(/[|]/g, ""))
     .join("_");
 }
 
-function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayment {
+function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayment | null {
+  const memberNumber = cleanCmsIdentityText(getCell(row, "회원번호"));
+  const contractNumber = cleanCmsIdentityText(getCell(row, "계약번호"));
+  const memberName = cleanCmsIdentityText(getCell(row, "회원명"));
+  const memberPhone = normalizePhone(getCell(row, "납부자 휴대전화", "휴대전화", "연락처"));
+  const rowText = Object.values(row).map(toText).join(" ");
+  const isSummaryRow = /합계|총계|소계|total/i.test(rowText) && !memberNumber && !memberName && !memberPhone;
+  const hasMemberIdentity = Boolean(memberNumber || memberName || memberPhone || contractNumber);
+
+  if (!hasMemberIdentity || isSummaryRow) return null;
+
   const paymentWithoutId = {
     rowIndex,
-    memberNumber: toText(getCell(row, "회원번호")),
-    contractNumber: toText(getCell(row, "계약번호")),
-    memberName: toText(getCell(row, "회원명")),
-    memberPhone: normalizePhone(getCell(row, "납부자 휴대전화", "휴대전화", "연락처")),
+    memberNumber,
+    contractNumber,
+    memberName,
+    memberPhone,
     billingMonth: normalizeBillingMonth(getCell(row, "청구월", "최초청구월")),
-    productName: toText(getCell(row, "상품", "상품명")),
-    collectionStatus: toText(getCell(row, "수납상태")),
-    paymentStatus: toText(getCell(row, "결제상태")),
-    paymentType: toText(getCell(row, "결제방식")),
-    paymentMethod: toText(getCell(row, "결제수단")),
+    productName: cleanCmsIdentityText(getCell(row, "상품", "상품명")),
+    collectionStatus: cleanCmsIdentityText(getCell(row, "수납상태")),
+    paymentStatus: cleanCmsIdentityText(getCell(row, "결제상태")),
+    paymentType: cleanCmsIdentityText(getCell(row, "결제방식")),
+    paymentMethod: cleanCmsIdentityText(getCell(row, "결제수단")),
     promisedAt: normalizeDate(getCell(row, "약정일")),
     paidAt: normalizeDate(getCell(row, "결제일", "결제일(납부기간)", "청구완납일자")),
     completedAt: normalizeDate(getCell(row, "청구완납일자")),
@@ -176,14 +192,15 @@ function normalizeHyosungRow(row: HyosungRow, rowIndex: number): NormalizedPayme
     paidAmount: toNumber(getCell(row, "수납금액")),
     unpaidAmount: toNumber(getCell(row, "미납금액")),
     refundAmount: toNumber(getCell(row, "환불금액")),
-    resultMessage: toText(getCell(row, "결제결과", "비고")),
-    memberType: toText(getCell(row, "회원구분")),
-    managerName: toText(getCell(row, "담당관리자")),
+    resultMessage: cleanCmsIdentityText(getCell(row, "결제결과", "비고")),
+    memberType: cleanCmsIdentityText(getCell(row, "회원구분")),
+    managerName: cleanCmsIdentityText(getCell(row, "담당관리자")),
     rawData: row,
     isPaid: false,
   };
 
   const isPaid =
+    paymentWithoutId.collectionStatus === "완납" &&
     paymentWithoutId.paymentStatus === "결제완료" &&
     paymentWithoutId.paidAmount > 0;
 
@@ -215,7 +232,7 @@ function parseWorkbook(buffer: Buffer) {
 
   return rows
     .map((row, index) => normalizeHyosungRow(row, index + 2))
-    .filter((row) => row.memberName || row.memberNumber || row.memberPhone);
+    .filter((row): row is NormalizedPayment => Boolean(row));
 }
 
 
@@ -290,7 +307,7 @@ async function findExistingImport(provider: string, externalPaymentId: string, p
     }
   }
 
-  if (data) return data;
+  if (data?.sales_record_id) return data;
   // 2차: 구버전 ID 포맷으로 조회 (회원번호+이름+청구월 prefix 매칭)
   // reset_for_reimport 상태는 재처리 허용이므로 제외
   if (payment) {
@@ -487,16 +504,11 @@ async function importPayments(payments: NormalizedPayment[]) {
       }
 
       if (!payment.isPaid) {
-        const saved = await saveExternalPaymentRecord(payment, {
-          importStatus: "logged_only",
-          importMessage: "결제완료 조건이 아니어서 매출로 생성하지 않고 로그만 저장했습니다.",
-        });
-
         results.push({
           externalPaymentId: payment.externalPaymentId,
           memberName: payment.memberName,
-          status: "logged_only",
-          message: saved.import_message,
+          status: "ignored_unpaid",
+          message: "결제완료 조건이 아니어서 통합매출 반영 대상에서 제외했습니다.",
           salesRecordId: null,
         });
         continue;
@@ -586,7 +598,7 @@ export async function POST(request: NextRequest) {
       paidRows: payments.filter((item) => item.isPaid).length,
       failedOrUnpaidRows: payments.filter((item) => !item.isPaid).length,
       salesCreated: results.filter((item) => item.status === "sales_created").length,
-      loggedOnly: results.filter((item) => item.status === "logged_only").length,
+      ignoredUnpaid: results.filter((item) => item.status === "ignored_unpaid").length,
       duplicate: results.filter((item) => item.status === "duplicate").length,
       failed: results.filter((item) => item.status === "failed").length,
     };
