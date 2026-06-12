@@ -762,7 +762,7 @@ export default function VipMembersPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[640px]">
+            <div className="stat-grid grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[640px]">
               <StatCard
                 icon={<Users size={17} />}
                 label="전체 입회자"
