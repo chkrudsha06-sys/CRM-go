@@ -352,7 +352,7 @@ export default function CustomerRegisterPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="stat-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {routeStats.map((item) => {
                 const percent = contacts.length ? Math.round((item.count / contacts.length) * 100) : 0;
                 return (
