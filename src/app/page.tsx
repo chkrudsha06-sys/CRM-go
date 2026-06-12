@@ -612,19 +612,22 @@ export default function HomePage() {
     const { year, month } = getMonthWindow(selectedMonth);
 
     try {
-      const [contactRes, noteRes, salesRes, kpiRes] = await Promise.all([
-        supabase.from("contacts").select("*").order("created_at", { ascending: false }).limit(3000),
-        supabase.from("contact_notes").select("*").order("created_at", { ascending: false }).limit(3000),
-        supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(3000),
+      const [customerDbRes, vipRes, noteRes, salesRes, kpiRes] = await Promise.all([
+        supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false }),
+        supabase.from("contacts").select("*").eq("crm_db_source", "vip_activity").order("created_at", { ascending: false }),
+        supabase.from("contact_notes").select("*").order("created_at", { ascending: false }).limit(5000),
+        supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000),
         supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", 0),
       ]);
 
-      if (contactRes.error) throw contactRes.error;
+      if (customerDbRes.error) throw customerDbRes.error;
+      if (vipRes.error) throw vipRes.error;
       if (noteRes.error) console.warn("contact_notes:", noteRes.error.message);
       if (salesRes.error) console.warn("ad_executions:", salesRes.error.message);
       if (kpiRes.error) console.warn("kpi_settings:", kpiRes.error.message);
 
-      setContacts(((contactRes.data || []) as unknown) as ContactRow[]);
+      const allContacts = [...((customerDbRes.data || []) as unknown as ContactRow[]), ...((vipRes.data || []) as unknown as ContactRow[])];
+      setContacts(allContacts);
       setNotes(((noteRes.data || []) as unknown) as NoteRow[]);
       setSales(((salesRes.data || []) as unknown) as SalesRow[]);
       setKpis(((kpiRes.data || []) as unknown) as KpiRow[]);
@@ -733,6 +736,14 @@ export default function HomePage() {
     return contacts.filter((contact) => rowMatchesOwner(contact, activeOwner));
   }, [contacts, activeOwner]);
 
+  const customerDbContacts = useMemo(() => {
+    return visibleContacts.filter((contact) => normalizeText(contact.crm_db_source) === "customer_db");
+  }, [visibleContacts]);
+
+  const monthCustomerDb = useMemo(() => {
+    return customerDbContacts.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
+  }, [customerDbContacts, rangeStart, rangeEnd]);
+
   const visibleSales = useMemo(() => {
     return sales.filter((row) => salesMatchesOwner(row, activeOwner));
   }, [sales, activeOwner]);
@@ -753,13 +764,15 @@ export default function HomePage() {
   const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
 
   const stats = useMemo(() => {
-    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, rangeStart, rangeEnd)).length;
-    const tmCount = monthContacts.filter((contact) => {
+    /* 고객DB 기반 (기간 내 신규 업로드) */
+    const firstTouch = monthCustomerDb.filter((contact) => hasFirstTouch(contact, notesByContact, rangeStart, rangeEnd)).length;
+    const tmCount = monthCustomerDb.filter((contact) => {
       const activity = normalizeText(contact.activity_type);
       return activity.includes("TM") || Boolean(contact.has_tm) || isInRange(contact.tm_date, rangeStart, rangeEnd);
     }).length;
-    const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
-    const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, rangeStart, rangeEnd)).length;
+    const coldTalkCount = monthCustomerDb.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
+
+    /* VIP 기반 (누적 — 파이프라인3과 동일) */
     const master = vipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
     const challenger = vipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
     const bronze = vipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
@@ -768,12 +781,14 @@ export default function HomePage() {
     const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
     const contracts = vipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd)).length;
 
+    /* 매출 (기간 내) */
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
     const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
     const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
+    /* 파이프라인 단계별 (누적 — 파이프라인3과 1:1 매칭) */
     const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
       acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       return acc;
@@ -786,25 +801,25 @@ export default function HomePage() {
     const contractRate = percent(retention, Math.max(vipContacts.length, 1));
 
     return {
-      firstTouch, tmCount, coldTalkCount, vipThisMonth,
+      firstTouch, tmCount, coldTalkCount,
       master, challenger, bronze,
       masterThisMonth, challengerThisMonth, bronzeThisMonth,
       contracts, churnCount, churnRate,
       membershipSales, lmsSales, hogangSales, refund, totalSales,
       stageCounts, retention, activePipeline, contractRate,
-      currentPipelineTotal: vipContacts.length,
+      vipTotal: vipContacts.length,
     };
-  }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
+  }, [monthCustomerDb, monthSales, notesByContact, rangeStart, rangeEnd, vipContacts]);
 
   /* 당월 영업 퍼널: 4단계 */
   const funnelStages = useMemo(() => {
     return [
-      { label: "고객DB 신규", value: monthContacts.length, sub: "당월 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthContacts.length) },
-      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: percent(stats.vipThisMonth, Math.max(stats.firstTouch, 1)) },
-      { label: "VIP 이관·등급심사", value: stats.vipThisMonth, sub: `현재 VIP ${stats.currentPipelineTotal}명`, tone: "purple" as ToneName, rate: percent(stats.retention, Math.max(stats.vipThisMonth, 1)) },
-      { label: "계약 · 리텐션", value: stats.retention, sub: `당월 계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
+      { label: "고객DB 신규", value: monthCustomerDb.length, sub: "기간 내 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthCustomerDb.length) },
+      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: null },
+      { label: "VIP 전체", value: stats.vipTotal, sub: `리드 ${stats.stageCounts["리드"] || 0} · 프로스 ${stats.stageCounts["프로스펙팅"] || 0} · 클로징 ${stats.stageCounts["딜클로징"] || 0}`, tone: "purple" as ToneName, rate: percent(stats.retention, Math.max(stats.vipTotal, 1)) },
+      { label: "계약 · 리텐션", value: stats.retention, sub: `당월 신규계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
     ];
-  }, [monthContacts.length, stats]);
+  }, [monthCustomerDb.length, stats]);
 
   /* 오늘 챙겨야 할 고객 (크리티컬 통합 리스트) */
   const { actionItems, criticalCounts } = useMemo(() => {
@@ -903,28 +918,26 @@ export default function HomePage() {
 
   const teamRows = useMemo(() => {
     return EXECUTION_PART_NAMES.map((owner) => {
-      const ownerContacts = contacts.filter((contact) => rowMatchesOwner(contact, owner));
-      const ownerVisible = ownerContacts;
-      const ownerMonthContacts = ownerVisible.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
-      const ownerVip = ownerVisible.filter(isVipContact);
+      const ownerAll = contacts.filter((contact) => rowMatchesOwner(contact, owner));
+      const ownerCustomerDb = ownerAll.filter((contact) => normalizeText(contact.crm_db_source) === "customer_db");
+      const ownerVip = ownerAll.filter(isVipContact);
+      const ownerMonthDb = ownerCustomerDb.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
       const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
       const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
-      const masterChallenger = ownerVisible.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length;
-      const bronze = ownerVisible.filter((contact) => isGradeContact(contact, "브론즈")).length;
       return {
         owner,
-        db: ownerMonthContacts.length,
-        masterChallenger,
-        bronze,
+        db: ownerMonthDb.length,
+        masterChallenger: ownerVip.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length,
+        bronze: ownerVip.filter((contact) => isGradeContact(contact, "브론즈")).length,
         lead: ownerStage("리드"),
         prospect: ownerStage("프로스펙팅"),
         closing: ownerStage("딜클로징"),
-        contracts: ownerVisible.filter((contact) => isContracted(contact) && (isInRange(contact.contract_date, rangeStart, rangeEnd) || isInRange(contact.updated_at, rangeStart, rangeEnd))).length,
+        contracts: ownerVip.filter((contact) => isContracted(contact)).length,
         churn: ownerStage("이탈/탈퇴"),
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
       };
     });
-  }, [contacts, sales, selectedMonth]);
+  }, [contacts, sales, rangeStart, rangeEnd]);
 
   /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
   const intakeRows = useMemo(() => {
@@ -1545,9 +1558,9 @@ export default function HomePage() {
                     <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <p className="text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>첫 접촉률</p>
-                        <p className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthContacts.length)}%</p>
+                        <p className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthCustomerDb.length)}%</p>
                       </div>
-                      <ProgressBar value={stats.firstTouch} total={monthContacts.length} tone="cyan" />
+                      <ProgressBar value={stats.firstTouch} total={monthCustomerDb.length} tone="cyan" />
                     </div>
                   </div>
                 </Panel>
