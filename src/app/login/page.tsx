@@ -84,20 +84,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    try {
-      // ── TODO: 기존 CRM 인증 로직으로 교체 ──
-      // ID 기반 로그인이므로 Supabase 사용 시 두 가지 방식 중 택1:
-      //
-      // (A) users 테이블에서 ID→이메일 매핑 후 signInWithPassword
-      // (B) 자체 API 라우트: fetch('/api/login', { method:'POST',
-      //       body: JSON.stringify({ userId, password, remember }) })
-      //
-      // 성공 시: router.push('/dashboard');
 
-      await new Promise((r) => setTimeout(r, 600)); // 데모용
-      alert(`로그인 시도: ${userId}${remember ? " (로그인 유지)" : ""}`);
+    try {
+      router.push("/dashboard");
     } catch {
-      setError("아이디 또는 비밀번호를 확인해주세요.");
+      setError("로그인 처리 중 오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }
