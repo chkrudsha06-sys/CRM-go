@@ -3,7 +3,7 @@
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
 import type { ElementType, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -512,34 +512,36 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   );
 }
 
-/** 영업 퍼널 단계 (압축형) + 가운데 정렬된 전환율 커넥터 */
-function FunnelStage({ label, value, sub, tone, rate, isLast }: { label: string; value: number; sub: string; tone: ToneName; rate?: number | null; isLast?: boolean }) {
+/** 퍼널 박스 (가로 축소 · 세로 확장 · 텍스트 확대) */
+function FunnelBox({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: ToneName }) {
   const c = toneStyle(tone);
   return (
-    <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 lg:flex-row lg:gap-0">
-      <div className="min-w-0 flex-1 rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.dot }} />
-          <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
-        </div>
-        <p className="mt-1 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
-          {value.toLocaleString()}<span className="ml-0.5 text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
-        </p>
-        <p className="mt-1 truncate text-[10px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+    <div className="w-full max-w-[180px] rounded-[12px] border px-4 py-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="flex items-center gap-1.5">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
+        <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
       </div>
-      {!isLast && (
-        <div className="flex shrink-0 items-center justify-center py-0.5 lg:w-[68px] lg:py-0">
-          {rate !== null && rate !== undefined ? (
-            <span
-              className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums tracking-[-0.02em]"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
-            >
-              {rate}% <ArrowRight size={11} className="rotate-90 lg:rotate-0" />
-            </span>
-          ) : (
-            <ArrowRight size={13} className="rotate-90 lg:rotate-0" style={{ color: "var(--text-faint)" }} />
-          )}
-        </div>
+      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+        {value.toLocaleString()}<span className="ml-0.5 text-[14px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
+      </p>
+      <p className="mt-2 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+    </div>
+  );
+}
+
+/** 퍼널 커넥터 (고정 폭 · 겹침 방지) */
+function FunnelConnector({ rate }: { rate: number | null | undefined }) {
+  return (
+    <div className="flex w-[72px] shrink-0 items-center justify-center">
+      {rate !== null && rate !== undefined ? (
+        <span
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.02em]"
+          style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
+        >
+          {rate}%<ArrowRight size={12} />
+        </span>
+      ) : (
+        <ArrowRight size={14} style={{ color: "var(--text-faint)" }} />
       )}
     </div>
   );
@@ -989,7 +991,7 @@ export default function HomePage() {
               <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
               <Badge tone="muted" icon={CalendarDays}>{selectedMonthLabel}</Badge>
             </div>
-            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 파이프라인 → 계약·리텐션 → 매출까지 당월 영업 흐름을 한 화면에서 봅니다.</p>
+            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션 → 매출까지 당월 영업 흐름을 한 화면에서 봅니다.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1045,13 +1047,16 @@ export default function HomePage() {
                   icon={LineChart}
                   tone="info"
                   title="당월 영업 퍼널"
-                  desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 파이프라인 → 계약·리텐션"
+                  desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션"
                   right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
                 />
                 <div className="p-4">
-                  <div className="flex flex-col gap-1 lg:flex-row lg:items-stretch lg:gap-0">
+                  <div className="flex flex-col items-center gap-2 lg:flex-row lg:justify-center lg:gap-0">
                     {funnelStages.map((stage) => (
-                      <FunnelStage key={stage.label} {...stage} />
+                      <Fragment key={stage.label}>
+                        <FunnelBox label={stage.label} value={stage.value} sub={stage.sub} tone={stage.tone} />
+                        {!stage.isLast && <FunnelConnector rate={stage.rate} />}
+                      </Fragment>
                     ))}
                   </div>
                 </div>
