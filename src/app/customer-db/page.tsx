@@ -552,7 +552,7 @@ function NoteComposer({
     onAdd({
       noteDate,
       activityType,
-      content: `[${sensitivity}] ${content.trim()}`,
+      content: content.trim(),
       author: "현재 사용자",
     });
     setContent("");
@@ -1857,22 +1857,20 @@ export default function CustomerDbPage() {
                 </p>
               </div>
 
-              <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-8 w-8 shrink-0 p-0">
-                <X size={17} />
-              </button>
-            </div>
-
-            {/* 액션 버튼: 헤더 바로 아래 */}
-            <div className="flex flex-wrap gap-1.5 border-b px-4 pb-2.5" style={{ borderColor: "var(--border-subtle)" }}>
-              <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-8 px-2.5 text-[11px]">
-                <ArrowRight size={12} /> VIP DB이관
-              </button>
-              <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]">
-                <Edit3 size={12} /> 수정
-              </button>
-              <button type="button" onClick={() => deleteRecord(selectedRecord)} className="btn-premium h-8 px-2.5 text-[11px]" style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}>
-                <Trash2 size={12} /> 삭제
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-8 px-2.5 text-[11px]">
+                  <ArrowRight size={12} /> VIP DB이관
+                </button>
+                <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]">
+                  <Edit3 size={12} /> 수정
+                </button>
+                <button type="button" onClick={() => deleteRecord(selectedRecord)} className="btn-premium h-8 px-2.5 text-[11px]" style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}>
+                  <Trash2 size={12} /> 삭제
+                </button>
+                <button type="button" onClick={() => setSelectedRecord(null)} className="btn-premium btn-secondary h-8 w-8 shrink-0 p-0">
+                  <X size={17} />
+                </button>
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
