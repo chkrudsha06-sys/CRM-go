@@ -681,7 +681,8 @@ export default function HomePage() {
       setContacts(allContacts);
 
       /* 당일 일별활동 목표/달성 */
-      const todayKey = new Date().toISOString().slice(0, 10);
+      const _now = new Date();
+      const todayKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
       const dagUserName = currentUser?.name || "";
       try {
         const { data: dagRows, error: dagError } = await supabase
