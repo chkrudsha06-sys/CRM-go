@@ -271,9 +271,28 @@ async function findExistingImport(provider: string, externalPaymentId: string, p
     .maybeSingle();
 
   if (error) throw error;
-  if (data) return data;
 
+  if (data?.sales_record_id) {
+    // 실제 매출이 존재하는지 확인
+    const { data: realSales } = await supabase
+      .from("ad_executions")
+      .select("id")
+      .eq("id", data.sales_record_id)
+      .maybeSingle();
+
+    if (!realSales?.id) {
+      // 매출 삭제됨 → 초기화 후 재처리 허용
+      await supabase
+        .from("external_payment_records")
+        .update({ sales_record_id: null, import_status: "reset_for_reimport" })
+        .eq("id", data.id);
+      return null;
+    }
+  }
+
+  if (data) return data;
   // 2차: 구버전 ID 포맷으로 조회 (회원번호+이름+청구월 prefix 매칭)
+  // reset_for_reimport 상태는 재처리 허용이므로 제외
   if (payment) {
     const prefix = [
       provider,
@@ -288,11 +307,27 @@ async function findExistingImport(provider: string, externalPaymentId: string, p
       .eq("provider", provider)
       .like("external_payment_id", `${prefix}%`)
       .not("sales_record_id", "is", null)
+      .not("import_status", "in", '("reset_for_reimport","failed","logged_only")')
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (fallback) return fallback;
+    if (fallback?.sales_record_id) {
+      // 실제 매출이 존재하는지 최종 확인
+      const { data: realCheck } = await supabase
+        .from("ad_executions")
+        .select("id")
+        .eq("id", fallback.sales_record_id)
+        .maybeSingle();
+
+      if (realCheck?.id) return fallback;
+
+      // 매출이 삭제된 경우 → 이 기록도 초기화
+      await supabase
+        .from("external_payment_records")
+        .update({ sales_record_id: null, import_status: "reset_for_reimport" })
+        .eq("id", fallback.id);
+    }
   }
 
   return null;
