@@ -43,8 +43,6 @@ export default function LoginPage() {
   const [slide, setSlide] = useState(0);
   const touchX = useRef<number | null>(null);
 
-  const [videoReady, setVideoReady] = useState(false);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [requestDone, setRequestDone] = useState(false);
   const [showReqPw, setShowReqPw] = useState(false);
@@ -162,19 +160,8 @@ export default function LoginPage() {
               muted
               loop
               playsInline
-              onLoadedData={() => setVideoReady(true)}
+              preload="auto"
             />
-
-            {!videoReady && (
-              <div className={styles.videoPlaceholder}>
-                <strong>영상 자리</strong>
-                <span>
-                  프로젝트의 <b>public/login-video.mp4</b> 경로에
-                  <br />
-                  영상 파일을 넣으면 자동으로 재생됩니다.
-                </span>
-              </div>
-            )}
 
             <div className={styles.mediaLogo}>
               <img className={styles.wordmark} src="/wordmark.png" alt="분양의신" />
