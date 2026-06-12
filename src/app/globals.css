@@ -1265,3 +1265,278 @@ aside span {
     border-top: 1px solid #e2e8f0;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+ * 통합 페이지 헤더 시스템 — 전 메뉴 일괄 적용
+ * 스탯 카드 축소 · 패딩 압축 · 타이틀 통일 · 필터바 통일
+ * ═══════════════════════════════════════════════════════ */
+
+/* ── 1. 페이지 타이틀 + 설명 통일 ── */
+.premium-page h1:first-of-type,
+.crm-modern-page h1:first-of-type {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.04em !important;
+  line-height: 1.2 !important;
+}
+
+.premium-page h1:first-of-type + p,
+.crm-modern-page h1:first-of-type + p {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+  margin-top: 2px !important;
+}
+
+/* ── 2. 상단 배지 (premium-card 밖의 badge/span) ── */
+.premium-page > div > header .badge-premium:first-child,
+[data-page-badge] {
+  font-size: 11px !important;
+  height: 24px !important;
+  margin-bottom: 6px !important;
+}
+
+/* ── 3. 스탯 카드 그리드 → 인라인 컴팩트 필 ── */
+.premium-page .stat-grid,
+.premium-page > div > div > section:first-child .grid[class*="grid-cols"],
+.crm-modern-page .stat-grid,
+.crm-modern-main > div > div:first-child .grid[class*="grid-cols"],
+[data-stat-grid] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  grid-template-columns: none !important;
+}
+
+[data-stat-grid] > *,
+.stat-grid > * {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+}
+
+/* 스탯 카드 내부 축소 */
+[data-stat-card],
+.stat-grid > .premium-card,
+.stat-grid > div {
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  min-height: unset !important;
+  height: auto !important;
+}
+
+/* 스탯 카드 아이콘 축소 */
+[data-stat-card] .h-9,
+[data-stat-card] .h-10,
+[data-stat-card] .w-9,
+[data-stat-card] .w-10,
+.stat-grid .h-9,
+.stat-grid .h-10,
+.stat-grid .w-9,
+.stat-grid .w-10 {
+  height: 28px !important;
+  width: 28px !important;
+  border-radius: 8px !important;
+}
+
+[data-stat-card] .h-9 svg,
+[data-stat-card] .h-10 svg,
+.stat-grid .h-9 svg,
+.stat-grid .h-10 svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* 스탯 카드 라벨 → 작게 */
+[data-stat-card] p:first-child,
+.stat-grid p:first-child {
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+/* 스탯 카드 숫자 → 축소 */
+[data-stat-card] .text-\[28px\],
+[data-stat-card] .text-\[26px\],
+[data-stat-card] .text-\[24px\],
+[data-stat-card] .text-\[22px\],
+[data-stat-card] .text-\[20px\],
+[data-stat-card] .text-\[32px\],
+.stat-grid .text-\[28px\],
+.stat-grid .text-\[26px\],
+.stat-grid .text-\[24px\],
+.stat-grid .text-\[22px\],
+.stat-grid .text-\[20px\],
+.stat-grid .text-\[32px\] {
+  font-size: 17px !important;
+  line-height: 1.2 !important;
+}
+
+/* ── 4. 필터 바 통일 ── */
+[data-filter-bar],
+.premium-filterbar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 0 0 !important;
+}
+
+[data-filter-bar] input,
+[data-filter-bar] select,
+[data-filter-bar] .crm-search {
+  height: 36px !important;
+  font-size: 13px !important;
+  border-radius: 10px !important;
+}
+
+/* ── 5. 페이지별 상단 패딩 축소 ── */
+.premium-page > div:first-child {
+  padding-top: 16px !important;
+}
+
+/* 상단 영역 라운딩 통일 (26px → 18px) */
+.premium-page .rounded-\[26px\],
+.premium-page .rounded-\[24px\]:first-of-type {
+  border-radius: 18px !important;
+}
+
+/* ── 6. 상단 메인 카드 패딩 축소 ── */
+.premium-page > div > div > section:first-child,
+.premium-page > div > section:first-child,
+.premium-page > main > div:first-child > .premium-card:first-child,
+.crm-modern-main > div:first-child > .premium-card:first-child {
+  padding: 16px 20px !important;
+}
+
+/* ── 7. 액션 버튼 그룹 통일 ── */
+.premium-page .btn-premium {
+  height: 36px !important;
+  font-size: 13px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  gap: 5px !important;
+}
+
+/* ── StatCard 컴팩트화 (전 메뉴 h-[82px] 패턴 자동 적용) ── */
+.premium-card.flex.h-\[82px\],
+.premium-card.flex.h-\[78px\],
+.premium-card.flex.h-\[84px\] {
+  height: 52px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  gap: 10px !important;
+  border-radius: 12px !important;
+}
+
+/* StatCard 아이콘 축소 */
+.premium-card.flex.h-\[82px\] .h-10,
+.premium-card.flex.h-\[82px\] .w-10,
+.premium-card.flex.h-\[82px\] .h-9,
+.premium-card.flex.h-\[82px\] .w-9,
+.premium-card.flex.h-\[78px\] .h-10,
+.premium-card.flex.h-\[78px\] .w-10 {
+  height: 28px !important;
+  width: 28px !important;
+  border-radius: 8px !important;
+}
+
+.premium-card.flex.h-\[82px\] .h-10 svg,
+.premium-card.flex.h-\[82px\] .h-9 svg,
+.premium-card.flex.h-\[78px\] .h-10 svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* StatCard 숫자 축소 */
+.premium-card.flex.h-\[82px\] .text-\[22px\],
+.premium-card.flex.h-\[82px\] .text-\[24px\],
+.premium-card.flex.h-\[82px\] .text-\[28px\],
+.premium-card.flex.h-\[78px\] .text-\[22px\] {
+  font-size: 17px !important;
+  margin-top: 2px !important;
+}
+
+/* StatCard 라벨 */
+.premium-card.flex.h-\[82px\] .crm-tiny,
+.premium-card.flex.h-\[78px\] .crm-tiny {
+  font-size: 11px !important;
+}
+
+/* ── 스탯 그리드 → 인라인 flex (grid-cols 5개 이상) ── */
+.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5,
+.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5 > *,
+.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 > * {
+  flex: 1 1 120px !important;
+  min-width: 0 !important;
+}
+
+/* ── 상단 헤더 카드 패딩 축소 (rounded-[24px]~[26px] 패턴) ── */
+.premium-page .premium-card.rounded-\[24px\],
+.premium-page .premium-card.rounded-\[26px\],
+.premium-page .premium-card.rounded-\[22px\] {
+  padding: 14px 18px !important;
+  border-radius: 16px !important;
+}
+
+/* 큰 패딩 축소 */
+.premium-page .p-5.lg\:p-6:first-child,
+.premium-page .p-4.sm\:p-5:first-child {
+  padding: 14px 18px !important;
+}
+
+/* ── 필터 영역 통일 ── */
+.premium-page .premium-card .premium-filterbar,
+.premium-page .premium-card section:first-child + section,
+.premium-page .premium-card [class*="flex"][class*="gap"][class*="crm-search"] {
+  padding-top: 10px !important;
+  padding-bottom: 0 !important;
+}
+
+/* ── stat-grid 자식 카드 컴팩트화 ── */
+.stat-grid > .premium-card {
+  padding: 8px 12px !important;
+  min-height: unset !important;
+  height: auto !important;
+  border-radius: 12px !important;
+  gap: 8px !important;
+}
+
+.stat-grid > .premium-card .h-10,
+.stat-grid > .premium-card .w-10,
+.stat-grid > .premium-card .h-9,
+.stat-grid > .premium-card .w-9 {
+  height: 28px !important;
+  width: 28px !important;
+  border-radius: 8px !important;
+}
+
+.stat-grid > .premium-card .h-10 svg,
+.stat-grid > .premium-card .h-9 svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.stat-grid > .premium-card .text-\[22px\],
+.stat-grid > .premium-card .text-\[24px\],
+.stat-grid > .premium-card .text-\[28px\] {
+  font-size: 17px !important;
+  margin-top: 1px !important;
+}
+
+.stat-grid > .premium-card .crm-tiny {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+}
+
+/* stat-grid 내 아이콘 컨테이너 */
+.stat-grid > .premium-card .rounded-\[13px\],
+.stat-grid > .premium-card .rounded-\[14px\],
+.stat-grid > .premium-card .rounded-\[15px\] {
+  border-radius: 8px !important;
+  height: 28px !important;
+  width: 28px !important;
+}
