@@ -631,6 +631,17 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  /* 일별활동기록 (당일 목표/달성 + 특발성활동목표) */
+  type DailyGoalRow = {
+    id: number;
+    goal_new_tm: number; result_new_tm: number;
+    goal_coldtalk: number; result_coldtalk: number;
+    goal_consultant_db: number; result_consultant_db: number;
+    goal_second_touch: number; result_second_touch: number;
+    goal_work_items: { id: string; text: string; done: boolean }[] | null;
+  };
+  const [dailyGoal, setDailyGoal] = useState<DailyGoalRow | null>(null);
+
   /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
   const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
   const [editIssue, setEditIssue] = useState("");
@@ -668,6 +679,19 @@ export default function HomePage() {
 
       const allContacts = [...((customerDbRes.data || []) as unknown as ContactRow[]), ...((vipRes.data || []) as unknown as ContactRow[])];
       setContacts(allContacts);
+
+      /* 당일 일별활동 목표/달성 */
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const userName = currentUser?.name || "";
+      if (userName) {
+        const { data: dagData } = await supabase
+          .from("daily_activity_goals")
+          .select("*")
+          .eq("work_date", todayKey)
+          .eq("owner_name", userName)
+          .maybeSingle();
+        setDailyGoal((dagData as DailyGoalRow) || null);
+      }
       setNotes(((noteRes.data || []) as unknown) as NoteRow[]);
       setSales(((salesRes.data || []) as unknown) as SalesRow[]);
       setKpis(((kpiRes.data || []) as unknown) as KpiRow[]);
@@ -1071,6 +1095,31 @@ export default function HomePage() {
     { label: "챌린저", value: stats.challengerThisMonth, total: stats.challenger, tone: "purple" as ToneName },
     { label: "브론즈", value: stats.bronzeThisMonth, total: stats.bronze, tone: "success" as ToneName },
   ];
+
+  const toggleWorkItem = useCallback(async (itemId: string) => {
+    if (!dailyGoal) return;
+    const items = (dailyGoal.goal_work_items || []).map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item
+    );
+    setDailyGoal((prev) => prev ? { ...prev, goal_work_items: items } : prev);
+    try {
+      await supabase.from("daily_activity_goals").update({ goal_work_items: items }).eq("id", dailyGoal.id);
+    } catch (e) { console.warn("work item toggle 실패", e); }
+  }, [dailyGoal]);
+
+  const dailyActivityFields = useMemo(() => {
+    if (!dailyGoal) return [];
+    return [
+      { label: "당일 TM", goal: dailyGoal.goal_new_tm, result: dailyGoal.result_new_tm, unit: "건" },
+      { label: "당일 콜드톡", goal: dailyGoal.goal_coldtalk, result: dailyGoal.result_coldtalk, unit: "건" },
+      { label: "브론즈 DB 확보", goal: dailyGoal.goal_consultant_db, result: dailyGoal.result_consultant_db, unit: "개" },
+      { label: "1% DB 확보", goal: dailyGoal.goal_second_touch, result: dailyGoal.result_second_touch, unit: "개" },
+    ];
+  }, [dailyGoal]);
+
+  const dailyWorkItems = useMemo(() => {
+    return (dailyGoal?.goal_work_items || []).filter((item) => item.text.trim().length > 0);
+  }, [dailyGoal]);
 
   const handlePdfSave = useCallback(() => {
     const d = (n: number) => String(n).padStart(2, "0");
@@ -1539,6 +1588,62 @@ export default function HomePage() {
                     </div>
                   </Panel>
                 </div>
+
+                {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}
+                <Panel>
+                  <PanelTitle icon={Target} tone="info" title="당일 활동목표 달성현황" desc="일별활동기록 목표 대비 실시간 자동집계 결과" right={<a href="/daily-activity" className="btn-premium btn-secondary">일별활동기록</a>} />
+                  {!dailyGoal ? (
+                    <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="일별활동기록에서 당일 목표를 입력하면 여기에 실시간 반영됩니다." />
+                  ) : (
+                    <div className="p-4">
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {dailyActivityFields.map((f) => {
+                          const rate = f.goal > 0 ? percent(f.result, f.goal) : 0;
+                          return (
+                            <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
+                                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                  {f.goal > 0 ? `${rate}%` : "미설정"}
+                                </span>
+                              </div>
+                              <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
+                                {f.result}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
+                              </p>
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {dailyWorkItems.length > 0 && (
+                        <div className="mt-3 rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
+                          <div className="space-y-1">
+                            {dailyWorkItems.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => toggleWorkItem(item.id)}
+                                className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-white/[.04]"
+                              >
+                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)", color: "var(--success-text)" }}>
+                                  {item.done && <CheckCircle2 size={13} />}
+                                </div>
+                                <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
+                                  {item.text}
+                                </span>
+                                {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Panel>
               </div>
 
               {/* 우측 */}
