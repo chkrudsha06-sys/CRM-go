@@ -34,6 +34,7 @@ import {
   UserCheck,
   Users,
   WalletCards,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -426,10 +427,11 @@ function toneStyle(tone: ToneName) {
 /* ─────────────────────────────────────────────────────────────
  * 통일 디자인 시스템 (전 카드 공통 규격)
  *  - 카드 헤더: px-4 py-3 / 타이틀 14px tracking-[-0.02em] / 설명 12px
- *  - 메인 숫자: 22px tracking-[-0.04em] (퍼널 24px)
- *  - 라벨 11px · 서브 12px / 라벨→숫자 mt-1.5 · 숫자→서브 mt-1
+ *  - 메인 숫자: 20~22px tracking-[-0.04em] / 라벨 11px · 서브 12px
  *  - 서브카드: rounded-[12px] p-3 surface-2 / 그리드 갭: 외부 gap-4 · 내부 gap-2.5
  * ───────────────────────────────────────────────────────────── */
+
+type DashboardActionItem = ActionItem & { contactId: number };
 
 function Badge({ children, tone = "muted", icon: Icon }: { children: ReactNode; tone?: ToneName; icon?: ElementType }) {
   const c = toneStyle(tone);
@@ -473,21 +475,16 @@ function PanelTitle({ icon, tone, title, desc, right }: { icon: ElementType; ton
   );
 }
 
-/** 통일 스탯 박스: 라벨(11px) → 숫자(22px) → 서브(12px) 고정 규격 */
-function StatBox({ label, value, sub, tone = "muted", href, money: isMoney }: { label: string; value: number | string; sub?: string; tone?: ToneName; href?: string; money?: boolean }) {
+function StatBox({ label, value, sub, tone = "muted" }: { label: string; value: number | string; sub?: string; tone?: ToneName }) {
   const c = toneStyle(tone);
-  const Wrapper: any = href ? "a" : "div";
   return (
-    <Wrapper href={href} className={`block rounded-[12px] border p-3 ${href ? "transition-colors hover:bg-white/[.03]" : ""}`} style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
-        {href ? <ChevronRight size={12} style={{ color: "var(--text-faint)" }} /> : null}
-      </div>
+    <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
       <p className="mt-1.5 truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
-        {typeof value === "number" ? (isMoney ? money(value) : value.toLocaleString()) : value}
+        {typeof value === "number" ? value.toLocaleString() : value}
       </p>
       {sub && <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>}
-    </Wrapper>
+    </div>
   );
 }
 
@@ -513,24 +510,32 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   );
 }
 
-/** 영업 퍼널 단계 카드 (단계 간 전환율 화살표 포함) */
+/** 영업 퍼널 단계 (압축형) + 가운데 정렬된 전환율 커넥터 */
 function FunnelStage({ label, value, sub, tone, rate, isLast }: { label: string; value: number; sub: string; tone: ToneName; rate?: number | null; isLast?: boolean }) {
   const c = toneStyle(tone);
   return (
-    <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1.5 lg:flex-row">
-      <div className="min-w-0 flex-1 rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+    <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 lg:flex-row lg:gap-0">
+      <div className="min-w-0 flex-1 rounded-[12px] border p-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
         <div className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.dot }} />
           <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
         </div>
-        <p className="mt-1.5 text-[24px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{value.toLocaleString()}</p>
-        <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+        <p className="mt-1.5 text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+          {value.toLocaleString()}<span className="ml-0.5 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
+        </p>
+        <p className="mt-1 truncate text-[11px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
       </div>
       {!isLast && (
-        <div className="flex shrink-0 items-center justify-center gap-1 py-0.5 lg:w-9 lg:flex-col lg:gap-0.5 lg:py-0">
-          <ArrowRight size={13} className="rotate-90 lg:rotate-0" style={{ color: "var(--text-faint)" }} />
-          {rate !== null && rate !== undefined && (
-            <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{rate}%</span>
+        <div className="flex shrink-0 items-center justify-center px-1 py-0.5 lg:w-[58px] lg:px-1.5 lg:py-0">
+          {rate !== null && rate !== undefined ? (
+            <span
+              className="inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[12px] font-bold tabular-nums tracking-[-0.02em]"
+              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
+            >
+              {rate}% <ArrowRight size={11} className="rotate-90 lg:rotate-0" />
+            </span>
+          ) : (
+            <ArrowRight size={13} className="rotate-90 lg:rotate-0" style={{ color: "var(--text-faint)" }} />
           )}
         </div>
       )}
@@ -549,6 +554,13 @@ export default function HomePage() {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
+  const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
+  const [editIssue, setEditIssue] = useState("");
+  const [editForm, setEditForm] = useState({ name: "", title: "", phone: "", management_stage: "", payment_channel: "", regular_payment_date: "", memo: "" });
+  const [quickNote, setQuickNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -595,6 +607,61 @@ export default function HomePage() {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  const openCustomerEdit = useCallback((contactId: number, issue: string) => {
+    const target = contacts.find((row) => Number(row.id) === Number(contactId));
+    if (!target) return;
+    setEditTarget(target);
+    setEditIssue(issue);
+    setQuickNote("");
+    setEditForm({
+      name: target.name || "",
+      title: target.title || "",
+      phone: target.phone || "",
+      management_stage: target.management_stage || "",
+      payment_channel: target.payment_channel || "",
+      regular_payment_date: target.regular_payment_date || "",
+      memo: target.memo || "",
+    });
+  }, [contacts]);
+
+  const saveCustomerEdit = useCallback(async () => {
+    if (!editTarget) return;
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, any> = {
+        name: editForm.name.trim() || null,
+        title: editForm.title.trim() || null,
+        phone: editForm.phone.trim() || null,
+        management_stage: editForm.management_stage || null,
+        payment_channel: editForm.payment_channel.trim() || null,
+        regular_payment_date: editForm.regular_payment_date.trim() || null,
+        memo: editForm.memo.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("contacts").update(payload).eq("id", editTarget.id);
+      if (error) throw error;
+
+      if (quickNote.trim()) {
+        const { error: noteError } = await supabase.from("contact_notes").insert({
+          contact_id: editTarget.id,
+          content: quickNote.trim(),
+          note_date: toDateKey(new Date()),
+          author: me?.name || null,
+        });
+        if (noteError) console.warn("contact_notes insert:", noteError.message);
+      }
+
+      setEditTarget(null);
+      setQuickNote("");
+      await fetchDashboard();
+    } catch (error: any) {
+      console.error(error);
+      setErrorMessage(error?.message || "고객 정보를 저장하지 못했습니다.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editForm, editTarget, fetchDashboard, me?.name, quickNote]);
 
   const fixedOwner = isExecutionUser(me);
   const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
@@ -654,20 +721,17 @@ export default function HomePage() {
     }).length;
     const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
     const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, selectedMonth)).length;
-    const highValue = visibleContacts.filter((contact) => isHighValueContact(contact)).length;
-    const coreVip = visibleContacts.filter((contact) => isCoreVipGrade(contact)).length;
     const master = visibleContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
     const challenger = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
     const bronze = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
+    const masterThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, selectedMonth)).length;
+    const challengerThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, selectedMonth)).length;
     const bronzeThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
     const contracts = visibleContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
-    const churn = visibleContacts.filter((contact) => isChurned(contact) && (isInMonth(contact.churn_date, selectedMonth) || isInMonth(contact.updated_at, selectedMonth))).length;
 
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
     const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
-    const linkedSales = monthSales.filter((row) => salesCategory(row) === "linked").reduce((sum, row) => sum + effectiveSales(row), 0);
-    const otherSales = monthSales.filter((row) => salesCategory(row) === "other").reduce((sum, row) => sum + effectiveSales(row), 0);
     const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
@@ -683,17 +747,17 @@ export default function HomePage() {
     const contractRate = percent(retention, Math.max(vipContacts.length, 1));
 
     return {
-      firstTouch, tmCount, coldTalkCount,
-      vipThisMonth, highValue, coreVip,
-      master, challenger, bronze, bronzeThisMonth,
-      contracts, churn, churnCount,
-      membershipSales, lmsSales, hogangSales, linkedSales, otherSales, refund, totalSales,
-      stageCounts, retention, churnRate, activePipeline, contractRate,
+      firstTouch, tmCount, coldTalkCount, vipThisMonth,
+      master, challenger, bronze,
+      masterThisMonth, challengerThisMonth, bronzeThisMonth,
+      contracts, churnCount, churnRate,
+      membershipSales, lmsSales, hogangSales, refund, totalSales,
+      stageCounts, retention, activePipeline, contractRate,
       currentPipelineTotal: vipContacts.length,
     };
   }, [monthContacts, monthSales, notesByContact, selectedMonth, vipContacts, visibleContacts]);
 
-  /* 당월 영업 퍼널: 고객DB → 첫접촉 → VIP이관·심사 → 파이프라인 진행 → 계약·리텐션 */
+  /* 당월 영업 퍼널 */
   const funnelStages = useMemo(() => {
     return [
       { label: "고객DB 신규", value: monthContacts.length, sub: "당월 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthContacts.length) },
@@ -704,12 +768,13 @@ export default function HomePage() {
     ];
   }, [monthContacts.length, stats]);
 
-  /* 크리티컬 이슈: 전체 수집 후 유형별 카운트 → 리스트는 우선순위 상위 10건 */
+  /* 오늘 챙겨야 할 고객 (크리티컬 통합 리스트) */
   const { actionItems, criticalCounts } = useMemo(() => {
-    const items: ActionItem[] = [];
+    const items: DashboardActionItem[] = [];
     const counts = { payment: 0, missing: 0, inactive: 0, closing: 0 };
 
     visibleContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
       const day = parsePaymentDay(contact.regular_payment_date);
       if (isContracted(contact) && day) {
         const { diff } = getNextPaymentInfo(day);
@@ -723,6 +788,7 @@ export default function HomePage() {
             desc: paymentLabel(contact),
             href: "/pipeline3",
             priority: diff,
+            contactId,
           });
         }
       }
@@ -734,9 +800,10 @@ export default function HomePage() {
           type: "결제정보 누락",
           tone: "danger",
           title: contact.name || "고객명 없음",
-          desc: "계약완료 고객이지만 결제채널 또는 결제일이 없습니다.",
+          desc: "결제채널 또는 결제일이 비어 있습니다. 클릭해 바로 입력하세요.",
           href: "/pipeline3",
           priority: 1,
+          contactId,
         });
       }
 
@@ -753,6 +820,7 @@ export default function HomePage() {
           desc: `${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
           href: "/pipeline3",
           priority: 4 + inactiveDays,
+          contactId,
         });
       }
 
@@ -767,17 +835,18 @@ export default function HomePage() {
           desc: `딜클로징 ${closingDays}일째 체류 중입니다.`,
           href: "/pipeline3",
           priority: 2 + closingDays,
+          contactId,
         });
       }
     });
 
-    const unique = new Map<string, ActionItem>();
+    const unique = new Map<string, DashboardActionItem>();
     items
       .sort((a, b) => a.priority - b.priority)
       .forEach((item) => {
         if (!unique.has(item.key)) unique.set(item.key, item);
       });
-    return { actionItems: Array.from(unique.values()).slice(0, 10), criticalCounts: counts };
+    return { actionItems: Array.from(unique.values()).slice(0, 14), criticalCounts: counts };
   }, [notesByContact, visibleContacts]);
 
   const paymentDdays = useMemo(() => {
@@ -820,6 +889,7 @@ export default function HomePage() {
     });
   }, [contacts, keyword, sales, selectedMonth]);
 
+  /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
   const intakeRows = useMemo(() => {
     const groups = new Map<string, ContactRow[]>();
     visibleContacts.forEach((contact) => {
@@ -830,41 +900,43 @@ export default function HomePage() {
     });
     return Array.from(groups.entries())
       .map(([route, rows]) => {
-        const monthRows = rows.filter((row) => isInMonth(row.created_at, selectedMonth) || isInMonth(row.vip_transferred_at, selectedMonth));
-        const baseRows = monthRows.length ? monthRows : rows;
         const contract = rows.filter(isContracted).length;
         const vip = rows.filter(isVipContact).length;
         const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, selectedMonth)).length;
-        return { route, count: baseRows.length, total: rows.length, firstTouch, vip, contract, rate: percent(contract, rows.length) };
+        return {
+          route,
+          total: rows.length,
+          firstTouch,
+          vip,
+          contract,
+          touchRate: percent(firstTouch, rows.length),
+          vipRate: percent(vip, rows.length),
+        };
       })
-      .sort((a, b) => b.contract - a.contract || b.vip - a.vip || b.count - a.count)
+      .sort((a, b) => b.vip - a.vip || b.vipRate - a.vipRate || b.total - a.total)
       .slice(0, 7);
   }, [notesByContact, selectedMonth, visibleContacts]);
 
-  const gradeRows = useMemo(() => {
-    const groups = new Map<string, ContactRow[]>();
-    vipContacts.forEach((contact) => {
-      const key = contact.customer_grade || "심사미진행";
-      const list = groups.get(key) || [];
-      list.push(contact);
-      groups.set(key, list);
+  /* 등급별 계약전환율: 마스터·챌린저·브론즈 계약건수 + 계약 유입경로 */
+  const gradeContractRows = useMemo(() => {
+    return CORE_VIP_GRADES.map((grade) => {
+      const rows = vipContacts.filter((contact) => isGradeContact(contact, grade));
+      const contracted = rows.filter(isContracted);
+      const routeCounts = new Map<string, number>();
+      contracted.forEach((contact) => {
+        const key = contact.intake_route || "경로 미지정";
+        routeCounts.set(key, (routeCounts.get(key) || 0) + 1);
+      });
+      const routes = Array.from(routeCounts.entries()).sort((a, b) => b[1] - a[1]);
+      return {
+        grade,
+        count: rows.length,
+        contracts: contracted.length,
+        rate: percent(contracted.length, rows.length),
+        routes,
+        tone: (grade === "마스터" ? "warning" : grade === "챌린저" ? "purple" : "success") as ToneName,
+      };
     });
-
-    const rows = Array.from(groups.entries()).map(([grade, rows]) => {
-      const contracts = rows.filter(isContracted).length;
-      const priority = normalizeText(grade).includes(normalizeText("마스터"))
-        ? 1
-        : normalizeText(grade).includes(normalizeText("챌린저"))
-          ? 2
-          : normalizeText(grade).includes(normalizeText("브론즈"))
-            ? 3
-            : 9;
-      return { grade, count: rows.length, contracts, rate: percent(contracts, rows.length), priority };
-    });
-
-    return rows
-      .sort((a, b) => a.priority - b.priority || b.rate - a.rate || b.count - a.count)
-      .slice(0, 6);
   }, [vipContacts]);
 
   const kpiTarget = useMemo(() => {
@@ -875,35 +947,38 @@ export default function HomePage() {
     return target || null;
   }, [activeOwner, kpis]);
 
+  /* KPI: 분양회 모집 · 분양회 회비 2종만 */
   const kpiRows = useMemo(() => {
-    const target = kpiTarget;
     return [
-      { label: "분양회 모집", value: stats.contracts, goal: Number(target?.recruit_count || 0), unit: "명", tone: "success" as ToneName },
-      { label: "분양회 회비", value: stats.membershipSales, goal: Number(target?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
-      { label: "연계매출", value: stats.linkedSales, goal: Number(target?.linked_revenue || 0), unit: "원", tone: "info" as ToneName, money: true },
-      { label: "광고특전", value: stats.lmsSales + stats.hogangSales, goal: Number(target?.special_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
-      { label: "브론즈 DB", value: stats.bronzeThisMonth, goal: 0, unit: "명", tone: "success" as ToneName },
-      { label: "완판트럭 DB", value: monthContacts.filter((contact) => normalizeText(contact.intake_route).includes(normalizeText("완판트럭"))).length, goal: Number(kpiTarget?.wanpan_truck_count || 0), unit: "건", tone: "cyan" as ToneName },
+      { label: "분양회 모집", value: stats.contracts, goal: Number(kpiTarget?.recruit_count || 0), unit: "명", tone: "success" as ToneName, money: false },
+      { label: "분양회 회비", value: stats.membershipSales, goal: Number(kpiTarget?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
     ];
-  }, [kpiTarget, monthContacts, stats]);
+  }, [kpiTarget, stats.contracts, stats.membershipSales]);
 
+  /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 3종만 */
   const salesBreakdown = useMemo(() => ([
     { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
     { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
     { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
-    { label: "연계매출", value: stats.linkedSales, tone: "success" as ToneName },
-    { label: "기타/별도입금", value: stats.otherSales, tone: "muted" as ToneName },
-  ]), [stats]);
+  ]), [stats.hogangSales, stats.lmsSales, stats.membershipSales]);
+
+  const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales;
 
   const selectedMonthLabel = MONTH_LABEL_FORMAT.format(getMonthWindow(selectedMonth).start);
   const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
 
+  const gradeJoinRows = [
+    { label: "마스터", value: stats.masterThisMonth, total: stats.master, tone: "warning" as ToneName },
+    { label: "챌린저", value: stats.challengerThisMonth, total: stats.challenger, tone: "purple" as ToneName },
+    { label: "브론즈", value: stats.bronzeThisMonth, total: stats.bronze, tone: "success" as ToneName },
+  ];
+
   return (
     <div className="premium-page h-full overflow-y-auto">
       <div className="premium-shell px-5 py-5 md:px-7 md:py-6">
 
-        {/* ── 헤더: 한 줄로 압축 ── */}
+        {/* ── 헤더 ── */}
         <header className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -960,58 +1035,58 @@ export default function HomePage() {
         ) : (
           <div className="space-y-4">
 
-            {/* ── ① 최상단: 당월 영업 퍼널 ── */}
-            <Panel>
-              <PanelTitle
-                icon={LineChart}
-                tone="info"
-                title="당월 영업 퍼널"
-                desc="고객DB 업로드 → TM·콜드톡 첫접촉 → VIP 이관·자동등급심사 → 파이프라인 → 계약·리텐션"
-                right={
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}명 · {stats.churnRate}%</Badge>
-                    <Badge tone="muted">{selectedMonthLabel}</Badge>
+            {/* ── ① 최상단: 당월 영업 퍼널(좌) + 당월 등급 가입 현황(우) ── */}
+            <div className="grid items-stretch gap-4 2xl:grid-cols-[1fr_300px]">
+              <Panel className="h-full">
+                <PanelTitle
+                  icon={LineChart}
+                  tone="info"
+                  title="당월 영업 퍼널"
+                  desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 파이프라인 → 계약·리텐션"
+                  right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
+                />
+                <div className="p-4">
+                  <div className="flex flex-col gap-1 lg:flex-row lg:items-stretch lg:gap-0">
+                    {funnelStages.map((stage) => (
+                      <FunnelStage key={stage.label} {...stage} />
+                    ))}
                   </div>
-                }
-              />
-              <div className="p-4">
-                {/* 퍼널 본선 */}
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
-                  {funnelStages.map((stage) => (
-                    <FunnelStage key={stage.label} {...stage} />
-                  ))}
-                </div>
-
-                {/* 자동등급 분포 + 핵심 지표 한 줄 */}
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>자동등급 심사</span>
-                    <Badge tone="warning">마스터 {stats.master}</Badge>
-                    <Badge tone="purple">챌린저 {stats.challenger}</Badge>
-                    <Badge tone="success">브론즈 {stats.bronze}</Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-[12px] font-semibold tracking-[-0.01em]">
-                    <span style={{ color: "var(--text-subtle)" }}>VIP 계약전환율 <strong style={{ color: "var(--success-text)" }}>{stats.contractRate}%</strong></span>
-                    <span style={{ color: "var(--text-subtle)" }}>당월 순매출 <strong style={{ color: "var(--text-strong)" }}>{money(stats.totalSales)}</strong></span>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border px-3 py-2" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                      VIP 계약전환율 <strong style={{ color: "var(--success-text)" }}>{stats.contractRate}%</strong>
+                    </span>
+                    <span className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                      당월 순매출 <strong style={{ color: "var(--text-strong)" }}>{money(stats.totalSales)}</strong>
+                    </span>
                   </div>
                 </div>
-              </div>
-            </Panel>
+              </Panel>
 
-            {/* ── ② 크리티컬 요약 스트립: 결제임박 · 결제누락 · 장기미활동 · 클로징지연 ── */}
-            <section className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-              <StatBox label="정기결제 임박 (D-4 이내)" value={criticalCounts.payment} sub="자동이체 도래 고객" tone="warning" href="/pipeline3" />
-              <StatBox label="결제정보 누락" value={criticalCounts.missing} sub="계약완료 · 결제채널/결제일 미입력" tone="danger" href="/pipeline3" />
-              <StatBox label="장기 미활동 (7일+)" value={criticalCounts.inactive} sub="리드·프로스펙팅·클로징 구간" tone="warning" href="/pipeline3" />
-              <StatBox label="클로징 지연 (5일+)" value={criticalCounts.closing} sub="딜클로징 장기 체류" tone="danger" href="/pipeline3" />
-            </section>
+              <Panel className="flex h-full flex-col">
+                <PanelTitle icon={BadgeCheck} tone="warning" title="당월 등급 가입 현황" desc="자동등급 심사 실시간 집계" right={<Badge tone="muted">{selectedMonthLabel}</Badge>} />
+                <div className="flex flex-1 flex-col justify-center gap-2 p-4">
+                  {gradeJoinRows.map((row) => {
+                    const c = toneStyle(row.tone);
+                    return (
+                      <div key={row.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        <Badge tone={row.tone}>{row.label}</Badge>
+                        <div className="flex items-baseline gap-1.5">
+                          <p className="text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--text-faint)" }}>/ 누적 {row.total}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            </div>
 
-            {/* ── ③ 본문 그리드 ── */}
+            {/* ── ② 본문 그리드 ── */}
             <div className="grid gap-4 2xl:grid-cols-[1.25fr_.75fr]">
               {/* 좌측 */}
               <div className="space-y-4">
 
-                {/* 담당자별 파이프라인 현황: 정렬된 테이블 */}
+                {/* 담당자별 파이프라인 현황 */}
                 <Panel>
                   <PanelTitle icon={Users} tone="purple" title="담당자별 파이프라인 현황" desc="신규DB · VIP · 관리구간 · 계약 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
                   <div className="overflow-x-auto p-2">
@@ -1043,46 +1118,47 @@ export default function HomePage() {
                   </div>
                 </Panel>
 
-                {/* KPI + 매출 구성 */}
+                {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
-                  <Panel className="h-full">
-                    <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
-                    <div className="grid gap-2.5 p-4 sm:grid-cols-2">
+                  <Panel className="flex h-full flex-col">
+                    <PanelTitle icon={Target} tone="warning" title="KPI 목표 대비 달성률" desc="분양회 모집 · 분양회 회비" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                    <div className="flex flex-1 flex-col justify-center gap-2.5 p-4">
                       {kpiRows.map((row) => {
                         const hasGoal = row.goal > 0;
                         return (
-                          <div key={row.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div key={row.label} className="rounded-[12px] border p-3.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                             <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-[11px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
-                              <Badge tone={row.tone}>{hasGoal ? `${percent(row.value, row.goal)}%` : "집계"}</Badge>
+                              <p className="text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
+                              <Badge tone={row.tone}>{hasGoal ? `달성 ${percent(row.value, row.goal)}%` : "목표 미설정"}</Badge>
                             </div>
-                            <p className="mt-1.5 truncate text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
-                            <p className="mt-1 truncate text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "미설정"}</p>
-                            <div className="mt-2"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
+                            <div className="mt-2 flex items-baseline justify-between gap-3">
+                              <p className="truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
+                              <p className="shrink-0 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "—"}</p>
+                            </div>
+                            <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
                           </div>
                         );
                       })}
                     </div>
                   </Panel>
 
-                  <Panel className="h-full">
-                    <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc={`당월 순매출 ${money(stats.totalSales)} · 환불 ${money(stats.refund)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
-                    <div className="space-y-3 p-4">
-                      {/* 누적 비율 바 */}
+                  <Panel className="flex h-full flex-col">
+                    <PanelTitle icon={BarChart3} tone="cyan" title="매출 구성" desc={`분양회 월회비 · LMS · 호갱노노 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                    <div className="flex flex-1 flex-col justify-center gap-3 p-4">
                       <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                         {salesBreakdown.filter((item) => item.value > 0).map((item) => (
-                          <div key={item.label} style={{ width: `${percent(item.value, Math.max(stats.totalSales, 1))}%`, background: toneStyle(item.tone).bar }} />
+                          <div key={item.label} style={{ width: `${percent(item.value, Math.max(coreSalesTotal, 1))}%`, background: toneStyle(item.tone).bar }} />
                         ))}
                       </div>
                       {salesBreakdown.map((item) => (
-                        <div key={item.label} className="flex items-center justify-between gap-3">
+                        <div key={item.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: toneStyle(item.tone).dot }} />
                             <span className="truncate text-[12px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text)" }}>{item.label}</span>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2.5">
-                            <span className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
-                            <span className="w-9 text-right text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(stats.totalSales, 1))}%</span>
+                          <div className="flex shrink-0 items-baseline gap-2.5">
+                            <span className="text-[14px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
+                            <span className="w-9 text-right text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
                           </div>
                         </div>
                       ))}
@@ -1090,31 +1166,42 @@ export default function HomePage() {
                   </Panel>
                 </div>
 
-                {/* 유입경로 + 등급별 전환율 */}
+                {/* 유입경로별 성과 + 등급별 계약전환율 */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="h-full">
-                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="DB → 첫접촉 → VIP → 계약 전환 흐름" />
+                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="보유 DB로 몇 건을 접촉해 몇 건의 VIP DB를 확보했는가" />
                     <div className="p-4">
                       {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {intakeRows.map((row) => (
                             <div key={row.route} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                              <div className="mb-2 flex items-center justify-between gap-3">
-                                <p className="min-w-0 truncate text-[12px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                                <Badge tone={row.rate >= 20 ? "success" : row.rate >= 8 ? "warning" : "muted"}>{row.rate}% 계약</Badge>
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                                <span
+                                  className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums"
+                                  style={{
+                                    background: row.vipRate >= 60 ? "var(--success-bg)" : row.vipRate >= 30 ? "var(--warning-bg)" : "var(--surface-3)",
+                                    color: row.vipRate >= 60 ? "var(--success-text)" : row.vipRate >= 30 ? "var(--warning-text)" : "var(--text-subtle)",
+                                    border: `1px solid ${row.vipRate >= 60 ? "var(--success-border)" : row.vipRate >= 30 ? "var(--warning-border)" : "var(--border)"}`,
+                                  }}
+                                >
+                                  VIP 확보 {row.vipRate}%
+                                </span>
                               </div>
-                              <div className="grid grid-cols-4 gap-1.5 text-center">
-                                {[
-                                  { label: "DB", value: row.count, color: "var(--text-strong)" },
-                                  { label: "첫접촉", value: row.firstTouch, color: "var(--text-strong)" },
-                                  { label: "VIP", value: row.vip, color: "var(--text-strong)" },
-                                  { label: "계약", value: row.contract, color: "var(--success-text)" },
-                                ].map((cell) => (
-                                  <div key={cell.label} className="rounded-[8px] py-1.5" style={{ background: "var(--surface-1)" }}>
-                                    <p className="text-[10px] font-semibold" style={{ color: "var(--text-subtle)" }}>{cell.label}</p>
-                                    <p className="mt-0.5 text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: cell.color }}>{cell.value}</p>
-                                  </div>
-                                ))}
+                              {/* DB → 접촉 → VIP 누적 레이어 바 */}
+                              <div className="relative mt-2.5 h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, row.touchRate)}%`, background: "var(--cyan-border)" }} />
+                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, row.vipRate)}%`, background: toneStyle("purple").bar }} />
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-2">
+                                <p className="text-[12px] font-semibold tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                  DB <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
+                                  <span className="mx-1" style={{ color: "var(--text-faint)" }}>→</span>
+                                  접촉 <strong style={{ color: "var(--cyan-text)" }}>{row.firstTouch}건</strong>
+                                  <span className="mx-1" style={{ color: "var(--text-faint)" }}>→</span>
+                                  VIP <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
+                                </p>
+                                <p className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: "var(--success-text)" }}>계약 {row.contract}건</p>
                               </div>
                             </div>
                           ))}
@@ -1124,17 +1211,29 @@ export default function HomePage() {
                   </Panel>
 
                   <Panel className="h-full">
-                    <PanelTitle icon={Activity} tone="purple" title="자동등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 비교" />
-                    <div className="space-y-2 p-4">
-                      {gradeRows.length === 0 ? <EmptyBlock title="등급 데이터가 없습니다" desc="VIP활동DB에서 고객등급을 판정하면 여기에 표시됩니다." /> : gradeRows.map((row) => (
+                    <PanelTitle icon={Activity} tone="purple" title="등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
+                    <div className="space-y-2.5 p-4">
+                      {gradeContractRows.map((row) => (
                         <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                           <div className="flex items-center justify-between gap-3">
-                            <Badge tone={isGradeContact({ customer_grade: row.grade } as ContactRow, "브론즈") ? "success" : isHighValueContact({ customer_grade: row.grade } as ContactRow) ? "warning" : "muted"}>{row.grade}</Badge>
-                            <span className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{row.contracts}/{row.count}명</span>
+                            <div className="flex items-center gap-2">
+                              <Badge tone={row.tone}>{row.grade}</Badge>
+                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                계약 {row.contracts}건 <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[12px]">%</span></p>
                           </div>
-                          <div className="mt-2 flex items-center justify-between gap-3">
-                            <p className="text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[13px]">%</span></p>
-                            <div className="w-[55%]"><ProgressBar value={row.contracts} total={row.count} tone={row.rate >= 20 ? "success" : row.priority <= 3 ? "warning" : "purple"} /></div>
+                          <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
+                            {row.routes.length === 0 ? (
+                              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
+                            ) : row.routes.map(([route, count]) => (
+                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
+                                {route} {count}건
+                              </span>
+                            ))}
                           </div>
                         </div>
                       ))}
@@ -1146,42 +1245,62 @@ export default function HomePage() {
               {/* 우측 */}
               <div className="space-y-4">
 
-                {/* 오늘 챙겨야 할 고객 */}
+                {/* 오늘 챙겨야 할 고객: 크리티컬 4종 통합 + 클릭 시 즉시수정 팝업 */}
                 <Panel>
-                  <PanelTitle icon={AlertTriangle} tone="danger" title="오늘 챙겨야 할 고객" desc="결제 D-DAY · 결제누락 · 장기미활동 · 클로징지연" right={<Badge tone={totalCritical > 0 ? "danger" : "muted"}>{totalCritical}건</Badge>} />
+                  <PanelTitle icon={AlertTriangle} tone="danger" title="오늘 챙겨야 할 고객" desc="클릭하면 팝업에서 바로 수정 · 파이프라인3 자동 연동" right={<Badge tone={totalCritical > 0 ? "danger" : "muted"}>{totalCritical}건</Badge>} />
+                  <div className="flex flex-wrap gap-1.5 border-b px-4 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                    <Badge tone={criticalCounts.payment > 0 ? "warning" : "muted"}>결제임박 {criticalCounts.payment}</Badge>
+                    <Badge tone={criticalCounts.missing > 0 ? "danger" : "muted"}>결제누락 {criticalCounts.missing}</Badge>
+                    <Badge tone={criticalCounts.inactive > 0 ? "warning" : "muted"}>장기미활동 {criticalCounts.inactive}</Badge>
+                    <Badge tone={criticalCounts.closing > 0 ? "danger" : "muted"}>클로징지연 {criticalCounts.closing}</Badge>
+                  </div>
                   <div className="max-h-[440px] overflow-y-auto p-2">
-                    {actionItems.length === 0 ? <EmptyBlock title="오늘 긴급 관리 고객이 없습니다" desc="결제 D-DAY 또는 장기미활동 고객이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => (
-                      <a key={item.key} href={item.href} className="flex items-start gap-2.5 rounded-[12px] p-2.5 transition-colors hover:bg-white/[.04]">
-                        <IconBox icon={item.tone === "danger" ? AlertTriangle : CalendarClock} tone={item.tone} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Badge tone={item.tone}>{item.type}</Badge>
-                            <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{item.title}</p>
+                    {actionItems.length === 0 ? <EmptyBlock title="오늘 긴급 관리 고객이 없습니다" desc="결제 D-DAY 또는 장기미활동 고객이 생기면 이곳에 표시됩니다." /> : actionItems.map((item) => {
+                      const target = contacts.find((row) => Number(row.id) === item.contactId);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => openCustomerEdit(item.contactId, item.type)}
+                          className="flex w-full items-start gap-2.5 rounded-[12px] p-2.5 text-left transition-colors hover:bg-white/[.04]"
+                        >
+                          <IconBox icon={item.tone === "danger" ? AlertTriangle : CalendarClock} tone={item.tone} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <Badge tone={item.tone}>{item.type}</Badge>
+                              <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                {item.title}
+                                {target?.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {target.title}</span> : null}
+                              </p>
+                            </div>
+                            <p className="mt-1 line-clamp-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
                           </div>
-                          <p className="mt-1 line-clamp-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
-                        </div>
-                        <ChevronRight size={13} className="mt-1.5 shrink-0" style={{ color: "var(--text-faint)" }} />
-                      </a>
-                    ))}
+                          <ChevronRight size={13} className="mt-1.5 shrink-0" style={{ color: "var(--text-faint)" }} />
+                        </button>
+                      );
+                    })}
                   </div>
                 </Panel>
 
                 {/* 정기결제 D-DAY */}
                 <Panel>
-                  <PanelTitle icon={CreditCard} tone="warning" title="정기결제 D-DAY" desc={`D-4 이내 ${paymentDueSoonCount}명 · 계약/리텐션 고객 기준`} right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
+                  <PanelTitle icon={CreditCard} tone="warning" title="정기결제 D-DAY" desc={`D-4 이내 ${paymentDueSoonCount}건 · 계약/리텐션 고객 기준`} right={<a href="/pipeline3" className="btn-premium btn-secondary">파이프라인</a>} />
                   <div className="max-h-[360px] overflow-y-auto p-2">
                     {paymentDdays.length === 0 ? <EmptyBlock title="결제일 등록 고객이 없습니다" desc="계약전환 시 결제채널과 결제일을 입력하면 자동으로 계산됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
-                      <a key={contact.id} href="/pipeline3" className="flex items-center gap-2.5 rounded-[12px] p-2.5 transition-colors hover:bg-white/[.04]">
+                      <button key={contact.id} type="button" onClick={() => openCustomerEdit(Number(contact.id), `결제 ${ddayLabel(diff)}`)} className="flex w-full items-center gap-2.5 rounded-[12px] p-2.5 text-left transition-colors hover:bg-white/[.04]">
                         <div className="flex h-10 w-[52px] shrink-0 flex-col items-center justify-center rounded-[10px]" style={{ background: diff === 0 ? "var(--danger-bg)" : diff <= 4 ? "var(--warning-bg)" : "var(--surface-3)", color: diff === 0 ? "var(--danger-text)" : diff <= 4 ? "var(--warning-text)" : "var(--text-subtle)", border: `1px solid ${diff === 0 ? "var(--danger-border)" : diff <= 4 ? "var(--warning-border)" : "var(--border)"}` }}>
                           <span className="text-[11px] font-semibold leading-none">{ddayLabel(diff)}</span>
                           <span className="mt-0.5 text-[10px] font-medium leading-none">{formatDate(toDateKey(due))}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{contact.name || "고객명 없음"}</p>
+                          <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                            {contact.name || "고객명 없음"}
+                            {contact.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {contact.title}</span> : null}
+                          </p>
                           <p className="mt-0.5 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
                         </div>
                         <Badge tone={diff <= 4 ? "warning" : "muted"}>{contactOwner(contact)}</Badge>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 </Panel>
@@ -1191,8 +1310,8 @@ export default function HomePage() {
                   <PanelTitle icon={PhoneCall} tone="info" title="활동량 요약" desc="당월 첫 접촉과 활동노트 기준" />
                   <div className="space-y-2.5 p-4">
                     <div className="grid grid-cols-2 gap-2.5">
-                      <StatBox label="첫 접촉 완료" value={stats.firstTouch} sub={`TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`} tone="info" />
-                      <StatBox label="활동노트" value={monthNotes.length} sub="녹취 요약 · 수동 기록" tone="purple" />
+                      <StatBox label="첫 접촉 완료" value={`${stats.firstTouch}건`} sub={`TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`} tone="info" />
+                      <StatBox label="활동노트" value={`${monthNotes.length}건`} sub="녹취 요약 · 수동 기록" tone="purple" />
                     </div>
                     <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                       <div className="mb-2 flex items-center justify-between gap-3">
@@ -1225,6 +1344,107 @@ export default function HomePage() {
                     })}
                   </div>
                 </Panel>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 고객 즉시수정 팝업 (파이프라인3 contacts 테이블 직접 갱신 → 상호 연동) ── */}
+        {editTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="팝업 닫기"
+              onClick={() => !savingEdit && setEditTarget(null)}
+              className="absolute inset-0 cursor-default backdrop-blur-[2px]"
+              style={{ background: "var(--overlay)", animation: "overlayIn 160ms ease-out" }}
+            />
+            <div
+              className="relative flex max-h-[90vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[18px] border"
+              style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)", animation: "modalIn 200ms ease-out" }}
+            >
+              {/* 팝업 헤더 */}
+              <div className="flex items-start justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <Badge tone="danger">{editIssue}</Badge>
+                    {editTarget.customer_grade ? <Badge tone={isHighValueContact(editTarget) ? "warning" : "success"}>{editTarget.customer_grade}</Badge> : null}
+                    {editTarget.intake_route ? <Badge tone="muted">{editTarget.intake_route}</Badge> : null}
+                  </div>
+                  <h2 className="truncate text-[19px] font-semibold tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+                    {editTarget.name || "고객명 없음"}
+                    {editTarget.title ? <span className="ml-1.5 text-[14px] font-medium" style={{ color: "var(--text-muted)" }}>{editTarget.title}</span> : null}
+                  </h2>
+                  <p className="mt-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>ID {editTarget.id} · {editTarget.phone || "연락처 미입력"} · 담당 {contactOwner(editTarget)}</p>
+                </div>
+                <button type="button" onClick={() => !savingEdit && setEditTarget(null)} className="btn-premium btn-secondary h-9 w-9 shrink-0 p-0">
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* 팝업 본문: 즉시 수정 필드 */}
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>고객명</span>
+                    <input value={editForm.name} onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))} className="crm-search w-full px-3" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>직급</span>
+                    <input value={editForm.title} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="예: 본부장" className="crm-search w-full px-3" />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>연락처</span>
+                    <input value={editForm.phone} onChange={(event) => setEditForm((prev) => ({ ...prev, phone: event.target.value }))} className="crm-search w-full px-3" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>관리구간</span>
+                    <select value={editForm.management_stage} onChange={(event) => setEditForm((prev) => ({ ...prev, management_stage: event.target.value }))} className="crm-search w-full px-3">
+                      <option value="">미지정</option>
+                      {PIPELINE_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: editIssue.includes("결제") ? "var(--warning-border)" : "var(--border-subtle)" }}>
+                  <p className="mb-2 text-[11px] font-semibold" style={{ color: editIssue.includes("결제") ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                    결제 정보 {editIssue.includes("결제") ? "· 이 항목을 채우면 알림이 해제됩니다" : ""}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                      <input value={editForm.payment_channel} onChange={(event) => setEditForm((prev) => ({ ...prev, payment_channel: event.target.value }))} placeholder="예: 효성CMS, 사이다페이" className="crm-search w-full px-3" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                      <input value={editForm.regular_payment_date} onChange={(event) => setEditForm((prev) => ({ ...prev, regular_payment_date: event.target.value }))} placeholder="예: 25 (매월 25일)" className="crm-search w-full px-3" />
+                    </label>
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>메모</span>
+                  <textarea value={editForm.memo} onChange={(event) => setEditForm((prev) => ({ ...prev, memo: event.target.value }))} rows={2} className="crm-search w-full resize-none px-3 py-2" />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 빠른 작성 <span style={{ color: "var(--text-faint)" }}>(입력 시 활동 기록으로 저장 → 장기미활동 해제)</span></span>
+                  <textarea value={quickNote} onChange={(event) => setQuickNote(event.target.value)} rows={2} placeholder="예: TM 재접촉 완료, 다음주 미팅 예정" className="crm-search w-full resize-none px-3 py-2" />
+                </label>
+              </div>
+
+              {/* 팝업 푸터 */}
+              <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <a href="/pipeline3" className="text-[12px] font-semibold" style={{ color: "var(--accent-text)" }}>파이프라인3에서 전체 상세보기 →</a>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={savingEdit} onClick={() => setEditTarget(null)} className="btn-premium btn-secondary">취소</button>
+                  <button type="button" disabled={savingEdit} onClick={saveCustomerEdit} className="btn-premium btn-primary">
+                    {savingEdit ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 저장
+                  </button>
+                </div>
               </div>
             </div>
           </div>
