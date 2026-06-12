@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
+import JarvisAgent from "@/components/JarvisAgent";
 import { logout, validateSession, getCurrentUser, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Bell, Menu, Send, Truck, X } from "lucide-react";
@@ -426,7 +427,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
       <main className="min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">{children}</main>
 
-      <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col gap-3">
+      <JarvisAgent user={user} />
+
+      <div className="pointer-events-none fixed bottom-[146px] right-5 z-50 flex flex-col gap-3">
         {toastQueue.slice(0, 3).map((notification) => (
           <div key={notification.id} className="pointer-events-auto">
             <NotifToast notif={notification} onClose={() => closeToast(notification.id)} />
