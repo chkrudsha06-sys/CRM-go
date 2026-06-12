@@ -140,6 +140,7 @@ export default function LoginPage() {
         background: "#050505",
       }}
     >
+      {/* 로그인 전체 배경 이미지 - 원본 그대로 출력 */}
       <div
         aria-hidden="true"
         style={{
@@ -150,20 +151,8 @@ export default function LoginPage() {
           backgroundSize: "cover",
           backgroundPosition: "center center",
           backgroundRepeat: "no-repeat",
-          opacity: 0.68,
-          filter: "contrast(1.08) brightness(0.82)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 0,
-          background:
-            "radial-gradient(circle at 72% 42%, rgba(255,255,255,0.08), transparent 34%), linear-gradient(135deg, rgba(0,0,0,0.58), rgba(0,0,0,0.78))",
+          opacity: 1,
+          filter: "none",
           pointerEvents: "none",
         }}
       />
