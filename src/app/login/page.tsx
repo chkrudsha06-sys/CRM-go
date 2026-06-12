@@ -121,7 +121,7 @@ export default function LoginPage() {
           position: "absolute",
           inset: 0,
           zIndex: 0,
-          backgroundImage: "url('/login-network-bg.png')",
+          backgroundImage: "url('/login-network-bg.jpg')",
           backgroundSize: "cover",
           backgroundPosition: "center center",
           backgroundRepeat: "no-repeat",
