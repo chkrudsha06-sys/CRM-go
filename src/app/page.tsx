@@ -303,11 +303,11 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
   return "other";
 }
 
+const VIP_DB_SOURCE = "vip_activity";
+const CUSTOMER_DB_SOURCE = "customer_db";
+
 function isVipContact(contact: ContactRow) {
-  const source = normalizeText(contact.crm_db_source);
-  const stage = normalizeText(contact.management_stage);
-  const grade = normalizeText(contact.customer_grade);
-  return source === "vip_activity" || PIPELINE_STAGES.map(normalizeText).includes(stage) || Boolean(grade && grade !== normalizeText("심사미진행"));
+  return normalizeText(contact.crm_db_source) === "vip_activity";
 }
 
 function isHighValueContact(contact: ContactRow) {
@@ -725,13 +725,13 @@ export default function HomePage() {
     }).length;
     const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
     const vipThisMonth = visibleContacts.filter((contact) => isVipContact(contact) && touchedInMonth(contact, selectedMonth)).length;
-    const master = visibleContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
-    const challenger = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
-    const bronze = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
-    const masterThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, selectedMonth)).length;
-    const challengerThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, selectedMonth)).length;
-    const bronzeThisMonth = visibleContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
-    const contracts = visibleContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
+    const master = vipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
+    const challenger = vipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
+    const bronze = vipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
+    const masterThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, selectedMonth)).length;
+    const challengerThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, selectedMonth)).length;
+    const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, selectedMonth)).length;
+    const contracts = vipContacts.filter((contact) => isContractedInMonth(contact, selectedMonth)).length;
 
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -744,7 +744,7 @@ export default function HomePage() {
       return acc;
     }, {} as Record<string, number>);
 
-    const retention = stageCounts["리텐션"] || visibleContacts.filter(isContracted).length;
+    const retention = stageCounts["리텐션"] || vipContacts.filter(isContracted).length;
     const churnCount = stageCounts["이탈/탈퇴"] || 0;
     const churnRate = percent(churnCount, Math.max(vipContacts.length, 1));
     const activePipeline = (stageCounts["리드"] || 0) + (stageCounts["프로스펙팅"] || 0) + (stageCounts["딜클로징"] || 0);
@@ -776,7 +776,7 @@ export default function HomePage() {
     const items: DashboardActionItem[] = [];
     const counts = { payment: 0, missing: 0, inactive: 0, closing: 0 };
 
-    visibleContacts.forEach((contact) => {
+    vipContacts.forEach((contact) => {
       const contactId = Number(contact.id);
       const day = parsePaymentDay(contact.regular_payment_date);
       if (isContracted(contact) && day) {
@@ -850,10 +850,10 @@ export default function HomePage() {
         if (!unique.has(item.key)) unique.set(item.key, item);
       });
     return { actionItems: Array.from(unique.values()).slice(0, 14), criticalCounts: counts };
-  }, [notesByContact, visibleContacts]);
+  }, [notesByContact, vipContacts]);
 
   const paymentDdays = useMemo(() => {
-    return visibleContacts
+    return vipContacts
       .filter((contact) => isContracted(contact) && parsePaymentDay(contact.regular_payment_date))
       .map((contact) => {
         const day = parsePaymentDay(contact.regular_payment_date) || 1;
@@ -862,7 +862,7 @@ export default function HomePage() {
       })
       .sort((a, b) => a.diff - b.diff)
       .slice(0, 12);
-  }, [visibleContacts]);
+  }, [vipContacts]);
 
   const paymentDueSoonCount = useMemo(() => paymentDdays.filter((row) => row.diff >= 0 && row.diff <= 4).length, [paymentDdays]);
 
