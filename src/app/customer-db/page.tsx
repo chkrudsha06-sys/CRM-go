@@ -560,57 +560,45 @@ function NoteComposer({
     setSensitivity("감도없음");
   };
 
+  const btnStyle = (active: boolean) => ({
+    background: active ? "var(--accent-subtle)" : "var(--surface-2)",
+    borderColor: active ? "var(--accent-border)" : "var(--border-subtle)",
+    color: active ? "var(--accent-text)" : "var(--text-muted)",
+    fontWeight: active ? 600 : 400,
+  });
+
   return (
-    <div
-      className="space-y-1.5 rounded-[12px] border px-2.5 py-2"
-      style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-    >
+    <div className="space-y-1.5 rounded-[12px] border px-2.5 py-2" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>활동노트 작성</p>
-        <input
-          type="date"
-          value={noteDate}
-          onChange={(event) => setNoteDate(event.target.value)}
-          className="h-7 rounded-[8px] border px-2 text-[11px] outline-none"
-          style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }}
-        />
+        <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="h-7 rounded-[8px] border px-2 text-[11px] outline-none" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }} />
       </div>
 
-      <ActivityTypeSelector value={activityType} onChange={setActivityType} />
+      <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>활동항목</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {(["TM", "콜드톡"] as ActivityType[]).map((type) => (
+          <button key={type} type="button" onClick={() => setActivityType(type)} className="h-8 rounded-[8px] border text-[12px] transition-colors" style={btnStyle(activityType === type)}>
+            {type}
+          </button>
+        ))}
+      </div>
+
+      <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="활동 내용을 입력하세요." rows={2} className="min-h-[56px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] leading-5 outline-none" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }} />
+
+      <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-8 w-full text-[12px]">
+        <Plus size={13} /> 저장
+      </button>
 
       <div className="border-t pt-1.5" style={{ borderColor: "var(--border-subtle)" }}>
         <p className="mb-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>고객감도</p>
         <div className="grid grid-cols-2 gap-1.5">
           {["감도없음", "재TM진행"].map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setSensitivity(opt)}
-              className="h-8 rounded-[8px] border text-[12px] transition-colors"
-              style={{
-                background: sensitivity === opt ? "var(--accent-subtle)" : "var(--surface-2)",
-                borderColor: sensitivity === opt ? "var(--accent-border)" : "var(--border-subtle)",
-                color: sensitivity === opt ? "var(--accent-text)" : "var(--text-muted)",
-                fontWeight: sensitivity === opt ? 600 : 400,
-              }}
-            >
+            <button key={opt} type="button" onClick={() => setSensitivity(opt)} className="h-8 rounded-[8px] border text-[12px] transition-colors" style={btnStyle(sensitivity === opt)}>
               {opt}
             </button>
           ))}
         </div>
       </div>
-
-      <textarea
-        value={content}
-        onChange={(event) => setContent(event.target.value)}
-        placeholder="활동 내용을 입력하세요."
-        rows={2}
-        className="min-h-[56px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] leading-5 outline-none"
-        style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }}
-      />
-      <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-8 w-full text-[12px]">
-        <Plus size={13} /> 저장
-      </button>
     </div>
   );
 }
@@ -901,6 +889,8 @@ export default function CustomerDbPage() {
   const [editingRecord, setEditingRecord] = useState<RawCustomerRecord | null>(null);
   const [form, setForm] = useState<RawCustomerForm>({ ...EMPTY_FORM });
   const [selectedRecord, setSelectedRecord] = useState<RawCustomerRecord | null>(null);
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [editingMemo, setEditingMemo] = useState("");
   const [selectedRemoteNotes, setSelectedRemoteNotes] = useState<CustomerDbNote[]>([]);
   const [search, setSearch] = useState("");
   const [filterRoute, setFilterRoute] = useState("");
@@ -1013,10 +1003,9 @@ export default function CustomerDbPage() {
     const today = new Date().toISOString().slice(0, 10);
     const todayCount = records.filter((record) => String(record.created_at || "").slice(0, 10) === today).length;
     const totalActivity = tm + cold;
-    const todayNotes = records.filter((record) => {
-      const notes = record.notes || [];
-      return notes.some((n) => String(n.noteDate || "").slice(0, 10) === today);
-    }).length;
+    const todayTm = records.filter((record) => record.activity_type === "TM" && (record.notes || []).some((n) => String(n.noteDate || "").slice(0, 10) === today)).length;
+    const todayCold = records.filter((record) => record.activity_type === "콜드톡" && (record.notes || []).some((n) => String(n.noteDate || "").slice(0, 10) === today)).length;
+    const todayActivity = todayTm + todayCold;
     const routeCounts = INTAKE_ROUTES
       .map((route) => ({
         route,
@@ -1024,7 +1013,7 @@ export default function CustomerDbPage() {
       }))
       .filter((item) => item.count > 0);
 
-    return { total: records.length, tm, cold, todayCount, totalActivity, todayActivity: todayNotes, routeCounts };
+    return { total: records.length, tm, cold, todayCount, totalActivity, todayActivity, todayTm, todayCold, routeCounts };
   }, [records]);
 
   const filteredRecords = useMemo(() => {
@@ -1068,6 +1057,7 @@ export default function CustomerDbPage() {
 
   useEffect(() => {
     loadRemoteNotesForRecord(selectedRecord);
+    setMemoEditing(false);
   }, [selectedRecord?.id, selectedRecord?.phone]);
 
   const selectedDisplayNotes = useMemo(() => {
@@ -1618,7 +1608,9 @@ export default function CustomerDbPage() {
         </div>
         <div className="rounded-[12px] border px-3.5 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
           <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>당일 활동진행</p>
-          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.todayActivity}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+          <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{stats.todayActivity}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span>
+            <span className="ml-2 text-[11px]" style={{ color: "var(--text-faint)" }}>TM {stats.todayTm} · 콜드톡 {stats.todayCold}</span>
+          </p>
         </div>
       </section>
 
@@ -1870,22 +1862,22 @@ export default function CustomerDbPage() {
               </button>
             </div>
 
+            {/* 액션 버튼: 헤더 바로 아래 */}
+            <div className="flex flex-wrap gap-1.5 border-b px-4 pb-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+              <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-8 px-2.5 text-[11px]">
+                <ArrowRight size={12} /> VIP DB이관
+              </button>
+              <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]">
+                <Edit3 size={12} /> 수정
+              </button>
+              <button type="button" onClick={() => deleteRecord(selectedRecord)} className="btn-premium h-8 px-2.5 text-[11px]" style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}>
+                <Trash2 size={12} /> 삭제
+              </button>
+            </div>
+
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
               <section className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>고객 기본정보</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button type="button" onClick={() => requestTransfer(selectedRecord)} className="btn-premium btn-primary h-8 px-2.5 text-[11px]">
-                      <ArrowRight size={12} /> VIP DB이관
-                    </button>
-                    <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]">
-                      <Edit3 size={12} /> 수정
-                    </button>
-                    <button type="button" onClick={() => deleteRecord(selectedRecord)} className="btn-premium h-8 px-2.5 text-[11px]" style={{ color: "var(--danger-text)", background: "var(--danger-bg)", border: "1px solid var(--danger-border)" }}>
-                      <Trash2 size={12} /> 삭제
-                    </button>
-                  </div>
-                </div>
+                <p className="mb-2 text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>고객 기본정보</p>
                 <div className="grid grid-cols-[72px_1fr_72px_1fr] gap-x-2 gap-y-1 text-[12px]">
                   {[
                     ["고객명", fmt(selectedRecord.name)],
@@ -1911,11 +1903,35 @@ export default function CustomerDbPage() {
                     <MessageCircle size={14} style={{ color: "var(--accent)" }} />
                     <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>메모</p>
                   </div>
-                  <button type="button" onClick={() => openEditForm(selectedRecord)} className="btn-premium btn-secondary h-7 px-2 text-[11px]">
+                  <button type="button" onClick={() => { setEditingMemo(selectedRecord.memo || ""); setMemoEditing(true); }} className="btn-premium btn-secondary h-7 px-2 text-[11px]">
                     <Edit3 size={11} /> 수정
                   </button>
                 </div>
-                <MemoPreview memo={selectedRecord.memo} />
+                {memoEditing ? (
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={editingMemo}
+                      onChange={(e) => setEditingMemo(e.target.value)}
+                      rows={3}
+                      className="min-h-[60px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] leading-5 outline-none"
+                      style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }}
+                      placeholder="메모를 입력하세요."
+                    />
+                    <div className="flex gap-1.5">
+                      <button type="button" onClick={async () => {
+                        const updated = { ...selectedRecord, memo: editingMemo.trim() };
+                        setRecords((items) => items.map((r) => r.id === selectedRecord.id ? { ...r, memo: editingMemo.trim() } : r));
+                        setSelectedRecord(updated);
+                        setMemoEditing(false);
+                        try { await saveCustomerDbRecordToContacts(updated); } catch (e) { console.warn("메모 Supabase 동기화 실패", e); }
+                        showToast("메모가 저장되었습니다.");
+                      }} className="btn-premium btn-primary h-7 flex-1 text-[11px]"><Save size={11} /> 저장</button>
+                      <button type="button" onClick={() => setMemoEditing(false)} className="btn-premium btn-secondary h-7 px-3 text-[11px]">취소</button>
+                    </div>
+                  </div>
+                ) : (
+                  <MemoPreview memo={selectedRecord.memo} />
+                )}
               </section>
 
               <section className="mt-2 rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
