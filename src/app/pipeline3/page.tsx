@@ -66,6 +66,8 @@ type CustomerDbRecord = {
   crm_db_source?: string | null;
   vip_transferred_at?: string | null;
   assigned_to?: string | null;
+  regular_payment_date?: string | null;
+  payment_channel?: string | null;
   last_note_at?: string | null;
 };
 
@@ -90,6 +92,9 @@ type PipelineCustomer = {
   noteSummary: string;
   adsSummary: string;
   owner: string;
+  regularPaymentDate: string;
+  paymentChannel: string;
+  paymentInfo: string;
   raw: CustomerDbRecord;
 };
 
@@ -152,8 +157,13 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const UNREVIEWED_GRADE = "심사미진행";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
+const PAYMENT_CHANNEL_OPTIONS = [
+  "자동이체 (효성CMS)",
+  "카드 (사이다페이)",
+  "기타 (별도입금)",
+];
 const PIPELINE_SELECT_FIELDS =
-  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,churn_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to";
+  "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,churn_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to,regular_payment_date,payment_channel";
 
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
 const INTAKE_ROUTES = [
@@ -388,6 +398,23 @@ function formatShortDate(value?: string | null) {
   } catch {
     return value;
   }
+}
+
+function formatPaymentDate(value?: string | null) {
+  const day = String(value || "").replace(/\D/g, "");
+  if (!day) return "-";
+  return `매월 ${Number(day)}일`;
+}
+
+function formatPaymentInfo(channel?: string | null, paymentDate?: string | null) {
+  const safeChannel = fmt(channel);
+  const safeDate = formatPaymentDate(paymentDate);
+
+  if (safeChannel === "-" && safeDate === "-") return "-";
+  if (safeChannel === "-") return safeDate;
+  if (safeDate === "-") return safeChannel;
+
+  return `${safeChannel} / ${safeDate}`;
 }
 
 function normalizeStage(value?: string | null): StageKey {
@@ -653,6 +680,9 @@ function toPipelineCustomer(record: CustomerDbRecord): PipelineCustomer {
     adsSummary:
       "광고 요청 이력 없음. 필요 시 하단 광고요청 버튼으로 업무요청을 생성하세요.",
     owner: fmt(record.assigned_to),
+    regularPaymentDate: formatPaymentDate(record.regular_payment_date),
+    paymentChannel: fmt(record.payment_channel),
+    paymentInfo: formatPaymentInfo(record.payment_channel, record.regular_payment_date),
     raw: record,
   };
 }
@@ -742,7 +772,12 @@ function DetailPanel({
   onTab: (tab: DetailTab) => void;
   onClose: () => void;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
-  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
+  onContractConvert: (
+    customer: PipelineCustomer,
+    result: ContractConversionResult,
+    paymentDate?: string,
+    paymentChannel?: string,
+  ) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -913,7 +948,12 @@ function SummaryTab({
 }: {
   customer: PipelineCustomer;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
-  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
+  onContractConvert: (
+    customer: PipelineCustomer,
+    result: ContractConversionResult,
+    paymentDate?: string,
+    paymentChannel?: string,
+  ) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -950,6 +990,7 @@ function SummaryTab({
             <InfoItem label="탈퇴일" value={customer.churnDate} />
           ) : null}
           <InfoItem label="등록일" value={customer.registeredAt} />
+          <InfoItem label="결제채널 & 결제일" value={customer.paymentInfo} badge />
         </div>
       </section>
 
@@ -1036,7 +1077,12 @@ function QuickActions({
 }: {
   customer: PipelineCustomer;
   onStageChange: (customer: PipelineCustomer, target: StageKey) => void;
-  onContractConvert: (customer: PipelineCustomer, result: ContractConversionResult) => void;
+  onContractConvert: (
+    customer: PipelineCustomer,
+    result: ContractConversionResult,
+    paymentDate?: string,
+    paymentChannel?: string,
+  ) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -1046,9 +1092,17 @@ function QuickActions({
 }) {
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
+  const [contractPaymentDate, setContractPaymentDate] = useState(customer.raw.regular_payment_date || "");
+  const [contractPaymentChannel, setContractPaymentChannel] = useState(customer.raw.payment_channel || "");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingAddress, setMeetingAddress] = useState("");
   const targets = getQuickStageTargets(customer.stage);
+
+  useEffect(() => {
+    setContractPaymentDate(customer.raw.regular_payment_date || "");
+    setContractPaymentChannel(customer.raw.payment_channel || "");
+    setContractOpen(false);
+  }, [customer.id, customer.raw.regular_payment_date, customer.raw.payment_channel]);
 
   const handleMeetingSubmit = () => {
     if (!meetingDate) {
@@ -1059,6 +1113,21 @@ function QuickActions({
     setMeetingOpen(false);
     setMeetingDate("");
     setMeetingAddress("");
+  };
+
+  const handleContractCompleteSubmit = () => {
+    if (!contractPaymentDate) {
+      alert("정기결제일을 등록해주세요.");
+      return;
+    }
+
+    if (!contractPaymentChannel) {
+      alert("결제채널을 선택해주세요.");
+      return;
+    }
+
+    onContractConvert(customer, "계약완료", contractPaymentDate, contractPaymentChannel);
+    setContractOpen(false);
   };
 
   return (
@@ -1123,26 +1192,67 @@ function QuickActions({
         >
           <div className="md:col-span-2">
             <p className="crm-section-title">계약전환 상태 선택</p>
-            <p className="crm-tiny mt-1">예약완료는 클로징 구간, 계약완료는 리텐션 구간으로 자동 이동합니다.</p>
+            <p className="crm-tiny mt-1">계약완료 전환 시 정기결제일과 결제채널을 등록해주세요.</p>
           </div>
+
           <button
             type="button"
             onClick={() => {
               onContractConvert(customer, "예약완료");
               setContractOpen(false);
             }}
-            className="btn-premium btn-secondary h-11 w-full"
+            className="btn-premium btn-secondary h-11 w-full md:col-span-2"
           >
             <Award size={14} />
             예약완료
           </button>
+
+          <label className="block space-y-1.5">
+            <span className="crm-tiny">정기결제일</span>
+            <select
+              value={contractPaymentDate}
+              onChange={(event) => setContractPaymentDate(event.target.value)}
+              className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            >
+              <option value="">정기결제일 선택</option>
+              {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                <option key={day} value={String(day)}>
+                  매월 {day}일
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block space-y-1.5">
+            <span className="crm-tiny">결제채널</span>
+            <select
+              value={contractPaymentChannel}
+              onChange={(event) => setContractPaymentChannel(event.target.value)}
+              className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            >
+              <option value="">결제채널 선택</option>
+              {PAYMENT_CHANNEL_OPTIONS.map((channel) => (
+                <option key={channel} value={channel}>
+                  {channel}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <button
             type="button"
-            onClick={() => {
-              onContractConvert(customer, "계약완료");
-              setContractOpen(false);
-            }}
-            className="btn-premium btn-primary h-11 w-full"
+            onClick={handleContractCompleteSubmit}
+            className="btn-premium btn-primary h-11 w-full md:col-span-2"
           >
             <UserCheck size={14} />
             계약완료
@@ -2563,6 +2673,8 @@ export default function Pipeline3Page() {
             crm_db_source: VIP_DB_SOURCE,
             vip_transferred_at: recordToSave.vip_transferred_at || recordToSave.created_at,
             assigned_to: recordToSave.assigned_to || DEFAULT_ASSIGNED_TO,
+            regular_payment_date: recordToSave.regular_payment_date || null,
+            payment_channel: recordToSave.payment_channel || null,
           },
           { onConflict: "id" },
         )
@@ -2622,6 +2734,8 @@ export default function Pipeline3Page() {
       reservation_date: null,
       contract_date: null,
       churn_date: isChurn ? TODAY : null,
+      regular_payment_date: null,
+      payment_channel: null,
       memo: mergeMemoWithExistingGradeBlock(cleanMemo, customer.raw.memo),
     });
   };
@@ -2629,6 +2743,8 @@ export default function Pipeline3Page() {
   const handleContractConvert = (
     customer: PipelineCustomer,
     result: ContractConversionResult,
+    paymentDate?: string,
+    paymentChannel?: string,
   ) => {
     const isReservation = result === "예약완료";
     const nextStage: StageKey = isReservation ? "딜클로징" : "리텐션";
@@ -2641,6 +2757,8 @@ export default function Pipeline3Page() {
         ? TODAY
         : customer.raw.reservation_date || null,
       contract_date: isReservation ? null : TODAY,
+      regular_payment_date: isReservation ? null : paymentDate || null,
+      payment_channel: isReservation ? null : paymentChannel || null,
       memo: mergeMemoWithExistingGradeBlock(cleanMemo, customer.raw.memo),
     });
   };
