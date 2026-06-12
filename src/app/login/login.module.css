@@ -1,15 +1,11 @@
-/* 분양의신 CRM 로그인 페이지 — 고정 캔버스 스케일 방식 */
+/* 분양의신 CRM 로그인 페이지 — 단일 배경 고정 캔버스 방식 */
 
 .page {
   width: 100vw;
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
-  background-color: #000;
-  background-image: url("/login-network-bg.jpg");
-  background-size: 100% 100%;
-  background-position: center center;
-  background-repeat: no-repeat;
+  background: #000;
   font-family: "Pretendard", sans-serif;
   display: flex;
   align-items: center;
@@ -24,7 +20,7 @@
   overflow: hidden;
   transform: scale(var(--scene-scale));
   transform-origin: center center;
-  background: transparent;
+  background: #000;
 }
 
 .backgroundLayer {
@@ -32,7 +28,7 @@
   inset: 0;
   z-index: 0;
   background-image: url("/login-network-bg.jpg");
-  background-size: 100% 100%;
+  background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
   opacity: 1;
@@ -49,16 +45,16 @@
   height: 1010px;
   transform: translate(-50%, -50%);
   background: #0a0a0c;
-  border: 7px solid #2f3238;
+  border: 8px solid #34373d;
   border-radius: 30px;
   display: grid;
   grid-template-columns: 455px 1fr;
   overflow: hidden;
   box-sizing: border-box;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 34px rgba(80, 84, 92, 0.26),
-    0 46px 120px rgba(0, 0, 0, 0.68);
+    0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 0 38px rgba(80, 84, 92, 0.28),
+    0 46px 120px rgba(0, 0, 0, 0.72);
 }
 
 /* ═════════ 좌측: 영상 패널 ═════════ */
@@ -170,7 +166,6 @@
   pointer-events: none;
 }
 
-/* 텍스트 캐러셀 */
 .captionArea {
   position: absolute;
   inset: auto 0 0 0;
@@ -544,7 +539,6 @@
   font-size: 15px;
 }
 
-/* 요청 완료 화면 */
 .modalSuccess {
   text-align: center;
   padding: 22px 4px 8px;
