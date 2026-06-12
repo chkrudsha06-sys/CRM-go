@@ -1,16 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, FormEvent, CSSProperties } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { FormEvent, CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/auth";
 import styles from "./login.module.css";
-
-// ─────────────────────────────────────────────
-// 분양의신 CRM 로그인 페이지
-// 경로: src/app/login/page.tsx
-// 배경이미지: public/login-network-bg.jpg
-// 영상: public/login-video.mp4
-// ─────────────────────────────────────────────
 
 const DESIGN_WIDTH = 2560;
 const DESIGN_HEIGHT = 1440;
@@ -65,7 +59,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const updateScale = () => {
-      const nextScale = Math.min(
+      const nextScale = Math.max(
         window.innerWidth / DESIGN_WIDTH,
         window.innerHeight / DESIGN_HEIGHT
       );
