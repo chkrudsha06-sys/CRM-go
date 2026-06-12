@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { login } from "@/lib/auth";
 import styles from "./login.module.css";
 
 // ─────────────────────────────────────────────
 // 분양의신 CRM 로그인 페이지
-// 경로: app/login/page.tsx
-// 배경이미지: public/login-network-bg.png
-// 영상: public/login-video.mp4 (없으면 안내 화면 표시)
+// 경로: src/app/login/page.tsx
+// 배경이미지: public/login-network-bg.jpg
+// 영상: public/login-video.mp4
 // ─────────────────────────────────────────────
 
-// 캐러셀 문구 — 여기서만 수정하면 됩니다
 const SLIDES = [
   {
     title: "Where Ideas Flow",
@@ -60,10 +60,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (AUTO_INTERVAL <= 0) return;
-    const t = setInterval(
-      () => setSlide((s) => (s + 1) % SLIDES.length),
-      AUTO_INTERVAL
-    );
+
+    const t = setInterval(() => {
+      setSlide((s) => (s + 1) % SLIDES.length);
+    }, AUTO_INTERVAL);
+
     return () => clearInterval(t);
   }, [slide]);
 
@@ -71,17 +72,34 @@ export default function LoginPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setModalOpen(false);
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
+
+    const trimmedId = userId.trim();
+
+    if (!trimmedId || !password) {
+      setError("아이디와 비밀번호를 입력해주세요.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
     try {
-      router.push("/dashboard");
+      const user = await login(trimmedId, password);
+
+      if (!user) {
+        setError("아이디 또는 비밀번호가 올바르지 않습니다.");
+        return;
+      }
+
+      router.replace("/");
+      router.refresh();
     } catch {
       setError("로그인 처리 중 오류가 발생했습니다.");
     } finally {
@@ -91,12 +109,20 @@ export default function LoginPage() {
 
   async function handleRequest(e: FormEvent) {
     e.preventDefault();
+
     console.log("계정 요청:", req);
     setRequestDone(true);
   }
 
   function openModal() {
-    setReq({ name: "", dept: "", phone: "", userId: "", password: "", reason: "" });
+    setReq({
+      name: "",
+      dept: "",
+      phone: "",
+      userId: "",
+      password: "",
+      reason: "",
+    });
     setRequestDone(false);
     setShowReqPw(false);
     setModalOpen(true);
@@ -114,7 +140,6 @@ export default function LoginPage() {
         background: "#050505",
       }}
     >
-      {/* 로그인 전체 배경 이미지 */}
       <div
         aria-hidden="true"
         style={{
@@ -125,13 +150,12 @@ export default function LoginPage() {
           backgroundSize: "cover",
           backgroundPosition: "center center",
           backgroundRepeat: "no-repeat",
-          opacity: 0.62,
+          opacity: 0.68,
           filter: "contrast(1.08) brightness(0.82)",
           pointerEvents: "none",
         }}
       />
 
-      {/* 배경 위 어두운 그라데이션 */}
       <div
         aria-hidden="true"
         style={{
@@ -151,7 +175,6 @@ export default function LoginPage() {
           zIndex: 1,
         }}
       >
-        {/* ═════════ 좌측: 영상 + 캐러셀 ═════════ */}
         <section className={styles.mediaSide}>
           <video
             src="/login-video.mp4"
@@ -191,17 +214,27 @@ export default function LoginPage() {
                   className={i === slide ? styles.barActive : ""}
                   aria-label={`${i + 1}번 문구`}
                   onClick={() => setSlide(i)}
+                  type="button"
                 />
               ))}
             </div>
+
             <div
               className={styles.captionSlides}
               onClick={nextSlide}
-              onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+              onTouchStart={(e) => {
+                touchX.current = e.touches[0].clientX;
+              }}
               onTouchEnd={(e) => {
                 if (touchX.current === null) return;
+
                 const dx = e.changedTouches[0].clientX - touchX.current;
-                if (Math.abs(dx) > 40) (dx < 0 ? nextSlide() : prevSlide());
+
+                if (Math.abs(dx) > 40) {
+                  if (dx < 0) nextSlide();
+                  else prevSlide();
+                }
+
                 touchX.current = null;
               }}
               title="클릭하면 다음 문구로 넘어갑니다"
@@ -221,23 +254,33 @@ export default function LoginPage() {
           </div>
         </section>
 
-        {/* ═════════ 우측: 로그인 ═════════ */}
         <section className={styles.formSide}>
           <div className={styles.formInner}>
             <div className={styles.formLogo}>
               <img src="/logo.png" alt="분양의신 로고" />
             </div>
+
             <h1 className={styles.formTitle}>다시 오셨군요!</h1>
-            <p className={styles.formSub}>분양의신 대외협력팀 CRM 계정으로 로그인하세요</p>
+            <p className={styles.formSub}>
+              분양의신 대외협력팀 CRM 계정으로 로그인하세요
+            </p>
 
             <form onSubmit={handleLogin}>
               <div className={`${styles.field} ${styles.withIcon}`}>
                 <span className={styles.leadIcon}>
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <svg
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
                     <circle cx="12" cy="8.5" r="3.6" />
                     <path d="M5 19.5c1.4-3.2 4-4.7 7-4.7s5.6 1.5 7 4.7" />
                   </svg>
                 </span>
+
                 <input
                   type="text"
                   placeholder="아이디"
@@ -250,11 +293,19 @@ export default function LoginPage() {
 
               <div className={`${styles.field} ${styles.withIcon}`}>
                 <span className={styles.leadIcon}>
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <svg
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
                     <rect x="4" y="10" width="16" height="10" rx="3" />
                     <path d="M8 10V8a4 4 0 0 1 8 0v2" />
                   </svg>
                 </span>
+
                 <input
                   type={showPw ? "text" : "password"}
                   placeholder="비밀번호"
@@ -263,13 +314,21 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
+
                 <button
                   type="button"
                   className={styles.eyeBtn}
                   onClick={() => setShowPw((v) => !v)}
                   aria-label="비밀번호 표시"
                 >
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <svg
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
                     <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
                     <circle cx="12" cy="12" r="2.6" />
                   </svg>
@@ -296,14 +355,13 @@ export default function LoginPage() {
 
             <div className={styles.divider}>또는</div>
 
-            <button className={styles.requestBtn} onClick={openModal}>
+            <button className={styles.requestBtn} onClick={openModal} type="button">
               계정 요청하기
             </button>
           </div>
         </section>
       </div>
 
-      {/* ═════════ 계정요청 모달 ═════════ */}
       {modalOpen && (
         <div
           className={styles.modalOverlay}
@@ -316,14 +374,17 @@ export default function LoginPage() {
               <div>
                 <div className={styles.modalHead}>
                   <h2>계정 요청</h2>
+
                   <button
                     className={styles.modalClose}
                     onClick={() => setModalOpen(false)}
                     aria-label="닫기"
+                    type="button"
                   >
                     &times;
                   </button>
                 </div>
+
                 <p className={styles.modalDesc}>
                   아래 정보를 입력하시면 관리자 확인 후 계정이 생성됩니다.
                 </p>
@@ -351,6 +412,7 @@ export default function LoginPage() {
                       <option value="" disabled hidden>
                         부서를 선택하세요
                       </option>
+
                       {DEPTS.map((d) => (
                         <option key={d} value={d}>
                           {d}
@@ -392,13 +454,21 @@ export default function LoginPage() {
                       onChange={(e) => setReq({ ...req, password: e.target.value })}
                       required
                     />
+
                     <button
                       type="button"
                       className={styles.eyeBtn}
                       onClick={() => setShowReqPw((v) => !v)}
                       aria-label="비밀번호 표시"
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
                         <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
                         <circle cx="12" cy="12" r="2.6" />
                       </svg>
@@ -423,13 +493,28 @@ export default function LoginPage() {
             ) : (
               <div className={styles.modalSuccess}>
                 <div className={styles.check}>
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4cc3ec" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="30"
+                    height="30"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#4cc3ec"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M4 12.5l5 5L20 6.5" />
                   </svg>
                 </div>
+
                 <h3>계정 생성을 요청하였습니다.</h3>
                 <p>관리자가 확인 후 회신 드릴 예정입니다.</p>
-                <button className={styles.okBtn} onClick={() => setModalOpen(false)}>
+
+                <button
+                  className={styles.okBtn}
+                  onClick={() => setModalOpen(false)}
+                  type="button"
+                >
                   확인
                 </button>
               </div>
