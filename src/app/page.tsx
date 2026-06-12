@@ -1129,6 +1129,68 @@ export default function HomePage() {
                   </div>
                 </Panel>
 
+
+                {/* 유입경로별 성과 + 등급별 계약전환율 */}
+                <div className="grid items-stretch gap-4 xl:grid-cols-2">
+                  <Panel className="h-full">
+                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="DB 입력 대비 VIP 전환 현황" />
+                    <div className="p-4">
+                      {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
+                        <div className="space-y-2">
+                          {intakeRows.map((row) => (
+                            <div key={row.route} className="rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                              <div className="flex items-center gap-3">
+                                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                  DB입력 <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
+                                </p>
+                                <ArrowRight size={13} style={{ color: "var(--text-faint)" }} />
+                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                  VIP전환 <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
+                                </p>
+                                <Badge tone={row.vipRate >= 60 ? "success" : row.vipRate >= 30 ? "warning" : "muted"}>{row.vipRate}%</Badge>
+                              </div>
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.vipRate)}%`, background: toneStyle("purple").bar }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Panel>
+
+                  <Panel className="h-full">
+                    <PanelTitle icon={Activity} tone="purple" title="등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
+                    <div className="space-y-2.5 p-4">
+                      {gradeContractRows.map((row) => (
+                        <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <Badge tone={row.tone}>{row.grade}</Badge>
+                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                계약 {row.contracts}건 <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[12px]">%</span></p>
+                          </div>
+                          <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
+                            {row.routes.length === 0 ? (
+                              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
+                            ) : row.routes.map(([route, count]) => (
+                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[11px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
+                                {route} {count}건
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                </div>
+
                 {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="flex h-full flex-col">
@@ -1170,81 +1232,6 @@ export default function HomePage() {
                           <div className="flex shrink-0 items-baseline gap-2.5">
                             <span className="text-[14px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
                             <span className="w-9 text-right text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Panel>
-                </div>
-
-                {/* 유입경로별 성과 + 등급별 계약전환율 */}
-                <div className="grid items-stretch gap-4 xl:grid-cols-2">
-                  <Panel className="h-full">
-                    <PanelTitle icon={TrendingUp} tone="success" title="유입경로별 성과" desc="보유 DB로 몇 건을 접촉해 몇 건의 VIP DB를 확보했는가" />
-                    <div className="p-4">
-                      {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
-                        <div className="space-y-2.5">
-                          {intakeRows.map((row) => (
-                            <div key={row.route} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                                <span
-                                  className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold tabular-nums"
-                                  style={{
-                                    background: row.vipRate >= 60 ? "var(--success-bg)" : row.vipRate >= 30 ? "var(--warning-bg)" : "var(--surface-3)",
-                                    color: row.vipRate >= 60 ? "var(--success-text)" : row.vipRate >= 30 ? "var(--warning-text)" : "var(--text-subtle)",
-                                    border: `1px solid ${row.vipRate >= 60 ? "var(--success-border)" : row.vipRate >= 30 ? "var(--warning-border)" : "var(--border)"}`,
-                                  }}
-                                >
-                                  VIP 확보 {row.vipRate}%
-                                </span>
-                              </div>
-                              {/* DB → 접촉 → VIP 누적 레이어 바 */}
-                              <div className="relative mt-2.5 h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, row.touchRate)}%`, background: "var(--cyan-border)" }} />
-                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, row.vipRate)}%`, background: toneStyle("purple").bar }} />
-                              </div>
-                              <div className="mt-2 flex items-center justify-between gap-2">
-                                <p className="text-[12px] font-normal tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
-                                  DB <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
-                                  <span className="mx-1" style={{ color: "var(--text-faint)" }}>→</span>
-                                  접촉 <strong style={{ color: "var(--cyan-text)" }}>{row.firstTouch}건</strong>
-                                  <span className="mx-1" style={{ color: "var(--text-faint)" }}>→</span>
-                                  VIP <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
-                                </p>
-                                <p className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: "var(--success-text)" }}>계약 {row.contract}건</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </Panel>
-
-                  <Panel className="h-full">
-                    <PanelTitle icon={Activity} tone="purple" title="등급별 계약전환율" desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
-                    <div className="space-y-2.5 p-4">
-                      {gradeContractRows.map((row) => (
-                        <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <Badge tone={row.tone}>{row.grade}</Badge>
-                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
-                                계약 {row.contracts}건 <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
-                              </p>
-                            </div>
-                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[12px]">%</span></p>
-                          </div>
-                          <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
-                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
-                            {row.routes.length === 0 ? (
-                              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
-                            ) : row.routes.map(([route, count]) => (
-                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[11px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
-                                {route} {count}건
-                              </span>
-                            ))}
                           </div>
                         </div>
                       ))}
