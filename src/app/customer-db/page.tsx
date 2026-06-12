@@ -1374,10 +1374,21 @@ export default function CustomerDbPage() {
     showToast("VIP활동DB로 이관되었습니다.");
   };
 
-  const deleteRecord = (record: RawCustomerRecord) => {
+  const deleteRecord = async (record: RawCustomerRecord) => {
     if (!window.confirm(`${record.name} 고객을 고객DB에서 삭제하시겠습니까?`)) return;
     setRecords((items) => items.filter((item) => item.id !== record.id));
     if (selectedRecord?.id === record.id) setSelectedRecord(null);
+
+    // Supabase에서도 삭제 (crm_db_source = "customer_db"인 레코드)
+    try {
+      const contactId = await findContactIdByPhone(record.phone);
+      if (contactId) {
+        await supabase.from("contacts").delete().eq("id", contactId);
+      }
+    } catch (error) {
+      console.warn("Supabase 삭제 실패 (localStorage는 삭제됨)", error);
+    }
+
     showToast("고객DB에서 삭제되었습니다.");
   };
 
