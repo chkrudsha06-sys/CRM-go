@@ -871,8 +871,26 @@ aside nav button,
 aside [role="button"] {
   font-family: var(--font-sans) !important;
   font-size: 14px !important;
-  font-weight: 720 !important;
+  font-weight: 400 !important;
   letter-spacing: -0.028em !important;
+}
+
+aside p,
+aside span,
+aside button,
+aside a,
+aside h1,
+aside h2,
+aside h3,
+aside label,
+aside textarea {
+  font-weight: 400 !important;
+}
+
+aside .crm-avatar,
+aside .crm-avatar-sm,
+aside .crm-avatar-lg {
+  font-weight: 400 !important;
 }
 
 aside p,
