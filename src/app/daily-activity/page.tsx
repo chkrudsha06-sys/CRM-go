@@ -1413,8 +1413,8 @@ export default function DailyActivityPage() {
                   </label>
                 </div>
 
-                <div className="p-5">
-                  <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+                <div className="space-y-4 p-5">
+                  <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
                     <GoalInputPanel
                       goal={goal}
                       disabled={isOutsideMeeting}
@@ -1423,6 +1423,8 @@ export default function DailyActivityPage() {
                       }
                     />
                     <AutoResultNotice goal={goal} result={result} />
+                  </div>
+                  <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
                     <WorkItemsEditor
                       items={workItems}
                       disabled={isOutsideMeeting}
