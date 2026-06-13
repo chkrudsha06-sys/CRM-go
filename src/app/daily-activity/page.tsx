@@ -708,7 +708,7 @@ function WorkItemsEditor({
 }) {
   return (
     <div
-      className="flex h-full min-h-[340px] flex-col rounded-[16px] border p-4"
+      className="flex h-full min-h-[240px] w-full flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -770,7 +770,7 @@ function WorkItemsResultChecklist({
   const visibleItems = items.length > 0 ? items : createEmptyWorkItems();
   return (
     <div
-      className="flex h-full min-h-[340px] flex-col rounded-[16px] border p-4"
+      className="flex h-full min-h-[240px] w-full flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
@@ -818,7 +818,7 @@ function GoalInputPanel({
 }) {
   return (
     <div
-      className="flex h-full min-h-[228px] flex-col rounded-[16px] border p-4"
+      className="flex h-full min-h-[240px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
@@ -844,7 +844,7 @@ function GoalInputPanel({
 function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValues }) {
   return (
     <div
-      className="flex h-full min-h-[228px] flex-col rounded-[16px] border p-4"
+      className="flex h-full min-h-[240px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
@@ -1413,8 +1413,8 @@ export default function DailyActivityPage() {
                   </label>
                 </div>
 
-                <div className="space-y-5 p-5">
-                  <div className="grid items-stretch gap-5 xl:grid-cols-2">
+                <div className="p-5">
+                  <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
                     <GoalInputPanel
                       goal={goal}
                       disabled={isOutsideMeeting}
@@ -1423,9 +1423,6 @@ export default function DailyActivityPage() {
                       }
                     />
                     <AutoResultNotice goal={goal} result={result} />
-                  </div>
-
-                  <div className="grid items-stretch gap-5 xl:grid-cols-2">
                     <WorkItemsEditor
                       items={workItems}
                       disabled={isOutsideMeeting}
