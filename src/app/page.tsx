@@ -1134,18 +1134,21 @@ export default function HomePage() {
       const ownerAll = contacts.filter((contact) => rowMatchesOwner(contact, owner));
       const ownerCustomerDb = ownerAll.filter((contact) => normalizeText(contact.crm_db_source) === "customer_db");
       const ownerVip = ownerAll.filter(isVipContact);
+      // 기간 내 이관된 VIP (vip_transferred_at 기준)
+      const ownerPeriodVip = ownerVip.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd));
       const ownerMonthDb = ownerCustomerDb.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
       const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
-      const ownerStage = (stage: string) => ownerVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      // 파이프라인 단계별: 기간 내 이관 VIP 기준
+      const ownerStage = (stage: string) => ownerPeriodVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       return {
         owner,
         db: ownerMonthDb.length,
-        masterChallenger: ownerVip.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length,
-        bronze: ownerVip.filter((contact) => isGradeContact(contact, "브론즈")).length,
+        masterChallenger: ownerPeriodVip.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length,
+        bronze: ownerPeriodVip.filter((contact) => isGradeContact(contact, "브론즈")).length,
         lead: ownerStage("리드"),
         prospect: ownerStage("프로스펙팅"),
         closing: ownerStage("딜클로징"),
-        contracts: ownerVip.filter((contact) => isContracted(contact)).length,
+        contracts: ownerPeriodVip.filter((contact) => isContracted(contact)).length,
         churn: ownerStage("이탈/탈퇴"),
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
       };
