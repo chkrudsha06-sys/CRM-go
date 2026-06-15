@@ -553,9 +553,6 @@ function MemberDayCard({
   row?: DailyActivityRow;
 }) {
   const excluded = row?.is_outside_meeting;
-  const workItems = row ? normalizeWorkItems(row.goal_work_items).filter((item) => item.text.trim().length > 0) : [];
-  const doneCount = workItems.filter((item) => item.done).length;
-
   return (
     <article className="premium-card overflow-hidden p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -592,101 +589,32 @@ function MemberDayCard({
         </span>
       </div>
 
-      {/* 좌우 2분할: 왼쪽=수치목표, 오른쪽=특발성목표 */}
-      <div className="grid gap-3 xl:grid-cols-2">
-
-        {/* 왼쪽: 수치 활동목표 2×2 */}
-        <div className="grid gap-2 grid-cols-2">
-          {ACTIVITY_FIELDS.map((field) => (
-            <div
-              key={field.key}
-              className="rounded-[13px] border p-3"
-              style={{
-                borderColor: "var(--border)",
-                background: "var(--surface-2)",
-              }}
-            >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="crm-tiny">{field.label}</p>
-                <p className="text-[11px] font-[780]" style={{ color: "var(--text)" }}>
-                  {goalValue(row, field.key)}/{resultValue(row, field.key)}{field.unit}
-                </p>
-              </div>
-              <ProgressBar
-                result={resultValue(row, field.key)}
-                goal={goalValue(row, field.key)}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* 오른쪽: 특발성 활동목표 */}
-        <div
-          className="rounded-[13px] border p-3"
-          style={{ borderColor: "var(--border)", background: "var(--surface-2)", minHeight: "120px" }}
-        >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="crm-tiny" style={{ fontWeight: 700 }}>특발성 활동목표</p>
-            {workItems.length > 0 && (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-[700]"
-                style={{
-                  background: doneCount === workItems.length && workItems.length > 0 ? "var(--success-bg)" : "var(--surface-3)",
-                  color: doneCount === workItems.length && workItems.length > 0 ? "var(--success-text)" : "var(--text-faint)",
-                  border: `1px solid ${doneCount === workItems.length && workItems.length > 0 ? "var(--success-border)" : "var(--border)"}`,
-                }}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {ACTIVITY_FIELDS.map((field) => (
+          <div
+            key={field.key}
+            className="rounded-[13px] border p-3"
+            style={{
+              borderColor: "var(--border)",
+              background: "var(--surface-2)",
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="crm-tiny">{field.label}</p>
+              <p
+                className="text-[12px] font-[780]"
+                style={{ color: "var(--text)" }}
               >
-                {doneCount}/{workItems.length} 달성
-              </span>
-            )}
-          </div>
-          {workItems.length === 0 ? (
-            <p className="text-[12px] mt-3" style={{ color: "var(--text-faint)" }}>
-              {excluded ? "외근으로 기록 제외" : row ? "입력된 특발성 목표 없음" : "미입력"}
-            </p>
-          ) : (
-            <div className="space-y-1.5 mt-1">
-              {workItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2.5 rounded-[8px] px-2.5 py-2"
-                  style={{
-                    background: item.done ? "var(--success-bg)" : "var(--surface-3)",
-                    border: `1px solid ${item.done ? "var(--success-border)" : "var(--border-subtle)"}`,
-                  }}
-                >
-                  <div
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border"
-                    style={{
-                      background: item.done ? "var(--success-bg)" : "var(--surface)",
-                      borderColor: item.done ? "var(--success-border)" : "var(--border)",
-                    }}
-                  >
-                    {item.done && (
-                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                        <path d="M2 5.5L4.5 8L9 3" stroke="var(--success-text)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <span
-                    className="flex-1 text-[12px] font-[600]"
-                    style={{
-                      color: item.done ? "var(--success-text)" : "var(--text-strong)",
-                      textDecoration: item.done ? "line-through" : "none",
-                    }}
-                  >
-                    {item.text}
-                  </span>
-                  {item.done && (
-                    <span className="text-[10px] font-[700]" style={{ color: "var(--success-text)" }}>
-                      ✓ 달성
-                    </span>
-                  )}
-                </div>
-              ))}
+                {goalValue(row, field.key)} / {resultValue(row, field.key)} {field.unit}
+              </p>
             </div>
-          )}
-        </div>
+            <ProgressBar
+              result={resultValue(row, field.key)}
+              goal={goalValue(row, field.key)}
+            />
+          </div>
+        ))}
+
       </div>
     </article>
   );
@@ -1086,23 +1014,12 @@ export default function DailyActivityPage() {
     );
   };
 
-  const toggleWorkItemDone = async (id: string) => {
-    const updatedItems = workItems.map((item) =>
-      item.id === id ? { ...item, done: !item.done } : item,
+  const toggleWorkItemDone = (id: string) => {
+    setWorkItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, done: !item.done } : item,
+      ),
     );
-    setWorkItems(updatedItems);
-
-    // 즉시 Supabase에 저장 → 대시보드와 실시간 동기화
-    if (!currentMember) return;
-    try {
-      await supabase
-        .from("daily_activity_goals")
-        .update({ goal_work_items: updatedItems })
-        .eq("work_date", date)
-        .eq("owner_name", currentMember.name);
-    } catch (e) {
-      console.warn("특발성 활동목표 체크 저장 실패", e);
-    }
   };
 
   const addWorkItem = () => {
@@ -1316,30 +1233,38 @@ export default function DailyActivityPage() {
   const enteredResults = dailyMemberRows.filter(({ row }) =>
     isResultEntered(row),
   ).length;
-  const totalGoalTm = dailyMemberRows.reduce(
-    (sum, item) => sum + totalTmGoal(item.row),
-    0,
+
+  // 상단 카드: 관리자는 4명 합산, 실행파트는 본인(myRow)만 표시
+  const isAdminView = access.canViewAll && !currentMember;
+  const cardRows: Array<{ row?: DailyActivityRow }> = isAdminView
+    ? dailyMemberRows
+    : [{ row: myRow }];
+
+  const totalGoalTm = isAdminView
+    ? dailyMemberRows.reduce((sum, item) => sum + totalTmGoal(item.row), 0)
+    : totalTmGoal(myRow);
+  const totalResultTm = isAdminView
+    ? dailyMemberRows.reduce((sum, item) => sum + totalTmResult(item.row), 0)
+    : totalTmResult(myRow);
+  const totalGoalMeeting = cardRows.reduce(
+    (sum, item) => sum + goalValue(item.row, "meeting_confirmed"), 0,
   );
-  const totalResultTm = dailyMemberRows.reduce(
-    (sum, item) => sum + totalTmResult(item.row),
-    0,
+  const totalResultMeeting = cardRows.reduce(
+    (sum, item) => sum + resultValue(item.row, "meeting_confirmed"), 0,
   );
-  const totalGoalMeeting = dailyMemberRows.reduce(
-    (sum, item) => sum + goalValue(item.row, "meeting_confirmed"),
-    0,
-  );
-  const totalResultMeeting = dailyMemberRows.reduce(
-    (sum, item) => sum + resultValue(item.row, "meeting_confirmed"),
-    0,
-  );
-  const totalGoalColdtalk = totalFieldGoal(dailyMemberRows, "coldtalk");
-  const totalResultColdtalk = totalFieldResult(dailyMemberRows, "coldtalk");
-  const totalGoalBronzeDb = totalFieldGoal(dailyMemberRows, "consultant_db");
-  const totalResultBronzeDb = totalFieldResult(dailyMemberRows, "consultant_db");
-  const totalGoalOnePercentDb = totalFieldGoal(dailyMemberRows, "second_touch");
-  const totalResultOnePercentDb = totalFieldResult(dailyMemberRows, "second_touch");
-  const totalGoalSpecial = totalSpecialGoal(dailyMemberRows);
-  const totalResultSpecial = totalSpecialResult(dailyMemberRows);
+  const totalGoalColdtalk = totalFieldGoal(cardRows, "coldtalk");
+  const totalResultColdtalk = totalFieldResult(cardRows, "coldtalk");
+  const totalGoalBronzeDb = totalFieldGoal(cardRows, "consultant_db");
+  const totalResultBronzeDb = totalFieldResult(cardRows, "consultant_db");
+  const totalGoalOnePercentDb = totalFieldGoal(cardRows, "second_touch");
+  const totalResultOnePercentDb = totalFieldResult(cardRows, "second_touch");
+  // 특발성 목표: 본인 workItems 텍스트 입력 수 기준
+  const totalGoalSpecial = isAdminView
+    ? totalSpecialGoal(dailyMemberRows)
+    : (myRow?.goal_work_items || []).filter((item: any) => String(item.text || "").trim().length > 0).length;
+  const totalResultSpecial = isAdminView
+    ? totalSpecialResult(dailyMemberRows)
+    : (myRow?.goal_work_items || []).filter((item: any) => item.done).length;
 
   return (
     <div className="premium-page h-full overflow-y-auto">
