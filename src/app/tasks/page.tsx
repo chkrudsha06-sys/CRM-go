@@ -498,15 +498,21 @@ function StatCard({
   icon,
   tone,
   sub,
+  onClick,
 }: {
   label: string;
   value: number;
   icon: ElementType;
   tone: string;
   sub?: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="premium-card flex h-[82px] items-center gap-4 px-4">
+    <div
+      className="premium-card flex h-[82px] items-center gap-4 px-4 transition-all"
+      onClick={onClick}
+      style={{ cursor: onClick ? "pointer" : undefined, outline: tone !== "muted" && onClick ? "2px solid var(--accent-border)" : undefined }}
+    >
       <PremiumIcon icon={icon} tone={tone} />
       <div className="min-w-0">
         <p className="crm-tiny">{label}</p>
@@ -573,7 +579,6 @@ function getApprovalLine(type: ApprovalType, requesterName: string) {
   return [
     ...base,
     { role: "본부장", name: APPROVAL_OFFICERS.head, step: 3, status: "대기" },
-    { role: "대표이사", name: APPROVAL_OFFICERS.ceo, step: 4, status: "대기" },
   ];
 }
 
@@ -2204,6 +2209,8 @@ export default function TasksPage() {
       )
         return false;
       if (tab === "내가 요청한" && task.requester !== me) return false;
+      if (tab === "미완료" && task.status === "완료") return false;
+      if (tab === "완료" && task.status !== "완료") return false;
 
       const matchSearch =
         !keyword ||
@@ -2252,6 +2259,8 @@ export default function TasksPage() {
       )
         return false;
       if (tab === "내가 요청한" && request.requester_name !== me) return false;
+      if (tab === "미완료" && (request.status === "완료" || request.status === "반려")) return false;
+      if (tab === "완료" && request.status !== "완료") return false;
       if (
         tab === "전체" &&
         !visibleToMe &&
@@ -2344,7 +2353,6 @@ export default function TasksPage() {
     fStatus,
     fPriority,
     fCategory,
-    fAssignee,
   ].filter(Boolean).length;
 
   const resetFilters = () => {
@@ -2459,9 +2467,7 @@ export default function TasksPage() {
         head_name: LEAVE_TYPES.includes(requestType)
           ? null
           : APPROVAL_OFFICERS.head,
-        ceo_name: LEAVE_TYPES.includes(requestType)
-          ? null
-          : APPROVAL_OFFICERS.ceo,
+        ceo_name: null,
         current_approver_name: currentApprover,
         status: "진행중",
         payload,
@@ -2534,8 +2540,7 @@ export default function TasksPage() {
     const current = request.current_approver_name;
     if (current === request.team_lead_name && request.head_name)
       return request.head_name;
-    if (current === request.head_name && request.ceo_name)
-      return request.ceo_name;
+    // 본부장이 마지막 결재자
     return null;
   };
 
@@ -2559,8 +2564,7 @@ export default function TasksPage() {
       .update({
         status: nextStatus,
         current_approver_name: nextApprover,
-        final_approved_at:
-          nextStatus === "완료" ? new Date().toISOString() : null,
+
       })
       .eq("id", request.id);
 
@@ -2728,40 +2732,47 @@ export default function TasksPage() {
             label="전체 업무"
             value={stats.total}
             icon={FileText}
-            tone="info"
+            tone={tab === "전체" ? "info" : "muted"}
+            onClick={() => setTab("전체")}
           />
           <StatCard
             label="나에게 온"
             value={stats.mine}
             icon={User}
-            tone="purple"
+            tone={tab === "나에게 온" ? "purple" : "muted"}
+            onClick={() => setTab("나에게 온")}
           />
           <StatCard
             label="내가 요청"
             value={stats.requested}
             icon={Send}
-            tone="cyan"
+            tone={tab === "내가 요청한" ? "cyan" : "muted"}
+            onClick={() => setTab("내가 요청한")}
           />
           <StatCard
             label="미완료"
             value={stats.pending}
             icon={AlertCircle}
-            tone="warning"
+            tone={tab === "미완료" ? "warning" : "muted"}
+            onClick={() => setTab("미완료")}
           />
           <StatCard
             label="완료"
             value={stats.done}
             icon={CheckCircle2}
-            tone="success"
+            tone={tab === "완료" ? "success" : "muted"}
+            onClick={() => setTab("완료")}
           />
         </div>
       </div>
 
       <div className="flex flex-shrink-0 gap-0.5 overflow-x-auto px-5 md:px-7">
         {[
+          { label: "전체", count: stats.total },
           { label: "나에게 온", count: stats.mine },
           { label: "내가 요청한", count: stats.requested },
-          { label: "전체", count: stats.total },
+          { label: "미완료", count: stats.pending },
+          { label: "완료", count: stats.done },
         ].map((item) => {
           const active = tab === item.label;
           return (
@@ -2822,13 +2833,6 @@ export default function TasksPage() {
           options={CATEGORIES}
           placeholder="카테고리"
         />
-        <SelectChip
-          value={fAssignee}
-          onChange={setFAssignee}
-          options={TEAM.map((m) => m.name)}
-          placeholder="담당자"
-        />
-
         {activeFilters > 0 && (
           <button
             type="button"
@@ -2975,7 +2979,7 @@ export default function TasksPage() {
       {showApprovalCreate && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div
-            className="flex h-[88vh] w-full max-w-[1320px] overflow-hidden rounded-[24px]"
+            className="flex h-[96vh] w-full max-w-[1600px] overflow-hidden rounded-[24px]"
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border-2)",
@@ -3336,7 +3340,7 @@ export default function TasksPage() {
                         style={{ color: "var(--text-muted)" }}
                       >
                         연차/반차는 팀장 결재까지만 진행되며, 결제/환불/페이백은
-                        본부장 및 대표이사까지 결재 라인이 생성됩니다.
+                        본부장까지 결재 라인이 생성됩니다.
                       </p>
                     </section>
                   </div>
