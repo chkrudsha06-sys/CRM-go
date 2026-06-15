@@ -185,7 +185,9 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true, message: "업무요청 알림 발송 완료" });
+    // 카카오워크가 반환하는 message id 추출
+    const messageId = result?.message?.id || result?.id || null;
+    return NextResponse.json({ ok: true, message: "업무요청 알림 발송 완료", kakao_message_id: messageId });
   } catch (error: any) {
     return NextResponse.json(
       { ok: false, message: error?.message || "서버 오류" },
