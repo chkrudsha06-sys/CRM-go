@@ -664,6 +664,7 @@ export default function HomePage() {
   const [quickNote, setQuickNote] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [popupMode, setPopupMode] = useState<"payment_missing" | "inactive" | "closing" | "db_inactive" | "view_only">("view_only");
+  const [showVipTransfer, setShowVipTransfer] = useState(false); // 고객DB 팝업 VIP이관 섹션 토글
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -814,6 +815,15 @@ export default function HomePage() {
         payload.payment_channel = editForm.payment_channel.trim() || null;
         payload.regular_payment_date = editForm.regular_payment_date.trim() || null;
       }
+      // VIP이관 처리 (고객DB → VIP활동DB)
+      if (popupMode === "db_inactive" && showVipTransfer) {
+        const now2 = new Date().toISOString();
+        payload.crm_db_source = "vip_activity";
+        payload.vip_transferred_at = now2;
+        payload.management_stage = "리드";
+        payload.customer_grade = "심사미진행";
+        // 활동노트도 함께 저장 (아래 공통 처리에서)
+      }
       // 활동노트 팝업 (장기미활동/클로징지연): 관리구간 + 결제정보 저장
       else if (popupMode === "inactive" || popupMode === "closing" || popupMode === "db_inactive") {
         if (editForm.management_stage) payload.management_stage = editForm.management_stage;
@@ -863,6 +873,7 @@ export default function HomePage() {
 
       setEditTarget(null);
       setQuickNote("");
+      setShowVipTransfer(false);
       await fetchDashboard();
     } catch (error: any) {
       console.error(error);
@@ -2150,13 +2161,16 @@ export default function HomePage() {
                   </>
                 )}
 
-                {/* ── 고객DB 재TM: 활동노트 + 고객감도 ── */}
+                {/* ── 고객DB 재TM: 활동노트 + 고객감도 + VIP이관 ── */}
                 {popupMode === "db_inactive" && (
                   <>
+                    {/* 활동노트 */}
                     <label className="block">
                       <span className="mb-1 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
-                      <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={4} placeholder="TM 내용, 고객 반응 등을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
+                      <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={3} placeholder="TM 내용, 고객 반응 등을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
                     </label>
+
+                    {/* 고객감도 */}
                     <div>
                       <span className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>고객감도</span>
                       <div className="grid grid-cols-3 gap-2">
@@ -2173,6 +2187,47 @@ export default function HomePage() {
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    {/* VIP활동DB 이관 섹션 */}
+                    <div className="rounded-[14px] border p-3.5" style={{ background: "var(--accent-subtle)", borderColor: "var(--accent-border)" }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[12px] font-bold" style={{ color: "var(--accent-text)" }}>VIP활동DB 이관</p>
+                          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-subtle)" }}>고객DB → VIP활동DB로 이관 후 심사를 진행합니다</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowVipTransfer((prev) => !prev)}
+                          className="shrink-0 rounded-[10px] border px-3 py-1.5 text-[12px] font-bold transition-all"
+                          style={{
+                            background: showVipTransfer ? "var(--accent)" : "var(--surface-2)",
+                            borderColor: showVipTransfer ? "var(--accent)" : "var(--border-subtle)",
+                            color: showVipTransfer ? "#fff" : "var(--text-muted)",
+                          }}>
+                          {showVipTransfer ? "이관 취소" : "이관 활성화"}
+                        </button>
+                      </div>
+
+                      {showVipTransfer && (
+                        <div className="mt-3 space-y-2 rounded-[10px] border p-3" style={{ background: "var(--surface)", borderColor: "var(--accent-border)" }}>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black" style={{ background: "var(--accent)", color: "#fff" }}>1</span>
+                            <p className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>저장 시 VIP활동DB로 이관</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black" style={{ background: "var(--accent)", color: "#fff" }}>2</span>
+                            <p className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>
+                              심사는&nbsp;
+                              <a href="/customer-db" className="underline" style={{ color: "var(--accent-text)" }}>고객DB 메뉴</a>
+                              &nbsp;→ VIP이관 버튼에서 진행
+                            </p>
+                          </div>
+                          <div className="mt-2 rounded-[8px] p-2.5 text-[11px] font-semibold leading-relaxed" style={{ background: "var(--warning-bg)", color: "var(--warning-text)", border: "1px solid var(--warning-border)" }}>
+                            이관 후 관리구간: 리드 / 자동등급: 심사미진행
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -2235,7 +2290,9 @@ export default function HomePage() {
 
               {/* 팝업 푸터 */}
               <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
-                <a href="/pipeline3" className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>파이프라인에서 전체 상세보기 →</a>
+                <a href={popupMode === "db_inactive" ? "/customer-db" : "/pipeline3"} className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>
+                  {popupMode === "db_inactive" ? "고객DB에서 전체보기 →" : "파이프라인에서 전체 상세보기 →"}
+                </a>
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={savingEdit} onClick={() => setEditTarget(null)} className="btn-premium btn-secondary">닫기</button>
                   {popupMode !== "view_only" && (
