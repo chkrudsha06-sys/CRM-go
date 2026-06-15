@@ -797,6 +797,13 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <p className="text-[12px] font-bold" style={{ color: "var(--success-text)" }}>실매출</p>
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
                 </div>
+                {/* 수기 등록 메모 — 사이다페이/효성CMS 외 채널 */}
+                {item.memo && item.channel !== "사이다페이" && item.channel !== "효성CMS" && (
+                  <div className="mt-4 rounded-[14px] p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <p className="mb-2 text-[11px] font-bold" style={{ color: "var(--text-faint)" }}>메모</p>
+                    <p className="whitespace-pre-wrap text-[13px] font-semibold leading-relaxed" style={{ color: "var(--text)" }}>{item.memo}</p>
+                  </div>
+                )}
               </section>
               {item.memo && (item.channel === "사이다페이" || item.channel === "효성CMS") && (
                 <section className="premium-card p-4">
