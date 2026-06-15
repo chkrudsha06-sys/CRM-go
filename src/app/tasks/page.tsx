@@ -134,9 +134,9 @@ type ApprovalRequestRow = {
 
 type ApprovalActionRow = {
   id: number;
-  request_id: number;
+  approval_request_id: number;
   actor_name: string | null;
-  action_type: string | null;
+  action: string | null;
   memo: string | null;
   created_at: string;
 };
@@ -1492,7 +1492,7 @@ function buildApprovedNameSet(
   actions.forEach((action) => {
     const actor = (action.actor_name || "").trim();
     if (!actor) return;
-    if (action.action_type === "승인" || action.action_type === "제출") {
+    if (action.action === "승인" || action.action === "제출") {
       signed.add(actor);
     }
   });
@@ -1513,7 +1513,7 @@ function ApprovalPreview({
   const line = getApprovalLine(form.requestType, requester);
   const approvedActorNames = new Set(
     actions
-      .filter((action) => action.action_type === "승인")
+      .filter((action) => action.action === "승인")
       .map((action) => (action.actor_name || "").trim())
       .filter(Boolean),
   );
@@ -2484,10 +2484,10 @@ export default function TasksPage() {
     const requestId = data?.id;
     if (requestId) {
       await supabase.from("approval_actions").insert({
-        request_id: requestId,
+        approval_request_id: requestId,
         actor_name: requesterName,
-        action_type: "제출",
-        memo: `${requestType} 요청을 제출했습니다.`,
+        action: "제출",
+        comment: `${requestType} 요청을 제출했습니다.`,
       });
 
       await supabase.from("notifications").insert([
@@ -2574,10 +2574,10 @@ export default function TasksPage() {
     }
 
     await supabase.from("approval_actions").insert({
-      request_id: request.id,
+      approval_request_id: request.id,
       actor_name: me,
-      action_type: action,
-      memo: `${me}님이 ${action} 처리했습니다.`,
+      action: action,
+      comment: `${me}님이 ${action} 처리했습니다.`,
     });
 
     if (action === "승인" && nextApprover) {
@@ -2969,7 +2969,7 @@ export default function TasksPage() {
         <ApprovalDetailSlidePanel
           request={selectedApproval}
           me={me}
-          actions={approvalActions.filter((action) => action.request_id === selectedApproval.id)}
+          actions={approvalActions.filter((action) => action.approval_request_id === selectedApproval.id)}
           onClose={() => setSelectedApproval(null)}
           onApprove={() => handleApprovalAction(selectedApproval, "승인")}
           onReject={() => handleApprovalAction(selectedApproval, "반려")}
