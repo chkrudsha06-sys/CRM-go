@@ -1766,7 +1766,7 @@ export default function CustomerDbPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               // Supabase에서 재로딩
               try {
                 const userRaw = window.localStorage.getItem("crm_user");
