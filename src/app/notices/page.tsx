@@ -95,14 +95,25 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
     setSaving(true);
     try {
       const urls: string[] = [];
+      const failedFiles: string[] = [];
       for (const f of files) {
         const path = `notices/${Date.now()}_${f.name}`;
-        const { error } = await supabase.storage.from("notice-images").upload(path, f, { upsert: true });
-        if (!error) {
-          const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
-          if (data?.publicUrl) urls.push(data.publicUrl);
+        const { error: upErr } = await supabase.storage.from("notice-images").upload(path, f, { upsert: true });
+        if (upErr) {
+          console.error("파일 업로드 실패:", f.name, upErr);
+          failedFiles.push(`${f.name} (${upErr.message})`);
+          continue;
         }
+        const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
+        if (data?.publicUrl) urls.push(data.publicUrl);
       }
+
+      // 파일 업로드 실패가 있으면 사용자에게 알림 후 진행 여부 확인
+      if (failedFiles.length > 0) {
+        const ok = confirm(`다음 파일 업로드에 실패했습니다:\n\n${failedFiles.join("\n")}\n\nSupabase Storage 권한 확인이 필요합니다.\n파일 없이 공지만 등록할까요?`);
+        if (!ok) { setSaving(false); return; }
+      }
+
       const { error } = await supabase.from("notices").insert({
         title: title.trim(), content: content.trim(), importance,
         image_url: urls[0]||null, file_urls: urls.length?urls:null,
