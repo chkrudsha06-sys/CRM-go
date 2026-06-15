@@ -665,12 +665,26 @@ export default function HomePage() {
 
     const { year, month } = getMonthWindow(selectedMonth);
 
+    // 실행파트 담당자면 Supabase 쿼리 자체에 assigned_to 필터 적용
+    const isExecUser = isExecutionUser(currentUser) && !isAdminUser(currentUser);
+    const execName = isExecUser ? (currentUser?.name || "") : null;
+
     try {
+      let customerDbQuery = supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false });
+      let vipQuery = supabase.from("contacts").select("*").eq("crm_db_source", "vip_activity").order("created_at", { ascending: false });
+      let salesQuery = supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000);
+
+      if (execName) {
+        customerDbQuery = customerDbQuery.eq("assigned_to", execName);
+        vipQuery = vipQuery.eq("assigned_to", execName);
+        salesQuery = salesQuery.eq("team_member", execName);
+      }
+
       const [customerDbRes, vipRes, noteRes, salesRes, kpiRes] = await Promise.all([
-        supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false }),
-        supabase.from("contacts").select("*").eq("crm_db_source", "vip_activity").order("created_at", { ascending: false }),
+        customerDbQuery,
+        vipQuery,
         supabase.from("contact_notes").select("*").order("created_at", { ascending: false }).limit(5000),
-        supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000),
+        salesQuery,
         supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", 0),
       ]);
 
