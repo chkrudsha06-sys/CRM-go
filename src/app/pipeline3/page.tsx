@@ -150,6 +150,7 @@ type AdRequestForm = {
   script_text: string;
   domain: string;
   // 호갱노노 채널톡
+  rep_number: string;
   test_number: string;
   kakao_type: string;
   image_template: string;
@@ -304,6 +305,7 @@ const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
   script: "X",
   script_text: "",
   domain: "",
+  rep_number: "",
   test_number: "",
   kakao_type: "",
   image_template: "",
@@ -616,6 +618,8 @@ function formatPhoneAuto(val: string): string {
 function buildTaskContent(form: AdRequestForm) {
   if (form.category === "LMS업무요청") {
     return [
+      `[LMS 업무요청]`,
+      ``,
       `0. 고객명: ${form.member_name} ${form.member_title}`,
       `0. 고객연락처: ${form.member_number}`,
       `1. 현장명: ${form.site_name}`,
@@ -624,19 +628,23 @@ function buildTaskContent(form: AdRequestForm) {
       `4. 발송일자: ${form.hope_date ? `${new Date(form.hope_date).getMonth()+1}월 ${new Date(form.hope_date).getDate()}일 (${getWeekday(form.hope_date)})` : ""}`,
       `5. 발송시각: ${form.hope_time || ""}`,
       `6. 발송건수: ${formatSendCount(form.send_count)}건`,
-      `7. 타겟지역: ①${form.region1} ②${form.region2} ③${form.region3}`,
-      `8. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
-      `9. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
-      `10. 발송도메인: ${form.domain || "X"}`,
+      `7. 착신번호(대표번호): ${form.rep_number || ""}`,
+      `8. 타겟지역: ①${form.region1} ②${form.region2} ③${form.region3}`,
+      `9. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
+      `10. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
+      `11. 발송도메인: ${form.domain || "X"}`,
     ].join("\n");
   }
 
   if (form.category === "호갱노노(직방)_채널톡") {
     return [
+      `[호갱노노(직방) 채널톡 업무요청]`,
+      ``,
       `0. 고객명: ${form.member_name} ${form.member_title}`,
       `0. 고객연락처: ${form.member_number}`,
       `1. 현장명: ${form.site_name}`,
       `2. 테스트번호: ${form.test_number}`,
+      `2-1. 착신번호(대표번호): ${form.rep_number || ""}`,
       `3. 발송채널: ${form.platform || "호갱노노 채널톡"}`,
       `4. 조합여부: ${form.combination === "O" ? "해당" : "미해당"}`,
       `5. 발송일자: ${form.hope_date ? `${new Date(form.hope_date).getMonth()+1}월 ${new Date(form.hope_date).getDate()}일 (${getWeekday(form.hope_date)})` : ""}`,
@@ -655,6 +663,8 @@ function buildTaskContent(form: AdRequestForm) {
 
   if (form.category === "호갱노노(직방)_단지마커") {
     return [
+      `[호갱노노(직방) 단지마커 업무요청]`,
+      ``,
       `0. 고객명: ${form.member_name} ${form.member_title}`,
       `0. 고객연락처: ${form.member_number}`,
       `광고주명: ${form.advertiser}`,
@@ -2332,6 +2342,9 @@ function AdRequestModal({
   const [me, setMe] = useState("파이프라인3");
   const [form, setForm] = useState<AdRequestForm>(() => ({
     ...EMPTY_AD_REQUEST_FORM,
+    member_name: customer.name || "",
+    member_number: customer.phone || "",
+    member_title: customer.title || "",
     content: `[파이프라인3 광고요청]
 고객명: ${customer.name} ${customer.title}
 연락처: ${customer.phone}
@@ -2373,6 +2386,9 @@ function AdRequestModal({
       priority: prev.priority || "보통",
       assignee: prev.assignee,
       tagged: prev.tagged,
+      member_name: customer.name || "",
+      member_number: customer.phone || "",
+      member_title: customer.title || "",
       content:
         category === "호갱노노(기타광고)" || category === "일반 업무요청"
           ? `[파이프라인3 광고요청]
@@ -2575,6 +2591,7 @@ function AdRequestModal({
                 <div><InputLabel>발송시각</InputLabel><input type="time" className={inputClass} value={form.hope_time} onChange={(e) => setForm({...form, hope_time: e.target.value})} /></div>
                 <div><InputLabel>발송건수</InputLabel><input className={inputClass} value={form.send_count} onChange={(e) => setForm({...form, send_count: e.target.value})} placeholder="00,000" /></div>
                 <div><InputLabel>타겟연령 (예: 30~60)</InputLabel><input className={inputClass} value={form.age_range} onChange={(e) => setForm({...form, age_range: e.target.value})} placeholder="30~60" /></div>
+                <div><InputLabel>착신번호 (대표번호)</InputLabel><input className={inputClass} value={form.rep_number || ""} onChange={(e) => setForm({...form, rep_number: e.target.value})} placeholder="000-0000-0000" /></div>
                 <div><InputLabel>발송도메인</InputLabel><input className={inputClass} value={form.domain} onChange={(e) => setForm({...form, domain: e.target.value})} placeholder="없으면 X" /></div>
               </div>
               <div><InputLabel>타겟지역 (3곳)</InputLabel><div className="grid grid-cols-3 gap-2"><input className={inputClass} value={form.region1} onChange={(e) => setForm({...form, region1: e.target.value})} placeholder="① 지역" /><input className={inputClass} value={form.region2} onChange={(e) => setForm({...form, region2: e.target.value})} placeholder="② 지역" /><input className={inputClass} value={form.region3} onChange={(e) => setForm({...form, region3: e.target.value})} placeholder="③ 지역" /></div></div>
@@ -2592,6 +2609,7 @@ function AdRequestModal({
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div><InputLabel>현장명</InputLabel><input className={inputClass} value={form.site_name} onChange={(e) => setForm({...form, site_name: e.target.value})} placeholder="현장명 입력" /></div>
                 <div><InputLabel>테스트번호</InputLabel><input className={inputClass} value={form.test_number} onChange={(e) => setForm({...form, test_number: formatPhoneAuto(e.target.value)})} placeholder="010-0000-0000" maxLength={13} /></div>
+                <div><InputLabel>착신번호 (대표번호)</InputLabel><input className={inputClass} value={form.rep_number || ""} onChange={(e) => setForm({...form, rep_number: e.target.value})} placeholder="000-0000-0000" /></div>
                 <div><InputLabel>발송채널</InputLabel><select className={inputClass} value={form.platform} onChange={(e) => setForm({...form, platform: e.target.value})}><option value="">선택</option>{HOGAENG_CHANNEL_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
                 <div><InputLabel>조합여부</InputLabel><div className="flex gap-2">{["O","X"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, combination: v})} className="h-9 flex-1 rounded-[8px] border text-[13px] font-bold" style={{background: form.combination===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.combination===v?"var(--accent-border)":"var(--border)", color: form.combination===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}</div></div>
                 <div><InputLabel>발송일자</InputLabel><input type="date" className={inputClass} value={form.hope_date} onChange={(e) => setForm({...form, hope_date: e.target.value})} /></div>
