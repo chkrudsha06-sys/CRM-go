@@ -752,7 +752,7 @@ export default function QuotePage() {
             </section>
           </div>
 
-          <aside className="min-w-0 self-start xl:sticky xl:top-[104px] xl:h-[calc(100vh-128px)]">
+          <aside className="min-w-0 self-start xl:sticky xl:top-0 xl:h-[calc(100vh-104px)]">
             <div className="flex h-full min-h-[560px] flex-col rounded-[18px] border shadow-sm" style={surfaceStyle}>
               <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
                 <div className="flex items-center gap-2">
