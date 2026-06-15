@@ -244,7 +244,7 @@ async function findMatchedMember(payment: Pick<NormalizedPayment, "memberName" |
   if (memberNumber) {
     const { data, error } = await supabase
       .from("contacts")
-      .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+      .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .eq("bunyanghoe_number", memberNumber)
       .in("meeting_result", ["예약완료", "계약완료"])
       .order("id", { ascending: false })
@@ -258,7 +258,7 @@ async function findMatchedMember(payment: Pick<NormalizedPayment, "memberName" |
   if (memberName) {
     const { data, error } = await supabase
       .from("contacts")
-      .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+      .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .eq("name", memberName)
       .in("meeting_result", ["예약완료", "계약완료"])
       .order("id", { ascending: false })
@@ -423,17 +423,16 @@ async function createSalesRecord(payment: NormalizedPayment) {
   const matchedConsultant = toText(matchedMember?.consultant || payment.memberPhone);
 
   const memo = [
-    "효성CMS 수납내역 자동반영",
-    `회원번호: ${payment.memberNumber || "-"}`,
-    `계약번호: ${payment.contractNumber || "-"}`,
-    `청구월: ${payment.billingMonth || "-"}`,
-    `상품명: ${payment.productName || "-"}`,
-    `결제수단: ${payment.paymentMethod || "-"}`,
-    `결제방식: ${payment.paymentType || "-"}`,
-    `결제결과: ${payment.resultMessage || "-"}`,
-    `수납금액: ${payment.paidAmount.toLocaleString()}원`,
-    `미납금액: ${payment.unpaidAmount.toLocaleString()}원`,
-    `외부결제ID: ${payment.externalPaymentId}`,
+    "[효성CMS 수납내역 자동반영]",
+    `●회원번호: ${payment.memberNumber || "-"}`,
+    `●계약번호: ${payment.contractNumber || "-"}`,
+    `●청구월: ${payment.billingMonth || "-"}`,
+    `●수납상태: ${payment.collectionStatus || "완납"}`,
+    `●결제상태: 결제완료`,
+    `●결제방식: ${payment.paymentType || "자동결제"}`,
+    `●결제수단: ${payment.paymentMethod || "CMS"}`,
+    `●결제결과: ${payment.resultMessage || "정상"}`,
+    `●효성CMS 고유키: ${payment.externalPaymentId}`,
   ].join("\n");
 
   const { data, error } = await supabase
@@ -540,6 +539,53 @@ async function importPayments(payments: NormalizedPayment[]) {
         importMessage: "효성CMS 수납내역을 통합매출로 생성했습니다.",
         salesRecordId: Number(salesRecord.id),
       });
+
+      // ── 카카오워크 매출방 알림 ──
+      try {
+        const { count: paymentCount } = await supabase
+          .from("ad_executions")
+          .select("id", { count: "exact", head: true })
+          .eq("member_name", payment.memberName)
+          .eq("contract_route", "분양회")
+          .gt("execution_amount", 0);
+
+        const nth = paymentCount || 1;
+        const SHORT = "────────────────────";
+        const hyosungDetail = [
+          "[효성CMS 수납내역 자동반영]",
+          `●회원번호: ${payment.memberNumber || "-"}`,
+          `●계약번호: ${payment.contractNumber || "-"}`,
+          `●청구월: ${payment.billingMonth || "-"}`,
+          `●수납상태: ${payment.collectionStatus || "완납"}`,
+          `●결제상태: 결제완료`,
+          `●결제방식: ${payment.paymentType || "자동결제"}`,
+          `●결제수단: ${payment.paymentMethod || "CMS"}`,
+          `●결제결과: ${payment.resultMessage || "정상"}`,
+          `●효성CMS 고유키: ${payment.externalPaymentId}`,
+        ].join("\n");
+
+        const baseUrl = process.env.CRM_BASE_URL || "https://crm-go-roan.vercel.app";
+        const matchedForKakao = await findMatchedMember(payment);
+        await fetch(`${baseUrl}/api/kakaowork/send-sales-message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_name: payment.memberName,
+            member_title: matchedForKakao?.title || "",
+            member_phone: matchedForKakao?.phone || payment.memberPhone || "",
+            execution_amount: payment.paidAmount,
+            channel: "효성CMS",
+            contract_route: "분양회",
+            payment_date: payment.paidAt || payment.completedAt,
+            team_member: matchedForKakao?.assigned_to || payment.managerName || "",
+            is_auto: true,
+            payment_count: nth,
+            ciderpay_detail: hyosungDetail,
+          }),
+        });
+      } catch (kakaoErr) {
+        console.warn("카카오워크 효성CMS 알림 실패 (무시):", kakaoErr);
+      }
 
       results.push({
         externalPaymentId: payment.externalPaymentId,
