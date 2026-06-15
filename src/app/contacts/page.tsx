@@ -333,6 +333,24 @@ export default function ContactsPage() {
   const [filterRoute, setFilterRoute] = useState("");
   const [filterStage, setFilterStage] = useState("");
   const [filterGrade, setFilterGrade] = useState("");
+  const [filterAssigned, setFilterAssigned] = useState("전체");
+  const [currentUserInfo] = useState<{ isAdmin: boolean; isExec: boolean; name: string }>(() => {
+    try {
+      const userRaw = localStorage.getItem("crm_user");
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        const role = String(u?.role || "").toLowerCase();
+        const name = String(u?.name || "");
+        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+        const execNames = ["조계현", "이세호", "기여운", "최연전"];
+        const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+        const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+        const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+        return { isAdmin, isExec, name };
+      }
+    } catch {}
+    return { isAdmin: false, isExec: false, name: "" };
+  });
 
   useEffect(() => {
     let alive = true;
@@ -343,11 +361,31 @@ export default function ContactsPage() {
         // 이 값을 읽으면 Supabase에서 삭제한 고객도 다시 살아나므로 더 이상 사용하지 않습니다.
         window.localStorage.removeItem(STORAGE_KEY);
 
-        const { data, error } = await supabase
+        // 현재 로그인 사용자 파악 - 실행파트면 본인 담당만 조회
+        let execName: string | null = null;
+        try {
+          const userRaw = localStorage.getItem("crm_user");
+          if (userRaw) {
+            const u = JSON.parse(userRaw);
+            const role = String(u?.role || "").toLowerCase();
+            const name = String(u?.name || "");
+            const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+            const execNames = ["조계현", "이세호", "기여운", "최연전"];
+            const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+            const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+            const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+            if (isExec && !isAdmin) execName = name;
+          }
+        } catch {}
+
+        let q = supabase
           .from("contacts")
           .select(VIP_SELECT_FIELDS)
           .eq("crm_db_source", VIP_DB_SOURCE)
           .order("updated_at", { ascending: false });
+        if (execName) q = q.eq("assigned_to", execName) as typeof q;
+
+        const { data, error } = await q;
 
         if (error) throw error;
 
@@ -448,14 +486,19 @@ export default function ContactsPage() {
             .toLowerCase()
             .includes(keyword);
 
+      const matchesAssigned =
+        filterAssigned === "전체" ||
+        String(record.assigned_to || "").trim() === filterAssigned;
+
       return (
         matchesKeyword &&
         (!filterRoute || record.intake_route === filterRoute) &&
         (!filterStage || record.management_stage === filterStage) &&
-        (!filterGrade || displayCustomerGrade(record) === filterGrade)
+        (!filterGrade || displayCustomerGrade(record) === filterGrade) &&
+        matchesAssigned
       );
     });
-  }, [records, search, filterRoute, filterStage, filterGrade]);
+  }, [records, search, filterRoute, filterStage, filterGrade, filterAssigned]);
 
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
@@ -606,6 +649,7 @@ export default function ContactsPage() {
     setFilterRoute("");
     setFilterStage("");
     setFilterGrade("");
+    if (currentUserInfo.isAdmin) setFilterAssigned("전체");
   };
 
   return (
@@ -844,6 +888,20 @@ export default function ContactsPage() {
                 options={CUSTOMER_GRADE_OPTIONS}
                 placeholder="전체 고객등급"
               />
+
+              {currentUserInfo.isAdmin && (
+                <select
+                  value={filterAssigned}
+                  onChange={(e) => setFilterAssigned(e.target.value)}
+                  className="crm-search h-12 px-3"
+                  style={{ minWidth: "130px" }}
+                >
+                  <option value="전체">전체 담당자</option>
+                  {["조계현", "이세호", "기여운", "최연전"].map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              )}
 
               <button
                 type="button"
