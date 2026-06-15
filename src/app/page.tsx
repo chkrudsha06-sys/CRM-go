@@ -642,6 +642,7 @@ export default function HomePage() {
   };
   const [dailyGoal, setDailyGoal] = useState<DailyGoalRow | null>(null);
   const [allDailyGoals, setAllDailyGoals] = useState<(DailyGoalRow & { owner_name: string })[]>([]);
+  const [expandedDailyMember, setExpandedDailyMember] = useState<string | null>(null);
 
   /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
   const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
@@ -1612,9 +1613,59 @@ export default function HomePage() {
                     allDailyGoals.length === 0 ? (
                       <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="실행파트 담당자들이 일별활동기록을 입력하면 여기에 표시됩니다." />
                     ) : (
-                      <div className="p-4 space-y-4">
-                        {EXECUTION_PART_NAMES.map((memberName) => {
-                          const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
+                      <div className="p-4 space-y-2">
+                        {/* 담당자 카드 그리드 */}
+                        <div className="grid gap-2 grid-cols-2 xl:grid-cols-4">
+                          {EXECUTION_PART_NAMES.map((memberName) => {
+                            const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
+                            const isExpanded = expandedDailyMember === memberName;
+                            const totalGoal = memberGoal ? (memberGoal.goal_new_tm + memberGoal.goal_coldtalk + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
+                            const totalResult = memberGoal ? (memberGoal.result_new_tm + memberGoal.result_coldtalk + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
+                            const totalRate = totalGoal > 0 ? percent(totalResult, totalGoal) : 0;
+                            return (
+                              <button
+                                key={memberName}
+                                type="button"
+                                onClick={() => setExpandedDailyMember(isExpanded ? null : memberName)}
+                                className="rounded-[12px] border p-3 text-left transition-all"
+                                style={{
+                                  borderColor: isExpanded ? "var(--accent-border)" : "var(--border-subtle)",
+                                  background: isExpanded ? "var(--accent-subtle)" : "var(--surface-2)",
+                                  outline: "none",
+                                }}
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)", color: "#fff" }}>
+                                      {memberName.slice(0, 1)}
+                                    </div>
+                                    <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{memberName}</p>
+                                  </div>
+                                  <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{isExpanded ? "▲" : "▼"}</span>
+                                </div>
+                                {!memberGoal ? (
+                                  <p className="text-[11px]" style={{ color: "var(--text-faint)" }}>목표 미입력</p>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 달성률</p>
+                                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: totalRate >= 100 ? "var(--success-bg)" : totalRate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: totalRate >= 100 ? "var(--success-text)" : totalRate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                        {totalRate}%
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totalRate)}%`, background: totalRate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
+                                    </div>
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* 선택된 담당자 세부내역 */}
+                        {expandedDailyMember && (() => {
+                          const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(expandedDailyMember));
                           const fields = memberGoal ? [
                             { label: "당일 TM", goal: memberGoal.goal_new_tm, result: memberGoal.result_new_tm, unit: "건" },
                             { label: "당일 콜드톡", goal: memberGoal.goal_coldtalk, result: memberGoal.result_coldtalk, unit: "건" },
@@ -1623,8 +1674,8 @@ export default function HomePage() {
                           ] : [];
                           const memberWorkItems = memberGoal ? (memberGoal.goal_work_items || []).filter((item: { id: string; text: string; done: boolean }) => item.text.trim().length > 0) : [];
                           return (
-                            <div key={memberName} className="rounded-[12px] border p-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
-                              <p className="text-[13px] font-semibold mb-3" style={{ color: "var(--text-strong)" }}>{memberName}</p>
+                            <div className="rounded-[12px] border p-3" style={{ borderColor: "var(--accent-border)", background: "var(--surface-2)" }}>
+                              <p className="text-[12px] font-semibold mb-3" style={{ color: "var(--accent-text)" }}>{expandedDailyMember} 세부내역</p>
                               {!memberGoal ? (
                                 <p className="text-[12px]" style={{ color: "var(--text-faint)" }}>오늘 활동목표 미입력</p>
                               ) : (
@@ -1672,7 +1723,7 @@ export default function HomePage() {
                               )}
                             </div>
                           );
-                        })}
+                        })()}
                       </div>
                     )
                   ) : (
