@@ -1608,7 +1608,7 @@ export default function HomePage() {
                 {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}
                 <Panel>
                   <PanelTitle icon={Target} tone="info" title="당일 활동목표 달성현황" desc="일별활동기록 목표 대비 실시간 자동집계 결과" right={<a href="/daily-activity" className="btn-premium btn-secondary">일별활동기록</a>} />
-                  {isAdminUser(currentUser) ? (
+                  {isAdminUser(me) ? (
                     allDailyGoals.length === 0 ? (
                       <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="실행파트 담당자들이 일별활동기록을 입력하면 여기에 표시됩니다." />
                     ) : (
