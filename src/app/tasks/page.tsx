@@ -905,8 +905,8 @@ function ApprovalCard({
                 </button>
               </>
             )}
-            {/* 완료/반려 건 본인 요청건 삭제 버튼 */}
-            {onDelete && isRequester && (request.status === "완료" || request.status === "반려") && (
+            {/* 본인 요청건 삭제 버튼 (모든 상태) */}
+            {onDelete && isRequester && (
               <button
                 type="button"
                 onClick={onDelete}
@@ -1049,8 +1049,8 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               </>
             )}
           </div>
-          {/* 완료/반려 건 중 본인 요청건만 삭제 가능 */}
-          {onDelete && request.requester_name === me && (request.status === "완료" || request.status === "반려") && (
+          {/* 본인 요청건 삭제 버튼 (모든 상태) */}
+          {onDelete && request.requester_name === me && (
             <div className="mt-3 px-1">
               <button
                 type="button"
@@ -2752,9 +2752,10 @@ export default function TasksPage() {
   };
 
   const handleDeleteApproval = async (request: ApprovalRequestRow) => {
+    const statusLabel = request.status === "진행중" ? "⚠ 진행 중인 요청서입니다. " : "";
     if (
       !confirm(
-        `"${request.request_type}" 요청서를 삭제하시겠습니까?\n삭제된 요청서는 복구할 수 없습니다.`,
+        `${statusLabel}"${request.request_type}" 요청서를 삭제하시겠습니까?\n삭제된 요청서는 복구할 수 없습니다.`,
       )
     )
       return;
