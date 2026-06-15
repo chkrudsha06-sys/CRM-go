@@ -68,11 +68,6 @@ function isActive(n: Notice) { const t = today(); return n.start_date <= t && n.
 function getFileName(url: string) {
   try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_/, ""); } catch { return url; }
 }
-function avatarColor(name: string) {
-  const colors = ["#6366f1","#8b5cf6","#ec4899","#f97316","#10b981","#3b82f6","#f59e0b","#14b8a6","#ef4444"];
-  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % colors.length;
-  return colors[h];
-}
 
 // ━━━ 등록 모달 ━━━
 function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void; onSaved: () => void }) {
@@ -262,6 +257,22 @@ export default function NoticesPage() {
     closePanel(); load();
   };
 
+  const handleToggleRead = async (noticeId: number, userName: string) => {
+    // 본인만 토글 가능
+    if (userName !== me) return;
+    const isAlreadyRead = reads.some(r => r.notice_id === noticeId && r.user_name === userName);
+    if (isAlreadyRead) {
+      await supabase.from("notice_reads")
+        .delete()
+        .eq("notice_id", noticeId)
+        .eq("user_name", userName);
+    } else {
+      await supabase.from("notice_reads")
+        .upsert({ notice_id: noticeId, user_name: userName }, { onConflict: "notice_id,user_name" });
+    }
+    load();
+  };
+
   const readCount = (id: number) => reads.filter(r=>r.notice_id===id).length;
   const readUsers = (id: number) => reads.filter(r=>r.notice_id===id).map(r=>r.user_name);
 
@@ -344,12 +355,7 @@ export default function NoticesPage() {
 
                       {/* 공지사항명 */}
                       <td className="px-5 py-4 text-left">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-sm font-[930] text-white"
-                            style={{ background: `linear-gradient(135deg, ${avatarColor(notice.title)}, ${avatarColor(notice.title + "x")})` }}>
-                            {notice.title.slice(0,1)}
-                          </div>
-                          <div className="min-w-0">
+                        <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               {!active && (
                                 <span className="inline-flex items-center rounded-[4px] px-1.5 py-0.5 text-[10px] font-bold"
@@ -359,7 +365,6 @@ export default function NoticesPage() {
                                 {notice.title}
                               </p>
                             </div>
-                          </div>
                         </div>
                       </td>
 
@@ -503,14 +508,27 @@ export default function NoticesPage() {
                           <span className="text-[13px] font-[900]" style={{ color:"var(--text-strong)" }}>확인 현황</span>
                           <span className="crm-tiny ml-1">{ru.length}/{TEAM.length}명</span>
                         </div>
+                        <p className="crm-tiny mb-2">본인 이름을 클릭하여 확인 처리할 수 있습니다</p>
                         <div className="flex flex-wrap gap-1.5">
                           {TEAM.map(name=>{
                             const done=ru.includes(name);
+                            const isMe=name===me;
                             return (
-                              <div key={name} className="flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
-                                style={{ background:done?"var(--success-bg)":"var(--surface-2)", border:`1px solid ${done?"var(--success-border)":"var(--border-subtle)"}`, color:done?"var(--success-text)":"var(--text-muted)" }}>
-                                {done?<Check size={10}/>:<X size={10}/>}{name}
-                              </div>
+                              <button key={name} type="button"
+                                onClick={() => isMe && handleToggleRead(n.id, name)}
+                                disabled={!isMe}
+                                title={isMe ? (done ? "클릭하여 확인 취소" : "클릭하여 확인 완료") : ""}
+                                className="flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold transition"
+                                style={{
+                                  background: done ? "var(--success-bg)" : "var(--surface-2)",
+                                  border: `1px solid ${done ? "var(--success-border)" : "var(--border-subtle)"}`,
+                                  color: done ? "var(--success-text)" : "var(--text-muted)",
+                                  cursor: isMe ? "pointer" : "default",
+                                  outline: isMe ? `2px solid var(--accent-border)` : "none",
+                                  outlineOffset: isMe ? "1px" : "0",
+                                }}>
+                                {done?<Check size={10}/>:<X size={10}/>}{name}{isMe && " (나)"}
+                              </button>
                             );
                           })}
                         </div>
