@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { task_id, status, assignee, requester, category, customer_name } = body || {};
+    const { task_id, status, assignee, requester, category, customer_name, kakao_message_id } = body || {};
 
     // 상태 이모지
     const statusEmoji = status === "접수" ? "✅" : status === "보류" ? "⏸" : "📋";
@@ -96,6 +96,16 @@ export async function POST(request: Request) {
       },
     ];
 
+    // kakao_message_id가 있으면 해당 메시지에 reply (스레드 답글)
+    const sendPayload: Record<string, any> = {
+      conversation_id: Number(conversationId),
+      text: textFallback,
+      blocks,
+    };
+    if (kakao_message_id) {
+      sendPayload.root_message_id = Number(kakao_message_id);
+    }
+
     const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
       method: "POST",
       headers: {
@@ -103,11 +113,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       cache: "no-store",
-      body: JSON.stringify({
-        conversation_id: Number(conversationId),
-        text: textFallback,
-        blocks,
-      }),
+      body: JSON.stringify(sendPayload),
     });
 
     const raw = await res.text();
