@@ -417,6 +417,13 @@ async function findContactsByPhone(phone: string | null) {
     throw new Error(`Supabase contacts query failed: ${error.message}`);
   }
 
+  // memo 필드에서 고객감도 파싱
+  function getContactSensitivity(contact: ContactRow): string {
+    const memo = getStringField(contact, "memo");
+    const match = memo.match(/\[고객감도:\s*(.+?)\]/);
+    return match ? match[1].trim() : "감도없음";
+  }
+
   const matchedRows = ((data || []) as ContactRow[]).filter((contact) => {
     const numbers = [
       getStringField(contact, "phone"),
@@ -429,11 +436,35 @@ async function findContactsByPhone(phone: string | null) {
     return numbers.includes(normalizedPhone);
   });
 
-  const tmRows = matchedRows.filter((contact) => contact.has_tm === true);
+  // 고객DB TM 고객 중 재TM진행인 경우만 통화요약 대상
+  const tmRows = matchedRows.filter((contact) => {
+    if (contact.has_tm !== true) return false;
+    const sensitivity = getContactSensitivity(contact);
+    return sensitivity === "재TM진행";
+  });
+
+  // 파이프라인3 고객 (감도 필터 미적용 — 파이프라인은 별도 관리)
   const pipelineRows = matchedRows.filter((contact) => {
     const stage = getStringField(contact, "management_stage");
     return ["리드", "프로스펙팅", "딜크로징", "딜클로징", "리텐션"].includes(stage);
   });
+
+  // 고객DB TM 중 감도없음인 경우 → 요약 제외 처리용
+  const tmRowsAll = matchedRows.filter((contact) => contact.has_tm === true);
+  const tmSensitivitySkipped = tmRowsAll.length > 0 && tmRows.length === 0;
+
+  // 감도없음 고객DB TM이 매칭된 경우 → 통화요약 건너뜀
+  if (tmSensitivitySkipped) {
+    return {
+      status: "not_found",
+      message: "고객DB TM 고객이 매칭되었으나 고객감도가 '감도없음'으로 설정되어 통화요약을 진행하지 않습니다.",
+      normalizedPhone,
+      matchedCount: 0,
+      contacts: [],
+      matchSource: null,
+      matchSourceLabel: null,
+    };
+  }
 
   const selectedRows = tmRows.length > 0 ? tmRows : pipelineRows.length > 0 ? pipelineRows : matchedRows;
   const contacts = selectedRows.map(simplifyContact);
@@ -443,13 +474,13 @@ async function findContactsByPhone(phone: string | null) {
     return {
       status: "matched",
       message: tmRows.length > 0
-        ? "고객DB TM 고객이 정확히 1명 매칭되었습니다."
+        ? "고객DB TM 고객(재TM진행)이 정확히 1명 매칭되었습니다."
         : "파이프라인3 고객이 정확히 1명 매칭되었습니다.",
       normalizedPhone,
       matchedCount: contacts.length,
       contacts,
       matchSource,
-      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM)" : "파이프라인3",
+      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM·재TM진행)" : "파이프라인3",
     };
   }
 
