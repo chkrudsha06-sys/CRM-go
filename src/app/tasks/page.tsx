@@ -1201,6 +1201,7 @@ function DetailSlidePanel({
   activeTab,
   onTabChange,
   me,
+  isAdmin,
   onClose,
   onStatus,
   onComment,
@@ -1211,6 +1212,7 @@ function DetailSlidePanel({
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
   me: string;
+  isAdmin: boolean;
   onClose: () => void;
   onStatus: (status: string) => void;
   onComment: (text: string) => void;
@@ -3227,6 +3229,7 @@ export default function TasksPage() {
           onClose={() => setSelectedTask(null)}
           onStatus={(status) => handleStatus(selectedTask, status)}
           onComment={(text) => handleComment(selectedTask, text)}
+          isAdmin={isAdmin}
           onDelete={() => handleDelete(selectedTask)}
         />
       )}
