@@ -115,7 +115,7 @@ async function findMatchedMemberByName(memberName: string) {
 
   const { data, error } = await supabase
     .from("contacts")
-    .select("id,name,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
+    .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
     .eq("name", name)
     .in("meeting_result", ["예약완료", "계약완료"])
     .order("id", { ascending: false })
