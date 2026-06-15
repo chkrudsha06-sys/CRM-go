@@ -81,6 +81,21 @@ function safeKey(fileName: string) {
   const rand = Math.random().toString(36).slice(2, 10);
   return `notices/${Date.now()}_${rand}${ext ? "." + ext : ""}`;
 }
+// cross-origin 파일 진짜 다운로드 (새 탭이 아닌 저장 다이얼로그)
+async function downloadNoticeFile(url: string, displayName: string) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("파일을 찾을 수 없습니다.");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = displayName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+  } catch (e: any) { alert("다운로드 실패: " + (e?.message || "오류")); }
+}
+
 async function uploadFiles(files: File[]): Promise<{ urls: string[]; names: string[]; failed: string[] }> {
   const urls: string[] = [];
   const names: string[] = [];
@@ -564,13 +579,14 @@ export default function NoticesPage() {
                           <p className="crm-tiny mb-2 mt-4">첨부파일 ({fileUrls.length}개)</p>
                           <div className="space-y-1.5">
                             {fileUrls.map((url,i)=>(
-                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" download={fileLabel(url,i)}
-                                className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 transition hover:opacity-80"
+                              <button key={i} type="button"
+                                onClick={(e)=>{ e.stopPropagation(); downloadNoticeFile(url, fileLabel(url,i)); }}
+                                className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition hover:opacity-80"
                                 style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
                                 <File size={13} style={{ color:"var(--accent-text)" }}/>
                                 <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{fileLabel(url,i)}</span>
                                 <Download size={12} style={{ color:"var(--text-faint)" }}/>
-                              </a>
+                              </button>
                             ))}
                           </div>
                         </div>
