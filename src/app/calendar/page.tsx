@@ -623,7 +623,7 @@ export default function CalendarPage() {
                       onClick={() => { setSelectedDate(cell.date); setSelectedEvent(null); }}
                       className="min-h-0 p-2 text-left transition-all flex flex-col"
                       style={{
-                        background: isSelected ? "linear-gradient(180deg,rgba(139,124,246,.18),rgba(139,124,246,.04)),var(--surface-selected)" : cell.currentMonth ? "var(--surface)" : "rgba(16,17,20,.48)",
+                        background: isSelected ? "linear-gradient(180deg,rgba(139,124,246,.18),rgba(139,124,246,.04)),var(--surface-selected)" : cell.currentMonth ? "var(--surface)" : "rgba(148, 163, 184, 0.12)",
                         borderRight:"1px solid var(--border-subtle)",
                         borderBottom:"1px solid var(--border-subtle)",
                       }}>
@@ -632,7 +632,7 @@ export default function CalendarPage() {
                         <span className="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px]"
                           style={{
                             background: isToday ? "var(--accent)" : isSelected ? "var(--accent-subtle)" : "transparent",
-                            color: isToday ? "#fff" : cell.currentMonth ? "var(--text)" : "var(--text-faint)",
+                            color: isToday ? "#fff" : cell.currentMonth ? "var(--text)" : "var(--text-subtle)",
                             fontWeight: isToday ? 700 : 500,
                             border: isSelected&&!isToday ? "1px solid var(--accent-border)" : "1px solid transparent",
                           }}>
