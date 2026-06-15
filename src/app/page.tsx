@@ -634,6 +634,7 @@ export default function HomePage() {
   /* 일별활동기록 (당일 목표/달성 + 특발성활동목표) */
   type DailyGoalRow = {
     id: number;
+    owner_name: string;
     goal_new_tm: number; result_new_tm: number;
     goal_coldtalk: number; result_coldtalk: number;
     goal_consultant_db: number; result_consultant_db: number;
@@ -1123,6 +1124,22 @@ export default function HomePage() {
       await supabase.from("daily_activity_goals").update({ goal_work_items: items }).eq("id", dailyGoal.id);
     } catch (e) { console.warn("work item toggle 실패", e); }
   }, [dailyGoal]);
+
+  const toggleMemberWorkItem = useCallback(async (memberName: string, itemId: string) => {
+    const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
+    if (!memberGoal) return;
+    const items = (memberGoal.goal_work_items || []).map((item: { id: string; text: string; done: boolean }) =>
+      item.id === itemId ? { ...item, done: !item.done } : item
+    );
+    setAllDailyGoals((prev) => prev.map((r) =>
+      normalizePersonName(r.owner_name) === normalizePersonName(memberName)
+        ? { ...r, goal_work_items: items }
+        : r
+    ));
+    try {
+      await supabase.from("daily_activity_goals").update({ goal_work_items: items }).eq("id", memberGoal.id);
+    } catch (e) { console.warn("멤버 work item toggle 실패", e); }
+  }, [allDailyGoals]);
 
   const dailyActivityFields = useMemo(() => {
     if (!dailyGoal) return [];
@@ -1706,7 +1723,13 @@ export default function HomePage() {
                                       <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
                                       <div className="space-y-1">
                                         {memberWorkItems.map((item: { id: string; text: string; done: boolean }) => (
-                                          <div key={item.id} className="flex items-center gap-2.5 rounded-[8px] px-2.5 py-2" style={{ background: "var(--surface-2)" }}>
+                                          <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => toggleMemberWorkItem(expandedDailyMember!, item.id)}
+                                            className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-white/[.04]"
+                                            style={{ background: "var(--surface-2)" }}
+                                          >
                                             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)", color: "var(--success-text)" }}>
                                               {item.done && <CheckCircle2 size={13} />}
                                             </div>
@@ -1714,7 +1737,7 @@ export default function HomePage() {
                                               {item.text}
                                             </span>
                                             {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
-                                          </div>
+                                          </button>
                                         ))}
                                       </div>
                                     </div>
