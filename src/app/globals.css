@@ -537,7 +537,7 @@ option, optgroup { background: var(--surface); color: var(--text); }
   z-index: 5;
   height: 44px;
   padding: 0 15px;
-  text-align: left;
+  text-align: center;
   vertical-align: middle;
   background: linear-gradient(180deg, rgba(20,22,26,.98), rgba(20,22,26,.94)), var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -556,6 +556,7 @@ option, optgroup { background: var(--surface); color: var(--text); }
   height: 66px;
   padding: 0 15px;
   vertical-align: middle;
+  text-align: center;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-size: 13px;
