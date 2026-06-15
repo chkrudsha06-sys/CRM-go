@@ -21,12 +21,7 @@ import {
   UserCheck,
   X,
   Zap,
-  CreditCard,
-  Save,
 } from "lucide-react";
-
-const PAYMENT_CHANNEL_OPTIONS = ["자동이체 (효성CMS)", "카드 (사이다페이)", "기타 (별도입금)"];
-const PAYMENT_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 type Contact = {
   id: number;
@@ -48,8 +43,6 @@ type Contact = {
   reservation_date: string | null;
   intake_route: string | null;
   created_at: string;
-  payment_channel: string | null;
-  regular_payment_date: string | null;
 };
 
 type Note = {
@@ -1272,7 +1265,6 @@ function DetailSlidePanel({
   onClose,
   onStageChange,
   onMeetingSave,
-  onPaymentSave,
 }: {
   contact: Contact;
   tab: DetailTab;
@@ -1285,38 +1277,20 @@ function DetailSlidePanel({
     meetingAddress: string,
     meetingText: string,
   ) => Promise<void>;
-  onPaymentSave: (
-    contact: Contact,
-    paymentChannel: string,
-    regularPaymentDate: string,
-  ) => Promise<void>;
 }) {
   const stage = getStageKey(contact);
   const [retentionOpen, setRetentionOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
-  const [paymentOpen, setPaymentOpen] = useState(false);
   const [meetingDate, setMeetingDate] = useState(contact.meeting_date || TODAY);
   const [meetingAddress, setMeetingAddress] = useState(contact.meeting_address || "");
   const [meetingText, setMeetingText] = useState(contact.meeting_date_text || "");
   const [meetingSaving, setMeetingSaving] = useState(false);
-  const [paymentChannel, setPaymentChannel] = useState(contact.payment_channel || "");
-  const [regularPaymentDate, setRegularPaymentDate] = useState(contact.regular_payment_date || "");
-  const [paymentSaving, setPaymentSaving] = useState(false);
 
   useEffect(() => {
     setMeetingDate(contact.meeting_date || TODAY);
     setMeetingAddress(contact.meeting_address || "");
     setMeetingText(contact.meeting_date_text || "");
-    setPaymentChannel(contact.payment_channel || "");
-    setRegularPaymentDate(contact.regular_payment_date || "");
-  }, [contact.id, contact.meeting_address, contact.meeting_date, contact.meeting_date_text, contact.payment_channel, contact.regular_payment_date]);
-
-  const handlePaymentSubmit = async () => {
-    setPaymentSaving(true);
-    await onPaymentSave(contact, paymentChannel, regularPaymentDate);
-    setPaymentSaving(false);
-    setPaymentOpen(false);
-  };
+  }, [contact.id, contact.meeting_address, contact.meeting_date, contact.meeting_date_text]);
 
   const quickStageTargets = useMemo(() => {
     if (stage === "리드") return ["프로스펙팅", "딜크로징"];
@@ -1789,14 +1763,6 @@ function DetailSlidePanel({
                   </a>
                   <button
                     type="button"
-                    onClick={() => setPaymentOpen(true)}
-                    className="btn-premium btn-secondary w-full"
-                  >
-                    <CreditCard size={14} />
-                    결제정보 수정
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => onTab("notes")}
                     className="btn-premium btn-secondary w-full"
                   >
@@ -1836,82 +1802,6 @@ function DetailSlidePanel({
             </button>
           </div>
         </div>
-
-        {/* 결제정보 수정 모달 */}
-        {paymentOpen && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center" style={{ background: "var(--overlay)" }}>
-            <div
-              className="w-full max-w-[400px] rounded-[20px] border p-6 shadow-xl"
-              style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-            >
-              <div className="mb-5 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[16px] font-[760] tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>결제정보 수정</p>
-                  <p className="mt-0.5 text-[12px]" style={{ color: "var(--text-muted)" }}>{contact.name} 고객의 결제채널과 정기결제일을 설정합니다.</p>
-                </div>
-                <button type="button" onClick={() => setPaymentOpen(false)} className="btn-premium btn-ghost h-8 w-8 shrink-0 p-0">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-[12px] font-[650]" style={{ color: "var(--text-subtle)" }}>결제채널</label>
-                  <select
-                    value={paymentChannel}
-                    onChange={(e) => setPaymentChannel(e.target.value)}
-                    className="crm-search h-10 w-full px-3"
-                  >
-                    <option value="">선택해주세요</option>
-                    {PAYMENT_CHANNEL_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-[12px] font-[650]" style={{ color: "var(--text-subtle)" }}>정기결제일</label>
-                  <select
-                    value={regularPaymentDate}
-                    onChange={(e) => setRegularPaymentDate(e.target.value)}
-                    className="crm-search h-10 w-full px-3"
-                  >
-                    <option value="">선택해주세요</option>
-                    {PAYMENT_DAY_OPTIONS.map((d) => (
-                      <option key={d} value={String(d)}>매월 {d}일</option>
-                    ))}
-                  </select>
-                </div>
-
-                {(paymentChannel || regularPaymentDate) && (
-                  <div className="rounded-[12px] border px-3 py-2.5" style={{ background: "var(--accent-subtle)", borderColor: "var(--accent-border)" }}>
-                    <p className="text-[12px] font-[650]" style={{ color: "var(--accent-text)" }}>
-                      {paymentChannel || "채널 미선택"} · {regularPaymentDate ? `매월 ${regularPaymentDate}일` : "결제일 미선택"}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentOpen(false)}
-                  className="btn-premium btn-ghost flex-1 h-10"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePaymentSubmit}
-                  disabled={paymentSaving}
-                  className="btn-premium btn-primary flex-1 h-10"
-                >
-                  <Save size={14} /> {paymentSaving ? "저장 중..." : "저장"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </aside>
     </>
   );
@@ -1944,7 +1834,7 @@ export default function PipelinePage() {
     let q = supabase
       .from("contacts")
       .select(
-        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,created_at,payment_channel,regular_payment_date",
+        "id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,contract_date,reservation_date,intake_route,created_at",
       )
       .order("created_at", { ascending: false })
       .limit(700);
@@ -2094,36 +1984,6 @@ export default function PipelinePage() {
 
     if (error) {
       alert("미팅일정 등록 실패: " + error.message);
-      return;
-    }
-
-    setContacts((prev) =>
-      prev.map((item) =>
-        item.id === contact.id ? { ...item, ...patch } : item,
-      ),
-    );
-    setSelectedContact((prev) =>
-      prev && prev.id === contact.id ? { ...prev, ...patch } : prev,
-    );
-  };
-
-  const handlePaymentSave = async (
-    contact: Contact,
-    paymentChannel: string,
-    regularPaymentDate: string,
-  ) => {
-    const patch: Partial<Contact> = {
-      payment_channel: paymentChannel || null,
-      regular_payment_date: regularPaymentDate || null,
-    };
-
-    const { error } = await supabase
-      .from("contacts")
-      .update(patch)
-      .eq("id", contact.id);
-
-    if (error) {
-      alert("결제정보 저장 실패: " + error.message);
       return;
     }
 
@@ -2441,7 +2301,6 @@ export default function PipelinePage() {
           onClose={() => setSelectedContact(null)}
           onStageChange={handleStageChange}
           onMeetingSave={handleMeetingSave}
-          onPaymentSave={handlePaymentSave}
         />
       )}
     </div>
