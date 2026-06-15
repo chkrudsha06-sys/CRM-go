@@ -1538,7 +1538,7 @@ function DetailSlidePanel({
             </button>
           </div>
 
-          {task.requester === me && (
+          {(task.requester === me || isAdmin) && (
             <button
               type="button"
               onClick={onDelete}
@@ -2254,6 +2254,7 @@ export default function TasksPage() {
   const [fCategory, setFCategory] = useState("");
   const [fAssignee, setFAssignee] = useState("");
   const [me, setMe] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const inputClass =
     "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
@@ -2266,6 +2267,9 @@ export default function TasksPage() {
       if (raw) {
         const current = JSON.parse(raw);
         setMe(current.name || "");
+        const adminNames = ["문시욱","김정후","김창완","최웅"];
+        const role = String(current.role || "").toLowerCase();
+        setIsAdmin(role === "admin" || adminNames.includes(current.name || ""));
         setApprovalForm((prev) => ({
           ...prev,
           writer: current.name || "",
@@ -2600,6 +2604,20 @@ export default function TasksPage() {
       return;
     }
 
+    // ── 저장된 task id 조회 ──
+    let savedTaskId: number | null = null;
+    try {
+      const { data: latestTask } = await supabase
+        .from("tasks")
+        .select("id")
+        .eq("requester", me)
+        .eq("category", form.category)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      savedTaskId = (latestTask as any)?.id || null;
+    } catch {}
+
     // ── 카카오워크 업무요청 알림 발송 ──
     try {
       await fetch("/api/kakaowork/send-task-message", {
@@ -2611,6 +2629,7 @@ export default function TasksPage() {
           category: form.category,
           content,
           priority: form.priority,
+          task_id: savedTaskId,
         }),
       });
     } catch (kakaoErr) {
@@ -2835,6 +2854,32 @@ export default function TasksPage() {
         comment_type: "상태변경",
       });
 
+    // ── 접수 시 요청자에게 워크봇 답글 알림 ──
+    if (status === "접수" || status === "보류") {
+      try {
+        // 고객명 추출 (content 첫 줄에서)
+        const contentLines = String(task.content || "").split("\n");
+        const customerLine = contentLines.find((l) => l.includes("고객명:"));
+        const customerName = customerLine ? customerLine.replace(/^.*고객명:\s*/, "").trim() : "";
+        const categoryLine = contentLines[0] || task.category || "";
+
+        await fetch("/api/kakaowork/send-task-status-notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_id: task.id,
+            status,
+            assignee: me,
+            requester: task.requester || "",
+            category: task.category || "",
+            customer_name: customerName,
+          }),
+        });
+      } catch (err) {
+        console.warn("카카오워크 상태변경 알림 실패:", err);
+      }
+    }
+
     setSelectedTask({
       ...task,
       status,
@@ -2856,9 +2901,10 @@ export default function TasksPage() {
   };
 
   const handleDelete = async (task: TaskRow) => {
+    const statusLabel = task.status && !["완료","취소"].includes(task.status) ? `⚠ "${task.status}" 상태입니다. ` : "";
     if (
       !confirm(
-        "이 업무를 삭제하시겠습니까?\n관련 코멘트와 첨부파일도 함께 정리됩니다.",
+        `${statusLabel}이 업무를 삭제하시겠습니까?\n관련 코멘트와 첨부파일도 함께 정리됩니다.`,
       )
     )
       return;
@@ -3118,7 +3164,7 @@ export default function TasksPage() {
                       setSelectedTask(task);
                       setDetailTab("detail");
                     }}
-                    canDelete={task.requester === me}
+                    canDelete={task.requester === me || isAdmin}
                     onDelete={() => handleDelete(task)}
                   />
                 ))}
