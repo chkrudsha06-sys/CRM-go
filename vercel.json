@@ -4,11 +4,11 @@
   "crons": [
     {
       "path": "/api/call-recordings/process",
-      "schedule": "0 0 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/payment-imports/ciderpay/sync",
-      "schedule": "0 2,5,7,9 * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/kakaowork/daily-reminder",
