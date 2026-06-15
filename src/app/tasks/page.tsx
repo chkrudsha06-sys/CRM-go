@@ -35,6 +35,7 @@ type TaskRow = {
   status: string | null;
   tagged: string[] | null;
   file_urls: string[] | null;
+  file_names: string[] | null;
   completed_at: string | null;
   kakao_message_id: string | null;
   created_at: string;
@@ -184,6 +185,31 @@ type ApprovalActionRow = {
 };
 
 type DetailTab = "detail" | "comments" | "files";
+
+// ━━━ 파일 업로드/다운로드 유틸 ━━━
+// Supabase Storage 키는 한글/특수문자를 허용하지 않으므로 안전한 영문 키로 변환한다.
+function safeTaskKey(fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot + 1).replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${Date.now()}_${rand}${ext ? "." + ext : ""}`;
+}
+// cross-origin 파일 진짜 다운로드 (새 탭이 아닌 저장 다이얼로그)
+async function downloadFile(bucketUrl: string, displayName: string) {
+  try {
+    const res = await fetch(bucketUrl);
+    if (!res.ok) throw new Error("파일을 찾을 수 없습니다.");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = displayName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+  } catch (e: any) {
+    alert("다운로드 실패: " + (e?.message || "오류"));
+  }
+}
 
 const TEAM = [
   { name: "김정후", title: "본부장", group: "관리자" },
@@ -1482,23 +1508,27 @@ function DetailSlidePanel({
                     첨부파일이 없습니다.
                   </div>
                 ) : (
-                  task.file_urls.map((file, index) => (
-                    <a
-                      key={index}
-                      href={`https://rlpdhufcsuewvwluydky.supabase.co/storage/v1/object/public/task-files/${file}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="premium-card premium-card-hover flex items-center gap-3 p-3"
-                    >
-                      <PremiumIcon icon={Download} tone="info" size="sm" />
-                      <span
-                        className="min-w-0 flex-1 truncate text-[13px] font-bold"
-                        style={{ color: "var(--accent-text)" }}
+                  task.file_urls.map((file, index) => {
+                    const displayName = task.file_names?.[index] || file.split("_").slice(1).join("_") || file;
+                    const { data } = supabase.storage.from("task-files").getPublicUrl(file);
+                    const fileUrl = data?.publicUrl || "";
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); downloadFile(fileUrl, displayName); }}
+                        className="premium-card premium-card-hover flex w-full items-center gap-3 p-3 text-left"
                       >
-                        {file.split("_").slice(1).join("_") || file}
-                      </span>
-                    </a>
-                  ))
+                        <PremiumIcon icon={Download} tone="info" size="sm" />
+                        <span
+                          className="min-w-0 flex-1 truncate text-[13px] font-bold"
+                          style={{ color: "var(--accent-text)" }}
+                        >
+                          {displayName}
+                        </span>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -2580,16 +2610,17 @@ export default function TasksPage() {
     }
 
     const fileUrls: string[] = [];
+    const fileNames: string[] = [];
 
     for (const file of files) {
-      const fileName = `${Date.now()}_${file.name}`;
+      const safeKey = safeTaskKey(file.name);
       const { error } = await supabase.storage
         .from("task-files")
-        .upload(fileName, file);
-      if (!error) fileUrls.push(fileName);
+        .upload(safeKey, file, { upsert: true, contentType: file.type || undefined });
+      if (!error) { fileUrls.push(safeKey); fileNames.push(file.name); }
     }
 
-    const { error } = await supabase.from("tasks").insert({
+    const insertData: Record<string, any> = {
       category: form.category,
       content,
       priority: form.priority,
@@ -2598,7 +2629,15 @@ export default function TasksPage() {
       status: "요청",
       tagged: form.tagged.length > 0 ? form.tagged : null,
       file_urls: fileUrls.length > 0 ? fileUrls : null,
-    });
+      file_names: fileNames.length > 0 ? fileNames : null,
+    };
+    // file_names 컬럼이 아직 없을 수 있으므로 실패 시 제외하고 재시도
+    let insertRes = await supabase.from("tasks").insert(insertData);
+    if (insertRes.error && /file_names|column/i.test(insertRes.error.message || "")) {
+      const { file_names: _fn, ...fallback } = insertData;
+      insertRes = await supabase.from("tasks").insert(fallback);
+    }
+    const error = insertRes.error;
 
     if (error) {
       alert(`생성 실패: ${error.message}`);
