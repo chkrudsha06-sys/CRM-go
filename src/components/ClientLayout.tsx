@@ -2,7 +2,7 @@
 
 import Sidebar from "@/components/Sidebar";
 import JarvisAgent from "@/components/JarvisAgent";
-import { NoticePopup } from "@/components/NoticePopup";
+import NoticePopup from "@/components/NoticePopup";
 import { logout, validateSession, getCurrentUser, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Bell, Menu, Send, Truck, X } from "lucide-react";
