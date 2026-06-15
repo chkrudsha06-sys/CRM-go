@@ -235,6 +235,39 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       lowerText.includes("콜드톡 목표") ||
       lowerText.includes("브론즈 목표") ||
       (lowerText.includes("목표") && (lowerText.includes("넣") || lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("설정") || lowerText.includes("할게") || lowerText.includes("하자") || lowerText.includes("해줘")));
+    const isCustomerDbAdd =
+      lowerText.includes("고객db") ||
+      lowerText.includes("고객 db") ||
+      lowerText.includes("고객디비") ||
+      lowerText.includes("고객 디비") ||
+      lowerText.includes("고객등록") ||
+      lowerText.includes("고객 등록") ||
+      lowerText.includes("db 입력") ||
+      lowerText.includes("db입력") ||
+      lowerText.includes("디비 입력") ||
+      lowerText.includes("디비입력") ||
+      lowerText.includes("신규 고객") ||
+      lowerText.includes("신규고객") ||
+      lowerText.includes("tm 등록") ||
+      lowerText.includes("tm등록") ||
+      lowerText.includes("콜드톡 등록") ||
+      lowerText.includes("콜드톡등록") ||
+      (lowerText.includes("고객") && (lowerText.includes("추가") || lowerText.includes("넣") || lowerText.includes("입력") || lowerText.includes("올려") || lowerText.includes("저장")));
+
+    if (isCustomerDbAdd && !isDailyGoal) {
+      const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
+      const agentMsg: JarvisMessage = {
+        role: "assistant",
+        content: `__AGENT_CUSTOMER_DB__`,
+        timestamp: getNowLabel(),
+      };
+      setMessages((prev) => [...prev, userMsg, agentMsg]);
+      setAgentMode("customer_db");
+      setAgentForm({ name: "", title: "", phone: "", intakeRoute: "", activityType: "TM", memo: "", firstNote: "" });
+      updateTalkState();
+      return;
+    }
+
     if (isDailyGoal) {
       const today = new Date().toISOString().slice(0, 10);
       const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
@@ -612,6 +645,120 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                               취소
                             </button>
                         </div>
+                      </div>
+                    ) : message.content === "__AGENT_CUSTOMER_DB__" ? (
+                      <div className="rounded-2xl rounded-bl-md p-4" style={{ border: "1px solid var(--accent-border)", background: "var(--surface-2)", minWidth: 280 }}>
+                        <p className="mb-1 text-[13px] font-black" style={{ color: "var(--accent-text)" }}>고객DB 신규 등록</p>
+                        <p className="mb-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>* 표시는 필수 항목입니다</p>
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>고객명 *</span>
+                            <input type="text" value={agentForm.name || ""} onChange={(e) => setAgentForm((p) => ({ ...p, name: e.target.value }))} className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }} placeholder="홍길동" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>직급</span>
+                            <div className="flex gap-1.5">
+                              {["본부장","팀장","팀원"].map((t) => (
+                                <button key={t} type="button" onClick={() => setAgentForm((p) => ({ ...p, title: t }))} className="rounded-lg px-2.5 py-1 text-[11px] font-bold transition" style={{ background: agentForm.title === t ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + (agentForm.title === t ? "var(--accent-border)" : "var(--border)"), color: agentForm.title === t ? "var(--accent-text)" : "var(--text-muted)" }}>{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>연락처 *</span>
+                            <input type="tel" value={agentForm.phone || ""} onChange={(e) => setAgentForm((p) => ({ ...p, phone: e.target.value }))} className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }} placeholder="010-0000-0000" />
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="mt-1 w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>유입경로 *</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {["분양의신DB","컨설턴트VIP DB","완판트럭","분양라인","분양회MGM","대협팀활동"].map((r) => (
+                                <button key={r} type="button" onClick={() => setAgentForm((p) => ({ ...p, intakeRoute: r }))} className="rounded-lg px-2 py-1 text-[11px] font-bold transition" style={{ background: agentForm.intakeRoute === r ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + (agentForm.intakeRoute === r ? "var(--accent-border)" : "var(--border)"), color: agentForm.intakeRoute === r ? "var(--accent-text)" : "var(--text-muted)" }}>{r}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>활동항목 *</span>
+                            <div className="flex gap-1.5">
+                              {["TM","콜드톡"].map((t) => (
+                                <button key={t} type="button" onClick={() => setAgentForm((p) => ({ ...p, activityType: t }))} className="rounded-lg px-3 py-1 text-[11px] font-bold transition" style={{ background: (agentForm.activityType || "TM") === t ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + ((agentForm.activityType || "TM") === t ? "var(--accent-border)" : "var(--border)"), color: (agentForm.activityType || "TM") === t ? "var(--accent-text)" : "var(--text-muted)" }}>{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="mt-1 w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>활동내용</span>
+                            <textarea value={agentForm.firstNote || ""} onChange={(e) => setAgentForm((p) => ({ ...p, firstNote: e.target.value }))} rows={2} className="flex-1 resize-none rounded-lg px-2.5 py-1.5 text-[12px] font-semibold outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }} placeholder="TM 통화 내용 (선택)" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>메모</span>
+                            <input type="text" value={agentForm.memo || ""} onChange={(e) => setAgentForm((p) => ({ ...p, memo: e.target.value }))} className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold outline-none" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }} placeholder="특이사항 (선택)" />
+                          </div>
+                        </div>
+                        {agentMode === "customer_db" && (
+                          <div className="mt-4 flex gap-2">
+                            <button type="button" disabled={agentSaving}
+                              onClick={async () => {
+                                if (!agentForm.name?.trim()) { alert("고객명을 입력해주세요."); return; }
+                                if (!agentForm.phone?.trim()) { alert("연락처를 입력해주세요."); return; }
+                                if (!agentForm.intakeRoute) { alert("유입경로를 선택해주세요."); return; }
+                                setAgentSaving(true);
+                                try {
+                                  const now = new Date().toISOString();
+                                  const todayStr = now.slice(0, 10);
+                                  const phoneDigits = agentForm.phone.replace(/[^0-9]/g, "");
+                                  const { data: allContacts } = await supabase.from("contacts").select("id,phone,customer_phone").limit(3000);
+                                  let existingId: number | null = null;
+                                  if (allContacts) {
+                                    const found = (allContacts as any[]).find((c: any) =>
+                                      (c.phone || "").replace(/[^0-9]/g,"") === phoneDigits ||
+                                      (c.customer_phone || "").replace(/[^0-9]/g,"") === phoneDigits
+                                    );
+                                    existingId = found?.id || null;
+                                  }
+                                  const payload = {
+                                    name: agentForm.name.trim(),
+                                    title: agentForm.title || "",
+                                    phone: agentForm.phone.trim(),
+                                    customer_phone: agentForm.phone.trim(),
+                                    intake_route: agentForm.intakeRoute,
+                                    management_stage: "리드",
+                                    customer_grade: "심사미진행",
+                                    memo: agentForm.memo?.trim() || "",
+                                    activity_type: agentForm.activityType || "TM",
+                                    crm_db_source: "customer_db",
+                                    assigned_to: user.name,
+                                    updated_at: now,
+                                  };
+                                  let contactId: number | null = null;
+                                  if (existingId) {
+                                    await supabase.from("contacts").update(payload).eq("id", existingId);
+                                    contactId = existingId;
+                                  } else {
+                                    const { data: newContact } = await supabase.from("contacts").insert({ ...payload, created_at: now }).select("id").single();
+                                    contactId = (newContact as any)?.id || null;
+                                  }
+                                  if (contactId && agentForm.firstNote?.trim()) {
+                                    const noteContent = `[${agentForm.activityType || "TM"}] ${agentForm.firstNote.trim()}`;
+                                    await supabase.from("contact_notes").insert({ contact_id: contactId, note_date: todayStr, content: noteContent, author: user.name });
+                                  }
+                                  setMessages((prev) => [...prev, {
+                                    role: "assistant" as const,
+                                    content: `고객DB 등록 완료\n\n${agentForm.name} ${agentForm.title || ""} | ${agentForm.phone}\n유입경로: ${agentForm.intakeRoute} | 활동항목: ${agentForm.activityType || "TM"}\n${agentForm.firstNote?.trim() ? "활동내용: " + agentForm.firstNote.trim() : ""}\n\n고객DB 메뉴에서 확인하실 수 있습니다.`,
+                                    timestamp: getNowLabel(),
+                                  }]);
+                                  setAgentMode(null);
+                                  setAgentForm({});
+                                } catch (err: any) {
+                                  alert("저장 실패: " + (err?.message || "오류"));
+                                } finally {
+                                  setAgentSaving(false);
+                                }
+                              }}
+                              className="flex-1 rounded-xl py-2 text-[12px] font-black text-white transition"
+                              style={{ background: agentSaving ? "var(--accent-subtle)" : "var(--accent)" }}>
+                              {agentSaving ? "저장 중..." : "고객DB 등록"}
+                            </button>
+                            <button type="button" onClick={() => { setAgentMode(null); setAgentForm({}); }} className="rounded-xl px-3 py-2 text-[12px] font-semibold transition" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>취소</button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div
