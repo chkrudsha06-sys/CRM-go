@@ -6,7 +6,7 @@ import type { ElementType, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, ArrowRight, CalendarDays, ChevronDown,
-  Clock, MapPin, Phone, Plus, RefreshCw, Search, Target, Truck, X,
+  Clock, MapPin, Phone, Plus, RefreshCw, Search, Target, Trash2, Truck, X,
 } from "lucide-react";
 
 /* ── 타입 ── */
@@ -140,14 +140,33 @@ function SelectChip({ value, onChange, options, placeholder }: { value:string; o
 }
 
 /* ── 이벤트 카드 ── */
-function EventCard({ event, selected, onClick }: { event:CalendarEvent; selected?:boolean; onClick:()=>void }) {
+function EventCard({
+  event,
+  selected,
+  onClick,
+  canDelete = false,
+  onDelete,
+}: {
+  event: CalendarEvent;
+  selected?: boolean;
+  onClick: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
+}) {
   const s = eventStyle(event.kind, event.category);
   const isLeave = event.kind === "leave";
   const isWanpan = event.kind === "wanpan";
   const isCustom = event.kind === "custom";
   const contact = event.contact;
   return (
-    <button type="button" onClick={onClick} className="premium-card premium-card-hover w-full p-4 text-left" style={selected ? { outline:"2px solid var(--accent)", outlineOffset:2 } : {}}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      className="premium-card premium-card-hover w-full cursor-pointer p-4 text-left outline-none"
+      style={selected ? { outline:"2px solid var(--accent)", outlineOffset:2 } : {}}
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{background:s.color}} />
         <div className="min-w-0 flex-1">
@@ -171,9 +190,23 @@ function EventCard({ event, selected, onClick }: { event:CalendarEvent; selected
             </div>
           )}
         </div>
-        <span className="shrink-0 text-[11px] font-semibold" style={{color:"var(--text-faint)"}}>{formatShortDate(event.date)}</span>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="text-[11px] font-semibold" style={{color:"var(--text-faint)"}}>{formatShortDate(event.date)}</span>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+              className="inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11px] font-[760] transition hover:brightness-110"
+              style={{background:"var(--danger-bg)", borderColor:"var(--danger-border)", color:"var(--danger-text)"}}
+              title="내가 등록한 일정 삭제"
+            >
+              <Trash2 size={12} />
+              삭제
+            </button>
+          )}
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -471,6 +504,46 @@ export default function CalendarPage() {
   const goNextMonth = () => { setCurrentMonth(p => new Date(p.getFullYear(), p.getMonth()+1, 1)); setSelectedEvent(null); };
   const goToday = () => { const t = new Date(); setCurrentMonth(t); setSelectedDate(TODAY); setSelectedEvent(null); };
 
+  const canDeleteCustomEvent = useCallback((event: CalendarEvent) => {
+    const owner = String(event.raw?.created_by || "");
+    return event.kind === "custom" && Boolean(event.raw?.id) && Boolean(currentUser) && owner === currentUser;
+  }, [currentUser]);
+
+  const handleDeleteCustomEvent = useCallback(async (event: CalendarEvent) => {
+    if (event.kind !== "custom" || !event.raw?.id) return;
+
+    const owner = String(event.raw?.created_by || "");
+    if (!currentUser || owner !== currentUser) {
+      alert("본인이 등록한 일정만 삭제할 수 있습니다.");
+      return;
+    }
+
+    const isRangeEvent = Boolean(event.raw?.date_end && event.raw.date_end !== event.raw.date_start);
+    const periodText = isRangeEvent
+      ? `${formatFullDate(event.raw.date_start)} ~ ${formatFullDate(event.raw.date_end)}`
+      : formatFullDate(event.raw?.date_start);
+    const message = isRangeEvent
+      ? `프로젝트 일정 전체 기간을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n기간: ${periodText}\n\n삭제하면 해당 기간에 표시된 모든 프로젝트 일정이 함께 사라집니다.`
+      : `선택한 일정을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n일자: ${periodText}`;
+
+    if (!window.confirm(message)) return;
+
+    const { error } = await supabase
+      .from("calendar_custom_events")
+      .delete()
+      .eq("id", event.raw.id)
+      .eq("created_by", currentUser);
+
+    if (error) {
+      alert(`삭제 실패: ${error.message}`);
+      return;
+    }
+
+    setSelectedEvent(null);
+    await fetchCalendar();
+    alert("일정이 삭제되었습니다.");
+  }, [currentUser, fetchCalendar]);
+
   return (
     <div className="premium-page flex h-full flex-col overflow-hidden">
       {/* 헤더 */}
@@ -609,7 +682,16 @@ export default function CalendarPage() {
                   <EmptyState icon="📅" title="선택한 날짜에 일정이 없습니다" description="다른 날짜를 선택하거나 일정을 등록해보세요" />
                 ) : (
                   <div className="space-y-3">
-                    {selectedEvents.map(ev=><EventCard key={ev.id} event={ev} selected={selectedEvent?.id===ev.id} onClick={()=>setSelectedEvent(ev===selectedEvent?null:ev)}/>)}
+                    {selectedEvents.map(ev=>(
+                      <EventCard
+                        key={ev.id}
+                        event={ev}
+                        selected={selectedEvent?.id===ev.id}
+                        onClick={()=>setSelectedEvent(ev===selectedEvent?null:ev)}
+                        canDelete={canDeleteCustomEvent(ev)}
+                        onDelete={()=>handleDeleteCustomEvent(ev)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
