@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { requester, assignee, category, content, priority } = body || {};
+    const { requester, assignee, category, content, priority, task_id } = body || {};
 
     const priorityEmoji: Record<string, string> = {
       "긴급": "🔴", "높음": "🟠", "보통": "🟡", "낮음": "🟢",
@@ -137,6 +137,28 @@ export async function POST(request: Request) {
         },
       },
     ];
+
+    // ── 접수/보류 버튼 추가 (task_id가 있을 때만) ──
+    if (task_id) {
+      blocks.push({
+        type: "button",
+        text: "✅ 접수",
+        style: "primary",
+        action: {
+          type: "submit_action",
+          value: `task:${task_id}:accept`,
+        },
+      });
+      blocks.push({
+        type: "button",
+        text: "⏸ 보류",
+        style: "danger",
+        action: {
+          type: "submit_action",
+          value: `task:${task_id}:hold`,
+        },
+      });
+    }
 
     const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
       method: "POST",
