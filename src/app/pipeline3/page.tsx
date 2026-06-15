@@ -21,6 +21,8 @@ import {
   UserCheck,
   X,
   Zap,
+  CreditCard,
+  Save,
 } from "lucide-react";
 
 const PAYMENT_CHANNEL_OPTIONS = ["자동이체 (효성CMS)", "카드 (사이다페이)", "기타 (별도입금)"];
@@ -1270,6 +1272,7 @@ function DetailSlidePanel({
   onClose,
   onStageChange,
   onMeetingSave,
+  onPaymentSave,
 }: {
   contact: Contact;
   tab: DetailTab;
