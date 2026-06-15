@@ -505,9 +505,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
             </div>
           </div>
 
-          <footer className="border-t border-white/10 p-3">
+          <footer className="border-t border-white/10 p-3" style={{ background: "rgba(10,17,35,0.98)" }}>
             <div className="flex items-end gap-2">
-              <div className="min-w-0 flex-1 rounded-2xl border border-white/20 px-3 py-2 focus-within:border-sky-300/45" style={{ background: "rgba(15,23,42,0.65)" }}>
+              <div className="min-w-0 flex-1 rounded-2xl border border-sky-300/20 px-3 py-2 focus-within:border-sky-300/50" style={{ background: "rgba(20,30,55,0.9)" }}>
                 <textarea
                   ref={inputRef}
                   value={input}
