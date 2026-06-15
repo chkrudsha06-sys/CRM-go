@@ -545,6 +545,70 @@ function ProgressBar({ result, goal }: { result: number; goal: number }) {
   );
 }
 
+function AdminMemberCards({
+  dailyMemberRows,
+  selectedOwner,
+  onSelect,
+}: {
+  dailyMemberRows: { member: { name: string; title: string }; row?: DailyActivityRow }[];
+  selectedOwner: string;
+  onSelect: (name: string) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {dailyMemberRows.map(({ member, row }) => {
+        const excluded = row?.is_outside_meeting;
+        const goalEntered = isGoalEntered(row);
+        const resultEntered = isResultEntered(row);
+        const isSelected = selectedOwner === member.name;
+        return (
+          <button
+            key={member.name}
+            type="button"
+            onClick={() => onSelect(isSelected ? "" : member.name)}
+            className="rounded-[13px] border p-4 text-left transition-all"
+            style={{
+              borderColor: isSelected ? "var(--accent-border)" : "var(--border)",
+              background: isSelected ? "var(--accent-subtle)" : "var(--surface-2)",
+              outline: "none",
+            }}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div
+                  className="crm-avatar"
+                  style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)", width: 32, height: 32, fontSize: 13 }}
+                >
+                  {member.name.slice(0, 1)}
+                </div>
+                <div>
+                  <p className="text-[13px] font-[760]" style={{ color: "var(--text-strong)" }}>{member.name}</p>
+                  <p className="text-[11px]" style={{ color: "var(--text-faint)" }}>{member.title}</p>
+                </div>
+              </div>
+              <span className={`badge-premium ${excluded ? "badge-warning" : resultEntered ? "badge-success" : goalEntered ? "badge-info" : "badge-muted"}`} style={{ fontSize: 10 }}>
+                {excluded ? "외근" : resultEntered ? "결과입력" : goalEntered ? "목표입력" : "대기"}
+              </span>
+            </div>
+            <div
+              className="rounded-[8px] px-3 py-2 text-center text-[12px] font-[760]"
+              style={{
+                background: goalEntered ? "var(--success-bg)" : "var(--surface-3)",
+                color: goalEntered ? "var(--success-text)" : "var(--text-faint)",
+              }}
+            >
+              {excluded ? "기록 제외" : goalEntered ? "✓ 목표설정 완료" : "목표 미설정"}
+            </div>
+            {isSelected && (
+              <p className="mt-2 text-center text-[11px]" style={{ color: "var(--accent-text)" }}>▲ 세부내역 보기</p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function MemberDayCard({
   member,
   row,
@@ -553,6 +617,7 @@ function MemberDayCard({
   row?: DailyActivityRow;
 }) {
   const excluded = row?.is_outside_meeting;
+  const workItems = row ? (normalizeWorkItems(row.goal_work_items)).filter((item) => item.text.trim().length > 0) : [];
   return (
     <article className="premium-card overflow-hidden p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -605,7 +670,7 @@ function MemberDayCard({
                 className="text-[12px] font-[780]"
                 style={{ color: "var(--text)" }}
               >
-                {goalValue(row, field.key)} / {resultValue(row, field.key)} {field.unit}
+                목표 {goalValue(row, field.key)} / 달성 {resultValue(row, field.key)} {field.unit}
               </p>
             </div>
             <ProgressBar
@@ -614,8 +679,26 @@ function MemberDayCard({
             />
           </div>
         ))}
-
       </div>
+
+      {workItems.length > 0 && (
+        <div className="mt-3 rounded-[13px] border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+          <p className="crm-tiny mb-2" style={{ fontWeight: 700 }}>특발성 활동목표</p>
+          <div className="space-y-1">
+            {workItems.map((item) => (
+              <div key={item.id} className="flex items-center gap-2.5 rounded-[8px] px-2.5 py-2" style={{ background: "var(--surface-3)" }}>
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)", color: "var(--success-text)" }}>
+                  {item.done && <span style={{ fontSize: 11 }}>✓</span>}
+                </div>
+                <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
+                  {item.text}
+                </span>
+                {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -1467,37 +1550,68 @@ export default function DailyActivityPage() {
                       실행파트 개인별 일별 활동 현황
                     </p>
                     <p className="crm-tiny mt-1">
-                      운영파트/관리자는 드롭다운으로 인원을 선택해 개인별
-                      데이터만 확인합니다. 입력창은 노출되지 않습니다.
+                      카드를 클릭하면 세부 활동내역을 확인할 수 있습니다.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={selectedOwner}
-                      onChange={(event) => setSelectedOwner(event.target.value)}
-                      className="h-[38px] min-w-[150px] rounded-full border px-3 text-[13px] font-[760] outline-none"
-                      style={{
-                        background: "var(--surface-2)",
-                        borderColor: "var(--border)",
-                        color: "var(--text)",
-                      }}
-                    >
-                      {EXEC_MEMBERS.map((member) => (
-                        <option key={member.name} value={member.name}>
-                          {member.name} {member.title}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="badge-premium badge-muted">
-                      {formatKoreanDate(date)}
-                    </span>
-                  </div>
+                  <span className="badge-premium badge-muted">
+                    {formatKoreanDate(date)}
+                  </span>
                 </div>
                 <div className="p-4">
-                  <MemberDayCard
-                    member={selectedMember}
-                    row={selectedDailyRow}
+                  <AdminMemberCards
+                    dailyMemberRows={dailyMemberRows}
+                    selectedOwner={selectedOwner}
+                    onSelect={setSelectedOwner}
                   />
+                  {selectedOwner && (
+                    <div className="mt-4">
+                      <MemberDayCard
+                        member={selectedMember}
+                        row={selectedDailyRow}
+                      />
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {access.canViewAll && (
+              <section className="premium-card overflow-hidden">
+                <div className="flex flex-col gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
+                  <p className="crm-section-title">실행파트 전체 특발성 활동목표</p>
+                  <p className="crm-tiny">각 담당자가 입력한 오늘의 특발성 활동목표 전체 현황입니다.</p>
+                </div>
+                <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {dailyMemberRows.map(({ member, row }) => {
+                    const items = row ? normalizeWorkItems(row.goal_work_items).filter((item) => item.text.trim().length > 0) : [];
+                    return (
+                      <div key={member.name} className="rounded-[13px] border p-3" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                        <div className="mb-2 flex items-center gap-2">
+                          <div className="crm-avatar" style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)", width: 28, height: 28, fontSize: 12 }}>
+                            {member.name.slice(0, 1)}
+                          </div>
+                          <p className="text-[13px] font-[760]" style={{ color: "var(--text-strong)" }}>{member.name}</p>
+                        </div>
+                        {items.length === 0 ? (
+                          <p className="text-[12px]" style={{ color: "var(--text-faint)" }}>미입력</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {items.map((item) => (
+                              <div key={item.id} className="flex items-center gap-2 rounded-[6px] px-2 py-1.5" style={{ background: "var(--surface-3)" }}>
+                                <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)" }}>
+                                  {item.done && <span style={{ fontSize: 9, color: "var(--success-text)" }}>✓</span>}
+                                </div>
+                                <span className="text-[12px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text)", textDecoration: item.done ? "line-through" : "none" }}>
+                                  {item.text}
+                                </span>
+                                {item.done && <span className="ml-auto text-[10px]" style={{ color: "var(--success-text)" }}>완료</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
