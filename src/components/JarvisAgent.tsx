@@ -1,6 +1,7 @@
 "use client";
 
 import type { CRMUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import {
   BarChart3,
   Bot,
@@ -136,6 +137,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   const [hidden, setHidden] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showQuickButtons, setShowQuickButtons] = useState(false);
+  const [agentMode, setAgentMode] = useState<string | null>(null); // 현재 에이전트 작업 모드
+  const [agentForm, setAgentForm] = useState<Record<string, string>>({}); // 에이전트 양식 값
+  const [agentSaving, setAgentSaving] = useState(false);
   const [status, setStatus] = useState<JarvisStatus>("idle");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -215,6 +219,26 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     setOpen(true);
     setInput("");
     setLastActionId(actionId || null);
+
+    // ── 에이전트 모드 키워드 감지 ──
+    const lowerText = text.toLowerCase();
+    if (
+      (lowerText.includes("일별활동") || lowerText.includes("활동 목표") || lowerText.includes("목표 등록") || lowerText.includes("오늘 목표")) &&
+      (lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("할게") || lowerText.includes("설정"))
+    ) {
+      const today = new Date().toISOString().slice(0, 10);
+      const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
+      const agentMsg: JarvisMessage = {
+        role: "assistant",
+        content: `__AGENT_DAILY_GOAL__:${today}`,
+        timestamp: getNowLabel(),
+      };
+      setMessages((prev) => [...prev, userMsg, agentMsg]);
+      setAgentMode("daily_goal");
+      setAgentForm({ tm: "", coldtalk: "", bronze: "", onePercent: "" });
+      updateTalkState();
+      return;
+    }
 
     const userMessage: JarvisMessage = {
       role: "user",
@@ -474,15 +498,102 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   <div
                     className={`max-w-[84%] ${message.role === "user" ? "items-end" : "items-start"} flex flex-col`}
                   >
-                    <div
-                      className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12px] font-medium leading-relaxed ${
-                        message.role === "user"
-                          ? "rounded-br-md bg-sky-500 text-white"
-                          : "rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100"
-                      }`}
-                    >
-                      {message.content}
-                    </div>
+                    {/* 에이전트 양식: 일별활동 목표 */}
+                    {message.content.startsWith("__AGENT_DAILY_GOAL__") ? (
+                      <div className="rounded-2xl rounded-bl-md border border-sky-300/30 p-4" style={{ background: "rgba(15,40,80,0.85)", minWidth: 260 }}>
+                        <p className="mb-3 text-[13px] font-black text-sky-200">일별활동 목표 등록</p>
+                        <p className="mb-3 text-[11px] text-slate-400">{message.content.split(":")[1]} 기준으로 저장됩니다.</p>
+                        <div className="space-y-2.5">
+                          {[
+                            { key: "tm", label: "당일 TM 목표", unit: "건" },
+                            { key: "coldtalk", label: "콜드톡 목표", unit: "건" },
+                            { key: "bronze", label: "브론즈DB 확보 목표", unit: "개" },
+                            { key: "onePercent", label: "1% DB 확보 목표", unit: "개" },
+                          ].map((field) => (
+                            <div key={field.key} className="flex items-center gap-2">
+                              <span className="w-[130px] shrink-0 text-[11px] font-semibold text-slate-300">{field.label}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={agentForm[field.key] || ""}
+                                onChange={(e) => setAgentForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                className="w-16 rounded-lg border border-sky-300/20 px-2 py-1 text-center text-[12px] font-bold text-white outline-none"
+                                style={{ background: "rgba(20,50,100,0.7)" }}
+                                placeholder="0"
+                              />
+                              <span className="text-[11px] text-slate-400">{field.unit}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {agentMode === "daily_goal" && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={agentSaving}
+                              onClick={async () => {
+                                if (!user?.name) { alert("로그인 정보가 없습니다."); return; }
+                                const today = message.content.split(":")[1];
+                                setAgentSaving(true);
+                                try {
+                                  const { error } = await supabase.from("daily_activity_goals").upsert({
+                                    work_date: today,
+                                    owner_name: user.name,
+                                    owner_title: user.title || "",
+                                    owner_role: "exec",
+                                    goal_new_tm: Number(agentForm.tm) || 0,
+                                    goal_coldtalk: Number(agentForm.coldtalk) || 0,
+                                    goal_consultant_db: Number(agentForm.bronze) || 0,
+                                    goal_second_touch: Number(agentForm.onePercent) || 0,
+                                    goal_manage_tm: 0,
+                                    goal_media_mix: 0,
+                                    goal_meeting_confirmed: 0,
+                                    is_outside_meeting: false,
+                                  }, { onConflict: "work_date,owner_name" });
+                                  if (error) throw error;
+                                  setMessages((prev) => [...prev, {
+                                    role: "assistant",
+                                    content: `${today} 일별활동 목표가 저장됐습니다.
+
+TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈DB ${agentForm.bronze || 0}개 / 1%DB ${agentForm.onePercent || 0}개
+
+일별활동기록 메뉴에서 바로 확인하실 수 있습니다.`,
+                                    timestamp: getNowLabel(),
+                                  }]);
+                                  setAgentMode(null);
+                                  setAgentForm({});
+                                } catch (err: any) {
+                                  alert("저장 실패: " + (err?.message || "오류 발생"));
+                                } finally {
+                                  setAgentSaving(false);
+                                }
+                              }}
+                              className="flex-1 rounded-xl py-2 text-[12px] font-black text-white transition"
+                              style={{ background: agentSaving ? "rgba(56,189,248,0.3)" : "rgba(56,189,248,0.7)" }}
+                            >
+                              {agentSaving ? "저장 중..." : "저장"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setAgentMode(null); setAgentForm({}); }}
+                              className="rounded-xl px-3 py-2 text-[12px] font-semibold text-slate-400 transition hover:text-white"
+                              style={{ background: "rgba(255,255,255,0.05)" }}
+                            >
+                              취소
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12px] font-medium leading-relaxed ${
+                          message.role === "user"
+                            ? "rounded-br-md bg-sky-500 text-white"
+                            : "rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100"
+                        }`}
+                      >
+                        {message.content}
+                      </div>
+                    )}
                     <span className="mt-1 px-1 text-[10px] font-semibold text-slate-500">
                       {message.timestamp}
                     </span>
