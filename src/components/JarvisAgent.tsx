@@ -245,7 +245,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       };
       setMessages((prev) => [...prev, userMsg, agentMsg]);
       setAgentMode("daily_goal");
-      setAgentForm({ tm: "", coldtalk: "", bronze: "", onePercent: "" });
+      setAgentForm({ tm: "", coldtalk: "", bronze: "", onePercent: "", special1: "", special2: "", special3: "" });
       updateTalkState();
       return;
     }
@@ -531,6 +531,25 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                             </div>
                           ))}
                         </div>
+
+                        {/* 특발성 활동목표 */}
+                        <div className="mt-3 space-y-1.5">
+                          <p className="text-[11px] font-bold" style={{ color: "var(--text-subtle)" }}>특발성 활동목표 (텍스트 입력)</p>
+                          {["special1", "special2", "special3"].map((key, i) => (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="w-4 shrink-0 text-center text-[11px]" style={{ color: "var(--text-faint)" }}>{i + 1}</span>
+                              <input
+                                type="text"
+                                value={agentForm[key] || ""}
+                                onChange={(e) => setAgentForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                                className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold outline-none"
+                                style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }}
+                                placeholder={`오늘 처리할 과업 ${i + 1}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
                         <div className="mt-4 flex gap-2">
                             <button
                               type="button"
@@ -553,6 +572,11 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                                     goal_media_mix: 0,
                                     goal_meeting_confirmed: 0,
                                     is_outside_meeting: false,
+                                    goal_work_items: [
+                                      { id: `task-${Date.now()}-1`, text: agentForm.special1 || "", done: false },
+                                      { id: `task-${Date.now()}-2`, text: agentForm.special2 || "", done: false },
+                                      { id: `task-${Date.now()}-3`, text: agentForm.special3 || "", done: false },
+                                    ],
                                   }, { onConflict: "work_date,owner_name" });
                                   if (error) throw error;
                                   setMessages((prev) => [...prev, {
@@ -561,7 +585,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
 
 TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈DB ${agentForm.bronze || 0}개 / 1%DB ${agentForm.onePercent || 0}개
 
-일별활동기록 메뉴에서 바로 확인하실 수 있습니다.`,
+특발성: ${[agentForm.special1, agentForm.special2, agentForm.special3].filter(Boolean).join(" / ") || "없음"}
+
+일별활동기록 메뉴에서 확인하실 수 있습니다.`,
                                     timestamp: getNowLabel(),
                                   }]);
                                   setAgentMode(null);
