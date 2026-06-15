@@ -15,6 +15,7 @@ import {
   Info,
   Loader2,
   Megaphone,
+  Pencil,
   Plus,
   RefreshCw,
   Shield,
@@ -29,11 +30,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Importance = "긴급" | "높음" | "보통" | "낮음" | "정보";
 type Notice = {
   id: number; title: string; content: string; importance: Importance;
-  image_url: string | null; file_urls: string[] | null;
+  image_url: string | null; file_urls: string[] | null; file_names: string[] | null;
   author: string; start_date: string; end_date: string;
   tagged: string[]; created_at: string;
 };
 type NoticeRead = { notice_id: number; user_name: string; };
+type ExistingFile = { url: string; name: string };
 
 // ━━━ 상수 ━━━
 const IMPORTANCE_LIST: Importance[] = ["긴급", "높음", "보통", "낮음", "정보"];
@@ -46,6 +48,7 @@ const IMP: Record<Importance, { icon: any; color: string; bg: string; border: st
 };
 const TEAM = ["김정후","김창완","최웅","조계현","이세호","기여운","최연전","김재영","최은정"];
 const ADMIN_NAMES = ["문시욱","김정후","김창완","최웅"];
+const IMG_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i;
 
 function getUser() {
   try {
@@ -66,23 +69,55 @@ function fmtDate(d: string) {
 }
 function isActive(n: Notice) { const t = today(); return n.start_date <= t && n.end_date >= t; }
 function getFileName(url: string) {
-  try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_/, ""); } catch { return url; }
+  try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_[a-z0-9]+\./, ".").replace(/^\d+_/, ""); } catch { return url; }
 }
 
-// ━━━ 등록 모달 ━━━
-function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle]       = useState("");
-  const [content, setContent]   = useState("");
-  const [importance, setImp]    = useState<Importance>("보통");
-  const [startDate, setStart]   = useState(today());
-  const [endDate, setEnd]       = useState(() => { const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); });
-  const [tagged, setTagged]     = useState<string[]>([]);
+// ━━━ 업로드 유틸 ━━━
+// Supabase Storage 키는 한글/특수문자를 허용하지 않으므로 안전한 영문 키로 변환한다.
+// 원본 파일명(한글 포함)은 file_names 컬럼에 따로 저장해 표시용으로 사용한다.
+function safeKey(fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot + 1).replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `notices/${Date.now()}_${rand}${ext ? "." + ext : ""}`;
+}
+async function uploadFiles(files: File[]): Promise<{ urls: string[]; names: string[]; failed: string[] }> {
+  const urls: string[] = [];
+  const names: string[] = [];
+  const failed: string[] = [];
+  for (const f of files) {
+    const path = safeKey(f.name);
+    const { error: upErr } = await supabase.storage
+      .from("notice-images")
+      .upload(path, f, { upsert: true, contentType: f.type || undefined });
+    if (upErr) { console.error("파일 업로드 실패:", f.name, upErr); failed.push(`${f.name} (${upErr.message})`); continue; }
+    const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
+    if (data?.publicUrl) { urls.push(data.publicUrl); names.push(f.name); }
+  }
+  return { urls, names, failed };
+}
+
+// ━━━ 등록/수정 모달 ━━━
+function NoticeModal({ me, editing, onClose, onSaved }:
+  { me: string; editing: Notice | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing;
+  const [title, setTitle]       = useState(editing?.title || "");
+  const [content, setContent]   = useState(editing?.content || "");
+  const [importance, setImp]    = useState<Importance>(editing?.importance || "보통");
+  const [startDate, setStart]   = useState(editing?.start_date?.slice(0,10) || today());
+  const [endDate, setEnd]       = useState(editing?.end_date?.slice(0,10) || (() => { const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })());
+  const [tagged, setTagged]     = useState<string[]>(editing?.tagged || []);
   const [files, setFiles]       = useState<File[]>([]);
+  const [existing, setExisting] = useState<ExistingFile[]>(
+    (editing?.file_urls || []).map((url, i) => ({ url, name: editing?.file_names?.[i] || getFileName(url) }))
+  );
   const [saving, setSaving]     = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef                 = useRef<HTMLInputElement>(null);
 
-  const others = TEAM.filter(n => n !== me);
+  // 태그 대상은 작성자 본인을 제외 (수정 시에는 원작성자 기준)
+  const authorName = editing?.author || me;
+  const others = TEAM.filter(n => n !== authorName);
   const allSel = tagged.length === others.length && others.length > 0;
   const toggleAll = () => setTagged(allSel ? [] : others);
   const toggleTag = (n: string) => setTagged(p => p.includes(n) ? p.filter(t=>t!==n) : [...p,n]);
@@ -94,32 +129,35 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
     if (startDate > endDate) { alert("종료일이 시작일보다 앞설 수 없습니다."); return; }
     setSaving(true);
     try {
-      const urls: string[] = [];
-      const failedFiles: string[] = [];
-      for (const f of files) {
-        const path = `notices/${Date.now()}_${f.name}`;
-        const { error: upErr } = await supabase.storage.from("notice-images").upload(path, f, { upsert: true });
-        if (upErr) {
-          console.error("파일 업로드 실패:", f.name, upErr);
-          failedFiles.push(`${f.name} (${upErr.message})`);
-          continue;
-        }
-        const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
-        if (data?.publicUrl) urls.push(data.publicUrl);
-      }
+      const { urls: newUrls, names: newNames, failed } = await uploadFiles(files);
 
-      // 파일 업로드 실패가 있으면 사용자에게 알림 후 진행 여부 확인
-      if (failedFiles.length > 0) {
-        const ok = confirm(`다음 파일 업로드에 실패했습니다:\n\n${failedFiles.join("\n")}\n\nSupabase Storage 권한 확인이 필요합니다.\n파일 없이 공지만 등록할까요?`);
+      if (failed.length > 0) {
+        const ok = confirm(`다음 파일 업로드에 실패했습니다:\n\n${failed.join("\n")}\n\nSupabase Storage 권한 확인이 필요합니다.\n실패한 파일 없이 저장할까요?`);
         if (!ok) { setSaving(false); return; }
       }
 
-      const { error } = await supabase.from("notices").insert({
+      const combinedUrls  = [...existing.map(e=>e.url),  ...newUrls];
+      const combinedNames = [...existing.map(e=>e.name), ...newNames];
+      const imageUrl = combinedUrls.find(u => IMG_RE.test(u)) || null;
+
+      const base = {
         title: title.trim(), content: content.trim(), importance,
-        image_url: urls[0]||null, file_urls: urls.length?urls:null,
-        author: me, start_date: startDate, end_date: endDate, tagged,
-      });
-      if (error) throw error;
+        image_url: imageUrl,
+        file_urls: combinedUrls.length ? combinedUrls : null,
+        start_date: startDate, end_date: endDate, tagged,
+      };
+      const withNames = { ...base, file_names: combinedNames.length ? combinedNames : null };
+      const colMissing = (msg: string) => /file_names|column/i.test(msg || "");
+
+      if (isEdit) {
+        let res = await supabase.from("notices").update(withNames).eq("id", editing!.id);
+        if (res.error && colMissing(res.error.message)) res = await supabase.from("notices").update(base).eq("id", editing!.id);
+        if (res.error) throw res.error;
+      } else {
+        let res = await supabase.from("notices").insert({ ...withNames, author: me });
+        if (res.error && colMissing(res.error.message)) res = await supabase.from("notices").insert({ ...base, author: me });
+        if (res.error) throw res.error;
+      }
       onSaved();
     } catch (e: any) { alert("저장 실패: " + (e?.message||"오류")); }
     finally { setSaving(false); }
@@ -134,7 +172,7 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
         <div className="flex shrink-0 items-center justify-between px-6 py-4" style={{ borderBottom:"1px solid var(--border-subtle)" }}>
           <div className="flex items-center gap-2">
             <Megaphone size={17} style={{ color:"var(--accent-text)" }} />
-            <h2 className="crm-section-title">공지사항 등록</h2>
+            <h2 className="crm-section-title">{isEdit ? "공지사항 수정" : "공지사항 등록"}</h2>
           </div>
           <button type="button" onClick={onClose} className="btn-premium btn-secondary h-8 w-8 p-0"><X size={14}/></button>
         </div>
@@ -191,7 +229,7 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
           </div>
           <div>
             <p className="crm-tiny mb-2">파일 첨부</p>
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={e=>addFiles(e.target.files)} />
+            <input ref={fileRef} type="file" multiple className="hidden" onChange={e=>{addFiles(e.target.files); if(fileRef.current) fileRef.current.value="";}} />
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileRef.current?.click()}
@@ -201,10 +239,25 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
               <p className="text-[13px] font-semibold" style={{ color:"var(--text-muted)" }}>파일 첨부 (선택)</p>
               <p className="crm-tiny">클릭하거나 드래그하여 파일을 업로드하세요</p>
             </div>
+            {/* 기존 첨부파일 (수정 모드) */}
+            {existing.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {existing.map((e,i)=>(
+                  <div key={`ex-${i}`} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
+                    style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
+                    <File size={13} style={{ color:"var(--accent-text)" }} />
+                    <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{e.name}</span>
+                    <span className="crm-tiny" style={{ color:"var(--text-faint)" }}>기존</span>
+                    <button type="button" onClick={()=>setExisting(p=>p.filter((_,j)=>j!==i))} style={{ color:"var(--text-faint)" }}><X size={12}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* 새로 추가한 파일 */}
             {files.length > 0 && (
               <div className="mt-2 space-y-1">
                 {files.map((f,i)=>(
-                  <div key={i} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
+                  <div key={`new-${i}`} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
                     style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
                     <File size={13} style={{ color:"var(--accent-text)" }} />
                     <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{f.name}</span>
@@ -223,7 +276,7 @@ function CreateModal({ me, onClose, onSaved }: { me: string; onClose: () => void
         <div className="flex shrink-0 items-center justify-end gap-2 px-6 py-4" style={{ borderTop:"1px solid var(--border-subtle)" }}>
           <button type="button" onClick={onClose} className="btn-premium btn-secondary">취소</button>
           <button type="button" onClick={handleSave} disabled={saving} className="btn-premium btn-primary">
-            {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}등록
+            {saving ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}{isEdit ? "수정" : "등록"}
           </button>
         </div>
       </div>
@@ -237,6 +290,7 @@ export default function NoticesPage() {
   const [reads, setReads]       = useState<NoticeRead[]>([]);
   const [loading, setLoading]   = useState(true);
   const [showCreate, setCreate] = useState(false);
+  const [editTarget, setEdit]   = useState<Notice|null>(null);
   const [selected, setSelected] = useState<Notice|null>(null);
   const [panelIn, setPanelIn]   = useState(false);
   const [me, setMe]             = useState("");
@@ -447,6 +501,8 @@ export default function NoticesPage() {
                 const Icon = cfg.icon;
                 const ru = readUsers(n.id);
                 const fileUrls = n.file_urls || (n.image_url ? [n.image_url] : []);
+                const canEdit = isAdmin || n.author === me;
+                const fileLabel = (url: string, i: number) => n.file_names?.[i] || getFileName(url);
                 return (
                   <>
                     <div className="flex shrink-0 items-center gap-2 px-5 py-3"
@@ -454,10 +510,17 @@ export default function NoticesPage() {
                       <Icon size={14} style={{ color:cfg.color }}/>
                       <span className="text-[12px] font-black" style={{ color:cfg.color }}>{n.importance}</span>
                       <span className="ml-auto crm-tiny">{fmtDate(n.start_date)} ~ {fmtDate(n.end_date)}</span>
-                      {(isAdmin || n.author === me) && (
+                      {canEdit && (
+                        <button type="button" onClick={()=>setEdit(n)}
+                          className="flex h-7 w-7 items-center justify-center rounded-[6px]"
+                          style={{ background:"var(--accent-subtle)", color:"var(--accent-text)" }} title="수정">
+                          <Pencil size={13}/>
+                        </button>
+                      )}
+                      {canEdit && (
                         <button type="button" onClick={()=>handleDelete(n.id)}
                           className="flex h-7 w-7 items-center justify-center rounded-[6px]"
-                          style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444" }}>
+                          style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444" }} title="삭제">
                           <Trash2 size={13}/>
                         </button>
                       )}
@@ -469,7 +532,7 @@ export default function NoticesPage() {
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-y-auto">
-                      {n.image_url && /\.(jpg|jpeg|png|gif|webp|svg)/i.test(n.image_url) && (
+                      {n.image_url && IMG_RE.test(n.image_url) && (
                         <div style={{ borderBottom:"1px solid var(--border-subtle)" }}>
                           <img src={n.image_url} alt="공지 이미지" className="max-h-[200px] w-full object-contain"
                             style={{ background:"var(--surface-2)" }}/>
@@ -501,11 +564,11 @@ export default function NoticesPage() {
                           <p className="crm-tiny mb-2 mt-4">첨부파일 ({fileUrls.length}개)</p>
                           <div className="space-y-1.5">
                             {fileUrls.map((url,i)=>(
-                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" download={getFileName(url)}
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" download={fileLabel(url,i)}
                                 className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 transition hover:opacity-80"
                                 style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
                                 <File size={13} style={{ color:"var(--accent-text)" }}/>
-                                <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{getFileName(url)}</span>
+                                <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{fileLabel(url,i)}</span>
                                 <Download size={12} style={{ color:"var(--text-faint)" }}/>
                               </a>
                             ))}
@@ -553,7 +616,18 @@ export default function NoticesPage() {
         )}
       </div>
 
-      {showCreate && <CreateModal me={me} onClose={()=>setCreate(false)} onSaved={()=>{ setCreate(false); load(); }}/>}
+      {/* 등록 모달 */}
+      {showCreate && (
+        <NoticeModal me={me} editing={null}
+          onClose={()=>setCreate(false)}
+          onSaved={()=>{ setCreate(false); load(); }}/>
+      )}
+      {/* 수정 모달 */}
+      {editTarget && (
+        <NoticeModal me={me} editing={editTarget}
+          onClose={()=>setEdit(null)}
+          onSaved={()=>{ setEdit(null); closePanel(); load(); }}/>
+      )}
     </div>
   );
 }
