@@ -171,6 +171,76 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // ===== 업무요청 접수/보류 버튼 =====
+    if (domain === "task") {
+      const taskId = Number(param1);
+      const baseUrl = process.env.CRM_BASE_URL || "https://crm-go-roan.vercel.app";
+
+      if (!taskId || !action) return NextResponse.json({ ok: true });
+
+      const newStatus = action === "accept" ? "접수" : action === "hold" ? "보류" : null;
+      if (!newStatus) return NextResponse.json({ ok: true });
+
+      // tasks 테이블 상태 업데이트
+      const { data: taskData } = await supabase
+        .from("tasks")
+        .select("id,category,content,requester,assignee")
+        .eq("id", taskId)
+        .single();
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({ status: newStatus })
+        .eq("id", taskId);
+
+      // task_comments에 상태변경 댓글 추가
+      if (!error && taskData) {
+        const contentLines = String((taskData as any).content || "").split("\n");
+        const customerLine = contentLines.find((l: string) => l.includes("고객명:"));
+        const customerName = customerLine ? customerLine.replace(/^.*고객명:\s*/, "").trim() : "";
+
+        const commentText = customerName
+          ? `수신자 ${clickerName}가\n고객명: ${customerName}\n${(taskData as any).category}을(를) ${newStatus}하였습니다.\n\n@${(taskData as any).requester || ""}`
+          : `수신자 ${clickerName}가\n${(taskData as any).category}을(를) ${newStatus}하였습니다.\n\n@${(taskData as any).requester || ""}`;
+
+        await supabase.from("task_comments").insert({
+          task_id: taskId,
+          author: "워크봇",
+          content: commentText,
+          comment_type: "상태변경",
+        });
+
+        // 카카오워크로 상태변경 알림 발송
+        if (appKey) {
+          try {
+            await fetch(`${baseUrl}/api/kakaowork/send-task-status-notify`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              cache: "no-store",
+              body: JSON.stringify({
+                task_id: taskId,
+                status: newStatus,
+                assignee: clickerName,
+                requester: (taskData as any).requester || "",
+                category: (taskData as any).category || "",
+                customer_name: customerName,
+              }),
+            });
+          } catch {}
+        }
+      }
+
+      if (appKey && conversationId) {
+        const statusEmoji = newStatus === "접수" ? "✅" : "⏸";
+        const text = error
+          ? `⚠️ 업무요청 ${newStatus} 처리 실패`
+          : `${statusEmoji} 업무요청이 ${newStatus} 처리되었습니다. (처리자: ${clickerName})`;
+        await sendResultMessage(appKey, Number(conversationId), text);
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: true });
