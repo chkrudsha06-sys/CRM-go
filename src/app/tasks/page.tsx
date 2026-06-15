@@ -760,12 +760,14 @@ function ApprovalCard({
   onView,
   onApprove,
   onReject,
+  onDelete,
 }: {
   request: ApprovalRequestRow;
   me: string;
   onView: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onDelete?: () => void;
 }) {
   const payload = (request.payload || {}) as Partial<ApprovalForm>;
   const currentApprover = effectiveCurrentApprover(request);
@@ -903,6 +905,17 @@ function ApprovalCard({
                 </button>
               </>
             )}
+            {/* 완료/반려 건 본인 요청건 삭제 버튼 */}
+            {onDelete && isRequester && (request.status === "완료" || request.status === "반려") && (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="btn-premium btn-danger h-8"
+              >
+                <Trash2 size={13} />
+                삭제
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -917,6 +930,7 @@ function ApprovalDetailSlidePanel({
   onClose,
   onApprove,
   onReject,
+  onDelete,
 }: {
   request: ApprovalRequestRow;
   me: string;
@@ -924,6 +938,7 @@ function ApprovalDetailSlidePanel({
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onDelete?: () => void;
 }) {
   const payload = (request.payload || {}) as Partial<ApprovalForm>;
   const currentApprover = effectiveCurrentApprover(request);
@@ -987,44 +1002,34 @@ function ApprovalDetailSlidePanel({
             <button
               type="button"
               onClick={() => {
-                const printContents = document.getElementById("approval-preview-print")?.innerHTML;
-                if (!printContents) return;
-                const win = window.open("", "_blank", "width=900,height=1200");
-                if (!win) return;
-                win.document.write(`<!DOCTYPE html><html lang="ko"><head>
-                  <meta charset="utf-8"/>
-                  <title>결재 양식 출력</title>
-                  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
-                  <style>
-                    @page { size: A4 portrait; margin: 0; }
-                    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    html, body { width: 210mm; height: 297mm; background: white; overflow: hidden; }
-                    body { display: block; }
-                    .print-wrap {
-                      width: 210mm;
-                      height: 297mm;
-                      overflow: hidden;
-                      display: flex;
-                      align-items: flex-start;
-                      justify-content: center;
-                      padding: 0;
-                    }
-                    .print-wrap > div {
-                      transform: scale(0.75);
-                      transform-origin: top center;
-                      flex-shrink: 0;
-                    }
-                    @media print {
-                      @page { size: A4 portrait; margin: 0; }
-                      html, body { width: 210mm; height: 297mm; overflow: hidden; page-break-after: avoid; }
-                      .print-wrap { height: 297mm; overflow: hidden; }
-                      .print-wrap > div { transform: scale(0.75); transform-origin: top center; page-break-inside: avoid; page-break-after: avoid; }
-                    }
-                  </style>
-                </head><body><div class="print-wrap">${printContents}</div>
-                <script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script>
-                </body></html>`);
-                win.document.close();
+                const el = document.getElementById("approval-preview-print");
+                if (!el) return;
+                const iframe = document.createElement("iframe");
+                iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;";
+                document.body.appendChild(iframe);
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (!doc) return;
+                doc.open();
+                doc.write(`<!DOCTYPE html><html lang="ko"><head>
+<meta charset="utf-8"/>
+<title></title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+<style>
+@page { size: A4 portrait; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+html, body { width: 210mm; height: 297mm; background: white; overflow: hidden; }
+body { display: flex; align-items: flex-start; justify-content: center; padding: 5mm; }
+</style>
+</head><body>${el.innerHTML}</body></html>`);
+                doc.close();
+                iframe.onload = () => {
+                  try {
+                    iframe.contentWindow?.focus();
+                    iframe.contentWindow?.print();
+                  } finally {
+                    setTimeout(() => document.body.removeChild(iframe), 2000);
+                  }
+                };
               }}
               className="btn-premium btn-secondary h-9"
             >
@@ -1044,6 +1049,19 @@ function ApprovalDetailSlidePanel({
               </>
             )}
           </div>
+          {/* 완료/반려 건 중 본인 요청건만 삭제 가능 */}
+          {onDelete && request.requester_name === me && (request.status === "완료" || request.status === "반려") && (
+            <div className="mt-3 px-1">
+              <button
+                type="button"
+                onClick={onDelete}
+                className="btn-premium btn-danger w-full h-9 text-[12px]"
+              >
+                <Trash2 size={13} />
+                요청서 삭제
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="slide-panel-body">
@@ -2733,6 +2751,28 @@ export default function TasksPage() {
     loadData();
   };
 
+  const handleDeleteApproval = async (request: ApprovalRequestRow) => {
+    if (
+      !confirm(
+        `"${request.request_type}" 요청서를 삭제하시겠습니까?\n삭제된 요청서는 복구할 수 없습니다.`,
+      )
+    )
+      return;
+
+    await supabase
+      .from("approval_actions")
+      .delete()
+      .eq("approval_request_id", request.id);
+
+    await supabase
+      .from("approval_requests")
+      .delete()
+      .eq("id", request.id);
+
+    setSelectedApproval(null);
+    loadData();
+  };
+
   const selectedComments = selectedTask ? taskComments(selectedTask.id) : [];
 
   return (
@@ -2936,6 +2976,7 @@ export default function TasksPage() {
                     onView={() => setSelectedApproval(request)}
                     onApprove={() => handleApprovalAction(request, "승인")}
                     onReject={() => handleApprovalAction(request, "반려")}
+                    onDelete={() => handleDeleteApproval(request)}
                   />
                 ))}
 
@@ -3024,6 +3065,7 @@ export default function TasksPage() {
           onClose={() => setSelectedApproval(null)}
           onApprove={() => handleApprovalAction(selectedApproval, "승인")}
           onReject={() => handleApprovalAction(selectedApproval, "반려")}
+          onDelete={() => handleDeleteApproval(selectedApproval)}
         />
       )}
 
