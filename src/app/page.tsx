@@ -621,13 +621,23 @@ export default function HomePage() {
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [sales, setSales] = useState<SalesRow[]>([]);
   const [kpis, setKpis] = useState<KpiRow[]>([]);
-  const [me, setMe] = useState<CRMUserLite | null>(null);
+  const [me, setMe] = useState<CRMUserLite | null>(() => {
+    // 초기 렌더 시점에 localStorage에서 바로 읽어 fixedOwner/activeOwner가 즉시 올바르게 계산됨
+    try { return readUserFromStorage(); } catch { return null; }
+  });
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
   const [filterMode, setFilterMode] = useState<FilterMode>("monthly");
   const [filterMonthNum, setFilterMonthNum] = useState(new Date().getMonth() + 1);
   const [filterWeekNum, setFilterWeekNum] = useState(() => getCurrentWeekNum(new Date().getFullYear(), new Date().getMonth() + 1));
   const [filterYear] = useState(new Date().getFullYear());
-  const [ownerFilter, setOwnerFilter] = useState("전체");
+  const [ownerFilter, setOwnerFilter] = useState<string>(() => {
+    // 실행파트 담당자면 초기 렌더부터 본인 이름으로 고정
+    try {
+      const u = readUserFromStorage();
+      if (isExecutionUser(u)) return u?.name || "전체";
+    } catch {}
+    return "전체";
+  });
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -817,8 +827,11 @@ export default function HomePage() {
 
   const notesByContact = useMemo(() => {
     const map = new Map<string, NoteRow[]>();
+    // visibleContacts id 기준으로만 노트 매핑 (다른 담당자 노트 배제)
+    const visibleIds = new Set(contacts.map((c) => String(c.id)));
     notes.forEach((note) => {
       const key = String(note.contact_id);
+      if (!visibleIds.has(key)) return; // 본인 담당 contacts에 속하지 않는 노트 제외
       const list = map.get(key) || [];
       list.push(note);
       map.set(key, list);
@@ -827,7 +840,7 @@ export default function HomePage() {
       list.sort((a, b) => new Date(String(b.created_at || b.note_date || 0)).getTime() - new Date(String(a.created_at || a.note_date || 0)).getTime());
     });
     return map;
-  }, [notes]);
+  }, [notes, contacts]);
 
   const visibleContacts = useMemo(() => {
     return contacts.filter((contact) => rowMatchesOwner(contact, activeOwner));
