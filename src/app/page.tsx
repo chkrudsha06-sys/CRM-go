@@ -658,9 +658,10 @@ export default function HomePage() {
   /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
   const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
   const [editIssue, setEditIssue] = useState("");
-  const [editForm, setEditForm] = useState({ name: "", title: "", phone: "", management_stage: "", payment_channel: "", regular_payment_date: "", memo: "" });
+  const [editForm, setEditForm] = useState({ name: "", title: "", phone: "", management_stage: "", payment_channel: "", regular_payment_date: "", memo: "", sensitivity: "" });
   const [quickNote, setQuickNote] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [popupMode, setPopupMode] = useState<"payment_missing" | "inactive" | "closing" | "db_inactive" | "view_only">("view_only");
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -781,26 +782,73 @@ export default function HomePage() {
       payment_channel: target.payment_channel || "",
       regular_payment_date: target.regular_payment_date || "",
       memo: target.memo || "",
+      sensitivity: "",
     });
+    // 팝업 모드 결정
+    if (issue.includes("결제") && issue.includes("D")) {
+      setPopupMode("view_only"); // 결제임박: 알림만
+    } else if (issue.includes("결제정보 누락") || issue.includes("결제누락")) {
+      setPopupMode("payment_missing"); // 결제정보 입력 팝업
+    } else if (issue.includes("재TM") || issue.includes("고객DB")) {
+      setPopupMode("db_inactive"); // 고객DB 장기미활동 → 활동노트 + 감도
+    } else if (issue.includes("클로징")) {
+      setPopupMode("closing"); // 클로징지연 → 활동노트 + 단계전환
+    } else {
+      setPopupMode("inactive"); // 장기미활동(VIP) → 활동노트 + 단계전환 + 계약전환
+    }
   }, [contacts]);
 
   const saveCustomerEdit = useCallback(async () => {
     if (!editTarget) return;
     setSavingEdit(true);
     try {
+      const now = new Date().toISOString();
       const payload: Record<string, any> = {
-        name: editForm.name.trim() || null,
-        title: editForm.title.trim() || null,
-        phone: editForm.phone.trim() || null,
-        management_stage: editForm.management_stage || null,
-        payment_channel: editForm.payment_channel.trim() || null,
-        regular_payment_date: editForm.regular_payment_date.trim() || null,
-        memo: editForm.memo.trim() || null,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       };
+
+      // 결제정보 누락 팝업: 결제정보만 저장
+      if (popupMode === "payment_missing") {
+        payload.payment_channel = editForm.payment_channel.trim() || null;
+        payload.regular_payment_date = editForm.regular_payment_date.trim() || null;
+      }
+      // 활동노트 팝업 (장기미활동/클로징지연): 관리구간 + 결제정보 저장
+      else if (popupMode === "inactive" || popupMode === "closing" || popupMode === "db_inactive") {
+        if (editForm.management_stage) payload.management_stage = editForm.management_stage;
+        if (editForm.payment_channel) payload.payment_channel = editForm.payment_channel.trim();
+        if (editForm.regular_payment_date) payload.regular_payment_date = editForm.regular_payment_date.trim();
+        // 고객DB 감도: memo에 태그 형태로 저장
+        if (popupMode === "db_inactive" && editForm.sensitivity) {
+          const baseMemo = (editForm.memo || "")
+            .replace(/\[고객감도:.*?\]/g, "")
+            .replace(/\[재TM일:.*?\]/g, "")
+            .trim();
+          const today = toDateKey(new Date());
+          let newMemo = baseMemo;
+          newMemo += `
+[고객감도: ${editForm.sensitivity}]`;
+          if (editForm.sensitivity === "재TM진행") newMemo += `
+[재TM일: ${today}]`;
+          payload.memo = newMemo.trim();
+        }
+      }
+
       const { error } = await supabase.from("contacts").update(payload).eq("id", editTarget.id);
       if (error) throw error;
 
+      // 계약전환 시 결제정보 함께 저장
+      if (editForm.management_stage === "리텐션") {
+        const contractPayload: Record<string, any> = {
+          meeting_result: "계약완료",
+          contract_date: toDateKey(new Date()),
+          updated_at: now,
+        };
+        if (editForm.payment_channel) contractPayload.payment_channel = editForm.payment_channel;
+        if (editForm.regular_payment_date) contractPayload.regular_payment_date = editForm.regular_payment_date;
+        await supabase.from("contacts").update(contractPayload).eq("id", editTarget.id);
+      }
+
+      // 활동노트 저장
       if (quickNote.trim()) {
         const { error: noteError } = await supabase.from("contact_notes").insert({
           contact_id: editTarget.id,
@@ -820,7 +868,7 @@ export default function HomePage() {
     } finally {
       setSavingEdit(false);
     }
-  }, [editForm, editTarget, fetchDashboard, me?.name, quickNote]);
+  }, [editForm, editTarget, fetchDashboard, me?.name, popupMode, quickNote]);
 
   const fixedOwner = isExecutionUser(me);
   const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
@@ -938,6 +986,7 @@ export default function HomePage() {
     const items: DashboardActionItem[] = [];
     const counts = { payment: 0, missing: 0, inactive: 0, closing: 0 };
 
+    // ── 1. 결제임박: 파이프라인(vipContacts) 중 결제일 등록 + D-4 이내 ──
     vipContacts.forEach((contact) => {
       const contactId = Number(contact.id);
       const day = parsePaymentDay(contact.regular_payment_date);
@@ -957,7 +1006,11 @@ export default function HomePage() {
           });
         }
       }
+    });
 
+    // ── 2. 결제누락: 파이프라인(vipContacts) 중 계약완료인데 결제정보 없는 고객 ──
+    vipContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
       if (isContracted(contact) && (!contact.payment_channel || !parsePaymentDay(contact.regular_payment_date))) {
         counts.missing += 1;
         items.push({
@@ -967,39 +1020,77 @@ export default function HomePage() {
           title: contact.name || "고객명 없음",
           desc: "결제채널 또는 결제일이 비어 있습니다. 클릭해 바로 입력하세요.",
           href: "/pipeline3",
-          priority: 1,
+          priority: 100,
           contactId,
         });
       }
+    });
 
+    // ── 3. 장기미활동 (고객DB): 재TM 예정일이 지난 고객 ──
+    customerDbContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
+      const memo = String(contact.memo || "");
+      // 재TM일 파싱: [재TM일: YYYY-MM-DD]
+      const reTmMatch = memo.match(/\[재TM일:\s*(\d{4}-\d{2}-\d{2})\]/);
+      if (reTmMatch) {
+        const reTmDate = parseDate(reTmMatch[1]);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (reTmDate && reTmDate <= today) {
+          const overdueDays = Math.floor((today.getTime() - reTmDate.getTime()) / 86400000);
+          counts.inactive += 1;
+          items.push({
+            key: `db-retm-${contact.id}`,
+            type: "재TM 예정",
+            tone: overdueDays === 0 ? "info" : "warning",
+            title: contact.name || "고객명 없음",
+            desc: `고객DB · 재TM 예정일 ${reTmMatch[1]}${overdueDays > 0 ? ` (${overdueDays}일 초과)` : " (오늘)"}`,
+            href: "/customer-db",
+            priority: 200 - overdueDays,
+            contactId,
+          });
+        }
+      }
+    });
+
+    // ── 4. 장기미활동 (VIP활동DB): 리드/프로스펙팅 중 활동노트 3일 이상 없는 고객 ──
+    vipContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
       const stage = normalizeText(contact.management_stage);
+      if (!["리드", "프로스펙팅"].some((s) => stage === normalizeText(s))) return;
       const latest = latestActivityDate(contact, notesByContact);
       const inactiveDays = daysBetween(latest);
-      if (["리드", "프로스펙팅", "딜클로징"].some((item) => stage === normalizeText(item)) && inactiveDays !== null && inactiveDays >= 7) {
+      if (inactiveDays !== null && inactiveDays >= 3) {
         counts.inactive += 1;
         items.push({
-          key: `inactive-${contact.id}`,
+          key: `vip-inactive-${contact.id}`,
           type: "장기 미활동",
           tone: "warning",
           title: contact.name || "고객명 없음",
-          desc: `${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
+          desc: `VIP·${contact.management_stage || "관리구간"} · 최근 활동 ${inactiveDays}일 전`,
           href: "/pipeline3",
-          priority: 4 + inactiveDays,
+          priority: 300 + inactiveDays,
           contactId,
         });
       }
+    });
 
-      const closingDays = daysBetween(contact.updated_at || contact.vip_transferred_at || contact.created_at);
-      if (stage === normalizeText("딜클로징") && closingDays !== null && closingDays >= 5) {
+    // ── 5. 클로징지연: 파이프라인 딜클로징 중 활동노트 3일 이상 없는 고객 ──
+    vipContacts.forEach((contact) => {
+      const contactId = Number(contact.id);
+      const stage = normalizeText(contact.management_stage);
+      if (stage !== normalizeText("딜클로징")) return;
+      const latest = latestActivityDate(contact, notesByContact);
+      const inactiveDays = daysBetween(latest);
+      if (inactiveDays !== null && inactiveDays >= 3) {
         counts.closing += 1;
         items.push({
           key: `closing-${contact.id}`,
           type: "클로징 지연",
           tone: "danger",
           title: contact.name || "고객명 없음",
-          desc: `딜클로징 ${closingDays}일째 체류 중입니다.`,
+          desc: `딜클로징 · 활동노트 ${inactiveDays}일 전`,
           href: "/pipeline3",
-          priority: 2 + closingDays,
+          priority: 400 + inactiveDays,
           contactId,
         });
       }
@@ -1011,8 +1102,8 @@ export default function HomePage() {
       .forEach((item) => {
         if (!unique.has(item.key)) unique.set(item.key, item);
       });
-    return { actionItems: Array.from(unique.values()).slice(0, 14), criticalCounts: counts };
-  }, [notesByContact, vipContacts]);
+    return { actionItems: Array.from(unique.values()).slice(0, 20), criticalCounts: counts };
+  }, [customerDbContacts, notesByContact, vipContacts]);
 
   const paymentDdays = useMemo(() => {
     return vipContacts
@@ -2007,74 +2098,136 @@ export default function HomePage() {
                 </button>
               </div>
 
-              {/* 팝업 본문: 즉시 수정 필드 */}
+              {/* 팝업 본문: 모드별 분기 */}
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-                <div className="grid grid-cols-2 gap-2.5">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>고객명</span>
-                    <input value={editForm.name} onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))} className="crm-search w-full px-3" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>직급</span>
-                    <input value={editForm.title} onChange={(event) => setEditForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="예: 본부장" className="crm-search w-full px-3" />
-                  </label>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>연락처</span>
-                    <input value={editForm.phone} onChange={(event) => setEditForm((prev) => ({ ...prev, phone: event.target.value }))} className="crm-search w-full px-3" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>관리구간</span>
-                    <select value={editForm.management_stage} onChange={(event) => setEditForm((prev) => ({ ...prev, management_stage: event.target.value }))} className="crm-search w-full px-3">
-                      <option value="">미지정</option>
-                      {PIPELINE_STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: editIssue.includes("결제") ? "var(--warning-border)" : "var(--border-subtle)" }}>
-                  <p className="mb-2 text-[11px] font-normal" style={{ color: editIssue.includes("결제") ? "var(--warning-text)" : "var(--text-subtle)" }}>
-                    결제 정보 {editIssue.includes("결제") ? "· 이 항목을 채우면 알림이 해제됩니다" : ""}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
-                      <select value={editForm.payment_channel} onChange={(event) => setEditForm((prev) => ({ ...prev, payment_channel: event.target.value }))} className="crm-search w-full px-3">
-                        <option value="">선택해주세요</option>
-                        {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
-                      <select value={editForm.regular_payment_date} onChange={(event) => setEditForm((prev) => ({ ...prev, regular_payment_date: event.target.value }))} className="crm-search w-full px-3">
-                        <option value="">선택해주세요</option>
-                        {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
-                      </select>
-                    </label>
+                {/* ── 결제임박: 알림 뷰만 ── */}
+                {popupMode === "view_only" && (
+                  <div className="rounded-[12px] border p-4" style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)" }}>
+                    <p className="text-[13px] font-semibold" style={{ color: "var(--warning-text)" }}>결제 예정 알림</p>
+                    <p className="mt-1 text-[12px]" style={{ color: "var(--text-muted)" }}>{paymentLabel(editTarget)}</p>
+                    <p className="mt-2 text-[11px]" style={{ color: "var(--text-subtle)" }}>결제채널 또는 결제일 수정이 필요하다면 파이프라인에서 직접 수정하세요.</p>
                   </div>
-                </div>
+                )}
 
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>메모</span>
-                  <textarea value={editForm.memo} onChange={(event) => setEditForm((prev) => ({ ...prev, memo: event.target.value }))} rows={2} className="crm-search w-full resize-none px-3 py-2" />
-                </label>
+                {/* ── 결제누락: 결제정보 입력 팝업 ── */}
+                {popupMode === "payment_missing" && (
+                  <>
+                    <div className="rounded-[12px] border p-3" style={{ background: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
+                      <p className="text-[12px] font-semibold" style={{ color: "var(--danger-text)" }}>결제채널과 정기결제일을 입력하면 알림이 해제됩니다.</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                        <select value={editForm.payment_channel} onChange={(e) => setEditForm((prev) => ({ ...prev, payment_channel: e.target.value }))} className="crm-search w-full px-3">
+                          <option value="">선택해주세요</option>
+                          {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                        <select value={editForm.regular_payment_date} onChange={(e) => setEditForm((prev) => ({ ...prev, regular_payment_date: e.target.value }))} className="crm-search w-full px-3">
+                          <option value="">선택해주세요</option>
+                          {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  </>
+                )}
 
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>활동노트 빠른 작성 <span style={{ color: "var(--text-faint)" }}>(입력 시 활동 기록으로 저장 → 장기미활동 해제)</span></span>
-                  <textarea value={quickNote} onChange={(event) => setQuickNote(event.target.value)} rows={2} placeholder="예: TM 재접촉 완료, 다음주 미팅 예정" className="crm-search w-full resize-none px-3 py-2" />
-                </label>
+                {/* ── 고객DB 재TM: 활동노트 + 고객감도 ── */}
+                {popupMode === "db_inactive" && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
+                      <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={4} placeholder="TM 내용, 고객 반응 등을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
+                    </label>
+                    <div>
+                      <span className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>고객감도</span>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["재TM진행", "미팅진행", "감도없음"].map((s) => (
+                          <button key={s} type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, sensitivity: prev.sensitivity === s ? "" : s }))}
+                            className="rounded-[10px] border py-2 text-[13px] font-semibold transition-all"
+                            style={{
+                              background: editForm.sensitivity === s ? "var(--accent-subtle)" : "var(--surface-2)",
+                              borderColor: editForm.sensitivity === s ? "var(--accent-border)" : "var(--border-subtle)",
+                              color: editForm.sensitivity === s ? "var(--accent-text)" : "var(--text-muted)",
+                            }}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── 장기미활동(VIP) / 클로징지연: 활동노트 + 단계전환 + 계약전환 ── */}
+                {(popupMode === "inactive" || popupMode === "closing") && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
+                      <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={4} placeholder="활동 내용, 다음 단계 계획을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
+                    </label>
+
+                    <div>
+                      <span className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>관리구간 전환</span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {["리드", "프로스펙팅", "딜클로징", "리텐션"].map((stage) => (
+                          <button key={stage} type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, management_stage: prev.management_stage === stage ? "" : stage }))}
+                            className="rounded-[10px] border py-2 text-[12px] font-semibold transition-all"
+                            style={{
+                              background: editForm.management_stage === stage ? "var(--accent-subtle)" : "var(--surface-2)",
+                              borderColor: editForm.management_stage === stage
+                                ? "var(--accent-border)"
+                                : stage === "리텐션" ? "var(--success-border)" : "var(--border-subtle)",
+                              color: editForm.management_stage === stage
+                                ? "var(--accent-text)"
+                                : stage === "리텐션" ? "var(--success-text)" : "var(--text-muted)",
+                            }}>
+                            {stage === "리텐션" ? "계약전환" : stage}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 계약전환 시 결제정보 입력 */}
+                    {editForm.management_stage === "리텐션" && (
+                      <div className="rounded-[12px] border p-3 space-y-2.5" style={{ background: "var(--success-bg)", borderColor: "var(--success-border)" }}>
+                        <p className="text-[12px] font-semibold" style={{ color: "var(--success-text)" }}>계약전환 — 결제정보 입력</p>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                            <select value={editForm.payment_channel} onChange={(e) => setEditForm((prev) => ({ ...prev, payment_channel: e.target.value }))} className="crm-search w-full px-3">
+                              <option value="">선택해주세요</option>
+                              {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                            <select value={editForm.regular_payment_date} onChange={(e) => setEditForm((prev) => ({ ...prev, regular_payment_date: e.target.value }))} className="crm-search w-full px-3">
+                              <option value="">선택해주세요</option>
+                              {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* 팝업 푸터 */}
               <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
-                <a href="/pipeline3" className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>파이프라인3에서 전체 상세보기 →</a>
+                <a href="/pipeline3" className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>파이프라인에서 전체 상세보기 →</a>
                 <div className="flex items-center gap-2">
-                  <button type="button" disabled={savingEdit} onClick={() => setEditTarget(null)} className="btn-premium btn-secondary">취소</button>
-                  <button type="button" disabled={savingEdit} onClick={saveCustomerEdit} className="btn-premium btn-primary">
-                    {savingEdit ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 저장
-                  </button>
+                  <button type="button" disabled={savingEdit} onClick={() => setEditTarget(null)} className="btn-premium btn-secondary">닫기</button>
+                  {popupMode !== "view_only" && (
+                    <button type="button" disabled={savingEdit || (!quickNote.trim() && popupMode === "db_inactive" && !editForm.sensitivity)} onClick={saveCustomerEdit} className="btn-premium btn-primary">
+                      {savingEdit ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 저장
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
