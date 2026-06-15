@@ -184,7 +184,7 @@ export async function POST(request: Request) {
       // tasks 테이블 상태 업데이트
       const { data: taskData } = await supabase
         .from("tasks")
-        .select("id,category,content,requester,assignee")
+        .select("id,category,content,requester,assignee,kakao_message_id")
         .eq("id", taskId)
         .single();
 
@@ -224,6 +224,7 @@ export async function POST(request: Request) {
                 requester: (taskData as any).requester || "",
                 category: (taskData as any).category || "",
                 customer_name: customerName,
+                kakao_message_id: (taskData as any).kakao_message_id || null,
               }),
             });
           } catch {}
