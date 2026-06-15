@@ -48,7 +48,8 @@ export async function POST(request: Request) {
       payment_card,
       card_number,
       payment_count, // N회차
-      ciderpay_detail, // 사이다페이 자동반영 세부내용
+      ciderpay_detail, // 사이다페이/효성CMS 자동반영 세부내용
+      extra_note, // 수기 등록 시 메모란 입력값
     } = body || {};
 
     const dateStr = getKoreanDate(payment_date);
@@ -80,6 +81,7 @@ export async function POST(request: Request) {
         SHORT,
         `●특이사항`,
         `1. ${nthStr} 결제건 입니다.`,
+        ...(extra_note ? [`${extra_note}`] : []),
       ].join("\n");
     } else {
       // 수기 등록 양식
@@ -100,6 +102,7 @@ export async function POST(request: Request) {
         SHORT,
         `●특이사항`,
         `1. ${nthStr} 결제건 입니다.`,
+        ...(extra_note ? [`${extra_note}`] : []),
       ].join("\n");
     }
 
