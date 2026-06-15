@@ -135,6 +135,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showQuickButtons, setShowQuickButtons] = useState(false);
   const [status, setStatus] = useState<JarvisStatus>("idle");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -176,9 +177,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
 
   const panelSizeClass = useMemo(() => {
     if (expanded) {
-      return "w-[min(900px,calc(100vw-32px))] h-[min(780px,calc(100vh-92px))]";
+      return "w-[min(1000px,calc(100vw-32px))] h-[min(860px,calc(100vh-80px))]";
     }
-    return "w-[min(460px,calc(100vw-32px))] h-[min(700px,calc(100vh-116px))]";
+    return "w-[min(540px,calc(100vw-24px))] h-[min(800px,calc(100vh-100px))]";
   }, [expanded]);
 
   useEffect(() => {
@@ -369,6 +370,16 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => setShowQuickButtons((prev) => !prev)}
+                className={`flex h-8 items-center gap-1 rounded-xl px-2 text-[11px] font-bold transition ${showQuickButtons ? "bg-sky-400/20 text-sky-200 ring-1 ring-sky-300/30" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                aria-label="퀵버튼 토글"
+                title="업무 퀵버튼"
+              >
+                <Sparkles size={13} />
+                퀵버튼
+              </button>
+              <button
+                type="button"
                 onClick={() => setExpanded((prev) => !prev)}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
                 aria-label={expanded ? "작게 보기" : "크게 보기"}
@@ -405,61 +416,47 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
             </div>
           </header>
 
-          <div className="relative border-b border-white/10 px-4 py-3">
-            <div className="flex items-start gap-3 rounded-2xl border border-sky-300/15 bg-white/[0.06] p-3">
-              <Sparkles
-                className="mt-0.5 flex-shrink-0 text-sky-300"
-                size={16}
-              />
-              <div className="min-w-0">
-                <p className="text-[12px] font-black text-white">
-                  자비스 업무 버튼
-                </p>
-                <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-300">
-                  버튼을 누르면 CRM 데이터를 읽고 자동으로 분석합니다. 현재는
-                  읽기/분석 전용이며 데이터 수정은 하지 않습니다.
-                </p>
+          {showQuickButtons && (
+            <div className="relative border-b border-white/10 px-4 py-3">
+              <div
+                className={`grid gap-2 ${expanded ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2"}`}
+              >
+                {JARVIS_ACTIONS.map((action) => {
+                  const Icon = action.icon;
+                  const active = loading && lastActionId === action.id;
+                  return (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => { void sendMessage(action.prompt, action.id); setShowQuickButtons(false); }}
+                      disabled={loading}
+                      className={`group min-w-0 rounded-2xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${
+                        active
+                          ? "border-sky-300/45 bg-sky-300/15"
+                          : "border-white/10 bg-white/[0.07] hover:border-sky-300/35 hover:bg-sky-300/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 text-sky-200 ring-1 ring-sky-300/15">
+                          {active ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Icon size={14} />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-100">
+                          {action.label}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed text-slate-400">
+                        {action.description}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-
-            <div
-              className={`mt-3 grid gap-2 ${expanded ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2"}`}
-            >
-              {JARVIS_ACTIONS.map((action) => {
-                const Icon = action.icon;
-                const active = loading && lastActionId === action.id;
-                return (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={() => void sendMessage(action.prompt, action.id)}
-                    disabled={loading}
-                    className={`group min-w-0 rounded-2xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${
-                      active
-                        ? "border-sky-300/45 bg-sky-300/15"
-                        : "border-white/10 bg-white/[0.07] hover:border-sky-300/35 hover:bg-sky-300/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 text-sky-200 ring-1 ring-sky-300/15">
-                        {active ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Icon size={14} />
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-100">
-                        {action.label}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed text-slate-400">
-                      {action.description}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 jarvis-scrollbar">
             <div className="space-y-3">
