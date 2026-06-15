@@ -2,6 +2,7 @@
 
 import Sidebar from "@/components/Sidebar";
 import JarvisAgent from "@/components/JarvisAgent";
+import { NoticePopup } from "@/app/notices/page";
 import { logout, validateSession, getCurrentUser, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Bell, Menu, Send, Truck, X } from "lucide-react";
@@ -146,6 +147,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<CRMUser | null>(null);
+  const [showNoticePopup, setShowNoticePopup] = useState(false);
+  const [noticeChecked, setNoticeChecked] = useState(false);
   const [checked, setChecked] = useState(false);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -165,6 +168,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
     setUser(currentUser);
     setChecked(true);
+    if (!noticeChecked) {
+      setShowNoticePopup(true);
+      setNoticeChecked(true);
+    }
   }, [pathname, router]);
 
   const pushNewToasts = useCallback((data: Notification[]) => {
@@ -427,6 +434,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
       <main className="min-w-0 flex-1 overflow-auto pt-[54px] md:pt-0">{children}</main>
 
+      {showNoticePopup && user && (
+        <NoticePopup me={user.name || ""} onClose={() => setShowNoticePopup(false)} />
+      )}
       <JarvisAgent user={user} />
 
       <div className="pointer-events-none fixed bottom-[146px] right-5 z-50 flex flex-col gap-3">
