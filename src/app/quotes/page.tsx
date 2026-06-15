@@ -133,6 +133,18 @@ function base64ToBlob(b64: string, type = "application/pdf"): Blob {
   return new Blob([arr], { type });
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = () => reject(new Error("PDF 데이터를 읽는 중 오류가 발생했습니다."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function QuotePage() {
   const [property, setProperty] = useState("");
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().split("T")[0]);
@@ -238,7 +250,7 @@ export default function QuotePage() {
   const totalVat = Math.round(total * 1.1);
 
   const handleDownload = async () => {
-    if (!property) return alert("대상물건을 입력하세요.");
+    if (!property.trim()) return alert("대상물건을 입력하세요.");
     setDownloading(true);
     try {
       const res = await fetch("/api/generate-quote", {
@@ -270,38 +282,41 @@ export default function QuotePage() {
       const quoteDateText = quoteDate.replace(/-/g, "");
       const priceText = totalVat >= 10000 ? `${Math.floor(totalVat / 10000).toLocaleString()}만` : totalVat.toLocaleString();
       const fileName = `(주)광고인_${media}_${type}_${quoteDateText}_${priceText}(VAT포함).pdf`;
+      const pdfBase64 = await blobToBase64(blob);
+
+      const { error } = await supabase.from("quotes").insert({
+        property: property.trim(),
+        quote_date: quoteDate,
+        client_addr: clientAddr,
+        client_name: clientName,
+        client_biz_no: clientBizNo,
+        client_ceo: clientCeo,
+        client_manager: clientMgr,
+        client_phone: clientPhone,
+        supplier_manager: supplierMgr,
+        supplier_phone: supplierPhone,
+        items: JSON.stringify(items),
+        total_amount: total,
+        total_vat: totalVat,
+        pdf_data: pdfBase64,
+      });
+
+      if (error) {
+        throw new Error(`PDF는 생성됐지만 저장에 실패했습니다. Supabase 오류: ${error.message}`);
+      }
+
+      await fetchSavedQuotes();
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = fileName;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
-
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const b64 = (reader.result as string).split(",")[1] || "";
-        await supabase.from("quotes").insert({
-          property,
-          quote_date: quoteDate,
-          client_addr: clientAddr,
-          client_name: clientName,
-          client_biz_no: clientBizNo,
-          client_ceo: clientCeo,
-          client_manager: clientMgr,
-          client_phone: clientPhone,
-          supplier_manager: supplierMgr,
-          supplier_phone: supplierPhone,
-          items: JSON.stringify(items),
-          total_amount: total,
-          total_vat: totalVat,
-          pdf_data: b64,
-        });
-        fetchSavedQuotes();
-      };
-      reader.readAsDataURL(blob);
     } catch (e: any) {
-      alert("PDF 생성 오류: " + e.message);
+      alert("PDF 저장 오류: " + e.message);
     } finally {
       setDownloading(false);
     }
@@ -737,8 +752,8 @@ export default function QuotePage() {
             </section>
           </div>
 
-          <aside className="min-w-0 xl:sticky xl:top-[96px] xl:h-[calc(100vh-122px)]">
-            <div className="flex h-full min-h-[680px] flex-col rounded-[18px] border shadow-sm" style={surfaceStyle}>
+          <aside className="min-w-0 self-start xl:sticky xl:top-[104px] xl:h-[calc(100vh-128px)]">
+            <div className="flex h-full min-h-[560px] flex-col rounded-[18px] border shadow-sm" style={surfaceStyle}>
               <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)" }}>
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-[10px]" style={{ background: "var(--info-bg)", color: "var(--info-text)" }}>
