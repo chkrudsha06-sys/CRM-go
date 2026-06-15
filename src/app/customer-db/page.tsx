@@ -1002,6 +1002,24 @@ export default function CustomerDbPage() {
   const [filterRoute, setFilterRoute] = useState("");
   const [filterActivity, setFilterActivity] = useState("");
   const [filterTitle, setFilterTitle] = useState("");
+  const [filterAssigned, setFilterAssigned] = useState("전체");
+  const [customerDbUserInfo] = useState<{ isAdmin: boolean; isExec: boolean; name: string }>(() => {
+    try {
+      const userRaw = localStorage.getItem("crm_user");
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        const role = String(u?.role || "").toLowerCase();
+        const name = String(u?.name || "");
+        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+        const execNames = ["조계현", "이세호", "기여운", "최연전"];
+        const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+        const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+        const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+        return { isAdmin, isExec, name };
+      }
+    } catch {}
+    return { isAdmin: false, isExec: false, name: "" };
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
@@ -1088,6 +1106,51 @@ export default function CustomerDbPage() {
     loadFromSupabase();
     return () => { alive = false; };
   }, []);
+
+  const reloadFromSupabase = async () => {
+    try {
+      const userRaw = typeof window !== "undefined" ? window.localStorage.getItem("crm_user") : null;
+      let execName: string | null = null;
+      if (userRaw) {
+        const u = JSON.parse(userRaw);
+        const role = String(u?.role || "").toLowerCase();
+        const name = String(u?.name || "");
+        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+        const execNames = ["조계현", "이세호", "기여운", "최연전"];
+        const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+        const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+        const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+        if (isExec && !isAdmin) execName = name;
+      }
+      let q = supabase
+        .from("contacts")
+        .select("*")
+        .eq("crm_db_source", "customer_db")
+        .order("created_at", { ascending: false });
+      if (execName) q = q.eq("assigned_to", execName) as typeof q;
+      const { data } = await q;
+      if (data) {
+        setRecords((data as any[]).map((row: any) => normalizeRawRecord({
+          id: row.id,
+          name: row.name || "",
+          title: row.title || "",
+          phone: row.phone || "",
+          intake_route: row.intake_route || "",
+          company: row.company || "",
+          assigned_to: row.assigned_to || "",
+          activity_type: row.activity_type || "TM",
+          memo: row.memo || "",
+          notes: [],
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+        })));
+      }
+      showToast("고객DB를 새로고침했습니다.");
+    } catch (e) {
+      console.warn("고객DB 새로고침 실패", e);
+      showToast("새로고침에 실패했습니다.");
+    }
+  };
 
   const showToast = (message: string) => {
     setToast(message);
@@ -1181,9 +1244,10 @@ export default function CustomerDbPage() {
             .toLowerCase()
             .includes(keyword);
 
-      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute) && (!filterActivity || record.activity_type === filterActivity) && (!filterTitle || record.title === filterTitle);
+      const matchesAssigned = filterAssigned === "전체" || String(record.assigned_to || "").trim() === filterAssigned;
+      return matchesKeyword && (!filterRoute || record.intake_route === filterRoute) && (!filterActivity || record.activity_type === filterActivity) && (!filterTitle || record.title === filterTitle) && matchesAssigned;
     });
-  }, [records, search, filterRoute, filterActivity, filterTitle]);
+  }, [records, search, filterRoute, filterActivity, filterTitle, filterAssigned]);
 
   const PAGE_SIZE = 10;
   const DISPLAY_SIZE = 7;
@@ -1766,29 +1830,7 @@ export default function CustomerDbPage() {
           </button>
           <button
             type="button"
-            onClick={async () => {
-              // Supabase에서 재로딩
-              try {
-                const userRaw = window.localStorage.getItem("crm_user");
-                let execName: string | null = null;
-                if (userRaw) {
-                  const u = JSON.parse(userRaw);
-                  const role = String(u?.role || "").toLowerCase();
-                  const name = String(u?.name || "");
-                  const execNames = ["조계현", "이세호", "기여운", "최연전"];
-                  const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
-                  const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
-                  const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
-                  const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
-                  if (isExec && !isAdmin) execName = name;
-                }
-                let q = supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false });
-                if (execName) q = q.eq("assigned_to", execName);
-                const { data } = await q;
-                if (data) setRecords((data as any[]).map((row) => normalizeRawRecord({ id: row.id, name: row.name || "", title: row.title || "", phone: row.phone || row.customer_phone || "", intake_route: row.intake_route || "", company: row.company || "", assigned_to: row.assigned_to || "", activity_type: row.activity_type || "TM", memo: row.memo || "", notes: [], created_at: row.created_at || new Date().toISOString(), updated_at: row.updated_at || new Date().toISOString() })));
-              } catch {}
-              showToast("고객DB를 새로고침했습니다.");
-            }}
+            onClick={() => reloadFromSupabase()}
             className="btn-premium btn-ghost"
           >
             <RefreshCcw size={15} /> 새로고침
@@ -1846,6 +1888,14 @@ export default function CustomerDbPage() {
             <option value="">전체 활동항목</option>
             {ACTIVITY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
+          {customerDbUserInfo.isAdmin && (
+            <select value={filterAssigned} onChange={(event) => setFilterAssigned(event.target.value)} className="crm-search h-10 w-[130px] px-3">
+              <option value="전체">전체 담당자</option>
+              {["조계현", "이세호", "기여운", "최연전"].map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </section>
 
