@@ -244,7 +244,9 @@ function NoticeModal({ me, editing, onClose, onSaved }:
           </div>
           <div>
             <p className="crm-tiny mb-2">파일 첨부</p>
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={e=>{addFiles(e.target.files); if(fileRef.current) fileRef.current.value="";}} />
+            <input ref={fileRef} type="file" multiple
+              style={{ position:"fixed", top:"-9999px", left:"-9999px", opacity:0 }}
+              onChange={e=>{addFiles(e.target.files); if(fileRef.current) fileRef.current.value="";}} />
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileRef.current?.click()}
