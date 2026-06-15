@@ -417,7 +417,9 @@ function latestActivityDate(contact: ContactRow, notesByContact: Map<string, Not
     .map((note) => note.created_at || note.note_date)
     .filter(Boolean)
     .sort((a, b) => new Date(String(b)).getTime() - new Date(String(a)).getTime())[0];
-  return latestNote || contact.updated_at || contact.created_at || null;
+  // 활동노트가 있으면 노트 기준, 없으면 VIP 이관일 → 등록일 순으로 fallback
+  // (updated_at은 DB 수정 시 갱신되므로 제외)
+  return latestNote || contact.vip_transferred_at || contact.created_at || null;
 }
 
 function hasFirstTouch(contact: ContactRow, notesByContact: Map<string, NoteRow[]>, start: Date, end: Date) {
