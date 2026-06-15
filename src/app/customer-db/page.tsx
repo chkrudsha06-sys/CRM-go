@@ -59,6 +59,7 @@ type RawCustomerRecord = {
   created_at: string;
   updated_at: string;
   sensitivity?: string;
+  sensitivity_updated_at?: string;
 };
 
 type RawCustomerForm = {
@@ -215,12 +216,72 @@ async function findContactIdByPhone(phone: string) {
   return matched?.id || null;
 }
 
-function buildContactMemoWithSensitivity(record: RawCustomerRecord): string {
-  const baseMemo = stripGradeAssessmentBlock(record.memo || "").trim();
-  const sensitivity = record.sensitivity || "감도없음";
-  return baseMemo ? `${baseMemo}
+// 한국 공휴일 목록 (연도별 고정 공휴일 + 주요 대체공휴일)
+function getKoreanHolidays(year: number): Set<string> {
+  const holidays = new Set<string>();
+  const add = (m: number, d: number) => holidays.add(`${year}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`);
+  // 고정 공휴일
+  add(1,1); add(3,1); add(5,5); add(6,6); add(8,15);
+  add(10,3); add(10,9); add(12,25);
+  // 설날/추석은 음력 계산 필요하나 근사값으로 2026년 기준 포함
+  // 2026년 설날: 2월 17~19일 / 추석: 10월 4~6일
+  if (year === 2026) {
+    add(2,16); add(2,17); add(2,18); add(2,19);
+    add(5,5); add(5,6); // 어린이날 대체
+    add(10,3); add(10,4); add(10,5); add(10,6);
+  }
+  if (year === 2027) {
+    add(2,6); add(2,7); add(2,8); add(2,9);
+    add(9,23); add(9,24); add(9,25); add(9,26);
+  }
+  return holidays;
+}
 
-[고객감도: ${sensitivity}]` : `[고객감도: ${sensitivity}]`;
+function isWeekendOrHoliday(date: Date, holidays: Set<string>): boolean {
+  const dow = date.getDay();
+  if (dow === 0 || dow === 6) return true;
+  const key = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  return holidays.has(key);
+}
+
+function addBusinessDays(startDateStr: string, days: number): string {
+  const start = new Date(startDateStr + "T00:00:00");
+  const holidays2026 = getKoreanHolidays(2026);
+  const holidays2027 = getKoreanHolidays(2027);
+  const getHolidays = (y: number) => y === 2027 ? holidays2027 : holidays2026;
+
+  let count = 0;
+  let current = new Date(start);
+  while (count < days) {
+    current.setDate(current.getDate() + 1);
+    if (!isWeekendOrHoliday(current, getHolidays(current.getFullYear()))) {
+      count++;
+    }
+  }
+  return `${current.getFullYear()}-${String(current.getMonth()+1).padStart(2,"0")}-${String(current.getDate()).padStart(2,"0")}`;
+}
+
+function formatRetmDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const days = ["일","월","화","수","목","금","토"];
+  return `${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+}
+
+function buildContactMemoWithSensitivity(record: RawCustomerRecord): string {
+  const baseMemo = stripGradeAssessmentBlock(record.memo || "")
+    .replace(/\[고객감도:[^\]]*\]/g, "")
+    .replace(/\[재TM일:[^\]]*\]/g, "")
+    .trim();
+  const sensitivity = record.sensitivity || "감도없음";
+  const retmTag = sensitivity === "재TM진행" && record.sensitivity_updated_at
+    ? `
+[재TM일: ${record.sensitivity_updated_at}]`
+    : "";
+  return baseMemo
+    ? `${baseMemo}
+
+[고객감도: ${sensitivity}]${retmTag}`
+    : `[고객감도: ${sensitivity}]${retmTag}`;
 }
 
 async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
@@ -365,6 +426,11 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
       const memoText = String(record.memo || "");
       const match = memoText.match(/\[고객감도:\s*(.+?)\]/);
       return match ? match[1].trim() : "감도없음";
+    })(),
+    sensitivity_updated_at: (() => {
+      const memoText = String(record.memo || "");
+      const match = memoText.match(/\[재TM일:\s*(.+?)\]/);
+      return match ? match[1].trim() : String(record.updated_at || "").slice(0, 10);
     })(),
     notes: Array.isArray(record.notes) ? record.notes : [],
     created_at: String(record.created_at || new Date().toISOString()),
@@ -1088,9 +1154,18 @@ export default function CustomerDbPage() {
     return filteredRecords.slice(start, start + PAGE_SIZE);
   }, [filteredRecords, currentPage, totalPages]);
 
-  // 재TM진행 고객 목록 (감도 기준)
+  // 재TM진행 고객 목록 (D+3 영업일 기준)
   const retmRecords = useMemo(() => {
-    return filteredRecords.filter((r) => r.sensitivity === "재TM진행").slice(0, DISPLAY_SIZE);
+    const today = new Date().toISOString().slice(0, 10);
+    return filteredRecords
+      .filter((r) => r.sensitivity === "재TM진행")
+      .map((r) => {
+        const baseDate = r.sensitivity_updated_at || r.updated_at?.slice(0, 10) || today;
+        const retmDate = addBusinessDays(baseDate, 3);
+        return { ...r, retmDate };
+      })
+      .sort((a, b) => (a as any).retmDate.localeCompare((b as any).retmDate))
+      .slice(0, DISPLAY_SIZE);
   }, [filteredRecords]);
 
   useEffect(() => {
@@ -1249,7 +1324,13 @@ export default function CustomerDbPage() {
   const handleSaveSensitivity = async (customerId: number, sensitivity: string) => {
     const targetRecord = records.find((record) => record.id === customerId);
     if (!targetRecord) return;
-    const updated = { ...targetRecord, sensitivity };
+    const now = new Date().toISOString();
+    const todayStr = now.slice(0, 10);
+    const updated = {
+      ...targetRecord,
+      sensitivity,
+      sensitivity_updated_at: sensitivity === "재TM진행" ? todayStr : targetRecord.sensitivity_updated_at,
+    };
     try {
       const contactId = await findContactIdByPhone(targetRecord.phone);
       if (contactId) {
@@ -1957,7 +2038,7 @@ export default function CustomerDbPage() {
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">소속회사</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">담당자</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">최근 활동</th>
-                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">등록일</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle" style={{ color: "var(--warning-text)", background: "var(--warning-bg)" }}>재TM 예정일 (D+3)</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">고객감도</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">관리</th>
               </tr>
@@ -1992,7 +2073,18 @@ export default function CustomerDbPage() {
                         <span className="crm-row-sub customer-db-cell-text">{latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}</span>
                       </div>
                     </td>
-                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{dateLabel(record.created_at)}</span></div></td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="customer-db-cell-text font-[700]" style={{ color: "var(--warning-text)" }}>
+                            {formatRetmDate((record as any).retmDate)}
+                          </span>
+                          <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>
+                            감도저장일: {(record.sensitivity_updated_at || record.updated_at?.slice(0,10) || "-")}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
                     <td className="customer-db-td">
                       <div className="customer-db-center-cell">
                         <span className="customer-db-badge badge-premium" style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", color: "var(--warning-text)", fontSize: "11px" }}>재TM진행</span>
