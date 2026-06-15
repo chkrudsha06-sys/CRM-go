@@ -2446,6 +2446,23 @@ function AdRequestModal({
       return;
     }
 
+    // ── 카카오워크 업무요청 알림 발송 ──
+    try {
+      await fetch("/api/kakaowork/send-task-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requester: me,
+          assignee: form.assignee,
+          category: form.category,
+          content,
+          priority: form.priority,
+        }),
+      });
+    } catch (kakaoErr) {
+      console.warn("카카오워크 업무요청 알림 실패 (무시):", kakaoErr);
+    }
+
     alert("업무요청이 결제&업무요청에 생성되었습니다.");
     onCreated();
   };
