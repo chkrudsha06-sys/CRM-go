@@ -177,9 +177,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
 
   const panelSizeClass = useMemo(() => {
     if (expanded) {
-      return "w-[min(1000px,calc(100vw-32px))] h-[min(860px,calc(100vh-80px))]";
+      return "w-[min(1000px,calc(100vw-32px))] h-[calc(100vh-80px)]";
     }
-    return "w-[min(540px,calc(100vw-24px))] h-[min(800px,calc(100vh-100px))]";
+    return "w-[min(540px,calc(100vw-24px))] h-[calc(100vh-100px)] max-h-[860px]";
   }, [expanded]);
 
   useEffect(() => {
@@ -316,7 +316,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   return (
     <div className="pointer-events-none fixed inset-0 z-40">
       <section
-        className={`pointer-events-auto absolute bottom-[116px] right-4 overflow-hidden rounded-[28px] shadow-2xl transition-all duration-300 ease-out md:right-6 ${panelSizeClass} ${
+        className={`pointer-events-auto absolute bottom-[80px] right-4 overflow-hidden rounded-[28px] shadow-2xl transition-all duration-300 ease-out md:right-6 ${panelSizeClass} ${
           open && !hidden
             ? "translate-x-0 opacity-100"
             : "pointer-events-none translate-x-[115%] opacity-0"
