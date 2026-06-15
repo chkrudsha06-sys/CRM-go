@@ -1097,26 +1097,58 @@ function SummaryTab({
             <p className="crm-tiny">고객DB와 연동되는 기본 정보</p>
           </div>
         </div>
-        <div className="stat-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <InfoItem label="고객명" value={customer.name} />
-          <InfoItem label="직급" value={customer.title} />
-          <InfoItem label="연락처" value={customer.phone} />
-          <InfoItem label="소속회사" value={customer.company} />
-          <InfoItem label="유입경로" value={customer.intakeRoute} badge />
-          <InfoItem label="담당자" value={customer.owner} />
-          <InfoItem label="심사결과" value={customer.grade} badge />
-          <InfoItem label="관리구간" value={stageLabel(customer.stage)} badge />
+        <div className="grid grid-cols-[88px_1fr_88px_1fr] gap-x-4 gap-y-3 text-[13px]">
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>고객명</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.name || "-"}</span>
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>직급</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.title || "-"}</span>
+
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>연락처</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.phone || "-"}</span>
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>소속회사</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.company || "-"}</span>
+
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>유입경로</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.intakeRoute || "-"}</span>
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>담당자</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.owner || "-"}</span>
+
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>심사결과</span>
+          <span>
+            {customer.grade ? (
+              <span className={`badge-premium ${badgeClass(customer.grade)}`} style={badgeStyle(customer.grade)}>{customer.grade}</span>
+            ) : <span className="font-semibold" style={{ color: "var(--text-strong)" }}>-</span>}
+          </span>
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>관리구간</span>
+          <span>
+            {customer.stage ? (
+              <span className={`badge-premium ${badgeClass(stageLabel(customer.stage))}`} style={badgeStyle(stageLabel(customer.stage))}>{stageLabel(customer.stage)}</span>
+            ) : <span className="font-semibold" style={{ color: "var(--text-strong)" }}>-</span>}
+          </span>
+
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>등록일</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.registeredAt || "-"}</span>
+          <span className="font-medium" style={{ color: "var(--text-faint)" }}>결제채널 & 결제일</span>
+          <span className="font-semibold" style={{ color: "var(--text-strong)" }}>{customer.paymentInfo || "-"}</span>
+
           {customer.meetingResult === "예약완료" ? (
-            <InfoItem label="예약완료일" value={customer.reservationDate} />
+            <>
+              <span className="font-medium" style={{ color: "var(--text-faint)" }}>예약완료일</span>
+              <span className="font-semibold col-span-3" style={{ color: "var(--text-strong)" }}>{customer.reservationDate || "-"}</span>
+            </>
           ) : null}
           {customer.meetingResult === "계약완료" ? (
-            <InfoItem label="계약완료일" value={customer.contractDate} />
+            <>
+              <span className="font-medium" style={{ color: "var(--text-faint)" }}>계약완료일</span>
+              <span className="font-semibold col-span-3" style={{ color: "var(--text-strong)" }}>{customer.contractDate || "-"}</span>
+            </>
           ) : null}
           {customer.stage === "이탈/탈퇴" ? (
-            <InfoItem label="탈퇴일" value={customer.churnDate} />
+            <>
+              <span className="font-medium" style={{ color: "var(--text-faint)" }}>탈퇴일</span>
+              <span className="font-semibold col-span-3" style={{ color: "var(--text-strong)" }}>{customer.churnDate || "-"}</span>
+            </>
           ) : null}
-          <InfoItem label="등록일" value={customer.registeredAt} />
-          <InfoItem label="결제채널 & 결제일" value={customer.paymentInfo} badge />
         </div>
       </section>
 
