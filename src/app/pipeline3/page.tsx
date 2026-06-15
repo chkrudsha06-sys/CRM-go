@@ -1087,7 +1087,7 @@ function RecentNoteSection({
           .eq("contact_id", contactId)
           .order("note_date", { ascending: false })
           .order("created_at", { ascending: false })
-          .limit(3);
+          .limit(1);
         if (error) throw error;
         if (alive) setNotes(Array.isArray(data) ? (data as ContactNote[]) : []);
       } catch {
