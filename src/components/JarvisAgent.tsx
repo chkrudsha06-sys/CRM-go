@@ -220,12 +220,22 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     setInput("");
     setLastActionId(actionId || null);
 
-    // ── 에이전트 모드 키워드 감지 ──
+    // ── 에이전트 모드 키워드 감지 (유연하게) ──
     const lowerText = text.toLowerCase();
-    if (
-      (lowerText.includes("일별활동") || lowerText.includes("활동 목표") || lowerText.includes("목표 등록") || lowerText.includes("오늘 목표")) &&
-      (lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("할게") || lowerText.includes("설정"))
-    ) {
+    const isDailyGoal =
+      lowerText.includes("일별활동") ||
+      lowerText.includes("활동목표") ||
+      lowerText.includes("활동 목표") ||
+      lowerText.includes("목표 등록") ||
+      lowerText.includes("목표등록") ||
+      lowerText.includes("오늘 목표") ||
+      lowerText.includes("오늘목표") ||
+      lowerText.includes("tm 목표") ||
+      lowerText.includes("tm목표") ||
+      lowerText.includes("콜드톡 목표") ||
+      lowerText.includes("브론즈 목표") ||
+      (lowerText.includes("목표") && (lowerText.includes("넣") || lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("설정") || lowerText.includes("할게") || lowerText.includes("하자") || lowerText.includes("해줘")));
+    if (isDailyGoal) {
       const today = new Date().toISOString().slice(0, 10);
       const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
       const agentMsg: JarvisMessage = {
@@ -517,16 +527,15 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                                 min="0"
                                 value={agentForm[field.key] || ""}
                                 onChange={(e) => setAgentForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                                className="w-16 rounded-lg border border-sky-300/20 px-2 py-1 text-center text-[12px] font-bold text-white outline-none"
-                                style={{ background: "rgba(20,50,100,0.7)" }}
+                                className="w-16 rounded-lg px-2 py-1.5 text-center text-[13px] font-bold outline-none"
+                                style={{ background: "#0f1f3d", border: "1px solid rgba(56,189,248,0.4)", color: "#fff" }}
                                 placeholder="0"
                               />
                               <span className="text-[11px] text-slate-400">{field.unit}</span>
                             </div>
                           ))}
                         </div>
-                        {agentMode === "daily_goal" && (
-                          <div className="mt-3 flex gap-2">
+                        <div className="mt-4 flex gap-2">
                             <button
                               type="button"
                               disabled={agentSaving}
@@ -580,8 +589,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                             >
                               취소
                             </button>
-                          </div>
-                        )}
+                        </div>
                       </div>
                     ) : (
                       <div
