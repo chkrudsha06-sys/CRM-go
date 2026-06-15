@@ -998,13 +998,26 @@ function ApprovalDetailSlidePanel({
                   <style>
                     @page { size: A4 portrait; margin: 0; }
                     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    html, body { width: 210mm; height: 297mm; background: white; }
-                    body { display: flex; align-items: center; justify-content: center; }
-                    .print-wrap { width: 210mm; min-height: 297mm; padding: 10mm; display: flex; flex-direction: column; justify-content: flex-start; }
-                    .print-wrap > * { transform-origin: top center; }
+                    html, body { width: 210mm; height: 297mm; background: white; overflow: hidden; }
+                    body { display: flex; align-items: flex-start; justify-content: center; }
+                    .print-wrap {
+                      width: 210mm;
+                      height: 297mm;
+                      padding: 4mm;
+                      display: flex;
+                      align-items: flex-start;
+                      justify-content: center;
+                      overflow: hidden;
+                    }
+                    .print-wrap > div {
+                      transform: scale(0.88);
+                      transform-origin: top center;
+                      flex-shrink: 0;
+                    }
                     @media print {
-                      html, body { width: 210mm; height: 297mm; }
-                      .print-wrap { padding: 8mm; }
+                      html, body { width: 210mm; height: 297mm; overflow: hidden; }
+                      .print-wrap { padding: 4mm; }
+                      .print-wrap > div { transform: scale(0.88); transform-origin: top center; }
                     }
                   </style>
                 </head><body><div class="print-wrap">${printContents}</div>
