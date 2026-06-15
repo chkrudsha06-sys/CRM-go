@@ -641,6 +641,7 @@ export default function HomePage() {
     goal_work_items: { id: string; text: string; done: boolean }[] | null;
   };
   const [dailyGoal, setDailyGoal] = useState<DailyGoalRow | null>(null);
+  const [allDailyGoals, setAllDailyGoals] = useState<(DailyGoalRow & { owner_name: string })[]>([]);
 
   /* 고객 즉시수정 팝업 상태 (파이프라인3 contacts 테이블과 동일 소스 → 자동 연동) */
   const [editTarget, setEditTarget] = useState<ContactRow | null>(null);
@@ -696,6 +697,12 @@ export default function HomePage() {
           setDailyGoal((myRow as DailyGoalRow) || null);
           if (!myRow && dagUserName) {
             console.info(`[대시보드] ${todayKey} / ${dagUserName} 일별활동 데이터 없음. 전체 ${(dagRows || []).length}건 조회됨.`);
+          }
+          if (isAdminUser(currentUser)) {
+            const execRows = (dagRows || []).filter((r: any) =>
+              EXECUTION_PART_NAMES.some((name) => normalizePersonName(name) === normalizePersonName(r.owner_name))
+            );
+            setAllDailyGoals(execRows);
           }
         }
       } catch (dagErr) {
@@ -1601,56 +1608,103 @@ export default function HomePage() {
                 {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}
                 <Panel>
                   <PanelTitle icon={Target} tone="info" title="당일 활동목표 달성현황" desc="일별활동기록 목표 대비 실시간 자동집계 결과" right={<a href="/daily-activity" className="btn-premium btn-secondary">일별활동기록</a>} />
-                  {!dailyGoal ? (
-                    <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="일별활동기록에서 당일 목표를 입력하면 여기에 실시간 반영됩니다." />
-                  ) : (
-                    <div className="p-4">
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {dailyActivityFields.map((f) => {
-                          const rate = f.goal > 0 ? percent(f.result, f.goal) : 0;
+                  {isAdminUser(currentUser) ? (
+                    allDailyGoals.length === 0 ? (
+                      <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="실행파트 담당자들이 일별활동기록을 입력하면 여기에 표시됩니다." />
+                    ) : (
+                      <div className="p-4 space-y-4">
+                        {EXECUTION_PART_NAMES.map((memberName) => {
+                          const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
+                          const fields = memberGoal ? [
+                            { label: "당일 TM", goal: memberGoal.goal_new_tm, result: memberGoal.result_new_tm, unit: "건" },
+                            { label: "당일 콜드톡", goal: memberGoal.goal_coldtalk, result: memberGoal.result_coldtalk, unit: "건" },
+                            { label: "브론즈 DB 확보", goal: memberGoal.goal_consultant_db, result: memberGoal.result_consultant_db, unit: "개" },
+                            { label: "1% DB 확보", goal: memberGoal.goal_second_touch, result: memberGoal.result_second_touch, unit: "개" },
+                          ] : [];
                           return (
-                            <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
-                                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
-                                  {f.goal > 0 ? `${rate}%` : "미설정"}
-                                </span>
-                              </div>
-                              <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
-                                {f.result}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
-                              </p>
-                              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
-                              </div>
+                            <div key={memberName} className="rounded-[12px] border p-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+                              <p className="text-[13px] font-semibold mb-3" style={{ color: "var(--text-strong)" }}>{memberName}</p>
+                              {!memberGoal ? (
+                                <p className="text-[12px]" style={{ color: "var(--text-faint)" }}>오늘 활동목표 미입력</p>
+                              ) : (
+                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                  {fields.map((f) => {
+                                    const rate = f.goal > 0 ? percent(f.result, f.goal) : 0;
+                                    return (
+                                      <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
+                                          <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                            {f.goal > 0 ? `${rate}%` : "미설정"}
+                                          </span>
+                                        </div>
+                                        <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
+                                          {f.result}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
+                                        </p>
+                                        <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
-
-                      {dailyWorkItems.length > 0 && (
-                        <div className="mt-3 rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
-                          <div className="space-y-1">
-                            {dailyWorkItems.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => toggleWorkItem(item.id)}
-                                className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-white/[.04]"
-                              >
-                                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)", color: "var(--success-text)" }}>
-                                  {item.done && <CheckCircle2 size={13} />}
+                    )
+                  ) : (
+                    !dailyGoal ? (
+                      <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="일별활동기록에서 당일 목표를 입력하면 여기에 실시간 반영됩니다." />
+                    ) : (
+                      <div className="p-4">
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          {dailyActivityFields.map((f) => {
+                            const rate = f.goal > 0 ? percent(f.result, f.goal) : 0;
+                            return (
+                              <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
+                                  <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                    {f.goal > 0 ? `${rate}%` : "미설정"}
+                                  </span>
                                 </div>
-                                <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
-                                  {item.text}
-                                </span>
-                                {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
-                              </button>
-                            ))}
-                          </div>
+                                <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
+                                  {f.result}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
+                                </p>
+                                <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+                                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
+                        {dailyWorkItems.length > 0 && (
+                          <div className="mt-3 rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                            <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
+                            <div className="space-y-1">
+                              {dailyWorkItems.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => toggleWorkItem(item.id)}
+                                  className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left transition-colors hover:bg-white/[.04]"
+                                >
+                                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border" style={{ background: item.done ? "var(--success-bg)" : "var(--surface)", borderColor: item.done ? "var(--success-border)" : "var(--border)", color: "var(--success-text)" }}>
+                                    {item.done && <CheckCircle2 size={13} />}
+                                  </div>
+                                  <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
+                                    {item.text}
+                                  </span>
+                                  {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
                   )}
                 </Panel>
               </div>
