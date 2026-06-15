@@ -36,6 +36,7 @@ type TaskRow = {
   tagged: string[] | null;
   file_urls: string[] | null;
   completed_at: string | null;
+  kakao_message_id: string | null;
   created_at: string;
 };
 
@@ -1201,7 +1202,6 @@ function DetailSlidePanel({
   activeTab,
   onTabChange,
   me,
-  isAdmin,
   onClose,
   onStatus,
   onComment,
@@ -1212,7 +1212,6 @@ function DetailSlidePanel({
   activeTab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
   me: string;
-  isAdmin: boolean;
   onClose: () => void;
   onStatus: (status: string) => void;
   onComment: (text: string) => void;
@@ -1540,7 +1539,7 @@ function DetailSlidePanel({
             </button>
           </div>
 
-          {(task.requester === me || isAdmin) && (
+          {task.requester === me && (
             <button
               type="button"
               onClick={onDelete}
@@ -2620,9 +2619,9 @@ export default function TasksPage() {
       savedTaskId = (latestTask as any)?.id || null;
     } catch {}
 
-    // ── 카카오워크 업무요청 알림 발송 ──
+    // ── 카카오워크 업무요청 알림 발송 + message_id 저장 ──
     try {
-      await fetch("/api/kakaowork/send-task-message", {
+      const kakaoRes = await fetch("/api/kakaowork/send-task-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2634,6 +2633,13 @@ export default function TasksPage() {
           task_id: savedTaskId,
         }),
       });
+      const kakaoData = await kakaoRes.json();
+      // 카카오워크 message_id를 tasks 테이블에 저장 (답글용)
+      if (kakaoData?.kakao_message_id && savedTaskId) {
+        await supabase.from("tasks").update({
+          kakao_message_id: String(kakaoData.kakao_message_id),
+        }).eq("id", savedTaskId);
+      }
     } catch (kakaoErr) {
       console.warn("카카오워크 업무요청 알림 실패 (무시):", kakaoErr);
     }
@@ -2865,6 +2871,14 @@ export default function TasksPage() {
         const customerName = customerLine ? customerLine.replace(/^.*고객명:\s*/, "").trim() : "";
         const categoryLine = contentLines[0] || task.category || "";
 
+        // tasks에서 kakao_message_id 조회
+        const { data: taskRow } = await supabase
+          .from("tasks")
+          .select("kakao_message_id")
+          .eq("id", task.id)
+          .single();
+        const kakaoMsgId = (taskRow as any)?.kakao_message_id || null;
+
         await fetch("/api/kakaowork/send-task-status-notify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2875,6 +2889,7 @@ export default function TasksPage() {
             requester: task.requester || "",
             category: task.category || "",
             customer_name: customerName,
+            kakao_message_id: kakaoMsgId,
           }),
         });
       } catch (err) {
@@ -3229,7 +3244,6 @@ export default function TasksPage() {
           onClose={() => setSelectedTask(null)}
           onStatus={(status) => handleStatus(selectedTask, status)}
           onComment={(text) => handleComment(selectedTask, text)}
-          isAdmin={isAdmin}
           onDelete={() => handleDelete(selectedTask)}
         />
       )}
