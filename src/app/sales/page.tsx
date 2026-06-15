@@ -1392,15 +1392,22 @@ export default function SalesPage() {
     // ── 신규 등록 + 분양회 결제건이면 카카오워크 알림 ──
     if (!editItem && payload.contract_route?.includes("분양회")) {
       try {
-        // N회차 계산
-        const { count: paymentCount } = await supabase
+        // N회차 계산: 고객명 기준 월별 유니크 결제 건수 (동월 중복 제외)
+        const { data: allPayments } = await supabase
           .from("ad_executions")
-          .select("id", { count: "exact", head: true })
+          .select("payment_date")
           .eq("member_name", payload.member_name || "")
           .eq("contract_route", payload.contract_route)
-          .gt("execution_amount", 0);
+          .gt("execution_amount", 0)
+          .order("payment_date", { ascending: true });
 
-        const nth = paymentCount || 1;
+        // 월별 유니크 카운트 (YYYY-MM 기준)
+        const uniqueMonths = new Set(
+          (allPayments || [])
+            .map((r: any) => (r.payment_date || "").slice(0, 7))
+            .filter(Boolean)
+        );
+        const nth = uniqueMonths.size || 1;
 
         // 고객 직급/연락처 조회
         const { data: memberInfo } = await supabase
@@ -1408,6 +1415,9 @@ export default function SalesPage() {
           .select("title, phone")
           .eq("name", payload.member_name || "")
           .maybeSingle();
+
+        // 메모 값 (특이사항 하단에 추가)
+        const memoNote = form.memo?.trim() || "";
 
         await fetch("/api/kakaowork/send-sales-message", {
           method: "POST",
@@ -1424,6 +1434,7 @@ export default function SalesPage() {
             payment_card: form.payment_card || "",
             is_auto: false,
             payment_count: nth,
+            extra_note: memoNote,
           }),
         });
       } catch (kakaoErr) {
