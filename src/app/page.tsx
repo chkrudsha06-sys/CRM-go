@@ -833,16 +833,16 @@ export default function HomePage() {
 
   const monthContacts = useMemo(() => {
     return visibleContacts.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
-  }, [visibleContacts, selectedMonth]);
+  }, [visibleContacts, rangeStart, rangeEnd]);
 
   const monthSales = useMemo(() => {
     return visibleSales.filter((row) => isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
-  }, [visibleSales, selectedMonth]);
+  }, [visibleSales, rangeStart, rangeEnd]);
 
   const monthNotes = useMemo(() => {
     const visibleIds = new Set(visibleContacts.map((contact) => String(contact.id)));
     return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInRange(note.created_at || note.note_date, rangeStart, rangeEnd));
-  }, [notes, visibleContacts, selectedMonth]);
+  }, [notes, visibleContacts, rangeStart, rangeEnd]);
 
   const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
 
@@ -1050,7 +1050,7 @@ export default function HomePage() {
       })
       .sort((a, b) => b.vip - a.vip || b.vipRate - a.vipRate || b.total - a.total)
       .slice(0, 7);
-  }, [notesByContact, selectedMonth, visibleContacts]);
+  }, [notesByContact, rangeStart, rangeEnd, visibleContacts]);
 
   /* 등급별 계약전환율: 마스터·챌린저·브론즈 계약건수 + 계약 유입경로 */
   const gradeContractRows = useMemo(() => {
@@ -1075,11 +1075,31 @@ export default function HomePage() {
   }, [vipContacts]);
 
   const kpiTarget = useMemo(() => {
-    const userName = activeOwner === "전체" ? "team" : activeOwner;
-    const target = activeOwner === "전체"
-      ? kpis.find((row) => row.scope === "team" && row.target_name === "team")
-      : kpis.find((row) => row.scope === "execution" && normalizePersonName(row.target_name) === normalizePersonName(userName));
-    return target || null;
+    if (activeOwner === "전체") {
+      const execRows = kpis.filter((row) =>
+        row.scope === "execution" &&
+        EXECUTION_PART_NAMES.some((name) => normalizePersonName(name) === normalizePersonName(row.target_name))
+      );
+      if (execRows.length > 0) {
+        return {
+          year: execRows[0].year,
+          month: execRows[0].month,
+          week: 0,
+          scope: "team" as const,
+          target_name: "team",
+          recruit_count: execRows.reduce((sum, r) => sum + Number(r.recruit_count || 0), 0),
+          bunyanghoe_revenue: execRows.reduce((sum, r) => sum + Number(r.bunyanghoe_revenue || 0), 0),
+          linked_revenue: execRows.reduce((sum, r) => sum + Number(r.linked_revenue || 0), 0),
+          special_revenue: execRows.reduce((sum, r) => sum + Number(r.special_revenue || 0), 0),
+          wanpan_truck_count: execRows.reduce((sum, r) => sum + Number(r.wanpan_truck_count || 0), 0),
+          ad_operation_revenue: execRows.reduce((sum, r) => sum + Number(r.ad_operation_revenue || 0), 0),
+        } as KpiRow;
+      }
+      return kpis.find((row) => row.scope === "team" && row.target_name === "team") || null;
+    }
+    return kpis.find((row) =>
+      row.scope === "execution" && normalizePersonName(row.target_name) === normalizePersonName(activeOwner)
+    ) || null;
   }, [activeOwner, kpis]);
 
   /* KPI: 분양회 모집 · 분양회 회비 2종만 */
@@ -1631,7 +1651,6 @@ export default function HomePage() {
                       <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="실행파트 담당자들이 일별활동기록을 입력하면 여기에 표시됩니다." />
                     ) : (
                       <div className="p-4 space-y-2">
-                        {/* 담당자 카드 그리드 */}
                         <div className="grid gap-2 grid-cols-2 xl:grid-cols-4">
                           {EXECUTION_PART_NAMES.map((memberName) => {
                             const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
@@ -1679,8 +1698,6 @@ export default function HomePage() {
                             );
                           })}
                         </div>
-
-                        {/* 선택된 담당자 세부내역 */}
                         {expandedDailyMember && (() => {
                           const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(expandedDailyMember));
                           const fields = memberGoal ? [
