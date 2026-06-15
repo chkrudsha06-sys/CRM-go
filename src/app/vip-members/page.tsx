@@ -48,6 +48,8 @@ interface VipContact {
   bank_code: string | null;
   bank_name: string | null;
   bank_account: string | null;
+  regular_payment_date: string | null;
+  payment_channel: string | null;
 }
 
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
@@ -389,7 +391,7 @@ function VipTable({
   const softHeader = "color-mix(in srgb, var(--surface-2) 88%, transparent)";
   const softRowAlt = "color-mix(in srgb, var(--surface-2) 68%, transparent)";
   const tableColumns =
-    "minmax(128px,1fr) minmax(82px,0.56fr) minmax(128px,0.85fr) minmax(116px,0.78fr) minmax(112px,0.72fr) minmax(112px,0.72fr)";
+    "minmax(128px,1fr) minmax(82px,0.56fr) minmax(128px,0.85fr) minmax(116px,0.78fr) minmax(112px,0.72fr) minmax(110px,0.7fr) minmax(112px,0.72fr)";
 
   return (
     <section
@@ -464,6 +466,7 @@ function VipTable({
                 <span>연락처</span>
                 <span>유입경로</span>
                 <span>심사결과</span>
+                <span>결제일</span>
                 <span>담당자</span>
               </div>
 
@@ -484,11 +487,12 @@ function VipTable({
                   >
                     <TableCell>
                       <div className="flex min-w-0 items-center justify-center gap-2 text-center">
-                        <Avatar
-                          name={contact.name}
-                          size="sm"
-                          className="hidden min-[1480px]:flex"
-                        />
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] text-[14px] font-[930] text-white"
+                          style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-3))" }}
+                        >
+                          {(contact.name || "?").slice(0, 1)}
+                        </div>
                         <div className="min-w-0 text-center">
                           <p className="truncate whitespace-nowrap text-center text-[12.5px] font-[720] leading-[1.15]" style={{ color: "var(--text-strong)" }}>
                             {contact.name}
@@ -525,6 +529,27 @@ function VipTable({
                       <span className="badge-premium badge-info text-[10.5px]">
                         {fmt(contact.customer_grade)}
                       </span>
+                    </TableCell>
+
+                    <TableCell>
+                      {contact.meeting_result === "계약완료" ? (
+                        <div className="text-center">
+                          {contact.regular_payment_date ? (
+                            <span className="whitespace-nowrap text-[12px] font-[720]" style={{ color: "var(--text-strong)" }}>
+                              매월 {contact.regular_payment_date}일
+                            </span>
+                          ) : (
+                            <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>미등록</span>
+                          )}
+                          {contact.payment_channel && (
+                            <p className="mt-0.5 text-[10px]" style={{ color: "var(--text-subtle)" }}>
+                              {contact.payment_channel.replace(" (효성CMS)", "").replace(" (사이다페이)", "").replace(" (별도입금)", "")}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>-</span>
+                      )}
                     </TableCell>
 
                     <TableCell>
@@ -656,7 +681,7 @@ export default function VipMembersPage() {
     let query = supabase
       .from("contacts")
       .select(
-        "id,name,title,phone,intake_route,customer_grade,assigned_to,meeting_result,contract_date,reservation_date,consultant,memo,bunyanghoe_number,bank_holder,bank_code,bank_name,bank_account",
+        "id,name,title,phone,intake_route,customer_grade,assigned_to,meeting_result,contract_date,reservation_date,consultant,memo,bunyanghoe_number,bank_holder,bank_code,bank_name,bank_account,regular_payment_date,payment_channel",
       )
       .in("meeting_result", ["계약완료", "예약완료"]);
 
