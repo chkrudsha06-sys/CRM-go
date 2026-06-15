@@ -1026,8 +1026,12 @@ export default function HomePage() {
 
   /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
   const intakeRows = useMemo(() => {
+    // 기간 내 고객DB 신규등록 contacts 기준으로 집계
+    const periodContacts = visibleContacts.filter((contact) =>
+      isInRange(contact.created_at, rangeStart, rangeEnd)
+    );
     const groups = new Map<string, ContactRow[]>();
-    visibleContacts.forEach((contact) => {
+    periodContacts.forEach((contact) => {
       const key = contact.intake_route || "유입경로 미지정";
       const list = groups.get(key) || [];
       list.push(contact);
@@ -1035,9 +1039,17 @@ export default function HomePage() {
     });
     return Array.from(groups.entries())
       .map(([route, rows]) => {
-        const contract = rows.filter(isContracted).length;
-        const vip = rows.filter(isVipContact).length;
-        const firstTouch = rows.filter((row) => hasFirstTouch(row, notesByContact, rangeStart, rangeEnd)).length;
+        // 기간 내 VIP 이관된 건 (vip_transferred_at 기준)
+        const vip = rows.filter((contact) =>
+          isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)
+        ).length;
+        // 기간 내 계약 전환된 건 (contract_date 기준)
+        const contract = rows.filter((contact) =>
+          isContractedInMonth(contact, rangeStart, rangeEnd)
+        ).length;
+        const firstTouch = rows.filter((row) =>
+          hasFirstTouch(row, notesByContact, rangeStart, rangeEnd)
+        ).length;
         return {
           route,
           total: rows.length,
@@ -1045,7 +1057,7 @@ export default function HomePage() {
           vip,
           contract,
           touchRate: percent(firstTouch, rows.length),
-          vipRate: percent(vip, rows.length),
+          vipRate: percent(vip, Math.max(rows.length, 1)),
         };
       })
       .sort((a, b) => b.vip - a.vip || b.vipRate - a.vipRate || b.total - a.total)
@@ -1055,8 +1067,15 @@ export default function HomePage() {
   /* 등급별 계약전환율: 마스터·챌린저·브론즈 계약건수 + 계약 유입경로 */
   const gradeContractRows = useMemo(() => {
     return CORE_VIP_GRADES.map((grade) => {
-      const rows = vipContacts.filter((contact) => isGradeContact(contact, grade));
-      const contracted = rows.filter(isContracted);
+      // 기간 내 VIP 이관된 해당 등급 고객 (vip_transferred_at 기준)
+      const rows = vipContacts.filter((contact) =>
+        isGradeContact(contact, grade) &&
+        isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)
+      );
+      // 기간 내 계약 전환된 건 (contract_date 기준)
+      const contracted = rows.filter((contact) =>
+        isContractedInMonth(contact, rangeStart, rangeEnd)
+      );
       const routeCounts = new Map<string, number>();
       contracted.forEach((contact) => {
         const key = contact.intake_route || "경로 미지정";
@@ -1067,12 +1086,12 @@ export default function HomePage() {
         grade,
         count: rows.length,
         contracts: contracted.length,
-        rate: percent(contracted.length, rows.length),
+        rate: percent(contracted.length, Math.max(rows.length, 1)),
         routes,
         tone: (grade === "마스터" ? "warning" : grade === "챌린저" ? "purple" : "success") as ToneName,
       };
     });
-  }, [vipContacts]);
+  }, [vipContacts, rangeStart, rangeEnd]);
 
   const kpiTarget = useMemo(() => {
     if (activeOwner === "전체") {
