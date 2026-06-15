@@ -628,8 +628,7 @@ function buildTaskContent(form: AdRequestForm) {
       `8. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
       `9. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
       `10. 발송도메인: ${form.domain || "X"}`,
-    ].join("
-");
+    ].join("\n");
   }
 
   if (form.category === "호갱노노(직방)_채널톡") {
@@ -651,8 +650,7 @@ function buildTaskContent(form: AdRequestForm) {
       `13. CTA 영역: 왼) ${form.cta_left} , 오) ${form.cta_right}`,
       `→ 발송도메인: ${form.domain || "X"}`,
       `14. 쿠폰여부: ${form.coupon === "O" ? form.coupon_text || "별도첨부" : "해당없음"}`,
-    ].join("
-");
+    ].join("\n");
   }
 
   if (form.category === "호갱노노(직방)_단지마커") {
@@ -673,8 +671,7 @@ function buildTaskContent(form: AdRequestForm) {
       ``,
       `PSD첨부: ${form.psd_file || "없음"}`,
       `조감도 첨부: ${form.bird_file || "없음"}`,
-    ].join("
-");
+    ].join("\n");
   }
 
   return form.content;
