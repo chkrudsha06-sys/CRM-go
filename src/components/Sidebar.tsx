@@ -4,6 +4,7 @@ import { logout, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
   Bell,
+  Megaphone,
   CalendarDays,
   Check,
   ChevronRight,
@@ -87,6 +88,7 @@ const OPS_MENUS: MenuItem[] = [
   { href: "/member-timeline", label: "회원 타임라인", icon: CalendarDays },
   { href: "/sales", label: "통합매출관리", icon: CircleDollarSign },
   { href: "/quotes", label: "견적서", icon: ReceiptText },
+  { href: "/notices", label: "공지사항", icon: Megaphone },
 ];
 
 const ADMIN_MENUS: MenuItem[] = [
