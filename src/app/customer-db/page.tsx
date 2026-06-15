@@ -58,6 +58,7 @@ type RawCustomerRecord = {
   notes: CustomerDbNote[];
   created_at: string;
   updated_at: string;
+  sensitivity?: string;
 };
 
 type RawCustomerForm = {
@@ -214,6 +215,14 @@ async function findContactIdByPhone(phone: string) {
   return matched?.id || null;
 }
 
+function buildContactMemoWithSensitivity(record: RawCustomerRecord): string {
+  const baseMemo = stripGradeAssessmentBlock(record.memo || "").trim();
+  const sensitivity = record.sensitivity || "감도없음";
+  return baseMemo ? `${baseMemo}
+
+[고객감도: ${sensitivity}]` : `[고객감도: ${sensitivity}]`;
+}
+
 async function saveCustomerDbRecordToContacts(record: RawCustomerRecord) {
   const now = new Date().toISOString();
   const existingId = await findContactIdByPhone(record.phone);
@@ -352,6 +361,11 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
         ? record.activity_type
         : "TM",
     memo: stripGradeAssessmentBlock(String(record.memo || "")),
+    sensitivity: (() => {
+      const memoText = String(record.memo || "");
+      const match = memoText.match(/\[고객감도:\s*(.+?)\]/);
+      return match ? match[1].trim() : "감도없음";
+    })(),
     notes: Array.isArray(record.notes) ? record.notes : [],
     created_at: String(record.created_at || new Date().toISOString()),
     updated_at: String(record.updated_at || new Date().toISOString()),
@@ -538,14 +552,23 @@ function ActivityTypeSelector({
 function NoteComposer({
   onAdd,
   defaultType,
+  currentSensitivity,
+  onSaveSensitivity,
 }: {
   onAdd: (note: Omit<CustomerDbNote, "id" | "createdAt"> & { sensitivity?: string }) => void;
   defaultType: ActivityType;
+  currentSensitivity?: string;
+  onSaveSensitivity?: (sensitivity: string) => Promise<void>;
 }) {
   const [noteDate, setNoteDate] = useState(today());
   const [activityType, setActivityType] = useState<ActivityType>(defaultType);
   const [content, setContent] = useState("");
-  const [sensitivity, setSensitivity] = useState("감도없음");
+  const [sensitivity, setSensitivity] = useState(currentSensitivity || "감도없음");
+  const [savingSensitivity, setSavingSensitivity] = useState(false);
+
+  useEffect(() => {
+    setSensitivity(currentSensitivity || "감도없음");
+  }, [currentSensitivity]);
 
   const handleAdd = () => {
     if (!content.trim()) return;
@@ -557,7 +580,16 @@ function NoteComposer({
     });
     setContent("");
     setNoteDate(today());
-    setSensitivity("감도없음");
+  };
+
+  const handleSaveSensitivity = async () => {
+    if (!onSaveSensitivity) return;
+    setSavingSensitivity(true);
+    try {
+      await onSaveSensitivity(sensitivity);
+    } finally {
+      setSavingSensitivity(false);
+    }
   };
 
   const btnStyle = (active: boolean) => ({
@@ -598,6 +630,14 @@ function NoteComposer({
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={handleSaveSensitivity}
+          disabled={savingSensitivity}
+          className="btn-premium btn-secondary mt-1.5 h-8 w-full text-[12px]"
+        >
+          <Save size={12} /> {savingSensitivity ? "저장 중..." : "고객감도 저장"}
+        </button>
       </div>
     </div>
   );
@@ -1198,6 +1238,24 @@ export default function CustomerDbPage() {
     showToast("고객DB에 등록되었습니다.");
   };
 
+
+  const handleSaveSensitivity = async (customerId: number, sensitivity: string) => {
+    const targetRecord = records.find((record) => record.id === customerId);
+    if (!targetRecord) return;
+    const updated = { ...targetRecord, sensitivity };
+    try {
+      const contactId = await findContactIdByPhone(targetRecord.phone);
+      if (contactId) {
+        await supabase.from("contacts").update({ memo: buildContactMemoWithSensitivity(updated) }).eq("id", contactId);
+      }
+      setRecords((items) => items.map((r) => r.id === customerId ? updated : r));
+      setSelectedRecord((current) => current?.id === customerId ? updated : current);
+      showToast("고객감도가 저장되었습니다.");
+    } catch (e) {
+      console.error("고객감도 저장 실패", e);
+      showToast("고객감도 저장 실패");
+    }
+  };
 
   const handleAddNote = async (customerId: number, note: Omit<CustomerDbNote, "id" | "createdAt">) => {
     const createdAt = new Date().toISOString();
@@ -1937,7 +1995,12 @@ export default function CustomerDbPage() {
                   <FileText size={14} style={{ color: "var(--accent)" }} />
                   <p className="text-[13px]" style={{ color: "var(--text-strong)", fontWeight: 600 }}>활동노트</p>
                 </div>
-                <NoteComposer defaultType={selectedRecord.activity_type} onAdd={(note) => handleAddNote(selectedRecord.id, note)} />
+                <NoteComposer
+                  defaultType={selectedRecord.activity_type}
+                  onAdd={(note) => handleAddNote(selectedRecord.id, note)}
+                  currentSensitivity={selectedRecord.sensitivity || "감도없음"}
+                  onSaveSensitivity={(sensitivity) => handleSaveSensitivity(selectedRecord.id, sensitivity)}
+                />
                 <div className="mt-1.5">
                   <NotesList
                     notes={selectedDisplayNotes}
