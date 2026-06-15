@@ -983,18 +983,53 @@ function ApprovalDetailSlidePanel({
             </button>
           </div>
 
-          {canApprove && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={onApprove} className="btn-premium btn-primary h-9">
-                <Check size={14} />
-                승인
-              </button>
-              <button type="button" onClick={onReject} className="btn-premium btn-danger h-9">
-                <X size={14} />
-                반려
-              </button>
-            </div>
-          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const printContents = document.getElementById("approval-preview-print")?.innerHTML;
+                if (!printContents) return;
+                const win = window.open("", "_blank", "width=900,height=1200");
+                if (!win) return;
+                win.document.write(`<!DOCTYPE html><html lang="ko"><head>
+                  <meta charset="utf-8"/>
+                  <title>결재 양식 출력</title>
+                  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+                  <style>
+                    @page { size: A4 portrait; margin: 0; }
+                    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    html, body { width: 210mm; height: 297mm; background: white; }
+                    body { display: flex; align-items: center; justify-content: center; }
+                    .print-wrap { width: 210mm; min-height: 297mm; padding: 10mm; display: flex; flex-direction: column; justify-content: flex-start; }
+                    .print-wrap > * { transform-origin: top center; }
+                    @media print {
+                      html, body { width: 210mm; height: 297mm; }
+                      .print-wrap { padding: 8mm; }
+                    }
+                  </style>
+                </head><body><div class="print-wrap">${printContents}</div>
+                <script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script>
+                </body></html>`);
+                win.document.close();
+              }}
+              className="btn-premium btn-secondary h-9"
+            >
+              <FileText size={14} />
+              양식 출력
+            </button>
+            {canApprove && (
+              <>
+                <button type="button" onClick={onApprove} className="btn-premium btn-primary h-9">
+                  <Check size={14} />
+                  승인
+                </button>
+                <button type="button" onClick={onReject} className="btn-premium btn-danger h-9">
+                  <X size={14} />
+                  반려
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="slide-panel-body">
@@ -1008,7 +1043,9 @@ function ApprovalDetailSlidePanel({
               justifyContent: "center",
             }}
           >
-            <ApprovalPreview form={previewForm} me={me} actions={actions} />
+            <div id="approval-preview-print">
+              <ApprovalPreview form={previewForm} me={me} actions={actions} />
+            </div>
           </div>
         </div>
       </aside>
@@ -1652,8 +1689,8 @@ function ApprovalPreview({
       <div
         className="mx-auto bg-white p-8 text-black shadow-xl"
         style={{
-          width: 760,
-          minHeight: 920,
+          width: 794,
+          minHeight: 1123,
           fontFamily: "Pretendard, Arial, sans-serif",
         }}
       >
@@ -1800,12 +1837,12 @@ function ApprovalPreview({
     <div
       className="mx-auto bg-white text-black shadow-xl"
       style={{
-        width: 840,
-        minHeight: 1080,
+        width: 794,
+        minHeight: 1123,
         fontFamily: "Pretendard, Arial, sans-serif",
       }}
     >
-      <div style={{ border: "3px solid #2563eb", minHeight: 1080 }}>
+      <div style={{ border: "3px solid #2563eb", minHeight: 1123 }}>
         <table
           style={{
             width: "100%",
