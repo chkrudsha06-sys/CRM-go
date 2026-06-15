@@ -919,7 +919,13 @@ export default function HomePage() {
     return notes.filter((note) => visibleIds.has(String(note.contact_id)) && isInRange(note.created_at || note.note_date, rangeStart, rangeEnd));
   }, [notes, visibleContacts, rangeStart, rangeEnd]);
 
+  // 누적 전체 VIP (오늘 챙겨야 할 고객, 정기결제 D-DAY, 담당자별 파이프라인용)
   const vipContacts = useMemo(() => visibleContacts.filter(isVipContact), [visibleContacts]);
+
+  // 기간 내 이관된 VIP (vip_transferred_at 기준 — 퍼널 통계용)
+  const periodVipContacts = useMemo(() => {
+    return vipContacts.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd));
+  }, [vipContacts, rangeStart, rangeEnd]);
 
   const stats = useMemo(() => {
     /* 고객DB 기반 (기간 내 신규 업로드) */
@@ -930,16 +936,16 @@ export default function HomePage() {
     }).length;
     const coldTalkCount = monthCustomerDb.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
 
-    /* VIP 기반 (누적 — 파이프라인3과 동일) */
-    const vipTransferred = vipContacts.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
-    const master = vipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
-    const challenger = vipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
-    const bronze = vipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
+    /* VIP 기반 — 기간 내 이관 기준 (vip_transferred_at) */
+    const vipTransferred = periodVipContacts.length;
+    const master = periodVipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
+    const challenger = periodVipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
+    const bronze = periodVipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
     const graded = master + challenger + bronze;
-    const masterThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "마스터") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
-    const challengerThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "챌린저") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
-    const bronzeThisMonth = vipContacts.filter((contact) => isGradeContact(contact, "브론즈") && touchedInMonth(contact, rangeStart, rangeEnd)).length;
-    const contracts = vipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd)).length;
+    const masterThisMonth = master;
+    const challengerThisMonth = challenger;
+    const bronzeThisMonth = bronze;
+    const contracts = periodVipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd)).length;
 
     /* 매출 (기간 내) */
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -948,7 +954,7 @@ export default function HomePage() {
     const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
-    /* 파이프라인 단계별 (누적 — 파이프라인3과 1:1 매칭) */
+    /* 파이프라인 단계별 — 누적 기준 (전체 vipContacts) */
     const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
       acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       return acc;
@@ -967,9 +973,9 @@ export default function HomePage() {
       contracts, churnCount, churnRate,
       membershipSales, lmsSales, hogangSales, refund, totalSales,
       stageCounts, retention, activePipeline, contractRate,
-      vipTotal: vipContacts.length,
+      vipTotal: periodVipContacts.length,
     };
-  }, [monthCustomerDb, monthSales, notesByContact, rangeStart, rangeEnd, vipContacts]);
+  }, [monthCustomerDb, monthSales, notesByContact, periodVipContacts, rangeStart, rangeEnd, vipContacts]);
 
   /* 당월 영업 퍼널: 4단계 */
   const funnelStages = useMemo(() => {
@@ -1266,9 +1272,9 @@ export default function HomePage() {
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
 
   const gradeJoinRows = [
-    { label: "마스터", value: stats.masterThisMonth, total: stats.master, tone: "warning" as ToneName },
-    { label: "챌린저", value: stats.challengerThisMonth, total: stats.challenger, tone: "purple" as ToneName },
-    { label: "브론즈", value: stats.bronzeThisMonth, total: stats.bronze, tone: "success" as ToneName },
+    { label: "마스터", value: stats.masterThisMonth, tone: "warning" as ToneName },
+    { label: "챌린저", value: stats.challengerThisMonth, tone: "purple" as ToneName },
+    { label: "브론즈", value: stats.bronzeThisMonth, tone: "success" as ToneName },
   ];
 
   const toggleWorkItem = useCallback(async (itemId: string) => {
@@ -1326,7 +1332,7 @@ export default function HomePage() {
       </td>${arrow}`;
     }).join("");
 
-    const gradeJoinHtml = gradeJoinRows.map((g) => `<span style="display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;margin-right:8px;font-size:13px;"><strong>${g.label}</strong> ${g.value}건 <span style="color:#94a3b8;font-size:11px;">/ 누적 ${g.total}</span></span>`).join("");
+    const gradeJoinHtml = gradeJoinRows.map((g) => `<span style="display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;margin-right:8px;font-size:13px;"><strong>${g.label}</strong> ${g.value}건</span>`).join("");
 
     const teamHeader = ["담당자","DB입력","마스터·챌린저DB","브론즈DB","리드","프로스펙팅","클로징","계약","이탈","매출"];
     const teamTh = teamHeader.map((h, i) => {
@@ -1601,7 +1607,7 @@ export default function HomePage() {
                         <Badge tone={row.tone}>{row.label}</Badge>
                         <div className="flex items-baseline gap-1.5">
                           <p className="text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
-                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--text-faint)" }}>/ 누적 {row.total}</span>
+
                         </div>
                       </div>
                     );
