@@ -557,7 +557,7 @@ function MemberDayCard({
   const specialDoneCount = specialItems.filter((item) => item.done).length;
 
   return (
-    <article className="premium-card overflow-hidden p-4">
+    <article className="premium-card p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div
@@ -592,20 +592,22 @@ function MemberDayCard({
         </span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="flex w-full flex-wrap items-stretch gap-3">
         {ACTIVITY_FIELDS.map((field) => (
           <div
             key={field.key}
             className="rounded-[13px] border p-3"
             style={{
+              flex: "0 0 150px",
+              minHeight: "118px",
               borderColor: "var(--border)",
               background: "var(--surface-2)",
             }}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="crm-tiny">{field.label}</p>
+              <p className="crm-tiny whitespace-nowrap">{field.label}</p>
               <p
-                className="text-[12px] font-[780]"
+                className="whitespace-nowrap text-[12px] font-[780]"
                 style={{ color: "var(--text)" }}
               >
                 {goalValue(row, field.key)} / {resultValue(row, field.key)} {field.unit}
@@ -619,35 +621,50 @@ function MemberDayCard({
         ))}
 
         <div
-          className="rounded-[13px] border p-3 md:col-span-2 xl:col-span-1"
+          className="rounded-[13px] border p-4"
           style={{
+            flex: "1 1 620px",
+            minWidth: "min(100%, 520px)",
+            minHeight: "118px",
             borderColor: "var(--border)",
-            background: "var(--surface-2)",
+            background: "linear-gradient(135deg, color-mix(in srgb, var(--surface-2) 92%, var(--accent) 8%), var(--surface-2))",
           }}
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="crm-tiny">당일 특발성활동목표</p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="crm-tiny">당일 특발성활동목표</p>
+              <p
+                className="mt-1 text-[11px] font-[650]"
+                style={{ color: "var(--text-faint)" }}
+              >
+                스크롤 없이 입력한 목표 텍스트를 전체 표시합니다.
+              </p>
+            </div>
             <p
-              className="text-[12px] font-[780]"
-              style={{ color: "var(--text)" }}
+              className="rounded-full border px-2.5 py-1 text-[12px] font-[800]"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface)",
+                color: "var(--text)",
+              }}
             >
-              {specialItems.length} / {specialDoneCount} 건
+              목표 {specialItems.length} / 완료 {specialDoneCount}건
             </p>
           </div>
 
           {specialItems.length > 0 ? (
-            <div className="max-h-[108px] space-y-1.5 overflow-y-auto pr-1">
+            <ol className="m-0 grid list-none gap-2 p-0">
               {specialItems.map((item, index) => (
-                <div
+                <li
                   key={item.id}
-                  className="flex items-start gap-2 rounded-[10px] border px-2 py-1.5"
+                  className="grid gap-2 rounded-[11px] border px-3 py-2.5 sm:grid-cols-[auto_1fr_auto] sm:items-start"
                   style={{
                     borderColor: "var(--border)",
                     background: "var(--surface)",
                   }}
                 >
                   <span
-                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-[850]"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-[850]"
                     style={{
                       background: item.done ? "var(--success-bg)" : "var(--accent-subtle)",
                       color: item.done ? "var(--success-text)" : "var(--accent-text)",
@@ -655,26 +672,27 @@ function MemberDayCard({
                   >
                     {index + 1}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={`break-words text-[12px] font-[760] leading-relaxed ${item.done ? "line-through" : ""}`}
-                      style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
-                    >
-                      {item.text}
-                    </p>
-                    <p
-                      className="mt-0.5 text-[10px] font-[800]"
-                      style={{ color: item.done ? "var(--success-text)" : "var(--text-faint)" }}
-                    >
-                      {item.done ? "완료" : "미완료"}
-                    </p>
-                  </div>
-                </div>
+                  <p
+                    className={`m-0 whitespace-pre-wrap break-words text-[13.5px] font-[760] leading-[1.65] ${item.done ? "line-through" : ""}`}
+                    style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
+                  >
+                    {item.text}
+                  </p>
+                  <span
+                    className="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10.5px] font-[850]"
+                    style={{
+                      background: item.done ? "var(--success-bg)" : "var(--surface-3)",
+                      color: item.done ? "var(--success-text)" : "var(--text-faint)",
+                    }}
+                  >
+                    {item.done ? "완료" : "미완료"}
+                  </span>
+                </li>
               ))}
-            </div>
+            </ol>
           ) : (
             <div
-              className="flex min-h-[74px] items-center justify-center rounded-[10px] border px-2 text-center text-[12px] font-[720] leading-relaxed"
+              className="flex min-h-[74px] items-center justify-center rounded-[11px] border px-3 text-center text-[12px] font-[720] leading-relaxed"
               style={{
                 borderColor: "var(--border)",
                 background: "var(--surface)",
