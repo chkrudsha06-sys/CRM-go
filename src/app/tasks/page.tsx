@@ -4014,8 +4014,8 @@ export default function TasksPage() {
                   ref={fileRef}
                   type="file"
                   multiple
-                  onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                  className="hidden"
+                  onChange={(e) => { setFiles(Array.from(e.target.files || [])); if (fileRef.current) fileRef.current.value = ""; }}
+                  style={{ position:"fixed", top:"-9999px", left:"-9999px", opacity:0 }}
                 />
                 <button
                   type="button"
