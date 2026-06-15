@@ -134,6 +134,7 @@ type AdRequestForm = {
   member_name: string;
   member_number: string;
   member_title: string;
+  // LMS
   platform: string;
   age_range: string;
   site_name: string;
@@ -144,6 +145,30 @@ type AdRequestForm = {
   region1: string;
   region2: string;
   region3: string;
+  combination: string;
+  script: string;
+  script_text: string;
+  domain: string;
+  // 호갱노노 채널톡
+  test_number: string;
+  kakao_type: string;
+  image_template: string;
+  cta_left: string;
+  cta_right: string;
+  coupon: string;
+  coupon_text: string;
+  // 단지마커
+  advertiser: string;
+  ad_period: string;
+  ad_start_date: string;
+  ad_date_range: string;
+  site_phone: string;
+  site_url: string;
+  line1: string;
+  line2: string;
+  line3: string;
+  psd_file: string;
+  bird_file: string;
 };
 
 const STORAGE_KEY = "crm_go_pipeline3_clean_v1";
@@ -228,32 +253,36 @@ const TEAM = [
 ];
 const TEAM_GROUPS = ["관리자", "실행파트", "운영파트"];
 const CATEGORIES = [
-  "LMS부킹요청",
-  "호갱노노 부킹요청",
-  "호갱노노 광고요청",
+  "LMS업무요청",
+  "호갱노노(직방)_채널톡",
+  "호갱노노(직방)_단지마커",
+  "호갱노노(기타광고)",
   "일반 업무요청",
 ];
 const PRIORITIES = ["긴급", "높음", "보통", "낮음"];
 const LMS_PLATFORMS = [
-  "전체플랫폼",
+  "삼성카드",
   "국민카드",
   "BC카드",
-  "삼성카드",
   "신한카드",
-  "롯데카드",
   "하나카드",
-  "SKT",
-  "KT",
+  "롯데카드",
   "롯데멤버스",
   "스마트스코어",
   "티맵",
+  "OK캐쉬백",
   "신세계포인트",
-  "OK캐시백",
+  "SKT",
+  "KT",
 ];
+const HOGAENG_CHANNEL_PLATFORMS = ["호갱노노 채널톡", "직방 채널톡"];
+const KAKAO_MESSAGE_TYPES = ["일반타입", "와이드", "케러셀", "동영상"];
+const IMAGE_TEMPLATES = ["일반", "하단바확장", "핫이슈", "아파트랭킹", "프리미엄1", "프리미엄2", "프리미엄3", "프리미엄4"];
+const AD_PERIODS = ["1주", "2주", "3주", "4주", "5주", "6주"];
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
-  category: "호갱노노 광고요청",
+  category: "LMS업무요청",
   content: "",
   priority: "보통",
   assignee: "",
@@ -271,6 +300,28 @@ const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
   region1: "",
   region2: "",
   region3: "",
+  combination: "X",
+  script: "X",
+  script_text: "",
+  domain: "",
+  test_number: "",
+  kakao_type: "",
+  image_template: "",
+  cta_left: "방문예약",
+  cta_right: "홈페이지",
+  coupon: "X",
+  coupon_text: "",
+  advertiser: "",
+  ad_period: "",
+  ad_start_date: "",
+  ad_date_range: "",
+  site_phone: "",
+  site_url: "",
+  line1: "",
+  line2: "",
+  line3: "",
+  psd_file: "",
+  bird_file: "",
 };
 
 const STAGES: Stage[] = [
@@ -537,32 +588,98 @@ function formatAmount(value: string) {
   return n ? Number(n).toLocaleString() : "";
 }
 
+function calcAdDateRange(startDate: string, period: string): string {
+  if (!startDate || !period) return "";
+  const weeks = parseInt(period);
+  if (isNaN(weeks)) return "";
+  const start = new Date(startDate);
+  const end = new Date(startDate);
+  end.setDate(end.getDate() + weeks * 7 - 1);
+  const fmt = (d: Date) => `${d.getMonth()+1}/${d.getDate()}`;
+  return `${fmt(start)}~${fmt(end)}(${period})`;
+}
+
+function formatSendCount(val: string): string {
+  const n = parseInt(val.replace(/,/g, ""));
+  if (isNaN(n)) return val;
+  return n.toLocaleString("ko-KR");
+}
+
+function formatPhoneAuto(val: string): string {
+  const digits = val.replace(/\D/g, "");
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0,3)}-${digits.slice(3)}`;
+  if (digits.length <= 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+  return digits;
+}
+
 function buildTaskContent(form: AdRequestForm) {
-  if (form.category === "LMS부킹요청") {
-    return `■ 분양회원: ${form.member_number} ${form.member_name} ${form.member_title}
-■ 플랫폼: ${form.platform}
-■ 연령대: ${form.age_range}
-■ 타겟팅: 부동산 관심자
-■ 현장명: ${form.site_name}
-■ 집행방식: LMS
-■ 광고금액: ${formatAmount(form.ad_amount)}원
-■ 발송건수: ${formatAmount(form.send_count)}건
-■ 희망날짜: ${form.hope_date}${form.hope_date ? ` (${getWeekday(form.hope_date)})` : ""} ${form.hope_time ? `${form.hope_time}시` : ""}
-■ 지역타겟팅: ①${form.region1} ②${form.region2} ③${form.region3}`;
+  if (form.category === "LMS업무요청") {
+    return [
+      `0. 고객명: ${form.member_name} ${form.member_title}`,
+      `0. 고객연락처: ${form.member_number}`,
+      `1. 현장명: ${form.site_name}`,
+      `2. 발송채널: LMS_${form.platform}`,
+      `3. 조합여부: ${form.combination}`,
+      `4. 발송일자: ${form.hope_date ? `${new Date(form.hope_date).getMonth()+1}월 ${new Date(form.hope_date).getDate()}일 (${getWeekday(form.hope_date)})` : ""}`,
+      `5. 발송시각: ${form.hope_time || ""}`,
+      `6. 발송건수: ${formatSendCount(form.send_count)}건`,
+      `7. 타겟지역: ①${form.region1} ②${form.region2} ③${form.region3}`,
+      `8. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
+      `9. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
+      `10. 발송도메인: ${form.domain || "X"}`,
+    ].join("
+");
   }
 
-  if (form.category === "호갱노노 부킹요청") {
-    return `■ 분양회원: ${form.member_number} ${form.member_name} ${form.member_title}
-■ 현장명: ${form.site_name}
-■ 플랫폼: 호갱노노 채널톡
-■ 발송건수: ${formatAmount(form.send_count)}건
-■ 발송일시: ${form.hope_date}${form.hope_date ? ` (${getWeekday(form.hope_date)})` : ""} ${form.hope_time ? `${form.hope_time}시` : ""}
-■ 지역타겟팅: ①${form.region1} ②${form.region2} ③${form.region3}
-■ 타겟연령: ${form.age_range}`;
+  if (form.category === "호갱노노(직방)_채널톡") {
+    return [
+      `0. 고객명: ${form.member_name} ${form.member_title}`,
+      `0. 고객연락처: ${form.member_number}`,
+      `1. 현장명: ${form.site_name}`,
+      `2. 테스트번호: ${form.test_number}`,
+      `3. 발송채널: ${form.platform || "호갱노노 채널톡"}`,
+      `4. 조합여부: ${form.combination === "O" ? "해당" : "미해당"}`,
+      `5. 발송일자: ${form.hope_date ? `${new Date(form.hope_date).getMonth()+1}월 ${new Date(form.hope_date).getDate()}일 (${getWeekday(form.hope_date)})` : ""}`,
+      `6. 발송시각: ${form.hope_time || ""}`,
+      `7. 발송건수: ${formatSendCount(form.send_count)}건`,
+      `8. 발송 타겟지역: ①${form.region1} ②${form.region2} ③${form.region3}`,
+      `9. 발송 타겟연령대: ${form.age_range}세 (부동산 관심자)`,
+      `10. 카카오톡 채널 메시지유형: ${form.kakao_type}`,
+      `11. 이미지 템플릿: ${form.image_template}`,
+      `12. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
+      `13. CTA 영역: 왼) ${form.cta_left} , 오) ${form.cta_right}`,
+      `→ 발송도메인: ${form.domain || "X"}`,
+      `14. 쿠폰여부: ${form.coupon === "O" ? form.coupon_text || "별도첨부" : "해당없음"}`,
+    ].join("
+");
+  }
+
+  if (form.category === "호갱노노(직방)_단지마커") {
+    return [
+      `0. 고객명: ${form.member_name} ${form.member_title}`,
+      `0. 고객연락처: ${form.member_number}`,
+      `광고주명: ${form.advertiser}`,
+      `광고집행기간: ${form.ad_period}`,
+      `광고시작일: ${form.ad_start_date}`,
+      `광고집행일자: ${form.ad_date_range || calcAdDateRange(form.ad_start_date, form.ad_period)}`,
+      `분양단지 전화번호: ${form.site_phone}`,
+      `분양단지 URL: ${form.site_url}`,
+      ``,
+      `[메시지 텍스트]`,
+      `1행: ${form.line1} (${form.line1.length}/17자)`,
+      `2행: ${form.line2} (${form.line2.length}/10자)`,
+      `3행: ${form.line3} (${form.line3.length}/15자)`,
+      ``,
+      `PSD첨부: ${form.psd_file || "없음"}`,
+      `조감도 첨부: ${form.bird_file || "없음"}`,
+    ].join("
+");
   }
 
   return form.content;
 }
+
 
 function badgeClass(value: string) {
   if (value === "마스터") return "grade-master";
@@ -2260,7 +2377,7 @@ function AdRequestModal({
       assignee: prev.assignee,
       tagged: prev.tagged,
       content:
-        category === "호갱노노 광고요청" || category === "일반 업무요청"
+        category === "호갱노노(기타광고)" || category === "일반 업무요청"
           ? `[파이프라인3 광고요청]
 고객명: ${customer.name} ${customer.title}
 연락처: ${customer.phone}
@@ -2323,7 +2440,7 @@ function AdRequestModal({
   return (
     <div className="crm-modal-overlay" onClick={onClose}>
       <div
-        className="crm-modal flex max-w-3xl flex-col"
+        className="crm-modal flex max-w-5xl flex-col"
         onClick={(event) => event.stopPropagation()}
       >
         <div
@@ -2450,218 +2567,84 @@ function AdRequestModal({
             </div>
           </div>
 
-          {form.category === "LMS부킹요청" && (
-            <div className="premium-card grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-              <div>
-                <InputLabel>플랫폼</InputLabel>
-                <select
-                  className={inputClass}
-                  value={form.platform}
-                  onChange={(event) =>
-                    setForm({ ...form, platform: event.target.value })
-                  }
-                >
-                  <option value="">선택</option>
-                  {LMS_PLATFORMS.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
+          {/* ── LMS 업무요청 ── */}
+          {form.category === "LMS업무요청" && (
+            <div className="premium-card space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><InputLabel>현장명</InputLabel><input className={inputClass} value={form.site_name} onChange={(e) => setForm({...form, site_name: e.target.value})} placeholder="현장명 입력" /></div>
+                <div><InputLabel>발송채널 (LMS)</InputLabel><select className={inputClass} value={form.platform} onChange={(e) => setForm({...form, platform: e.target.value})}><option value="">선택</option>{LMS_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
+                <div><InputLabel>조합여부</InputLabel><div className="flex gap-2">{["O","X"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, combination: v})} className="h-9 flex-1 rounded-[8px] border text-[13px] font-bold" style={{background: form.combination===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.combination===v?"var(--accent-border)":"var(--border)", color: form.combination===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}</div></div>
+                <div><InputLabel>발송일자</InputLabel><input type="date" className={inputClass} value={form.hope_date} onChange={(e) => setForm({...form, hope_date: e.target.value})} /></div>
+                <div><InputLabel>발송시각</InputLabel><input type="time" className={inputClass} value={form.hope_time} onChange={(e) => setForm({...form, hope_time: e.target.value})} /></div>
+                <div><InputLabel>발송건수</InputLabel><input className={inputClass} value={form.send_count} onChange={(e) => setForm({...form, send_count: e.target.value})} placeholder="00,000" /></div>
+                <div><InputLabel>타겟연령 (예: 30~60)</InputLabel><input className={inputClass} value={form.age_range} onChange={(e) => setForm({...form, age_range: e.target.value})} placeholder="30~60" /></div>
+                <div><InputLabel>발송도메인</InputLabel><input className={inputClass} value={form.domain} onChange={(e) => setForm({...form, domain: e.target.value})} placeholder="없으면 X" /></div>
               </div>
+              <div><InputLabel>타겟지역 (3곳)</InputLabel><div className="grid grid-cols-3 gap-2"><input className={inputClass} value={form.region1} onChange={(e) => setForm({...form, region1: e.target.value})} placeholder="① 지역" /><input className={inputClass} value={form.region2} onChange={(e) => setForm({...form, region2: e.target.value})} placeholder="② 지역" /><input className={inputClass} value={form.region3} onChange={(e) => setForm({...form, region3: e.target.value})} placeholder="③ 지역" /></div></div>
               <div>
-                <InputLabel>연령대</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.age_range}
-                  onChange={(event) =>
-                    setForm({ ...form, age_range: event.target.value })
-                  }
-                  placeholder="예: 30~60대"
-                />
-              </div>
-              <div>
-                <InputLabel>현장명</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.site_name}
-                  onChange={(event) =>
-                    setForm({ ...form, site_name: event.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <InputLabel>광고금액</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.ad_amount}
-                  onChange={(event) =>
-                    setForm({ ...form, ad_amount: event.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <InputLabel>발송건수</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.send_count}
-                  onChange={(event) =>
-                    setForm({ ...form, send_count: event.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <InputLabel>희망일시</InputLabel>
-                <div className="flex gap-2">
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={form.hope_date}
-                    onChange={(event) =>
-                      setForm({ ...form, hope_date: event.target.value })
-                    }
-                  />
-                  <select
-                    className="h-9 w-24 rounded-[8px] border px-3 text-[13px] font-semibold outline-none"
-                    value={form.hope_time}
-                    onChange={(event) =>
-                      setForm({ ...form, hope_time: event.target.value })
-                    }
-                  >
-                    <option value="">시간</option>
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={String(i).padStart(2, "0")}>
-                        {String(i).padStart(2, "0")}시
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <InputLabel>지역 타겟팅</InputLabel>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <input
-                    className={inputClass}
-                    value={form.region1}
-                    onChange={(event) =>
-                      setForm({ ...form, region1: event.target.value })
-                    }
-                    placeholder="① 지역"
-                  />
-                  <input
-                    className={inputClass}
-                    value={form.region2}
-                    onChange={(event) =>
-                      setForm({ ...form, region2: event.target.value })
-                    }
-                    placeholder="② 지역"
-                  />
-                  <input
-                    className={inputClass}
-                    value={form.region3}
-                    onChange={(event) =>
-                      setForm({ ...form, region3: event.target.value })
-                    }
-                    placeholder="③ 지역"
-                  />
-                </div>
+                <InputLabel>스크립트</InputLabel>
+                <div className="flex gap-2 mb-2">{["O","X","스크립트요청"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, script: v})} className="h-9 rounded-[8px] border px-3 text-[13px] font-bold" style={{background: form.script===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.script===v?"var(--accent-border)":"var(--border)", color: form.script===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}</div>
+                {form.script === "O" && <textarea className={textareaClass} value={form.script_text} onChange={(e) => setForm({...form, script_text: e.target.value})} placeholder="스크립트 내용 입력" rows={5} />}
               </div>
             </div>
           )}
 
-          {form.category === "호갱노노 부킹요청" && (
-            <div className="premium-card grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
-              <div>
-                <InputLabel>현장명</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.site_name}
-                  onChange={(event) =>
-                    setForm({ ...form, site_name: event.target.value })
-                  }
-                />
+          {/* ── 호갱노노(직방) 채널톡 ── */}
+          {form.category === "호갱노노(직방)_채널톡" && (
+            <div className="premium-card space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><InputLabel>현장명</InputLabel><input className={inputClass} value={form.site_name} onChange={(e) => setForm({...form, site_name: e.target.value})} placeholder="현장명 입력" /></div>
+                <div><InputLabel>테스트번호</InputLabel><input className={inputClass} value={form.test_number} onChange={(e) => setForm({...form, test_number: formatPhoneAuto(e.target.value)})} placeholder="010-0000-0000" maxLength={13} /></div>
+                <div><InputLabel>발송채널</InputLabel><select className={inputClass} value={form.platform} onChange={(e) => setForm({...form, platform: e.target.value})}><option value="">선택</option>{HOGAENG_CHANNEL_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
+                <div><InputLabel>조합여부</InputLabel><div className="flex gap-2">{["O","X"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, combination: v})} className="h-9 flex-1 rounded-[8px] border text-[13px] font-bold" style={{background: form.combination===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.combination===v?"var(--accent-border)":"var(--border)", color: form.combination===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}</div></div>
+                <div><InputLabel>발송일자</InputLabel><input type="date" className={inputClass} value={form.hope_date} onChange={(e) => setForm({...form, hope_date: e.target.value})} /></div>
+                <div><InputLabel>발송시각</InputLabel><input type="time" className={inputClass} value={form.hope_time} onChange={(e) => setForm({...form, hope_time: e.target.value})} /></div>
+                <div><InputLabel>발송건수</InputLabel><input className={inputClass} value={form.send_count} onChange={(e) => setForm({...form, send_count: e.target.value})} placeholder="00,000" /></div>
+                <div><InputLabel>타겟연령 (예: 30~60)</InputLabel><input className={inputClass} value={form.age_range} onChange={(e) => setForm({...form, age_range: e.target.value})} placeholder="30~60" /></div>
+                <div><InputLabel>카카오톡 메시지유형</InputLabel><select className={inputClass} value={form.kakao_type} onChange={(e) => setForm({...form, kakao_type: e.target.value})}><option value="">선택</option>{KAKAO_MESSAGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><InputLabel>이미지 템플릿</InputLabel><select className={inputClass} value={form.image_template} onChange={(e) => setForm({...form, image_template: e.target.value})}><option value="">선택</option>{IMAGE_TEMPLATES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><InputLabel>발송도메인</InputLabel><input className={inputClass} value={form.domain} onChange={(e) => setForm({...form, domain: e.target.value})} placeholder="없으면 X" /></div>
+                <div><InputLabel>쿠폰여부</InputLabel><div className="flex gap-2 mb-2">{["O","X"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, coupon: v})} className="h-9 flex-1 rounded-[8px] border text-[13px] font-bold" style={{background: form.coupon===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.coupon===v?"var(--accent-border)":"var(--border)", color: form.coupon===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}{form.coupon === "O" && <input className={inputClass} value={form.coupon_text} onChange={(e) => setForm({...form, coupon_text: e.target.value})} placeholder="쿠폰 내용" />}</div></div>
               </div>
+              <div><InputLabel>타겟지역 (3곳)</InputLabel><div className="grid grid-cols-3 gap-2"><input className={inputClass} value={form.region1} onChange={(e) => setForm({...form, region1: e.target.value})} placeholder="① 지역" /><input className={inputClass} value={form.region2} onChange={(e) => setForm({...form, region2: e.target.value})} placeholder="② 지역" /><input className={inputClass} value={form.region3} onChange={(e) => setForm({...form, region3: e.target.value})} placeholder="③ 지역" /></div></div>
+              <div><InputLabel>CTA 영역</InputLabel><div className="grid grid-cols-2 gap-2"><div><span className="text-[11px] font-semibold" style={{color:"var(--text-subtle)"}}>왼쪽</span><input className={inputClass} value={form.cta_left} onChange={(e) => setForm({...form, cta_left: e.target.value})} /></div><div><span className="text-[11px] font-semibold" style={{color:"var(--text-subtle)"}}>오른쪽</span><input className={inputClass} value={form.cta_right} onChange={(e) => setForm({...form, cta_right: e.target.value})} /></div></div></div>
               <div>
-                <InputLabel>발송건수</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.send_count}
-                  onChange={(event) =>
-                    setForm({ ...form, send_count: event.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <InputLabel>타겟연령</InputLabel>
-                <input
-                  className={inputClass}
-                  value={form.age_range}
-                  onChange={(event) =>
-                    setForm({ ...form, age_range: event.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <InputLabel>발송일시</InputLabel>
-                <div className="flex gap-2">
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={form.hope_date}
-                    onChange={(event) =>
-                      setForm({ ...form, hope_date: event.target.value })
-                    }
-                  />
-                  <select
-                    className="h-9 w-24 rounded-[8px] border px-3 text-[13px] font-semibold outline-none"
-                    value={form.hope_time}
-                    onChange={(event) =>
-                      setForm({ ...form, hope_time: event.target.value })
-                    }
-                  >
-                    <option value="">시간</option>
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={String(i).padStart(2, "0")}>
-                        {String(i).padStart(2, "0")}시
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <InputLabel>지역 타겟팅</InputLabel>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                  <input
-                    className={inputClass}
-                    value={form.region1}
-                    onChange={(event) =>
-                      setForm({ ...form, region1: event.target.value })
-                    }
-                    placeholder="① 지역"
-                  />
-                  <input
-                    className={inputClass}
-                    value={form.region2}
-                    onChange={(event) =>
-                      setForm({ ...form, region2: event.target.value })
-                    }
-                    placeholder="② 지역"
-                  />
-                  <input
-                    className={inputClass}
-                    value={form.region3}
-                    onChange={(event) =>
-                      setForm({ ...form, region3: event.target.value })
-                    }
-                    placeholder="③ 지역"
-                  />
-                </div>
+                <InputLabel>스크립트</InputLabel>
+                <div className="flex gap-2 mb-2">{["O","X","스크립트요청"].map((v) => <button key={v} type="button" onClick={() => setForm({...form, script: v})} className="h-9 rounded-[8px] border px-3 text-[13px] font-bold" style={{background: form.script===v?"var(--accent-bg)":"var(--surface-2)", borderColor: form.script===v?"var(--accent-border)":"var(--border)", color: form.script===v?"var(--accent-text)":"var(--text-muted)"}}>{v}</button>)}</div>
+                {form.script === "O" && <textarea className={textareaClass} value={form.script_text} onChange={(e) => setForm({...form, script_text: e.target.value})} placeholder="스크립트 내용 입력" rows={5} />}
               </div>
             </div>
           )}
 
-          {(form.category === "일반 업무요청" ||
-            form.category === "호갱노노 광고요청") && (
+          {/* ── 호갱노노(직방) 단지마커 ── */}
+          {form.category === "호갱노노(직방)_단지마커" && (
+            <div className="premium-card space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><InputLabel>광고주명</InputLabel><input className={inputClass} value={form.advertiser} onChange={(e) => setForm({...form, advertiser: e.target.value})} placeholder="광고주명" /></div>
+                <div><InputLabel>광고집행기간</InputLabel><select className={inputClass} value={form.ad_period} onChange={(e) => setForm({...form, ad_period: e.target.value, ad_date_range: calcAdDateRange(form.ad_start_date, e.target.value)})}><option value="">선택</option>{AD_PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>
+                <div><InputLabel>광고시작일</InputLabel><input type="date" className={inputClass} value={form.ad_start_date} onChange={(e) => setForm({...form, ad_start_date: e.target.value, ad_date_range: calcAdDateRange(e.target.value, form.ad_period)})} /></div>
+                <div><InputLabel>광고집행일자 (자동산출)</InputLabel><input className={inputClass} value={form.ad_date_range || calcAdDateRange(form.ad_start_date, form.ad_period)} readOnly style={{background:"var(--surface-2)", color:"var(--accent-text)", fontWeight:700}} /></div>
+                <div><InputLabel>분양단지 전화번호</InputLabel><input className={inputClass} value={form.site_phone} onChange={(e) => setForm({...form, site_phone: e.target.value})} placeholder="전화번호" /></div>
+                <div><InputLabel>분양단지 URL</InputLabel><input className={inputClass} value={form.site_url} onChange={(e) => setForm({...form, site_url: e.target.value})} placeholder="https://" /></div>
+              </div>
+              <div>
+                <InputLabel>메시지 텍스트</InputLabel>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2"><input className={inputClass} value={form.line1} onChange={(e) => e.target.value.length <= 17 && setForm({...form, line1: e.target.value})} placeholder="1행: 단지 특징 문구 (최대 17자)" maxLength={17} /><span className="shrink-0 text-[12px] font-bold" style={{color: form.line1.length > 14 ? "var(--danger-text)" : "var(--text-subtle)", minWidth:36}}>{form.line1.length}/17</span></div>
+                  <div className="flex items-center gap-2"><input className={inputClass} value={form.line2} onChange={(e) => e.target.value.length <= 10 && setForm({...form, line2: e.target.value})} placeholder="2행: 분양예정 정보 (최대 10자)" maxLength={10} /><span className="shrink-0 text-[12px] font-bold" style={{color: form.line2.length > 8 ? "var(--danger-text)" : "var(--text-subtle)", minWidth:36}}>{form.line2.length}/10</span></div>
+                  <div className="flex items-center gap-2"><input className={inputClass} value={form.line3} onChange={(e) => e.target.value.length <= 15 && setForm({...form, line3: e.target.value})} placeholder="3행: 단지 설명 문구 (최대 15자)" maxLength={15} /><span className="shrink-0 text-[12px] font-bold" style={{color: form.line3.length > 12 ? "var(--danger-text)" : "var(--text-subtle)", minWidth:36}}>{form.line3.length}/15</span></div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div><InputLabel>PSD 파일명/URL</InputLabel><input className={inputClass} value={form.psd_file} onChange={(e) => setForm({...form, psd_file: e.target.value})} placeholder="없으면 공란" /></div>
+                <div><InputLabel>조감도 파일명/URL (PSD 없는 경우)</InputLabel><input className={inputClass} value={form.bird_file} onChange={(e) => setForm({...form, bird_file: e.target.value})} placeholder="없으면 공란" /></div>
+              </div>
+              <p className="text-[11px]" style={{color:"var(--text-subtle)"}}>※ PSD/조감도 파일은 하단 파일첨부를 통해 업로드해주세요.</p>
+            </div>
+          )}
+
+          {(form.category === "호갱노노(기타광고)" ||
+            form.category === "일반 업무요청") && (
             <div>
               <InputLabel>상세 요청 내용</InputLabel>
               <textarea
