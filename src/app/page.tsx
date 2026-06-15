@@ -960,11 +960,15 @@ export default function HomePage() {
       return acc;
     }, {} as Record<string, number>);
 
-    const retention = stageCounts["리텐션"] || vipContacts.filter(isContracted).length;
-    const churnCount = stageCounts["이탈/탈퇴"] || 0;
-    const churnRate = percent(churnCount, Math.max(vipContacts.length, 1));
+    // 계약·리텐션 — 기간 내 계약전환 기준 (contract_date 또는 updated_at)
+    const retention = periodVipContacts.filter((contact) => isContracted(contact)).length;
+    const churnCount = periodVipContacts.filter((contact) =>
+      normalizeText(contact.management_stage).includes("이탈") ||
+      normalizeText(contact.management_stage).includes("탈퇴")
+    ).length;
+    const churnRate = percent(churnCount, Math.max(periodVipContacts.length, 1));
     const activePipeline = (stageCounts["리드"] || 0) + (stageCounts["프로스펙팅"] || 0) + (stageCounts["딜클로징"] || 0);
-    const contractRate = percent(retention, Math.max(vipContacts.length, 1));
+    const contractRate = percent(retention, Math.max(periodVipContacts.length, 1));
 
     return {
       firstTouch, tmCount, coldTalkCount, vipTransferred, graded,
