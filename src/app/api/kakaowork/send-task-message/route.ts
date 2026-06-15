@@ -28,6 +28,14 @@ async function findUserIdByEmail(appKey: string, email: string): Promise<number 
   }
 }
 
+function sectionHeader(text: string) {
+  return {
+    type: "text",
+    text,
+    inlines: [{ type: "styled", text, bold: true }],
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const appKey = process.env.KAKAO_WORK_APP_KEY;
@@ -42,111 +50,83 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const {
-      requester,    // 요청자 이름
-      assignee,     // 수신자 이름
-      category,     // 업무 카테고리
-      content,      // 업무 내용 (buildContent 결과)
-      priority,     // 우선순위
-    } = body || {};
+    const { requester, assignee, category, content, priority } = body || {};
+
+    const priorityEmoji: Record<string, string> = {
+      "긴급": "🔴", "높음": "🟠", "보통": "🟡", "낮음": "🟢",
+    };
+    const prioIcon = priorityEmoji[priority] || "🟡";
 
     // ── 수신자 멘션 처리 ──
-    let assigneeMentionBlock: any = null;
+    let assigneeInline: any = { type: "styled", text: `@${assignee || "-"}` };
     const assigneeEmail = getMentionEmail(assignee);
-    if (appKey && assigneeEmail) {
+    if (assigneeEmail) {
       const userId = await findUserIdByEmail(appKey, assigneeEmail);
       if (userId) {
-        assigneeMentionBlock = {
-          type: "text",
+        assigneeInline = {
+          type: "mention",
           text: `@${assignee}`,
-          inlines: [{ type: "mention", user_id: userId }],
+          ref: { type: "kw", value: userId },
         };
       }
     }
 
-    // ── 우선순위 이모지 ──
-    const priorityEmoji: Record<string, string> = {
-      "긴급": "🔴",
-      "높음": "🟠",
-      "보통": "🟡",
-      "낮음": "🟢",
-    };
-    const prioIcon = priorityEmoji[priority] || "🟡";
-
-    // ── 메시지 본문 구성 ──
-    const divider = "──────────────";
-    const shortDivider = "──────────";
-
-    // 업무 내용을 줄별로 분리 (최대 20줄)
-    const contentLines = String(content || "")
+    // ── 업무 내용 줄 정리 ──
+    const contentText = String(content || "")
       .split("\n")
-      .slice(0, 20)
-      .map((line) => line.trim())
-      .filter(Boolean);
+      .slice(0, 25)
+      .join("\n");
 
-    const textLines = [
+    // ── 텍스트 fallback ──
+    const textFallback = [
       `📋 업무요청 알림`,
-      divider,
       `▪ 요청자 : ${requester || "-"}`,
       `▪ 수신자 : @${assignee || "-"}`,
       `▪ 우선순위 : ${prioIcon} ${priority || "보통"}`,
-      shortDivider,
       `■ 업무요청 : ${category || "-"}`,
-      shortDivider,
-      ...contentLines,
-      divider,
-      `🔗 CRM 바로가기 : ${baseUrl}/tasks`,
-    ];
+      contentText,
+      `🔗 ${baseUrl}/tasks`,
+    ].join("\n");
 
-    const textFallback = textLines.join("\n");
-
-    // ── Block Kit 구성 ──
+    // ── Block Kit ──
     const blocks: any[] = [
+      // 헤더
+      { type: "header", text: "📋 업무요청 알림", style: "blue" },
+
+      // 요청자 / 수신자 / 우선순위
       {
         type: "text",
-        text: "📋 업무요청 알림",
-        inlines: [{ type: "styled", text: "📋 업무요청 알림", bold: true }],
+        text: `요청자 : ${requester || "-"}`,
       },
-      { type: "divider" },
-      {
-        type: "description",
-        term: "요청자",
-        content: { type: "text", text: requester || "-" },
-        accent: true,
-      },
-      // 수신자 멘션
-      assigneeMentionBlock
-        ? {
-            type: "description",
-            term: "수신자",
-            content: assigneeMentionBlock,
-            accent: true,
-          }
-        : {
-            type: "description",
-            term: "수신자",
-            content: { type: "text", text: `@${assignee || "-"}` },
-            accent: true,
-          },
-      {
-        type: "description",
-        term: "우선순위",
-        content: { type: "text", text: `${prioIcon} ${priority || "보통"}` },
-        accent: false,
-      },
-      { type: "divider" },
       {
         type: "text",
-        text: `■ 업무요청 : ${category || "-"}`,
-        inlines: [{ type: "styled", text: `■ 업무요청 : ${category || "-"}`, bold: true }],
+        text: `수신자 : @${assignee || "-"}`,
+        inlines: [
+          { type: "styled", text: "수신자 : " },
+          assigneeInline,
+        ],
       },
-      { type: "divider" },
-      // 업무 내용 (텍스트 블록으로)
       {
         type: "text",
-        text: contentLines.join("\n"),
+        text: `우선순위 : ${prioIcon} ${priority || "보통"}`,
       },
+
       { type: "divider" },
+
+      // 카테고리
+      sectionHeader(`■ 업무요청 : ${category || "-"}`),
+
+      { type: "divider" },
+
+      // 업무 내용
+      {
+        type: "text",
+        text: contentText,
+      },
+
+      { type: "divider" },
+
+      // CRM 바로가기 버튼
       {
         type: "button",
         text: "CRM 업무요청 바로가기",
