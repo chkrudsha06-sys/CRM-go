@@ -553,6 +553,9 @@ function MemberDayCard({
   row?: DailyActivityRow;
 }) {
   const excluded = row?.is_outside_meeting;
+  const specialItems = activeWorkItems(normalizeWorkItems(row?.goal_work_items));
+  const specialDoneCount = specialItems.filter((item) => item.done).length;
+
   return (
     <article className="premium-card overflow-hidden p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -589,7 +592,7 @@ function MemberDayCard({
         </span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {ACTIVITY_FIELDS.map((field) => (
           <div
             key={field.key}
@@ -615,6 +618,73 @@ function MemberDayCard({
           </div>
         ))}
 
+        <div
+          className="rounded-[13px] border p-3 md:col-span-2 xl:col-span-1"
+          style={{
+            borderColor: "var(--border)",
+            background: "var(--surface-2)",
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="crm-tiny">당일 특발성활동목표</p>
+            <p
+              className="text-[12px] font-[780]"
+              style={{ color: "var(--text)" }}
+            >
+              {specialItems.length} / {specialDoneCount} 건
+            </p>
+          </div>
+
+          {specialItems.length > 0 ? (
+            <div className="max-h-[108px] space-y-1.5 overflow-y-auto pr-1">
+              {specialItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-2 rounded-[10px] border px-2 py-1.5"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--surface)",
+                  }}
+                >
+                  <span
+                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-[850]"
+                    style={{
+                      background: item.done ? "var(--success-bg)" : "var(--accent-subtle)",
+                      color: item.done ? "var(--success-text)" : "var(--accent-text)",
+                    }}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`break-words text-[12px] font-[760] leading-relaxed ${item.done ? "line-through" : ""}`}
+                      style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
+                    >
+                      {item.text}
+                    </p>
+                    <p
+                      className="mt-0.5 text-[10px] font-[800]"
+                      style={{ color: item.done ? "var(--success-text)" : "var(--text-faint)" }}
+                    >
+                      {item.done ? "완료" : "미완료"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              className="flex min-h-[74px] items-center justify-center rounded-[10px] border px-2 text-center text-[12px] font-[720] leading-relaxed"
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--surface)",
+                color: "var(--text-faint)",
+              }}
+            >
+              입력된 특발성활동목표가 없습니다.
+            </div>
+          )}
+        </div>
       </div>
     </article>
   );
