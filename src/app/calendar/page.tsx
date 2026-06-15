@@ -548,33 +548,34 @@ export default function CalendarPage() {
                   return (
                     <button key={cell.date} type="button"
                       onClick={() => { setSelectedDate(cell.date); setSelectedEvent(null); }}
-                      className="min-h-0 p-1.5 text-left transition-all"
+                      className="min-h-0 p-2 text-left transition-all flex flex-col"
                       style={{
                         background: isSelected ? "linear-gradient(180deg,rgba(139,124,246,.18),rgba(139,124,246,.04)),var(--surface-selected)" : cell.currentMonth ? "var(--surface)" : "rgba(16,17,20,.48)",
                         borderRight:"1px solid var(--border-subtle)",
                         borderBottom:"1px solid var(--border-subtle)",
                       }}>
-                      {/* 날짜 + +N */}
-                      <div className="flex items-center justify-between">
-                        <span className="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[11px] font-[760]"
+                      {/* 날짜 왼쪽 상단 고정 + +N 오른쪽 */}
+                      <div className="flex items-start justify-between w-full mb-1">
+                        <span className="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px]"
                           style={{
                             background: isToday ? "var(--accent)" : isSelected ? "var(--accent-subtle)" : "transparent",
                             color: isToday ? "#fff" : cell.currentMonth ? "var(--text)" : "var(--text-faint)",
+                            fontWeight: isToday ? 700 : 500,
                             border: isSelected&&!isToday ? "1px solid var(--accent-border)" : "1px solid transparent",
                           }}>
                           {cell.day}
                         </span>
                         {extra > 0 && (
-                          <span className="text-[10px] font-bold" style={{color:"var(--text-faint)"}}>+{extra}</span>
+                          <span className="text-[11px]" style={{color:"var(--text-faint)"}}>+{extra}</span>
                         )}
                       </div>
                       {/* 이벤트 최대 4개 */}
-                      <div className="mt-1 space-y-0.5 overflow-hidden">
+                      <div className="space-y-0.5 w-full overflow-hidden">
                         {visible.map(ev => {
                           const s = eventStyle(ev.kind, ev.category);
                           return (
-                            <div key={ev.id} className="truncate rounded-[5px] px-1.5 py-0.5 text-[10px] font-bold leading-tight"
-                              style={{background:s.bg, border:`1px solid ${s.border}`, color:s.color}}>
+                            <div key={ev.id} className="truncate rounded-[5px] px-1.5 py-[3px] text-[12px] leading-tight"
+                              style={{background:s.bg, border:`1px solid ${s.border}`, color:s.color, fontWeight:500}}>
                               {ev.title}
                             </div>
                           );
