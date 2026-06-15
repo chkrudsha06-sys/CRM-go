@@ -1012,42 +1012,82 @@ export default function CustomerDbPage() {
   const [transferManagementStage, setTransferManagementStage] = useState<string>("리드");
   const [transferError, setTransferError] = useState("");
 
+  // Supabase에서 직접 고객DB 로딩 (담당자 기준 필터 포함)
   useEffect(() => {
-    setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
-    setLoaded(true);
-  }, []);
+    let alive = true;
 
-  useEffect(() => {
-    if (!loaded) return;
-    writeJsonArray(RAW_DB_STORAGE_KEY, records);
-  }, [loaded, records]);
+    const loadFromSupabase = async () => {
+      try {
+        // 현재 로그인 사용자 파악
+        const userRaw = typeof window !== "undefined" ? window.localStorage.getItem("crm_user") : null;
+        let execName: string | null = null;
+        if (userRaw) {
+          const u = JSON.parse(userRaw);
+          const role = String(u?.role || "").toLowerCase();
+          const name = String(u?.name || "");
+          const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+          const execNames = ["조계현", "이세호", "기여운", "최연전"];
+          const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+          const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+          const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+          if (isExec && !isAdmin) execName = name;
+        }
 
+        let q = supabase
+          .from("contacts")
+          .select("*")
+          .eq("crm_db_source", "customer_db")
+          .order("created_at", { ascending: false });
 
-  useEffect(() => {
-    if (!loaded || records.length === 0) return;
+        if (execName) {
+          q = q.eq("assigned_to", execName);
+        }
 
-    let cancelled = false;
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!alive) return;
 
-    const syncLocalCustomerDbToSupabase = async () => {
-      for (const record of records) {
-        if (cancelled) return;
-        try {
-          const contactId = await saveCustomerDbRecordToContacts(record);
-          for (const note of record.notes || []) {
-            await saveCustomerDbNoteToSupabase(contactId, note);
-          }
-        } catch (error) {
-          console.warn("기존 고객DB Supabase 동기화 실패", record.name, error);
+        const remoteRecords: RawCustomerRecord[] = (data || []).map((row: any) => normalizeRawRecord({
+          id: row.id,
+          name: row.name || "",
+          title: row.title || "",
+          phone: row.phone || row.customer_phone || "",
+          intake_route: row.intake_route || "",
+          company: row.company || "",
+          assigned_to: row.assigned_to || "",
+          activity_type: row.activity_type || "TM",
+          memo: row.memo || "",
+          sensitivity: (() => {
+            const m = String(row.memo || "");
+            const match = m.match(/\[고객감도:\s*(.+?)\]/);
+            return match ? match[1].trim() : "감도없음";
+          })(),
+          sensitivity_updated_at: (() => {
+            const m = String(row.memo || "");
+            const match = m.match(/\[재TM일:\s*(.+?)\]/);
+            return match ? match[1].trim() : String(row.updated_at || "").slice(0, 10);
+          })(),
+          notes: [],
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+        }));
+
+        setRecords(remoteRecords);
+        setLoaded(true);
+      } catch (err) {
+        console.warn("고객DB Supabase 로딩 실패, localStorage 폴백:", err);
+        // 폴백: localStorage
+        const local = readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord);
+        if (alive) {
+          setRecords(local);
+          setLoaded(true);
         }
       }
     };
 
-    syncLocalCustomerDbToSupabase();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loaded]);
+    loadFromSupabase();
+    return () => { alive = false; };
+  }, []);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -1727,7 +1767,26 @@ export default function CustomerDbPage() {
           <button
             type="button"
             onClick={() => {
-              setRecords(readJsonArray<RawCustomerRecord>(RAW_DB_STORAGE_KEY).map(normalizeRawRecord));
+              // Supabase에서 재로딩
+              try {
+                const userRaw = window.localStorage.getItem("crm_user");
+                let execName: string | null = null;
+                if (userRaw) {
+                  const u = JSON.parse(userRaw);
+                  const role = String(u?.role || "").toLowerCase();
+                  const name = String(u?.name || "");
+                  const execNames = ["조계현", "이세호", "기여운", "최연전"];
+                  const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+                  const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
+                  const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
+                  const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
+                  if (isExec && !isAdmin) execName = name;
+                }
+                let q = supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false });
+                if (execName) q = q.eq("assigned_to", execName);
+                const { data } = await q;
+                if (data) setRecords((data as any[]).map((row) => normalizeRawRecord({ id: row.id, name: row.name || "", title: row.title || "", phone: row.phone || row.customer_phone || "", intake_route: row.intake_route || "", company: row.company || "", assigned_to: row.assigned_to || "", activity_type: row.activity_type || "TM", memo: row.memo || "", notes: [], created_at: row.created_at || new Date().toISOString(), updated_at: row.updated_at || new Date().toISOString() })));
+              } catch {}
               showToast("고객DB를 새로고침했습니다.");
             }}
             className="btn-premium btn-ghost"
