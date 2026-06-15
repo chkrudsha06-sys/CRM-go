@@ -1661,6 +1661,29 @@ function NotesTab({
     }
   };
 
+  const handleDelete = async (noteId: number) => {
+    if (!confirm("이 활동노트를 삭제하시겠습니까?")) return;
+    setNotes((items) => items.filter((item) => item.id !== noteId));
+    try {
+      const { error } = await supabase
+        .from("contact_notes")
+        .delete()
+        .eq("id", noteId);
+      if (error) throw error;
+    } catch (error) {
+      console.warn("활동노트 삭제 실패", error);
+      alert("활동노트 삭제에 실패했습니다.");
+      // 실패 시 복구
+      const { data } = await supabase
+        .from("contact_notes")
+        .select("id,contact_id,note_date,content,author,created_at")
+        .eq("contact_id", customer.id)
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (data) setNotes(data as ContactNote[]);
+    }
+  };
+
   const visibleNotes = notes;
 
   return (
@@ -1755,9 +1778,20 @@ function NotesTab({
                 >
                   {note.note_date ? formatShortDate(note.note_date) : formatShortDate(note.created_at)}
                 </p>
-                <span className="badge-premium badge-muted">
-                  {note.author || "활동노트"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="badge-premium badge-muted">
+                    {note.author || "활동노트"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(note.id)}
+                    className="flex h-6 w-6 items-center justify-center rounded-full transition hover:bg-red-500/20"
+                    title="노트 삭제"
+                    style={{ color: "var(--text-faint)" }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               </div>
               <p
                 className="whitespace-pre-wrap text-sm font-[760] leading-7"
