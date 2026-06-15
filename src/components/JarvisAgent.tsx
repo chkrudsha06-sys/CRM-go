@@ -235,6 +235,50 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       lowerText.includes("콜드톡 목표") ||
       lowerText.includes("브론즈 목표") ||
       (lowerText.includes("목표") && (lowerText.includes("넣") || lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("설정") || lowerText.includes("할게") || lowerText.includes("하자") || lowerText.includes("해줘")));
+    // 활동노트 입력 감지
+    const noteNameMatch = text.match(/(.{2,6})\s*(활동노트|노트|메모)\s*(입력|작성|쓸게|쓰자|할게|해줘|남길게|등록)/);
+    const isNoteInput = !!(noteNameMatch || (
+      (lowerText.includes("활동노트") || lowerText.includes("노트 입력") || lowerText.includes("노트입력")) &&
+      (lowerText.includes("입력") || lowerText.includes("작성") || lowerText.includes("할게") || lowerText.includes("해줘") || lowerText.includes("남길게"))
+    ));
+
+    if (isNoteInput) {
+      // 이름 추출
+      const nameFromMatch = noteNameMatch?.[1]?.trim() || "";
+      const nameKeywords = ["활동노트","노트","메모","입력","작성","할게","해줘","남길게","등록","의","이"];
+      let extractedName = nameFromMatch;
+      if (!extractedName) {
+        // 텍스트에서 이름 추출 시도
+        const words = text.split(/\s+/);
+        extractedName = words.find((w) => w.length >= 2 && !nameKeywords.some((k) => w.includes(k))) || "";
+      }
+
+      const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
+
+      if (!extractedName || extractedName.length < 2) {
+        // 이름 없으면 물어보기
+        setMessages((prev) => [...prev, userMsg, {
+          role: "assistant",
+          content: "활동노트를 입력할 고객 이름을 알려주세요.",
+          timestamp: getNowLabel(),
+        }]);
+        updateTalkState();
+        return;
+      }
+
+      // 고객 조회 후 확인 양식 표시
+      const agentMsg: JarvisMessage = {
+        role: "assistant",
+        content: `__AGENT_NOTE_SEARCH__:${extractedName}`,
+        timestamp: getNowLabel(),
+      };
+      setMessages((prev) => [...prev, userMsg, agentMsg]);
+      setAgentMode("note_search");
+      setAgentForm({ searchName: extractedName, contactId: "", contactName: "", contactSource: "", noteContent: "" });
+      updateTalkState();
+      return;
+    }
+
     const isCustomerDbAdd =
       lowerText.includes("고객db") ||
       lowerText.includes("고객 db") ||
@@ -646,6 +690,24 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                             </button>
                         </div>
                       </div>
+                    ) : message.content.startsWith("__AGENT_NOTE_SEARCH__") ? (
+                      (() => {
+                        const searchName = message.content.split(":")[1] || "";
+                        return (
+                          <NoteSearchCard
+                            searchName={searchName}
+                            agentMode={agentMode}
+                            agentForm={agentForm}
+                            agentSaving={agentSaving}
+                            setAgentForm={setAgentForm}
+                            setAgentMode={setAgentMode}
+                            setAgentSaving={setAgentSaving}
+                            setMessages={setMessages}
+                            user={user}
+                            getNowLabel={getNowLabel}
+                          />
+                        );
+                      })()
                     ) : message.content === "__AGENT_CUSTOMER_DB__" ? (
                       <div className="rounded-2xl rounded-bl-md p-4" style={{ border: "1px solid var(--accent-border)", background: "var(--surface-2)", minWidth: 280 }}>
                         <p className="mb-1 text-[13px] font-black" style={{ color: "var(--accent-text)" }}>고객DB 신규 등록</p>
@@ -941,4 +1003,276 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
       `}</style>
     </div>
   );
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NoteSearchCard — 활동노트 에이전트 카드
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type NoteSearchCardProps = {
+  searchName: string;
+  agentMode: string | null;
+  agentForm: Record<string, string>;
+  agentSaving: boolean;
+  setAgentForm: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setAgentMode: React.Dispatch<React.SetStateAction<string | null>>;
+  setAgentSaving: React.Dispatch<React.SetStateAction<boolean>>;
+  setMessages: React.Dispatch<React.SetStateAction<JarvisMessage[]>>;
+  user: CRMUser;
+  getNowLabel: () => string;
+};
+
+function NoteSearchCard({
+  searchName,
+  agentMode,
+  agentForm,
+  agentSaving,
+  setAgentForm,
+  setAgentMode,
+  setAgentSaving,
+  setMessages,
+  user,
+  getNowLabel,
+}: NoteSearchCardProps) {
+  const [searchResult, setSearchResult] = useState<{
+    id: number;
+    name: string;
+    title: string;
+    source: string;
+    stage: string;
+    grade: string;
+    phone: string;
+    assigned_to: string;
+  } | null | "not_found">(null);
+  const [confirmed, setConfirmed] = useState(false);
+
+  // 마운트 시 고객 조회
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("contacts")
+          .select("id,name,title,crm_db_source,management_stage,customer_grade,phone,assigned_to,meeting_result")
+          .ilike("name", `%${searchName}%`)
+          .limit(5);
+
+        if (!alive) return;
+
+        if (!data || data.length === 0) {
+          setSearchResult("not_found");
+          return;
+        }
+
+        // 담당자 본인 고객 우선, 없으면 첫 번째
+        const matched = (data as any[]).find((c) => c.assigned_to === user.name) || data[0] as any;
+        const getStageLabel = (c: any) => {
+          if (c.management_stage) return c.management_stage;
+          if (c.meeting_result === "계약완료") return "리텐션";
+          if (c.meeting_result === "예약완료") return "딜클로징";
+          return "리드";
+        };
+        
+        setSearchResult({
+          id: matched.id,
+          name: matched.name,
+          title: matched.title || "",
+          source: matched.crm_db_source === "vip_activity" ? "VIP활동DB(파이프라인)" : "고객DB",
+          stage: getStageLabel(matched),
+          grade: matched.customer_grade || "심사미진행",
+          phone: matched.phone || "-",
+          assigned_to: matched.assigned_to || "-",
+        });
+      } catch {
+        if (alive) setSearchResult("not_found");
+      }
+    })();
+    return () => { alive = false; };
+  }, [searchName, user.name]);
+
+  const cardStyle: React.CSSProperties = {
+    border: "1px solid var(--accent-border)",
+    background: "var(--surface-2)",
+    minWidth: 270,
+  };
+
+  // 로딩 중
+  if (searchResult === null) {
+    return (
+      <div className="rounded-2xl rounded-bl-md p-4" style={cardStyle}>
+        <p className="text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>
+          {searchName} 고객을 조회 중입니다...
+        </p>
+      </div>
+    );
+  }
+
+  // 고객 없음
+  if (searchResult === "not_found") {
+    return (
+      <div className="rounded-2xl rounded-bl-md p-4" style={cardStyle}>
+        <p className="text-[12px] font-bold" style={{ color: "var(--danger-text)" }}>
+          {searchName} 고객을 CRM에서 찾지 못했습니다.
+        </p>
+        <p className="mt-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>
+          고객DB 또는 파이프라인에 등록된 고객인지 확인해주세요.
+        </p>
+      </div>
+    );
+  }
+
+  // 고객 확인 단계
+  if (!confirmed) {
+    return (
+      <div className="rounded-2xl rounded-bl-md p-4 space-y-3" style={cardStyle}>
+        <p className="text-[13px] font-black" style={{ color: "var(--accent-text)" }}>
+          고객 확인
+        </p>
+        <div className="rounded-xl p-3 space-y-1.5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div className="flex justify-between text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>고객명</span>
+            <span className="font-bold" style={{ color: "var(--text-strong)" }}>{searchResult.name} {searchResult.title}</span>
+          </div>
+          <div className="flex justify-between text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>DB 구분</span>
+            <span className="font-semibold" style={{ color: "var(--accent-text)" }}>{searchResult.source}</span>
+          </div>
+          <div className="flex justify-between text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>관리구간</span>
+            <span className="font-semibold" style={{ color: "var(--text)" }}>{searchResult.stage}</span>
+          </div>
+          <div className="flex justify-between text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>담당자</span>
+            <span className="font-semibold" style={{ color: "var(--text)" }}>{searchResult.assigned_to}</span>
+          </div>
+          <div className="flex justify-between text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>연락처</span>
+            <span className="font-semibold" style={{ color: "var(--text)" }}>{searchResult.phone}</span>
+          </div>
+        </div>
+        <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+          이 고객의 활동노트를 입력하시겠습니까?
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmed(true);
+              setAgentForm((p) => ({
+                ...p,
+                contactId: String(searchResult!.id),
+                contactName: searchResult!.name,
+                contactSource: searchResult!.source,
+                noteContent: "",
+              }));
+            }}
+            className="flex-1 rounded-xl py-2 text-[12px] font-black text-white"
+            style={{ background: "var(--accent)" }}
+          >
+            활동노트 입력
+          </button>
+          <button
+            type="button"
+            onClick={() => setAgentMode(null)}
+            className="rounded-xl px-3 py-2 text-[12px] font-semibold"
+            style={{ background: "var(--surface)", color: "var(--text-muted)" }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 활동노트 입력 단계
+  return (
+    <div className="rounded-2xl rounded-bl-md p-4 space-y-3" style={cardStyle}>
+      <div>
+        <p className="text-[13px] font-black" style={{ color: "var(--accent-text)" }}>
+          활동노트 입력
+        </p>
+        <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-subtle)" }}>
+          {searchResult.name} {searchResult.title} · {searchResult.source}
+        </p>
+      </div>
+      <div className="flex gap-1.5">
+        {["TM", "콜드톡", "미팅", "기타"].map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setAgentForm((p) => ({ ...p, activityType: t }))}
+            className="rounded-lg px-2.5 py-1 text-[11px] font-bold transition"
+            style={{
+              background: (agentForm.activityType || "TM") === t ? "var(--accent-subtle)" : "var(--surface)",
+              border: "1px solid " + ((agentForm.activityType || "TM") === t ? "var(--accent-border)" : "var(--border)"),
+              color: (agentForm.activityType || "TM") === t ? "var(--accent-text)" : "var(--text-muted)",
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={agentForm.noteContent || ""}
+        onChange={(e) => setAgentForm((p) => ({ ...p, noteContent: e.target.value }))}
+        rows={4}
+        placeholder="활동 내용을 입력하세요..."
+        className="w-full resize-none rounded-xl px-3 py-2.5 text-[12px] font-semibold outline-none"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }}
+      />
+      {agentMode === "note_search" && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={agentSaving || !agentForm.noteContent?.trim()}
+            onClick={async () => {
+              if (!agentForm.noteContent?.trim()) return;
+              setAgentSaving(true);
+              try {
+                const today = new Date().toISOString().slice(0, 10);
+                const actType = agentForm.activityType || "TM";
+                const content = `[${actType}] ${agentForm.noteContent.trim()}`;
+                const { error } = await supabase.from("contact_notes").insert({
+                  contact_id: Number(agentForm.contactId),
+                  note_date: today,
+                  content,
+                  author: user.name,
+                });
+                if (error) throw error;
+                setMessages((prev) => [...prev, {
+                  role: "assistant" as const,
+                  content: `활동노트를 저장했습니다.
+
+고객: ${searchResult?.name} ${searchResult?.title || ""}
+유형: ${actType}
+내용: ${agentForm.noteContent.trim()}
+
+파이프라인 또는 고객DB 메뉴에서 확인하실 수 있습니다.`,
+                  timestamp: getNowLabel(),
+                }]);
+                setAgentMode(null);
+                setAgentForm({});
+              } catch (err: any) {
+                alert("저장 실패: " + (err?.message || "오류"));
+              } finally {
+                setAgentSaving(false);
+              }
+            }}
+            className="flex-1 rounded-xl py-2 text-[12px] font-black text-white transition"
+            style={{ background: agentSaving ? "var(--accent-subtle)" : "var(--accent)" }}
+          >
+            {agentSaving ? "저장 중..." : "노트 저장"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmed(false)}
+            className="rounded-xl px-3 py-2 text-[12px] font-semibold"
+            style={{ background: "var(--surface)", color: "var(--text-muted)" }}
+          >
+            뒤로
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 }
