@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +9,22 @@ function formatWon(value: unknown): string {
   return Number(value || 0).toLocaleString("ko-KR") + "원";
 }
 
+function formatMoney55(value: unknown): string {
+  const n = Number(value || 0);
+  if (n === 550000) return "55만(vat포함)";
+  if (n % 10000 === 0) return `${n / 10000}만원`;
+  return formatWon(n);
+}
+
+function getKoreanDate(dateStr?: string | null): string {
+  const d = dateStr ? new Date(`${dateStr.slice(0, 10)}T00:00:00`) : new Date();
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
 export async function POST(request: Request) {
   try {
     const appKey = process.env.KAKAO_WORK_APP_KEY;
     const conversationId = process.env.KAKAO_WORK_SALES_CONVERSATION_ID;
-    const baseUrl = process.env.CRM_BASE_URL || "https://crm-go.vercel.app";
 
     if (!appKey || !conversationId) {
       return NextResponse.json(
@@ -23,34 +35,73 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const {
-      member_name, execution_amount, vat_amount, refund_amount,
-      channel, contract_route, payment_date, team_member, consultant, memo,
+      member_name,
+      member_title,
+      member_phone,
+      execution_amount,
+      channel,
+      contract_route,
+      payment_date,
+      team_member,
+      memo,
+      is_auto, // 사이다페이 자동 = true, 수기 = false
+      payment_card,
+      card_number,
+      payment_count, // N회차
+      ciderpay_detail, // 사이다페이 자동반영 세부내용
     } = body || {};
 
-    const supply = Number(execution_amount || 0);
-    const vat = Number(vat_amount || 0);
-    const refund = Number(refund_amount || 0);
-    const total = supply + vat - refund;
+    const dateStr = getKoreanDate(payment_date);
+    const amountStr = formatMoney55(execution_amount);
+    const route = normalizeRoute(contract_route);
+    const manager = team_member || "-";
+    const nthStr = payment_count ? `분양회${payment_count} 회차` : "분양회N 회차";
 
-    const lines = [
-      "💰 신규 매출 등록",
-      "──────────────",
-      `▪ 고객명 : ${member_name || "-"}`,
-      `▪ 결제일 : ${payment_date || "-"}`,
-      `▪ 채널 : ${channel || "-"}`,
-      `▪ 계약경로 : ${contract_route || "-"}`,
-      "──────────",
-      `▪ 공급가 : ${formatWon(supply)}`,
-      `▪ 부가세 : ${formatWon(vat)}`,
-      refund ? `▪ 환불 : ${formatWon(refund)}` : null,
-      `▪ 합계 : ${formatWon(total)}`,
-      "──────────",
-      `▪ 담당자 : ${team_member || "-"}`,
-      `▪ 컨설턴트 : ${consultant || "-"}`,
-      memo ? `▪ 메모 : ${memo}` : null,
-      "──────────────",
-      `🔗 CRM 바로가기 : ${baseUrl}/sales`,
-    ].filter(Boolean);
+    // ── 구분선 ──
+    const LINE = "──────────────";
+    const SHORT = "────────────────────";
+
+    let text = "";
+
+    if (is_auto) {
+      // 사이다페이 자동반영 양식
+      text = [
+        `#${dateStr} 분양회매출 [대외협력팀 ${manager} 메인]`,
+        `▶분양회`,
+        `●결제금액(A): ${amountStr}`,
+        SHORT,
+        `●고객명: ${member_name || ""}`,
+        `●직급: ${member_title || ""}`,
+        `●연락처: ${member_phone || ""}`,
+        SHORT,
+        ciderpay_detail || [
+          "사이다페이 정기결제 완료 자동반영",
+        ].join("\n"),
+        SHORT,
+        `●특이사항`,
+        `1. ${nthStr} 결제건 입니다.`,
+      ].join("\n");
+    } else {
+      // 수기 등록 양식
+      const channelLine = channel && channel !== "사이다페이"
+        ? `●결제채널: ${channel}${payment_card ? `, ${payment_card}` : ""}`
+        : `●결제채널: ${channel || ""}`;
+
+      text = [
+        `#${dateStr} 분양회매출 [대외협력팀 ${manager} 메인]`,
+        `▶분양회`,
+        `●결제금액(A): ${amountStr}`,
+        SHORT,
+        `●고객명: ${member_name || ""}`,
+        `●직급: ${member_title || ""}`,
+        `●연락처: ${member_phone || ""}`,
+        SHORT,
+        channelLine,
+        SHORT,
+        `●특이사항`,
+        `1. ${nthStr} 결제건 입니다.`,
+      ].join("\n");
+    }
 
     const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
       method: "POST",
@@ -61,17 +112,13 @@ export async function POST(request: Request) {
       cache: "no-store",
       body: JSON.stringify({
         conversation_id: Number(conversationId),
-        text: lines.join("\n"),
+        text,
       }),
     });
 
-    const text = await res.text();
+    const resText = await res.text();
     let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text };
-    }
+    try { data = resText ? JSON.parse(resText) : null; } catch { data = { raw: resText }; }
 
     if (!res.ok || data?.success === false) {
       return NextResponse.json(
@@ -87,4 +134,10 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+function normalizeRoute(route?: string | null): string {
+  if (!route) return "분양회";
+  if (route.includes("분양회")) return "분양회";
+  return route;
 }
