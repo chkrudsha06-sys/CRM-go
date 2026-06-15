@@ -1079,12 +1079,19 @@ export default function CustomerDbPage() {
     });
   }, [records, search, filterRoute, filterActivity, filterTitle]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / 10));
+  const PAGE_SIZE = 10;
+  const DISPLAY_SIZE = 7;
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
   const pagedRecords = useMemo(() => {
     const safePage = Math.min(currentPage, totalPages);
-    const start = (safePage - 1) * 10;
-    return filteredRecords.slice(start, start + 10);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredRecords.slice(start, start + PAGE_SIZE);
   }, [filteredRecords, currentPage, totalPages]);
+
+  // 재TM진행 고객 목록 (감도 기준)
+  const retmRecords = useMemo(() => {
+    return filteredRecords.filter((r) => r.sensitivity === "재TM진행").slice(0, DISPLAY_SIZE);
+  }, [filteredRecords]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1709,13 +1716,14 @@ export default function CustomerDbPage() {
               <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "9%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "5.5%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "28.5%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "27%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -1728,6 +1736,7 @@ export default function CustomerDbPage() {
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">담당자</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">최근 활동</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">등록일</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">고객감도</th>
                 <th className="customer-db-th sticky top-0 z-10 text-center align-middle">관리</th>
               </tr>
             </thead>
@@ -1801,6 +1810,21 @@ export default function CustomerDbPage() {
                       </div>
                     </td>
                     <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span
+                          className="customer-db-badge badge-premium"
+                          style={{
+                            background: record.sensitivity === "재TM진행" ? "var(--warning-bg)" : "var(--surface-2)",
+                            border: `1px solid ${record.sensitivity === "재TM진행" ? "var(--warning-border)" : "var(--border-subtle)"}`,
+                            color: record.sensitivity === "재TM진행" ? "var(--warning-text)" : "var(--text-faint)",
+                            fontSize: "11px",
+                          }}
+                        >
+                          {record.sensitivity || "감도없음"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td">
                       <div className="customer-db-action-wrap" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
@@ -1830,7 +1854,7 @@ export default function CustomerDbPage() {
               })}
               {!filteredRecords.length ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center">
+                  <td colSpan={11} className="py-12 text-center">
                     <p className="crm-card-title">등록된 고객DB가 없습니다.</p>
                     <p className="crm-tiny mt-1">TM 또는 콜드톡 활동 고객을 등록해주세요.</p>
                   </td>
@@ -1844,24 +1868,148 @@ export default function CustomerDbPage() {
           <p className="crm-tiny">
             총 {filteredRecords.length}건 · 페이지 {Math.min(currentPage, totalPages)} / {totalPages}
           </p>
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-1">
             <button
               type="button"
               onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
               disabled={currentPage <= 1}
-              className="btn-premium btn-ghost h-9 px-3 text-[12px] disabled:opacity-40"
+              className="btn-premium btn-ghost h-8 px-2.5 text-[12px] disabled:opacity-40"
             >
-              이전
+              ‹
             </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((page) => {
+                if (totalPages <= 7) return true;
+                if (page === 1 || page === totalPages) return true;
+                if (Math.abs(page - currentPage) <= 2) return true;
+                return false;
+              })
+              .reduce((acc: (number | string)[], page, idx, arr) => {
+                if (idx > 0 && typeof arr[idx - 1] === "number" && (page as number) - (arr[idx - 1] as number) > 1) {
+                  acc.push("...");
+                }
+                acc.push(page);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === "..." ? (
+                  <span key={`ellipsis-${idx}`} className="px-1 text-[12px]" style={{ color: "var(--text-faint)" }}>…</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCurrentPage(item as number)}
+                    className="h-8 min-w-[32px] rounded-[8px] border px-2 text-[12px] font-[650] transition-colors"
+                    style={{
+                      background: currentPage === item ? "var(--accent-subtle)" : "var(--surface-2)",
+                      borderColor: currentPage === item ? "var(--accent-border)" : "var(--border-subtle)",
+                      color: currentPage === item ? "var(--accent-text)" : "var(--text-muted)",
+                    }}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
             <button
               type="button"
               onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
               disabled={currentPage >= totalPages}
-              className="btn-premium btn-ghost h-9 px-3 text-[12px] disabled:opacity-40"
+              className="btn-premium btn-ghost h-8 px-2.5 text-[12px] disabled:opacity-40"
             >
-              다음
+              ›
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* 재TM진행 고객 리스트 */}
+      <section className="premium-card overflow-hidden mt-4">
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-[700]" style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", color: "var(--warning-text)" }}>재TM진행</span>
+            <p className="text-[14px] font-[700]" style={{ color: "var(--text-strong)" }}>재TM진행 고객</p>
+            <span className="crm-tiny">{retmRecords.length}건</span>
+          </div>
+          <p className="crm-tiny">최대 7건 표시 · 고객상세에서 감도 변경 가능</p>
+        </div>
+        <div className="crm-table-wrap overflow-auto rounded-b-[18px]">
+          <table className="crm-table customer-db-centered-table customer-db-force-center w-full table-fixed text-center">
+            <colgroup>
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "27%" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">고객명</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">직급</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">연락처</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">유입경로</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">활동항목</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">소속회사</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">담당자</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">최근 활동</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">등록일</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">고객감도</th>
+                <th className="customer-db-th sticky top-0 z-10 text-center align-middle">관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {retmRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-10 text-center">
+                    <p className="crm-card-title">재TM진행 고객이 없습니다.</p>
+                    <p className="crm-tiny mt-1">고객 상세에서 고객감도를 재TM진행으로 설정하면 여기에 표시됩니다.</p>
+                  </td>
+                </tr>
+              ) : retmRecords.map((record) => {
+                const latestNote = record.notes[0];
+                return (
+                  <tr
+                    key={`retm-${record.id}`}
+                    data-selected={selectedRecord?.id === record.id}
+                    onClick={() => setSelectedRecord(record)}
+                    className="customer-db-row cursor-pointer"
+                  >
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{record.name}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{fmt(record.title)}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text tabular-nums">{fmt(record.phone)}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className={`customer-db-badge badge-premium ${badgeClass(record.intake_route)}`}>{record.intake_route}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-badge rounded-full" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-strong)" }}>{record.activity_type}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{fmt(record.company)}</span></div></td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{fmt(record.assigned_to)}</span></div></td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-two-line-cell">
+                        <span className="customer-db-cell-text">{latestNote ? latestNote.activityType : "-"}</span>
+                        <span className="crm-row-sub customer-db-cell-text">{latestNote ? `${latestNote.noteDate} ${timeLabel(latestNote.createdAt)}` : "활동노트 없음"}</span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td"><div className="customer-db-center-cell"><span className="customer-db-cell-text">{dateLabel(record.created_at)}</span></div></td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-center-cell">
+                        <span className="customer-db-badge badge-premium" style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", color: "var(--warning-text)", fontSize: "11px" }}>재TM진행</span>
+                      </div>
+                    </td>
+                    <td className="customer-db-td">
+                      <div className="customer-db-action-wrap" onClick={(event) => event.stopPropagation()}>
+                        <button type="button" onClick={() => requestTransfer(record)} className="btn-premium btn-primary h-9 px-3 text-[12px]"><ArrowRight size={13} /> VIP DB이관</button>
+                        <button type="button" onClick={() => openEditForm(record)} className="btn-premium btn-secondary h-9 px-3 text-[12px]"><Edit3 size={13} /> 수정</button>
+                        <button type="button" onClick={() => deleteRecord(record)} className="btn-premium btn-danger h-9 px-3 text-[12px]"><Trash2 size={13} /> 삭제</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
