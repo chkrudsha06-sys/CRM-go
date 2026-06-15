@@ -356,20 +356,16 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
             : "pointer-events-none translate-x-[115%] opacity-0"
         }`}
         style={{
-          background:
-            "linear-gradient(180deg, rgba(15, 23, 42, 0.97), rgba(15, 23, 42, 0.93))",
-          border: "1px solid rgba(125, 211, 252, 0.28)",
-          boxShadow:
-            "0 24px 80px rgba(15, 23, 42, 0.36), 0 0 0 1px rgba(255,255,255,0.06) inset",
-          backdropFilter: "blur(22px)",
+          background: "var(--surface)",
+          border: "1px solid var(--border-subtle)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.22), inset -1px 0 0 rgba(255,255,255,0.015)",
         }}
         aria-hidden={!open}
       >
-        <div className="absolute -right-20 -top-20 h-52 w-52 rounded-full bg-sky-400/20 blur-3xl" />
-        <div className="absolute -left-16 bottom-16 h-44 w-44 rounded-full bg-blue-600/20 blur-3xl" />
+
 
         <div className="relative flex h-full min-h-0 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <header className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
             <div className="flex min-w-0 items-center gap-3">
               <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
                 {imageFailed ? (
@@ -388,14 +384,14 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-[15px] font-black tracking-[-0.03em] text-white">
+                  <h2 className="truncate text-[15px] font-black tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
                     JARVIS
                   </h2>
                   <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-2 py-0.5 text-[10px] font-black text-sky-200">
                     CRM AGENT
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-300">
+                <p className="mt-0.5 truncate text-[11px] font-semibold" style={{ color: "var(--text-subtle)" }}>
                   {user.name}님 전용 CRM 운영 에이전트
                 </p>
               </div>
@@ -415,7 +411,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <button
                 type="button"
                 onClick={() => setExpanded((prev) => !prev)}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
                 aria-label={expanded ? "작게 보기" : "크게 보기"}
               >
                 {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -423,7 +419,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <button
                 type="button"
                 onClick={resetChat}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
                 aria-label="대화 초기화"
                 title="대화 초기화"
               >
@@ -432,7 +428,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <button
                 type="button"
                 onClick={closePanel}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
                 aria-label="자비스 패널만 접기"
                 title="패널 접기"
               >
@@ -441,7 +437,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <button
                 type="button"
                 onClick={hideJarvis}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-300 transition hover:bg-white/10 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
                 aria-label="자비스 완전히 숨기기"
                 title="자비스 숨기기"
               >
@@ -451,7 +447,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
           </header>
 
           {showQuickButtons && (
-            <div className="relative border-b border-white/10 px-4 py-3">
+            <div className="relative px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
               <div
                 className={`grid gap-2 ${expanded ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2"}`}
               >
@@ -500,7 +496,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   className={`flex gap-2.5 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {message.role === "assistant" && (
-                    <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 ring-1 ring-sky-300/20">
+                    <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
                       <Bot size={15} className="text-sky-200" />
                     </div>
                   )}
@@ -510,9 +506,9 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   >
                     {/* 에이전트 양식: 일별활동 목표 */}
                     {message.content.startsWith("__AGENT_DAILY_GOAL__") ? (
-                      <div className="rounded-2xl rounded-bl-md border border-sky-300/30 p-4" style={{ background: "rgba(15,40,80,0.85)", minWidth: 260 }}>
+                      <div className="rounded-2xl rounded-bl-md border border-sky-300/30 p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--accent-border)", minWidth: 260 }}>
                         <p className="mb-3 text-[13px] font-black text-sky-200">일별활동 목표 등록</p>
-                        <p className="mb-3 text-[11px] text-slate-400">{message.content.split(":")[1]} 기준으로 저장됩니다.</p>
+                        <p className="mb-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{message.content.split(":")[1]} 기준으로 저장됩니다.</p>
                         <div className="space-y-2.5">
                           {[
                             { key: "tm", label: "당일 TM 목표", unit: "건" },
@@ -521,17 +517,17 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                             { key: "onePercent", label: "1% DB 확보 목표", unit: "개" },
                           ].map((field) => (
                             <div key={field.key} className="flex items-center gap-2">
-                              <span className="w-[130px] shrink-0 text-[11px] font-semibold text-slate-300">{field.label}</span>
+                              <span className="w-[130px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>{field.label}</span>
                               <input
                                 type="number"
                                 min="0"
                                 value={agentForm[field.key] || ""}
                                 onChange={(e) => setAgentForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
                                 className="w-16 rounded-lg px-2 py-1.5 text-center text-[13px] font-bold outline-none"
-                                style={{ background: "#0f1f3d", border: "1px solid rgba(56,189,248,0.4)", color: "#fff" }}
+                                style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-strong)" }}
                                 placeholder="0"
                               />
-                              <span className="text-[11px] text-slate-400">{field.unit}</span>
+                              <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>{field.unit}</span>
                             </div>
                           ))}
                         </div>
@@ -596,13 +592,13 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                         className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12px] font-medium leading-relaxed ${
                           message.role === "user"
                             ? "rounded-br-md bg-sky-500 text-white"
-                            : "rounded-bl-md border border-white/10 bg-white/[0.08] text-slate-100"
+                            : "rounded-bl-md"
                         }`}
                       >
                         {message.content}
                       </div>
                     )}
-                    <span className="mt-1 px-1 text-[10px] font-semibold text-slate-500">
+                    <span className="mt-1 px-1 text-[10px] font-semibold" style={{ color: "var(--text-faint)" }}>
                       {message.timestamp}
                     </span>
                   </div>
@@ -611,10 +607,10 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
 
               {loading && (
                 <div className="flex justify-start gap-2.5">
-                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 ring-1 ring-sky-300/20">
+                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
                     <Loader2 size={15} className="animate-spin text-sky-200" />
                   </div>
-                  <div className="rounded-2xl rounded-bl-md border border-white/10 bg-white/[0.08] px-3.5 py-2.5 text-[12px] font-bold text-slate-300">
+                  <div className="rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[12px] font-bold" style={{ border: "1px solid var(--border-subtle)", background: "var(--surface-2)", color: "var(--text-subtle)" }}>
                     CRM 데이터를 읽고 우선순위를 계산하고 있습니다...
                   </div>
                 </div>
@@ -624,9 +620,9 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
             </div>
           </div>
 
-          <footer className="border-t border-white/10 p-3" style={{ background: "rgba(10,17,35,0.98)" }}>
+          <footer className="p-3" style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--surface)" }}>
             <div className="flex items-end gap-2">
-              <div className="min-w-0 flex-1 rounded-2xl border border-sky-300/20 px-3 py-2 focus-within:border-sky-300/50" style={{ background: "rgba(20,30,55,0.9)" }}>
+              <div className="min-w-0 flex-1 rounded-2xl px-3 py-2" style={{ border: "1px solid var(--border)", background: "var(--surface-2)" }}>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -635,7 +631,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                   rows={1}
                   disabled={loading}
                   placeholder="자비스에게 CRM 업무를 물어보세요..."
-                  className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed text-white outline-none placeholder:text-slate-400"
+                  className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed outline-none" style={{ color: "var(--text-strong)" }}
                 />
               </div>
               <button
