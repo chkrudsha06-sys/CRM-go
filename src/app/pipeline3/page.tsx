@@ -1065,6 +1065,118 @@ function DetailPanel({
   );
 }
 
+function RecentNoteSection({
+  contactId,
+  onOpenNoteComposer,
+}: {
+  contactId: number;
+  onOpenNoteComposer: () => void;
+}) {
+  const [notes, setNotes] = useState<ContactNote[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("contact_notes")
+          .select("id,contact_id,note_date,content,author,created_at")
+          .eq("contact_id", contactId)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(3);
+        if (error) throw error;
+        if (alive) setNotes(Array.isArray(data) ? (data as ContactNote[]) : []);
+      } catch {
+        if (alive) setNotes([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+    load();
+    return () => { alive = false; };
+  }, [contactId]);
+
+  const latestNote = notes[0] || null;
+  const latestDate = latestNote?.note_date || latestNote?.created_at || null;
+
+  function formatDate(value: string | null) {
+    if (!value) return "-";
+    try {
+      return new Date(`${value.slice(0, 10)}T00:00:00`).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+    } catch { return value.slice(0, 10); }
+  }
+
+  return (
+    <section className="premium-card p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText size={17} style={{ color: "var(--accent)" }} />
+          <div className="min-w-0">
+            <p className="crm-section-title">활동노트</p>
+            <p className="crm-tiny">
+              {latestDate ? `최근 활동일 ${formatDate(latestDate)}` : "활동노트 없음"}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenNoteComposer}
+          className="btn-premium btn-primary h-8 px-3 text-[12px]"
+        >
+          <Plus size={13} />
+          노트 작성
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex h-20 items-center justify-center">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+        </div>
+      ) : notes.length === 0 ? (
+        <div
+          className="flex min-h-[80px] items-center justify-center rounded-[14px] border border-dashed text-[13px] font-semibold"
+          style={{ color: "var(--text-faint)", borderColor: "var(--border)" }}
+        >
+          등록된 활동노트가 없습니다
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {notes.map((note) => (
+            <div
+              key={note.id}
+              className="rounded-[14px] border p-3.5"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[12px] font-bold" style={{ color: "var(--accent-text)" }}>
+                  {formatDate(note.note_date || note.created_at)}
+                </span>
+                {note.author && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                    style={{ background: "var(--surface)", color: "var(--text-subtle)", border: "1px solid var(--border-subtle)" }}
+                  >
+                    {note.author}
+                  </span>
+                )}
+              </div>
+              <p
+                className="line-clamp-4 whitespace-pre-wrap text-[13px] font-medium leading-relaxed"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {note.content}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SummaryTab({
   customer,
   onStageChange,
@@ -1177,42 +1289,7 @@ function SummaryTab({
           </div>
         </section>
 
-        <section className="premium-card p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <FileText size={17} style={{ color: "var(--accent)" }} />
-              <div className="min-w-0">
-                <p className="crm-section-title">활동노트</p>
-                <p className="crm-tiny">Supabase contact_notes 기준 활동노트</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onOpenNoteComposer}
-              className="btn-premium btn-primary h-8 px-3 text-[12px]"
-            >
-              <Plus size={13} />
-              노트 작성
-            </button>
-          </div>
-          <div
-            className="min-h-[128px] rounded-[16px] border p-4"
-            style={{
-              background: "var(--surface-2)",
-              borderColor: "var(--border)",
-            }}
-          >
-            <p
-              className="text-sm font-[760] leading-7"
-              style={{ color: "var(--text-subtle)" }}
-            >
-              {customer.noteSummary}
-            </p>
-            <p className="crm-tiny mt-3">
-              실제 contact_notes 연결은 후속 작업에서 Supabase로 연결합니다.
-            </p>
-          </div>
-        </section>
+        <RecentNoteSection contactId={customer.id} onOpenNoteComposer={onOpenNoteComposer} />
       </div>
 
       <QuickActions
