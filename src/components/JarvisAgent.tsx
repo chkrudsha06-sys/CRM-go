@@ -507,7 +507,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
 
           <footer className="border-t border-white/10 p-3">
             <div className="flex items-end gap-2">
-              <div className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.08] px-3 py-2 focus-within:border-sky-300/45">
+              <div className="min-w-0 flex-1 rounded-2xl border border-white/20 px-3 py-2 focus-within:border-sky-300/45" style={{ background: "rgba(15,23,42,0.65)" }}>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -516,7 +516,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   rows={1}
                   disabled={loading}
                   placeholder="자비스에게 CRM 업무를 물어보세요..."
-                  className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed text-white outline-none placeholder:text-slate-500"
+                  className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed text-white outline-none placeholder:text-slate-400"
                 />
               </div>
               <button
