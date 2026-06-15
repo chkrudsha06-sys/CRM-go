@@ -158,6 +158,31 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const UNREVIEWED_GRADE = "심사미진행";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
+const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
+
+function normalizePersonName(value?: string | null) {
+  return String(value || "")
+    .replace(/님|팀장|파트장|본부장|대표|메인|어쏘|CX|어시|관리자/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function getCurrentUserInfo(): { name: string; role: string; isAdmin: boolean; isExec: boolean } {
+  try {
+    const raw = localStorage.getItem("crm_user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      const name = String(u?.name || "");
+      const role = String(u?.role || "").toLowerCase();
+      const normName = normalizePersonName(name);
+      const isAdmin = role === "admin" || ADMIN_NAMES.some((n) => normalizePersonName(n) === normName);
+      const isExec = role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((n) => normalizePersonName(n) === normName);
+      return { name, role, isAdmin, isExec };
+    }
+  } catch {}
+  return { name: "", role: "", isAdmin: false, isExec: false };
+}
 const PAYMENT_CHANNEL_OPTIONS = [
   "자동이체 (효성CMS)",
   "카드 (사이다페이)",
@@ -2587,8 +2612,18 @@ export default function Pipeline3Page() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [intakeFilter, setIntakeFilter] = useState<FilterValue>("전체");
   const [stageFilter, setStageFilter] = useState<FilterValue>("전체");
+  const [assignedFilter, setAssignedFilter] = useState<string>("전체");
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string; isAdmin: boolean; isExec: boolean }>({ name: "", role: "", isAdmin: false, isExec: false });
 
   useEffect(() => {
+    // 사용자 정보 초기화
+    const userInfo = getCurrentUserInfo();
+    setCurrentUser(userInfo);
+    // 실행파트 담당자는 본인 담당 고객만 보이도록 고정
+    if (userInfo.isExec && !userInfo.isAdmin) {
+      setAssignedFilter(userInfo.name);
+    }
+
     let alive = true;
 
     const loadPipelineRecords = async () => {
@@ -2680,12 +2715,17 @@ export default function Pipeline3Page() {
         intakeFilter === "전체" || customer.intakeRoute === intakeFilter;
       const matchesStage = stageFilter === "전체" || customer.stage === stageFilter;
 
-      return matchesKeyword && matchesIntake && matchesStage;
+      // 담당자 필터: 실행파트는 본인 담당만, 관리자는 드롭다운 선택
+      const matchesAssigned =
+        assignedFilter === "전체" ||
+        normalizePersonName(customer.raw.assigned_to) === normalizePersonName(assignedFilter);
+
+      return matchesKeyword && matchesIntake && matchesStage && matchesAssigned;
     });
-  }, [customers, searchKeyword, intakeFilter, stageFilter]);
+  }, [customers, searchKeyword, intakeFilter, stageFilter, assignedFilter]);
 
   const hasActiveFilter =
-    searchKeyword.trim() || intakeFilter !== "전체" || stageFilter !== "전체";
+    searchKeyword.trim() || intakeFilter !== "전체" || stageFilter !== "전체" || (currentUser.isAdmin && assignedFilter !== "전체");
 
   const selectedCustomer = useMemo(
     () =>
@@ -3019,6 +3059,23 @@ export default function Pipeline3Page() {
               </select>
             </label>
 
+            {/* 관리자 전용: 담당자 필터 */}
+            {currentUser.isAdmin && (
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block">담당자 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3"
+                  value={assignedFilter}
+                  onChange={(event) => setAssignedFilter(event.target.value)}
+                >
+                  <option value="전체">전체 담당자</option>
+                  {EXECUTION_PART_NAMES.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <div className="flex items-end gap-2">
               <button
                 type="button"
@@ -3027,6 +3084,7 @@ export default function Pipeline3Page() {
                   setSearchKeyword("");
                   setIntakeFilter("전체");
                   setStageFilter("전체");
+                  if (currentUser.isAdmin) setAssignedFilter("전체");
                 }}
                 disabled={!hasActiveFilter}
               >
