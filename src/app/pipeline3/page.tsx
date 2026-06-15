@@ -809,6 +809,7 @@ function DetailPanel({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
+    meetingPurpose: string,
   ) => void;
   onOpenNoteComposer: () => void;
   onOpenEdit: () => void;
@@ -1196,6 +1197,7 @@ function SummaryTab({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
+    meetingPurpose: string,
   ) => void;
   onOpenNoteComposer: () => void;
 }) {
@@ -1322,6 +1324,7 @@ function QuickActions({
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
+    meetingPurpose: string,
   ) => void;
   onOpenNoteComposer: () => void;
 }) {
@@ -1331,6 +1334,7 @@ function QuickActions({
   const [contractPaymentChannel, setContractPaymentChannel] = useState(customer.raw.payment_channel || "");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingAddress, setMeetingAddress] = useState("");
+  const [meetingPurpose, setMeetingPurpose] = useState("");
   const targets = getQuickStageTargets(customer.stage);
 
   useEffect(() => {
@@ -1344,10 +1348,11 @@ function QuickActions({
       alert("미팅일정을 선택해 주세요.");
       return;
     }
-    onMeetingSave(customer, meetingDate, meetingAddress);
+    onMeetingSave(customer, meetingDate, meetingAddress, meetingPurpose);
     setMeetingOpen(false);
     setMeetingDate("");
     setMeetingAddress("");
+    setMeetingPurpose("");
   };
 
   const handleContractCompleteSubmit = () => {
@@ -1524,6 +1529,21 @@ function QuickActions({
               onChange={(event) => setMeetingAddress(event.target.value)}
               placeholder="예: 모델하우스 / 고객 사무실"
               className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            />
+          </label>
+          <label className="block space-y-1.5 md:col-span-2">
+            <span className="crm-tiny">미팅목적</span>
+            <textarea
+              value={meetingPurpose}
+              onChange={(event) => setMeetingPurpose(event.target.value)}
+              placeholder="예: 분양회 VIP 멤버십 설명 / 계약 클로징 / 서비스 제안"
+              rows={2}
+              className="w-full resize-none rounded-[10px] border px-3 py-2 text-[13px] font-semibold outline-none"
               style={{
                 background: "var(--surface)",
                 borderColor: "var(--border-subtle)",
@@ -3017,10 +3037,11 @@ export default function Pipeline3Page() {
     customer: PipelineCustomer,
     meetingDate: string,
     meetingAddress: string,
+    meetingPurpose: string,
   ) => {
     updateRecord(customer.id, {
       meeting_date: meetingDate,
-      meeting_date_text: "파이프라인3 미팅일정",
+      meeting_date_text: meetingPurpose.trim() || "파이프라인3 미팅일정",
       meeting_address: meetingAddress.trim() || null,
     });
   };
