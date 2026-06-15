@@ -474,6 +474,54 @@ async function processPaymentRow($: cheerio.CheerioAPI, row: any) {
 
   if (logError) throw logError;
 
+  // ── 카카오워크 매출방 알림 (결제완료 건만) ──
+  if (!isCancel) {
+    try {
+      // N회차 계산: 해당 고객의 분양회 결제 누적 건수
+      const { count: paymentCount } = await supabase
+        .from("ad_executions")
+        .select("id", { count: "exact", head: true })
+        .eq("member_name", buyerName)
+        .eq("contract_route", "분양회")
+        .gt("execution_amount", 0);
+
+      const nth = paymentCount || 1;
+
+      // 사이다페이 세부내용 구성
+      const ciderpayDetail = [
+        "사이다페이 정기결제 완료 자동반영",
+        `●거래번호: ${externalPaymentId}`,
+        `●구매자명: ${buyerName}`,
+        `●상품명: ${productName}`,
+        `●상태: 결제완료`,
+        `●금액: ${amount.toLocaleString()}원`,
+        `●결제완료일시: ${paidAtText}`,
+        `●취소완료일시: -`,
+      ].join("\n");
+
+      const baseUrl = process.env.CRM_BASE_URL || "https://crm-go-roan.vercel.app";
+      await fetch(`${baseUrl}/api/kakaowork/send-sales-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_name: buyerName,
+          member_title: matchedMember?.title || "",
+          member_phone: matchedMember?.phone || "",
+          execution_amount: amount,
+          channel: "사이다페이",
+          contract_route: "분양회",
+          payment_date: paymentDate,
+          team_member: matchedManagerName,
+          is_auto: true,
+          payment_count: nth,
+          ciderpay_detail: ciderpayDetail,
+        }),
+      });
+    } catch (kakaoErr) {
+      console.warn("카카오워크 매출 알림 실패 (무시):", kakaoErr);
+    }
+  }
+
   return {
     buyerName,
     productName,
