@@ -65,7 +65,7 @@ export default function NoticePopup({ me, onClose }: { me: string; onClose: () =
         .from("notice_reads")
         .select("notice_id")
         .eq("user_name", me);
-      setReads(new Set((readData || []).map((r: any) => r.notice_id)));
+      setReads(new Set(Array.from((readData || []).map((r: any) => Number(r.notice_id)))));
     })();
   }, [me]);
 
@@ -84,7 +84,7 @@ export default function NoticePopup({ me, onClose }: { me: string; onClose: () =
       { notice_id: notice.id, user_name: me },
       { onConflict: "notice_id,user_name" }
     );
-    setReads((prev) => new Set([...prev, notice.id]));
+    setReads((prev) => { const next = new Set(Array.from(prev)); next.add(notice.id); return next; });
     setSaving(false);
   };
 
