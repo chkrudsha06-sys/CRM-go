@@ -71,6 +71,13 @@ function isActive(n: Notice) { const t = today(); return n.start_date <= t && n.
 function getFileName(url: string) {
   try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_[a-z0-9]+\./, ".").replace(/^\d+_/, ""); } catch { return url; }
 }
+function getNoticeFileUrls(notice: Pick<Notice, "file_urls" | "image_url">) {
+  return notice.file_urls || (notice.image_url ? [notice.image_url] : []);
+}
+function getNoticeFileNames(notice: Pick<Notice, "file_urls" | "file_names" | "image_url">) {
+  const urls = getNoticeFileUrls(notice);
+  return urls.map((url, index) => notice.file_names?.[index] || getFileName(url));
+}
 
 // ━━━ 업로드 유틸 ━━━
 // Supabase Storage 키는 한글/특수문자를 허용하지 않으므로 안전한 영문 키로 변환한다.
@@ -392,17 +399,18 @@ export default function NoticesPage() {
             </div>
             <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted">
               <Filter className="h-4 w-4 flex-none"/>
-              <span>공지사항명 · 작성자 · 작성일 · 게시기간 · 중요도 · 태그자 · 확인자 기준</span>
+              <span>공지사항명 · 첨부파일명 · 작성자 · 작성일 · 게시기간 · 중요도 · 태그자 · 확인자 기준</span>
             </div>
           </div>
 
           {/* 테이블 */}
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-center">
+            <table className="w-full min-w-[1280px] border-collapse text-center">
               <thead>
                 <tr className="text-xs font-[900] uppercase tracking-[0.08em]"
                   style={{ background:"var(--surface-2)", color:"var(--text-faint)", borderBottom:"1px solid var(--border-subtle)" }}>
                   <th className="px-5 py-4 text-left">공지사항명</th>
+                  <th className="px-4 py-4 text-left">첨부파일명</th>
                   <th className="px-4 py-4">작성자</th>
                   <th className="px-4 py-4">작성일</th>
                   <th className="px-4 py-4">게시기간</th>
@@ -413,14 +421,14 @@ export default function NoticesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="py-20">
+                  <tr><td colSpan={8} className="py-20">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin" style={{ color:"var(--text-faint)" }}/>
                       <span className="crm-tiny">로딩 중...</span>
                     </div>
                   </td></tr>
                 ) : notices.length === 0 ? (
-                  <tr><td colSpan={7} className="py-20">
+                  <tr><td colSpan={8} className="py-20">
                     <p className="crm-tiny">등록된 공지사항이 없습니다</p>
                   </td></tr>
                 ) : notices.map(notice => {
@@ -429,6 +437,7 @@ export default function NoticesPage() {
                   const active = isActive(notice);
                   const sel = selected?.id === notice.id;
                   const rc = readCount(notice.id);
+                  const fileNames = getNoticeFileNames(notice);
 
                   return (
                     <tr key={notice.id} onClick={()=>openNotice(notice)}
@@ -448,6 +457,26 @@ export default function NoticesPage() {
                               </p>
                             </div>
                         </div>
+                      </td>
+
+                      {/* 첨부파일명 */}
+                      <td className="px-4 py-4 text-left">
+                        {fileNames.length > 0 ? (
+                          <div className="flex max-w-[260px] flex-col gap-1">
+                            {fileNames.slice(0, 2).map((name, index) => (
+                              <span key={`${name}-${index}`} className="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-[760]"
+                                style={{ background:"var(--surface-2)", border:"1px solid var(--border-subtle)", color:"var(--text-muted)" }}>
+                                <File size={10} className="shrink-0" style={{ color:"var(--accent-text)" }} />
+                                <span className="truncate">{name}</span>
+                              </span>
+                            ))}
+                            {fileNames.length > 2 && (
+                              <span className="crm-tiny">외 {fileNames.length - 2}개</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="crm-tiny">-</span>
+                        )}
                       </td>
 
                       {/* 작성자 */}
@@ -517,7 +546,7 @@ export default function NoticesPage() {
                 const cfg = IMP[n.importance as Importance] || IMP["정보"];
                 const Icon = cfg.icon;
                 const ru = readUsers(n.id);
-                const fileUrls = n.file_urls || (n.image_url ? [n.image_url] : []);
+                const fileUrls = getNoticeFileUrls(n);
                 const canEdit = isAdmin || n.author === me;
                 const fileLabel = (url: string, i: number) => n.file_names?.[i] || getFileName(url);
                 return (
