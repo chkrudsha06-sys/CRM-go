@@ -135,7 +135,7 @@ async function callAI(systemPrompt: string, messages: ChatMessage[]) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
+          system_instruction: { parts: [{ text: "[중요] 마크다운 문법(**굵게**, *기울임*, # 제목, - 목록, --- 구분선 등)을 절대 사용하지 않는다. 단락 구분은 빈 줄, 목록은 숫자나 ▪ 기호만 사용한다.\n\n" + systemPrompt }] },
           contents,
           generationConfig: {
             maxOutputTokens: 2200,
@@ -597,7 +597,10 @@ export async function POST(req: Request) {
 6. 분양회 관련 답변 시 "가입" 대신 "모집·참여 검토", "혜택" 대신 "서포트" 사용.
 7. CRM 데이터를 수정하거나 전송했다고 말하지 않는다. 자비스는 읽기/분석 전용이다.
 8. 모르는 내용은 추측하지 않는다.
-9. 답변은 간결하게, 실제 업무자가 바로 볼 수 있게 정리한다.
+9. 절대로 마크다운 문법을 사용하지 않는다. **, *, #, -, --- 등 기호를 사용하지 않는다.
+10. 단락 구분은 빈 줄로만 한다. 목록은 번호(1. 2. 3.)나 ▪ 기호만 사용한다.
+11. 강조가 필요하면 기호 없이 단어 자체로 강조하거나 [ ] 괄호를 사용한다.
+12. 답변은 간결하게, 실제 업무자가 바로 볼 수 있게 정리한다.
 
 CRM 로직 지식:
 ${crmKnowledge}
