@@ -884,8 +884,8 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                     className={`max-w-[84%] ${message.role === "user" ? "items-end" : "items-start"} flex flex-col`}
                   >
                     {message.content.startsWith("__AGENT_DAILY_GOAL__") ? (
-                      <div className="rounded-2xl rounded-bl-md border border-sky-300/30 p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--accent-border)", minWidth: 260 }}>
-                        <p className="mb-3 text-[13px] font-black text-sky-200">일별활동 목표 등록</p>
+                      <div className="rounded-2xl rounded-bl-md p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--accent-border)", minWidth: 260 }}>
+                        <p className="mb-3 text-[13px] font-black" style={{ color: "var(--accent-text)" }}>일별활동 목표 등록</p>
                         <p className="mb-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{message.content.split(":")[1]} 기준으로 저장됩니다.</p>
                         <div className="space-y-2.5">
                           {[
@@ -976,15 +976,15 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                                 }
                               }}
                               className="flex-1 rounded-xl py-2 text-[12px] font-black text-white transition"
-                              style={{ background: agentSaving ? "rgba(56,189,248,0.3)" : "rgba(56,189,248,0.7)" }}
+                              style={{ background: agentSaving ? "var(--accent-subtle)" : "var(--accent)" }}
                             >
                               {agentSaving ? "저장 중..." : "저장"}
                             </button>
                             <button
                               type="button"
                               onClick={() => { setAgentMode(null); setAgentForm({}); }}
-                              className="rounded-xl px-3 py-2 text-[12px] font-semibold text-slate-400 transition hover:text-white"
-                              style={{ background: "rgba(255,255,255,0.05)" }}
+                              className="rounded-xl px-3 py-2 text-[12px] font-semibold transition"
+                              style={{ background: "var(--surface)", color: "var(--text-muted)" }}
                             >
                               취소
                             </button>
