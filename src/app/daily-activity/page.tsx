@@ -448,7 +448,7 @@ function StatCard({
       <div>
         <p className="crm-tiny">{label}</p>
         <p
-          className="mt-2 text-[25px] font-[820] tracking-[-0.06em]"
+          className="mt-2 text-[25px] font-[700] tracking-[-0.02em]"
           style={{ color: "var(--text-strong)" }}
         >
           {typeof value === "number" ? value.toLocaleString() : value}
@@ -494,7 +494,7 @@ function NumberInput({
           onChange={(event) =>
             onChange(Math.max(0, Number(event.target.value || 0)))
           }
-          className="h-[42px] w-full rounded-[13px] border px-3 pr-10 text-[14px] font-[760] outline-none disabled:opacity-50"
+          className="h-[42px] w-full rounded-[13px] border px-3 pr-10 text-[14px] font-[600] outline-none disabled:opacity-50"
           style={{
             background: "var(--surface-2)",
             borderColor: "var(--border)",
@@ -502,7 +502,7 @@ function NumberInput({
           }}
         />
         <span
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] font-bold"
           style={{ color: "var(--text-faint)" }}
         >
           {unit}
@@ -526,7 +526,7 @@ function ProgressBar({ result, goal }: { result: number; goal: number }) {
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-[11px] font-bold">
+      <div className="mb-1 flex items-center justify-between text-[12px] font-bold">
         <span style={{ color: "var(--text-subtle)" }}>
           {goal.toLocaleString()} / {result.toLocaleString()}
         </span>
@@ -607,7 +607,7 @@ function MemberDayCard({
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="crm-tiny whitespace-nowrap">{field.label}</p>
               <p
-                className="whitespace-nowrap text-[12px] font-[780]"
+                className="whitespace-nowrap text-[13px] font-[700]"
                 style={{ color: "var(--text)" }}
               >
                 {goalValue(row, field.key)} / {resultValue(row, field.key)} {field.unit}
@@ -634,14 +634,14 @@ function MemberDayCard({
             <div>
               <p className="crm-tiny">당일 특발성활동목표</p>
               <p
-                className="mt-1 text-[11px] font-[650]"
+                className="mt-1 text-[12px] font-[500]"
                 style={{ color: "var(--text-faint)" }}
               >
                 스크롤 없이 입력한 목표 텍스트를 전체 표시합니다.
               </p>
             </div>
             <p
-              className="rounded-full border px-2.5 py-1 text-[12px] font-[800]"
+              className="rounded-full border px-2.5 py-1 text-[13px] font-[700]"
               style={{
                 borderColor: "var(--border)",
                 background: "var(--surface)",
@@ -664,7 +664,7 @@ function MemberDayCard({
                   }}
                 >
                   <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-[850]"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-[700]"
                     style={{
                       background: item.done ? "var(--success-bg)" : "var(--accent-subtle)",
                       color: item.done ? "var(--success-text)" : "var(--accent-text)",
@@ -673,13 +673,13 @@ function MemberDayCard({
                     {index + 1}
                   </span>
                   <p
-                    className={`m-0 whitespace-pre-wrap break-words text-[13.5px] font-[760] leading-[1.65] ${item.done ? "line-through" : ""}`}
+                    className={`m-0 whitespace-pre-wrap break-words text-[13.5px] font-[600] leading-[1.65] ${item.done ? "line-through" : ""}`}
                     style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
                   >
                     {item.text}
                   </p>
                   <span
-                    className="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10.5px] font-[850]"
+                    className="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[11.5px] font-[700]"
                     style={{
                       background: item.done ? "var(--success-bg)" : "var(--surface-3)",
                       color: item.done ? "var(--success-text)" : "var(--text-faint)",
@@ -692,7 +692,7 @@ function MemberDayCard({
             </ol>
           ) : (
             <div
-              className="flex min-h-[74px] items-center justify-center rounded-[11px] border px-3 text-center text-[12px] font-[720] leading-relaxed"
+              className="flex min-h-[74px] items-center justify-center rounded-[11px] border px-3 text-center text-[13px] font-[600] leading-relaxed"
               style={{
                 borderColor: "var(--border)",
                 background: "var(--surface)",
@@ -769,7 +769,7 @@ function PeriodSummary({
 function GuideBox({ children }: { children: ReactNode }) {
   return (
     <div
-      className="rounded-[16px] border px-4 py-3 text-[13px] font-[650] leading-relaxed"
+      className="rounded-[16px] border px-4 py-3 text-[13px] font-[500] leading-relaxed"
       style={{
         background: "var(--accent-subtle)",
         borderColor: "var(--accent-border)",
@@ -817,7 +817,7 @@ function WorkItemsEditor({
         {items.map((item, index) => (
           <div key={item.id} className="flex items-center gap-2">
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-[850]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-[700]"
               style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
             >
               {index + 1}
@@ -881,7 +881,7 @@ function WorkItemsResultChecklist({
                 onChange={() => onToggle(item.id)}
               />
               <span
-                className={`min-w-0 flex-1 text-[14px] font-[760] ${item.done ? "line-through" : ""}`}
+                className={`min-w-0 flex-1 text-[14px] font-[600] ${item.done ? "line-through" : ""}`}
                 style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
               >
                 {hasText ? item.text : `${index + 1}. 입력된 업무가 없습니다`}
@@ -1388,7 +1388,7 @@ export default function DailyActivityPage() {
               type="date"
               value={date}
               onChange={(event) => setDate(event.target.value)}
-              className="h-[38px] rounded-full border px-3 text-[13px] font-[740] outline-none"
+              className="h-[38px] rounded-full border px-3 text-[13px] font-[600] outline-none"
               style={{
                 background: "var(--surface-2)",
                 borderColor: "var(--border)",
@@ -1485,7 +1485,7 @@ export default function DailyActivityPage() {
                     </div>
                   </div>
                   <label
-                    className="flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[12px] font-[780]"
+                    className="flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[13px] font-[700]"
                     style={{
                       borderColor: isOutsideMeeting
                         ? "var(--warning-border)"
@@ -1571,7 +1571,7 @@ export default function DailyActivityPage() {
                     <select
                       value={selectedOwner}
                       onChange={(event) => setSelectedOwner(event.target.value)}
-                      className="h-[38px] min-w-[150px] rounded-full border px-3 text-[13px] font-[760] outline-none"
+                      className="h-[38px] min-w-[150px] rounded-full border px-3 text-[13px] font-[600] outline-none"
                       style={{
                         background: "var(--surface-2)",
                         borderColor: "var(--border)",
@@ -1654,11 +1654,11 @@ export default function DailyActivityPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-2">
-                  <span className="crm-tiny font-[800]">월별 검색</span>
+                  <span className="crm-tiny font-[700]">월별 검색</span>
                   <select
                     value={monthFilter}
                     onChange={(event) => setMonthFilter(event.target.value)}
-                    className="h-[38px] min-w-[150px] rounded-full border px-3 text-center text-[13px] font-[800] outline-none"
+                    className="h-[38px] min-w-[150px] rounded-full border px-3 text-center text-[13px] font-[700] outline-none"
                     style={{
                       background: "var(--surface-2)",
                       borderColor: "var(--border)",
@@ -1721,7 +1721,7 @@ export default function DailyActivityPage() {
                               </span>
                               {row.owner_title ? (
                                 <span
-                                  className="rounded-full border px-2 py-0.5 text-[11px] font-[850]"
+                                  className="rounded-full border px-2 py-0.5 text-[12px] font-[700]"
                                   style={{
                                     borderColor: "var(--border)",
                                     background: "var(--surface-2)",
@@ -1771,7 +1771,7 @@ export default function DailyActivityPage() {
                                 type="button"
                                 onClick={() => handleEditDetailRow(row)}
                                 disabled={saving || row.owner_name !== user?.name}
-                                className="rounded-full border px-2.5 py-1 text-[11px] font-[850] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-full border px-2.5 py-1 text-[12px] font-[700] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                                 style={{
                                   borderColor: "var(--border)",
                                   background: "var(--surface-2)",
@@ -1784,7 +1784,7 @@ export default function DailyActivityPage() {
                                 type="button"
                                 onClick={() => handleDeleteDetailRow(row)}
                                 disabled={saving || row.owner_name !== user?.name}
-                                className="rounded-full border px-2.5 py-1 text-[11px] font-[850] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                                className="rounded-full border px-2.5 py-1 text-[12px] font-[700] transition hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                                 style={{
                                   borderColor: "var(--danger-border)",
                                   background: "var(--danger-bg)",
@@ -1809,7 +1809,7 @@ export default function DailyActivityPage() {
 
       {toast && (
         <div
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[14px] px-5 py-3 text-[13px] font-[780] text-white shadow-lg"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[14px] px-5 py-3 text-[13px] font-[700] text-white shadow-lg"
           style={{ background: "linear-gradient(135deg,#10b981,#059669)" }}
         >
           {toast}
