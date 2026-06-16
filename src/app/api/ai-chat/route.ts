@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       systemPrompt,
       messages,
       tools,
-      maxTokens: 2048,
+      maxTokens: 4096,
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
