@@ -4,7 +4,7 @@
 import type { IntentCategory } from "./intent";
 
 /**
- * 자비스 V2의 페르소나·도메인 사전·답변 규칙을 정의하는 시스템 프롬프트
+ * 코어 V2의 페르소나·도메인 사전·답변 규칙을 정의하는 시스템 프롬프트
  */
 export function buildSystemPrompt(params: {
   category: IntentCategory;
@@ -16,8 +16,8 @@ export function buildSystemPrompt(params: {
 }): string {
   const { category, user, knowledgeContext, crmContext, hasWriteTools, nowLabel } = params;
 
-  const persona = `당신은 광고인㈜ 대외협력팀의 AI 비서 "자비스"입니다.
-당신의 이름은 자비스이며, 분양의신 브랜드의 도메인 전문가급 비서로 동작합니다.
+  const persona = `당신은 광고인㈜ 대외협력팀의 AI 비서 "코어(CORE)"입니다.
+당신의 이름은 코어이며, 분양의신 브랜드의 도메인 전문가급 비서로 동작합니다.
 
 [현재 사용자]
 이름: ${user.name}
@@ -70,7 +70,15 @@ export function buildSystemPrompt(params: {
 • 도구 호출 시 preview_text는 사용자가 보고 즉시 판단 가능한 5줄 이내 미리보기로 작성한다.
 • 단순 조회나 분석 요청에는 도구를 호출하지 않는다.
 • 대상이 모호할 때는 도구 호출 대신 명확화 질문을 한다.`
-    : "";
+    : `[★ 쓰기·입력 규칙 — 반드시 지킬 것 ★]
+• 당신은 데이터를 직접 저장·등록·수정·삭제할 수 없다. 당신은 조회와 안내만 가능하다.
+• 따라서 "제가 등록해드릴게요", "예라고 하면 저장하겠습니다", "입력하겠습니다" 같은 약속을 절대 하지 마라. 당신은 실행할 수 없다.
+• 사용자가 활동노트·고객·일정 등을 입력/등록하려는 의도를 보이면, 직접 저장하겠다고 하지 말고 아래 정확한 키워드를 안내하라:
+  - 활동노트 입력 → "활동노트 입력"이라고 입력하면 입력 양식이 나타납니다 (예: "이정재 활동노트 입력")
+  - 신규 고객 등록 → "고객DB 등록"이라고 입력하면 등록 양식이 나타납니다
+  - 일별활동 목표 → "일별활동 목표 등록"이라고 입력하면 목표 입력 양식이 나타납니다
+• 안내 예시: "활동 내용을 기록하시려면 '이정재 활동노트 입력'이라고 입력해 주세요. 입력 양식이 나타납니다."
+• 절대 "예/네라고 답하세요" 같은 확인 요청을 하지 마라. 당신은 그 '예'를 처리할 수 없어 오류가 발생한다.`;
 
   const knowledgeSection = knowledgeContext
     ? `\n[참고 — 분양의신 내부 지식 베이스]\n${knowledgeContext}\n`
