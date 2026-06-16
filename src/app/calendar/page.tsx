@@ -578,19 +578,85 @@ export default function CalendarPage() {
       </div>
 
       {/* 필터바 */}
-      <div className="premium-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={goPrevMonth} className="btn-premium btn-secondary h-9 w-9 p-0"><ArrowLeft size={14}/></button>
-          <div className="flex h-9 min-w-[180px] items-center justify-center rounded-full border px-4 text-[13px] font-[760]" style={{background:"var(--surface-2)",borderColor:"var(--border)",color:"var(--text)"}}>{formatMonth(currentMonth)}</div>
-          <button type="button" onClick={goNextMonth} className="btn-premium btn-secondary h-9 w-9 p-0"><ArrowRight size={14}/></button>
+      <div className="flex-shrink-0 px-5 py-3 md:px-7">
+        <div className="premium-card rounded-[22px] p-4">
+          <div className="grid gap-3 xl:grid-cols-[auto_minmax(260px,1.4fr)_minmax(140px,0.65fr)_auto]" style={{ justifyContent: "start" }}>
+
+            {/* 월 이동 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="crm-meta block pl-3 font-normal">월 선택</span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={goPrevMonth} className="btn-premium btn-secondary h-12 w-10 p-0">
+                  <ArrowLeft size={14}/>
+                </button>
+                <div
+                  className="flex h-12 min-w-[140px] items-center justify-center rounded-[12px] border px-4 text-[13px] font-normal"
+                  style={{ background:"var(--surface-2)", borderColor:"var(--border)", color:"var(--text)" }}
+                >
+                  {formatMonth(currentMonth)}
+                </div>
+                <button type="button" onClick={goNextMonth} className="btn-premium btn-secondary h-12 w-10 p-0">
+                  <ArrowRight size={14}/>
+                </button>
+              </div>
+            </div>
+
+            {/* 검색 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-10 font-normal">일정 검색</span>
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="일정, 담당자, 장소 검색..."
+                  className="crm-search h-12 w-full pl-10 pr-3 font-normal"
+                />
+              </div>
+            </label>
+
+            {/* 담당자 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">담당자 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3 font-normal"
+                value={fAssigned}
+                onChange={(e) => setFAssigned(e.target.value)}
+              >
+                <option value="">전체 담당자</option>
+                {TEAM.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+
+            {/* 필터 초기화 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span
+                className="crm-meta block text-[11px] font-normal transition-colors"
+                style={{ color: activeFilters > 0 ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+              >
+                필터 적용중
+              </span>
+              <button
+                type="button"
+                className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-normal transition-all"
+                style={{
+                  background: activeFilters > 0 ? "var(--accent-subtle)" : "var(--surface-2)",
+                  border: `1px solid ${activeFilters > 0 ? "var(--accent-border)" : "var(--border)"}`,
+                  color: activeFilters > 0 ? "var(--accent-text)" : "var(--text-subtle)",
+                }}
+                onClick={resetFilters}
+                disabled={activeFilters === 0}
+              >
+                <RefreshCw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
+                필터 초기화
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="relative w-full sm:w-[280px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:"var(--text-faint)"}} />
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="일정, 담당자, 장소 검색..." className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none" style={{background:"var(--surface-2)",borderColor:"var(--border)",color:"var(--text)"}}/>
-        </div>
-        <SelectChip value={fAssigned} onChange={setFAssigned} options={TEAM} placeholder="담당자" />
-        {activeFilters > 0 && <button type="button" onClick={resetFilters} className="btn-premium btn-danger h-8">초기화</button>}
-        <span className="ml-auto hidden text-[12px] font-bold md:block" style={{color:"var(--text-faint)"}}>{events.length.toLocaleString()}건</span>
       </div>
 
       {/* 본문 */}
