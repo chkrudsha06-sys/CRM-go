@@ -668,8 +668,8 @@ export default function CalendarPage() {
         ) : (
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_400px]">
             {/* 캘린더 그리드 */}
-            <section className="premium-card hidden min-h-0 overflow-y-auto xl:flex xl:flex-col">
-              <div className="grid flex-shrink-0 grid-cols-7 border-b sticky top-0 z-10" style={{borderColor:"var(--border-subtle)", background:"var(--surface)"}}>
+            <section className="premium-card hidden min-h-0 overflow-y-auto xl:block">
+              <div className="grid grid-cols-7 border-b sticky top-0 z-20" style={{borderColor:"var(--border-subtle)", background:"var(--surface-2)", boxShadow:"0 2px 8px rgba(0,0,0,0.18)"}}>
                 {WEEKDAYS.map(w => (
                   <div key={w} className="flex h-11 items-center justify-center text-[12px] font-bold"
                     style={{color:w==="일"?"var(--danger-text)":w==="토"?"var(--cyan-text)":"var(--text-subtle)",borderRight:"1px solid var(--border-subtle)"}}>
