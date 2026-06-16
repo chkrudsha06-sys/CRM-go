@@ -3,32 +3,33 @@
 import { logout, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
-  Bell,
-  Megaphone,
-  CalendarDays,
-  Check,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  CircleDollarSign,
-  Database,
-  Kanban,
-  LayoutDashboard,
-  LogOut,
-  MessageCircle,
-  Pencil,
-  Moon,
-  NotebookText,
-  ReceiptText,
-  Settings2,
-  Shield,
-  Sun,
-  Target,
-  Truck,
-  UserCheck,
-  Users,
-  X,
-} from "lucide-react";
+  IconBell as Bell,
+  IconBellRinging as Megaphone,
+  IconCalendar as CalendarDays,
+  IconCheck as Check,
+  IconChevronsLeft as ChevronsLeft,
+  IconChevronsRight as ChevronsRight,
+  IconChartLine as CircleDollarSign,
+  IconUser as Database,
+  IconTargetArrow as Kanban,
+  IconLayoutDashboard as LayoutDashboard,
+  IconLogout as LogOut,
+  IconCheckbox as MessageCircle,
+  IconPencil as Pencil,
+  IconMoon as Moon,
+  IconNotes as NotebookText,
+  IconFileInvoice as ReceiptText,
+  IconAdjustments as Settings2,
+  IconSettings as Shield,
+  IconSun as Sun,
+  IconClipboardList as Target,
+  IconTruck as Truck,
+  IconUsersGroup as UserCheck,
+  IconStar as Users,
+  IconTimelineEvent as TimelineIcon,
+  IconChartBar as ChartBarIcon,
+  IconX as X,
+} from "@tabler/icons-react";
 import RealtimeChatPopup from "@/components/RealtimeChatPopup";
 import Image from "next/image";
 import Link from "next/link";
@@ -71,35 +72,44 @@ type MenuItem = {
   icon: ElementType;
 };
 
-const EXEC_MENUS: MenuItem[] = [
+// Twenty식 5섹션 구성 (경로/라벨은 현재 배포본 유지)
+const WORKSPACE_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
+  { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
+  { href: "/member-timeline", label: "회원 타임라인", icon: TimelineIcon },
+];
+
+const SALES_MENUS: MenuItem[] = [
   { href: "/customer-db", label: "고객DB", icon: Database },
   { href: "/contacts", label: "VIP활동DB", icon: Users },
-  { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
   { href: "/pipeline3", label: "파이프라인", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
   { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
-  { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
-  { href: "/memo", label: "메모장", icon: NotebookText },
 ];
 
-const OPS_MENUS: MenuItem[] = [
-  { href: "/member-timeline", label: "회원 타임라인", icon: CalendarDays },
+const BIZ_MENUS: MenuItem[] = [
   { href: "/sales", label: "통합매출관리", icon: CircleDollarSign },
+  { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
   { href: "/quotes", label: "견적서", icon: ReceiptText },
+];
+
+const CONTENT_MENUS: MenuItem[] = [
+  { href: "/memo", label: "메모장", icon: NotebookText },
   { href: "/notices", label: "공지사항", icon: Megaphone },
 ];
 
 const ADMIN_MENUS: MenuItem[] = [
-  { href: "/reports", label: "팀 성과 분석", icon: Target },
+  { href: "/reports", label: "팀 성과 분석", icon: ChartBarIcon },
   { href: "/kpi-settings", label: "KPI 설정", icon: Settings2 },
   { href: "/account-manage", label: "계정관리", icon: Shield },
 ];
 
 const PREFETCH_MENUS = [
-  ...EXEC_MENUS,
-  ...OPS_MENUS,
+  ...WORKSPACE_MENUS,
+  ...SALES_MENUS,
+  ...BIZ_MENUS,
+  ...CONTENT_MENUS,
   ...ADMIN_MENUS,
 ];
 
@@ -204,7 +214,7 @@ async function upsertPresence(user: CRMUser) {
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="px-2 pb-1.5 pt-3 text-[10px] font-normal uppercase tracking-[0.13em]"
+      className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em]"
       style={{ color: "var(--text-faint)" }}
     >
       {children}
@@ -508,12 +518,10 @@ export default function Sidebar({
       <Link
         href={href}
         onClick={() => onMobileClose?.()}
-        className="group flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-[13px] font-normal tracking-[-0.018em] transition-all"
+        className="group flex h-8 items-center gap-2 rounded-[4px] px-2 text-[14px] font-normal transition-colors"
         style={{
-          background: active ? "var(--accent-subtle)" : "transparent",
-          border: active
-            ? "1px solid var(--accent-border)"
-            : "1px solid transparent",
+          background: active ? "var(--surface-hover)" : "transparent",
+          border: "1px solid transparent",
           color: active ? "var(--text)" : "var(--text-subtle)",
         }}
         onMouseEnter={(event) => {
@@ -526,18 +534,14 @@ export default function Sidebar({
         }}
       >
         <span
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[8px] transition-colors"
+          className="flex h-5 w-5 flex-shrink-0 items-center justify-center transition-colors"
           style={{
-            background: active ? "var(--accent-bg)" : "transparent",
             color: active ? "var(--accent-text)" : "var(--text-faint)",
           }}
         >
-          <Icon size={15} />
+          <Icon size={18} stroke={1.8} />
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        {active && (
-          <ChevronRight size={13} style={{ color: "var(--accent-text)" }} />
-        )}
       </Link>
     );
   };
@@ -1012,9 +1016,9 @@ export default function Sidebar({
       </div>
 
       <nav className="crm-sidebar-scroll min-h-0 flex-1 overflow-y-auto py-2 pl-3 pr-0">
-        <SectionTitle>Execution</SectionTitle>
+        <SectionTitle>워크스페이스</SectionTitle>
         <div className="space-y-0.5">
-          {EXEC_MENUS.map((menu) => (
+          {WORKSPACE_MENUS.map((menu) => (
             <NavItem key={menu.href} {...menu} />
           ))}
         </div>
@@ -1023,13 +1027,34 @@ export default function Sidebar({
           className="my-3"
           style={{ borderTop: "1px solid var(--border-subtle)" }}
         />
-        <SectionTitle>Operation</SectionTitle>
+        <SectionTitle>영업·고객</SectionTitle>
         <div className="space-y-0.5">
-          {OPS_MENUS.map((menu) => (
+          {SALES_MENUS.map((menu) => (
             <NavItem key={menu.href} {...menu} />
           ))}
         </div>
 
+        <div
+          className="my-3"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        />
+        <SectionTitle>매출·업무</SectionTitle>
+        <div className="space-y-0.5">
+          {BIZ_MENUS.map((menu) => (
+            <NavItem key={menu.href} {...menu} />
+          ))}
+        </div>
+
+        <div
+          className="my-3"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        />
+        <SectionTitle>콘텐츠</SectionTitle>
+        <div className="space-y-0.5">
+          {CONTENT_MENUS.map((menu) => (
+            <NavItem key={menu.href} {...menu} />
+          ))}
+        </div>
 
         {isAdmin && (
           <>
@@ -1037,7 +1062,7 @@ export default function Sidebar({
               className="my-3"
               style={{ borderTop: "1px solid var(--border-subtle)" }}
             />
-            <SectionTitle>Admin</SectionTitle>
+            <SectionTitle>관리</SectionTitle>
             <div className="space-y-0.5">
               {ADMIN_MENUS.map((menu) => (
                 <NavItem key={menu.href} {...menu} />
