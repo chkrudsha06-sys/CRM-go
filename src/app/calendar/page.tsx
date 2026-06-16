@@ -668,8 +668,8 @@ export default function CalendarPage() {
         ) : (
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_400px]">
             {/* 캘린더 그리드 */}
-            <section className="premium-card hidden min-h-0 overflow-hidden xl:flex xl:flex-col">
-              <div className="grid flex-shrink-0 grid-cols-7 border-b" style={{borderColor:"var(--border-subtle)"}}>
+            <section className="premium-card hidden min-h-0 overflow-y-auto xl:flex xl:flex-col">
+              <div className="grid flex-shrink-0 grid-cols-7 border-b sticky top-0 z-10" style={{borderColor:"var(--border-subtle)", background:"var(--surface)"}}>
                 {WEEKDAYS.map(w => (
                   <div key={w} className="flex h-11 items-center justify-center text-[12px] font-bold"
                     style={{color:w==="일"?"var(--danger-text)":w==="토"?"var(--cyan-text)":"var(--text-subtle)",borderRight:"1px solid var(--border-subtle)"}}>
@@ -677,17 +677,16 @@ export default function CalendarPage() {
                   </div>
                 ))}
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
+              <div className="grid grid-cols-7" style={{gridAutoRows:"minmax(116px, auto)"}}>
                 {days.map(cell => {
                   const dayEvents = eventsByDate[cell.date] || [];
                   const isToday = cell.date === TODAY;
                   const isSelected = cell.date === selectedDate;
-                  const visible = dayEvents.slice(0, 4);
-                  const extra = dayEvents.length - 4;
+                  const visible = dayEvents;
                   return (
                     <button key={cell.date} type="button"
                       onClick={() => { setSelectedDate(cell.date); setSelectedEvent(null); }}
-                      className="min-h-0 p-2 text-left transition-all flex flex-col"
+                      className="p-2 text-left transition-all flex flex-col"
                       style={{
                         background: isSelected ? "linear-gradient(180deg,rgba(139,124,246,.18),rgba(139,124,246,.04)),var(--surface-selected)" : cell.currentMonth ? "var(--surface)" : "rgba(148, 163, 184, 0.12)",
                         borderRight:"1px solid var(--border-subtle)",
@@ -704,12 +703,12 @@ export default function CalendarPage() {
                           }}>
                           {cell.day}
                         </span>
-                        {extra > 0 && (
-                          <span className="text-[11px]" style={{color:"var(--text-faint)"}}>+{extra}</span>
+                        {dayEvents.length > 0 && (
+                          <span className="text-[11px]" style={{color:"var(--text-faint)"}}>{dayEvents.length}건</span>
                         )}
                       </div>
-                      {/* 이벤트 최대 4개 */}
-                      <div className="space-y-0.5 w-full overflow-hidden">
+                      {/* 이벤트 전부 표시 */}
+                      <div className="space-y-0.5 w-full">
                         {visible.map(ev => {
                           const s = eventStyle(ev.kind, ev.category);
                           return (
