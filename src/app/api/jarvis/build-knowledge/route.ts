@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     // 보안: Bearer 토큰 또는 admin role 확인
     const authHeader = req.headers.get("authorization") || "";
     const token = authHeader.replace("Bearer ", "").trim();
-    const expectedToken = process.env.CRON_SECRET || process.env.CALL_RECORDINGS_PROCESS_SECRET || "";
+    const expectedToken = process.env.JARVIS_EMBED_SECRET || process.env.CRON_SECRET || process.env.CALL_RECORDINGS_PROCESS_SECRET || "";
 
     // 요청 body에서 user 정보 확인
     let body: { user?: { role?: string } } = {};
@@ -166,7 +166,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const secret = url.searchParams.get("secret") || "";
-  const expected = process.env.CRON_SECRET || process.env.CALL_RECORDINGS_PROCESS_SECRET || "";
+  const expected = process.env.JARVIS_EMBED_SECRET || process.env.CRON_SECRET || process.env.CALL_RECORDINGS_PROCESS_SECRET || "";
 
   if (!expected || secret !== expected) {
     return NextResponse.json(
