@@ -242,6 +242,101 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // ===== 결제요청 승인/반려 버튼 =====
+    if (domain === "approval") {
+      const requestId = Number(param1);
+      const baseUrl = process.env.CRM_BASE_URL || "https://crm-go-roan.vercel.app";
+
+      if (!requestId || !action) return NextResponse.json({ ok: true });
+
+      if (action !== "approve" && action !== "reject") return NextResponse.json({ ok: true });
+
+      // 현재 approval_requests 조회
+      const { data: reqData, error: reqErr } = await supabase
+        .from("approval_requests")
+        .select("*")
+        .eq("id", requestId)
+        .single();
+
+      if (!reqData || reqErr) {
+        if (appKey && conversationId) {
+          await sendResultMessage(appKey, Number(conversationId), "⚠️ 결제요청 정보를 찾을 수 없습니다.");
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      const currentApprover = reqData.current_approver_name;
+      if (clickerName !== currentApprover && currentApprover) {
+        if (appKey && conversationId) {
+          await sendResultMessage(appKey, Number(conversationId), `⚠️ 현재 승인권자(${currentApprover})만 처리할 수 있습니다.`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // 다음 승인자 계산 (팀장 → 본부장 순)
+      let nextApprover: string | null = null;
+      if (action === "approve") {
+        if (reqData.current_approver_name === reqData.team_lead_name && reqData.head_name) {
+          nextApprover = reqData.head_name;
+        }
+      }
+      const nextStatus = action === "reject" ? "반려" : nextApprover ? "진행중" : "완료";
+
+      const { error: updateErr } = await supabase
+        .from("approval_requests")
+        .update({ status: nextStatus, current_approver_name: nextApprover })
+        .eq("id", requestId);
+
+      if (updateErr) {
+        if (appKey && conversationId) {
+          await sendResultMessage(appKey, Number(conversationId), `⚠️ 처리 실패: ${updateErr.message}`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // approval_actions 기록
+      await supabase.from("approval_actions").insert({
+        approval_request_id: requestId,
+        actor_name: clickerName,
+        action: action === "approve" ? "승인" : "반려",
+        comment: `카카오워크에서 ${clickerName}님이 ${action === "approve" ? "승인" : "반려"} 처리했습니다.`,
+      });
+
+      // 카카오워크 결과 메시지
+      const actionLabel = action === "approve" ? "✅ 승인" : "❌ 반려";
+      const statusLabel = nextStatus === "완료" ? "최종 승인 완료" : nextStatus === "반려" ? "반려" : `다음 결재자(${nextApprover}) 승인 대기`;
+      if (appKey && conversationId) {
+        await sendResultMessage(
+          appKey,
+          Number(conversationId),
+          `${actionLabel} 처리 완료\n결제요청 #${requestId} · ${statusLabel}\n처리자: ${clickerName}`
+        );
+      }
+
+      // CRM 카카오워크 통합 알림 발송 (다음 단계)
+      try {
+        await fetch(`${baseUrl}/api/kakaowork/send-approval-notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({
+            request_id: requestId,
+            request_type: reqData.request_type,
+            requester_name: reqData.requester_name,
+            current_approver: nextApprover,
+            reference_name: reqData.reference_name,
+            action: action === "approve" ? "승인" : "반려",
+            actor: clickerName,
+            is_final: action === "approve" && !nextApprover,
+            payload: reqData.payload || {},
+          }),
+        });
+      } catch {}
+
+      return NextResponse.json({ ok: true });
+    }
+
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: true });
