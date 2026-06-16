@@ -30,12 +30,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Importance = "긴급" | "높음" | "보통" | "낮음" | "정보";
 type Notice = {
   id: number; title: string; content: string; importance: Importance;
-  image_url: string | null; file_urls: string[] | null; file_names: string[] | null;
+  image_url: string | null; file_urls: string[] | null;
   author: string; start_date: string; end_date: string;
   tagged: string[]; created_at: string;
 };
 type NoticeRead = { notice_id: number; user_name: string; };
-type ExistingFile = { url: string; name: string };
 
 // ━━━ 상수 ━━━
 const IMPORTANCE_LIST: Importance[] = ["긴급", "높음", "보통", "낮음", "정보"];
@@ -48,7 +47,6 @@ const IMP: Record<Importance, { icon: any; color: string; bg: string; border: st
 };
 const TEAM = ["김정후","김창완","최웅","조계현","이세호","기여운","최연전","김재영","최은정"];
 const ADMIN_NAMES = ["문시욱","김정후","김창완","최웅"];
-const IMG_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i;
 
 function getUser() {
   try {
@@ -69,77 +67,25 @@ function fmtDate(d: string) {
 }
 function isActive(n: Notice) { const t = today(); return n.start_date <= t && n.end_date >= t; }
 function getFileName(url: string) {
-  try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_[a-z0-9]+\./, ".").replace(/^\d+_/, ""); } catch { return url; }
-}
-function getNoticeFileUrls(notice: Pick<Notice, "file_urls" | "image_url">) {
-  return notice.file_urls || (notice.image_url ? [notice.image_url] : []);
-}
-function getNoticeFileNames(notice: Pick<Notice, "file_urls" | "file_names" | "image_url">) {
-  const urls = getNoticeFileUrls(notice);
-  return urls.map((url, index) => notice.file_names?.[index] || getFileName(url));
+  try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_/, ""); } catch { return url; }
 }
 
-// ━━━ 업로드 유틸 ━━━
-// Supabase Storage 키는 한글/특수문자를 허용하지 않으므로 안전한 영문 키로 변환한다.
-// 원본 파일명(한글 포함)은 file_names 컬럼에 따로 저장해 표시용으로 사용한다.
-function safeKey(fileName: string) {
-  const dot = fileName.lastIndexOf(".");
-  const ext = dot >= 0 ? fileName.slice(dot + 1).replace(/[^a-zA-Z0-9]/g, "").toLowerCase() : "";
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `notices/${Date.now()}_${rand}${ext ? "." + ext : ""}`;
-}
-// cross-origin 파일 진짜 다운로드 (새 탭이 아닌 저장 다이얼로그)
-async function downloadNoticeFile(url: string, displayName: string) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("파일을 찾을 수 없습니다.");
-    const blob = await res.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = displayName;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
-  } catch (e: any) { alert("다운로드 실패: " + (e?.message || "오류")); }
-}
-
-async function uploadFiles(files: File[]): Promise<{ urls: string[]; names: string[]; failed: string[] }> {
-  const urls: string[] = [];
-  const names: string[] = [];
-  const failed: string[] = [];
-  for (const f of files) {
-    const path = safeKey(f.name);
-    const { error: upErr } = await supabase.storage
-      .from("notice-images")
-      .upload(path, f, { upsert: true, contentType: f.type || undefined });
-    if (upErr) { console.error("파일 업로드 실패:", f.name, upErr); failed.push(`${f.name} (${upErr.message})`); continue; }
-    const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
-    if (data?.publicUrl) { urls.push(data.publicUrl); names.push(f.name); }
-  }
-  return { urls, names, failed };
-}
-
-// ━━━ 등록/수정 모달 ━━━
-function NoticeModal({ me, editing, onClose, onSaved }:
-  { me: string; editing: Notice | null; onClose: () => void; onSaved: () => void }) {
+// ━━━ 등록 모달 ━━━
+function NoticeFormModal({ me, editing, onClose, onSaved }: { me: string; editing: Notice | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!editing;
   const [title, setTitle]       = useState(editing?.title || "");
   const [content, setContent]   = useState(editing?.content || "");
   const [importance, setImp]    = useState<Importance>(editing?.importance || "보통");
-  const [startDate, setStart]   = useState(editing?.start_date?.slice(0,10) || today());
-  const [endDate, setEnd]       = useState(editing?.end_date?.slice(0,10) || (() => { const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })());
+  const [startDate, setStart]   = useState(editing?.start_date || today());
+  const [endDate, setEnd]       = useState(editing?.end_date || (() => { const d=new Date(); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })());
   const [tagged, setTagged]     = useState<string[]>(editing?.tagged || []);
   const [files, setFiles]       = useState<File[]>([]);
-  const [existing, setExisting] = useState<ExistingFile[]>(
-    (editing?.file_urls || []).map((url, i) => ({ url, name: editing?.file_names?.[i] || getFileName(url) }))
-  );
+  const [existingUrls, setExistingUrls] = useState<string[]>(editing?.file_urls || (editing?.image_url ? [editing.image_url] : []));
   const [saving, setSaving]     = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef                 = useRef<HTMLInputElement>(null);
 
-  // 태그 대상은 작성자 본인을 제외 (수정 시에는 원작성자 기준)
-  const authorName = editing?.author || me;
-  const others = TEAM.filter(n => n !== authorName);
+  const others = TEAM.filter(n => n !== me);
   const allSel = tagged.length === others.length && others.length > 0;
   const toggleAll = () => setTagged(allSel ? [] : others);
   const toggleTag = (n: string) => setTagged(p => p.includes(n) ? p.filter(t=>t!==n) : [...p,n]);
@@ -151,34 +97,46 @@ function NoticeModal({ me, editing, onClose, onSaved }:
     if (startDate > endDate) { alert("종료일이 시작일보다 앞설 수 없습니다."); return; }
     setSaving(true);
     try {
-      const { urls: newUrls, names: newNames, failed } = await uploadFiles(files);
+      const urls: string[] = [];
+      const failedFiles: string[] = [];
+      for (const f of files) {
+        const path = `notices/${Date.now()}_${f.name}`;
+        const { error: upErr } = await supabase.storage.from("notice-images").upload(path, f, { upsert: true });
+        if (upErr) {
+          console.error("파일 업로드 실패:", f.name, upErr);
+          failedFiles.push(`${f.name} (${upErr.message})`);
+          continue;
+        }
+        const { data } = supabase.storage.from("notice-images").getPublicUrl(path);
+        if (data?.publicUrl) urls.push(data.publicUrl);
+      }
 
-      if (failed.length > 0) {
-        const ok = confirm(`다음 파일 업로드에 실패했습니다:\n\n${failed.join("\n")}\n\nSupabase Storage 권한 확인이 필요합니다.\n실패한 파일 없이 저장할까요?`);
+      // 파일 업로드 실패가 있으면 사용자에게 알림 후 진행 여부 확인
+      if (failedFiles.length > 0) {
+        const ok = confirm(`다음 파일 업로드에 실패했습니다:\n\n${failedFiles.join("\n")}\n\nSupabase Storage 권한 확인이 필요합니다.\n파일 없이 공지만 등록할까요?`);
         if (!ok) { setSaving(false); return; }
       }
 
-      const combinedUrls  = [...existing.map(e=>e.url),  ...newUrls];
-      const combinedNames = [...existing.map(e=>e.name), ...newNames];
-      const imageUrl = combinedUrls.find(u => IMG_RE.test(u)) || null;
+      // 기존 파일 + 새로 업로드된 파일 합치기
+      const allUrls = [...existingUrls, ...urls];
 
-      const base = {
-        title: title.trim(), content: content.trim(), importance,
-        image_url: imageUrl,
-        file_urls: combinedUrls.length ? combinedUrls : null,
-        start_date: startDate, end_date: endDate, tagged,
-      };
-      const withNames = { ...base, file_names: combinedNames.length ? combinedNames : null };
-      const colMissing = (msg: string) => /file_names|column/i.test(msg || "");
-
-      if (isEdit) {
-        let res = await supabase.from("notices").update(withNames).eq("id", editing!.id);
-        if (res.error && colMissing(res.error.message)) res = await supabase.from("notices").update(base).eq("id", editing!.id);
-        if (res.error) throw res.error;
+      if (isEdit && editing) {
+        // 수정 모드
+        const { error } = await supabase.from("notices").update({
+          title: title.trim(), content: content.trim(), importance,
+          image_url: allUrls[0]||null, file_urls: allUrls.length?allUrls:null,
+          start_date: startDate, end_date: endDate, tagged,
+          updated_at: new Date().toISOString(),
+        }).eq("id", editing.id);
+        if (error) throw error;
       } else {
-        let res = await supabase.from("notices").insert({ ...withNames, author: me });
-        if (res.error && colMissing(res.error.message)) res = await supabase.from("notices").insert({ ...base, author: me });
-        if (res.error) throw res.error;
+        // 등록 모드
+        const { error } = await supabase.from("notices").insert({
+          title: title.trim(), content: content.trim(), importance,
+          image_url: allUrls[0]||null, file_urls: allUrls.length?allUrls:null,
+          author: me, start_date: startDate, end_date: endDate, tagged,
+        });
+        if (error) throw error;
       }
       onSaved();
     } catch (e: any) { alert("저장 실패: " + (e?.message||"오류")); }
@@ -198,7 +156,7 @@ function NoticeModal({ me, editing, onClose, onSaved }:
           </div>
           <button type="button" onClick={onClose} className="btn-premium btn-secondary h-8 w-8 p-0"><X size={14}/></button>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto px-6 py-5">
           <div>
             <p className="crm-tiny mb-1">제목 *</p>
             <input className="h-10 w-full rounded-[8px] border px-3 text-[14px] font-bold outline-none" style={IS}
@@ -251,49 +209,63 @@ function NoticeModal({ me, editing, onClose, onSaved }:
           </div>
           <div>
             <p className="crm-tiny mb-2">파일 첨부</p>
-            <input ref={fileRef} type="file" multiple
-              style={{ position:"fixed", top:"-9999px", left:"-9999px", opacity:0 }}
-              onChange={e=>{addFiles(e.target.files); if(fileRef.current) fileRef.current.value="";}} />
-            <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
+            <input ref={fileRef} type="file" multiple className="hidden"
+              onChange={e=>{
+                addFiles(e.target.files);
+                // 같은 파일 재선택 가능하도록 value 리셋
+                if (e.target) e.target.value = "";
+              }} />
+            <button type="button"
+              onDragOver={e=>{e.preventDefault();setDragging(true);}}
+              onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
-              onClick={()=>fileRef.current?.click()}
-              className="flex cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border-2 border-dashed py-5 transition"
+              onClick={(e)=>{e.preventDefault();e.stopPropagation();fileRef.current?.click();}}
+              className="flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border-2 border-dashed py-5 transition"
               style={{ borderColor:dragging?"var(--accent)":"var(--border-2)", background:dragging?"var(--accent-subtle)":"var(--surface-2)" }}>
               <File size={20} style={{ color:"var(--text-faint)" }} />
               <p className="text-[13px] font-semibold" style={{ color:"var(--text-muted)" }}>파일 첨부 (선택)</p>
               <p className="crm-tiny">클릭하거나 드래그하여 파일을 업로드하세요</p>
-            </div>
-            {/* 기존 첨부파일 (수정 모드) */}
-            {existing.length > 0 && (
+            </button>
+            {/* 기존 파일 (수정 모드) */}
+            {existingUrls.length > 0 && (
               <div className="mt-2 space-y-1">
-                {existing.map((e,i)=>(
-                  <div key={`ex-${i}`} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
-                    style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
-                    <File size={13} style={{ color:"var(--accent-text)" }} />
-                    <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{e.name}</span>
-                    <span className="crm-tiny" style={{ color:"var(--text-faint)" }}>기존</span>
-                    <button type="button" onClick={()=>setExisting(p=>p.filter((_,j)=>j!==i))} style={{ color:"var(--text-faint)" }}><X size={12}/></button>
-                  </div>
-                ))}
+                <p className="crm-tiny mb-1">기존 첨부파일</p>
+                {existingUrls.map((url,i)=>{
+                  const fname = (() => {
+                    try { return decodeURIComponent(url.split("/").pop()!).replace(/^\d+_/, ""); }
+                    catch { return url; }
+                  })();
+                  return (
+                    <div key={i} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
+                      style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
+                      <File size={13} style={{ color:"var(--accent-text)" }} />
+                      <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{fname}</span>
+                      <button type="button" onClick={()=>setExistingUrls(p=>p.filter((_,j)=>j!==i))}
+                        title="파일 삭제" style={{ color:"#ef4444" }}><X size={12}/></button>
+                    </div>
+                  );
+                })}
               </div>
             )}
-            {/* 새로 추가한 파일 */}
+
+            {/* 신규 업로드 파일 */}
             {files.length > 0 && (
               <div className="mt-2 space-y-1">
+                {existingUrls.length > 0 && <p className="crm-tiny mb-1">새로 추가할 파일</p>}
                 {files.map((f,i)=>(
-                  <div key={`new-${i}`} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
-                    style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
+                  <div key={i} className="flex items-center gap-2 rounded-[8px] px-3 py-2"
+                    style={{ background:"var(--accent-subtle)", border:"1px solid var(--accent-border)" }}>
                     <File size={13} style={{ color:"var(--accent-text)" }} />
-                    <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{f.name}</span>
+                    <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text-strong)" }}>{f.name}</span>
                     <button type="button" onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} style={{ color:"var(--text-faint)" }}><X size={12}/></button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <div>
+          <div className="flex flex-1 flex-col">
             <p className="crm-tiny mb-1">내용 *</p>
-            <textarea className="min-h-[480px] w-full resize-none rounded-[8px] border px-3 py-3 text-[13px] font-semibold leading-relaxed outline-none"
+            <textarea className="min-h-[480px] flex-1 w-full resize-none rounded-[8px] border px-3 py-3 text-[13px] font-semibold leading-relaxed outline-none"
               style={IS} value={content} onChange={e=>setContent(e.target.value)} placeholder="공지사항 내용을 입력하세요" />
           </div>
         </div>
@@ -314,7 +286,7 @@ export default function NoticesPage() {
   const [reads, setReads]       = useState<NoticeRead[]>([]);
   const [loading, setLoading]   = useState(true);
   const [showCreate, setCreate] = useState(false);
-  const [editTarget, setEdit]   = useState<Notice|null>(null);
+  const [editing, setEditing]   = useState<Notice | null>(null);
   const [selected, setSelected] = useState<Notice|null>(null);
   const [panelIn, setPanelIn]   = useState(false);
   const [me, setMe]             = useState("");
@@ -399,18 +371,17 @@ export default function NoticesPage() {
             </div>
             <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted">
               <Filter className="h-4 w-4 flex-none"/>
-              <span>공지사항명 · 첨부파일명 · 작성자 · 작성일 · 게시기간 · 중요도 · 태그자 · 확인자 기준</span>
+              <span>공지사항명 · 작성자 · 작성일 · 게시기간 · 중요도 · 태그자 · 확인자 기준</span>
             </div>
           </div>
 
           {/* 테이블 */}
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[1280px] border-collapse text-center">
+            <table className="w-full min-w-[1100px] border-collapse text-center">
               <thead>
                 <tr className="text-xs font-[900] uppercase tracking-[0.08em]"
                   style={{ background:"var(--surface-2)", color:"var(--text-faint)", borderBottom:"1px solid var(--border-subtle)" }}>
                   <th className="px-5 py-4 text-left">공지사항명</th>
-                  <th className="px-4 py-4 text-left">첨부파일명</th>
                   <th className="px-4 py-4">작성자</th>
                   <th className="px-4 py-4">작성일</th>
                   <th className="px-4 py-4">게시기간</th>
@@ -421,14 +392,14 @@ export default function NoticesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="py-20">
+                  <tr><td colSpan={7} className="py-20">
                     <div className="flex items-center justify-center gap-2">
                       <Loader2 size={18} className="animate-spin" style={{ color:"var(--text-faint)" }}/>
                       <span className="crm-tiny">로딩 중...</span>
                     </div>
                   </td></tr>
                 ) : notices.length === 0 ? (
-                  <tr><td colSpan={8} className="py-20">
+                  <tr><td colSpan={7} className="py-20">
                     <p className="crm-tiny">등록된 공지사항이 없습니다</p>
                   </td></tr>
                 ) : notices.map(notice => {
@@ -437,7 +408,6 @@ export default function NoticesPage() {
                   const active = isActive(notice);
                   const sel = selected?.id === notice.id;
                   const rc = readCount(notice.id);
-                  const fileNames = getNoticeFileNames(notice);
 
                   return (
                     <tr key={notice.id} onClick={()=>openNotice(notice)}
@@ -457,26 +427,6 @@ export default function NoticesPage() {
                               </p>
                             </div>
                         </div>
-                      </td>
-
-                      {/* 첨부파일명 */}
-                      <td className="px-4 py-4 text-left">
-                        {fileNames.length > 0 ? (
-                          <div className="flex max-w-[260px] flex-col gap-1">
-                            {fileNames.slice(0, 2).map((name, index) => (
-                              <span key={`${name}-${index}`} className="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-[760]"
-                                style={{ background:"var(--surface-2)", border:"1px solid var(--border-subtle)", color:"var(--text-muted)" }}>
-                                <File size={10} className="shrink-0" style={{ color:"var(--accent-text)" }} />
-                                <span className="truncate">{name}</span>
-                              </span>
-                            ))}
-                            {fileNames.length > 2 && (
-                              <span className="crm-tiny">외 {fileNames.length - 2}개</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="crm-tiny">-</span>
-                        )}
                       </td>
 
                       {/* 작성자 */}
@@ -546,9 +496,7 @@ export default function NoticesPage() {
                 const cfg = IMP[n.importance as Importance] || IMP["정보"];
                 const Icon = cfg.icon;
                 const ru = readUsers(n.id);
-                const fileUrls = getNoticeFileUrls(n);
-                const canEdit = isAdmin || n.author === me;
-                const fileLabel = (url: string, i: number) => n.file_names?.[i] || getFileName(url);
+                const fileUrls = n.file_urls || (n.image_url ? [n.image_url] : []);
                 return (
                   <>
                     <div className="flex shrink-0 items-center gap-2 px-5 py-3"
@@ -556,19 +504,21 @@ export default function NoticesPage() {
                       <Icon size={14} style={{ color:cfg.color }}/>
                       <span className="text-[12px] font-black" style={{ color:cfg.color }}>{n.importance}</span>
                       <span className="ml-auto crm-tiny">{fmtDate(n.start_date)} ~ {fmtDate(n.end_date)}</span>
-                      {canEdit && (
-                        <button type="button" onClick={()=>setEdit(n)}
-                          className="flex h-7 w-7 items-center justify-center rounded-[6px]"
-                          style={{ background:"var(--accent-subtle)", color:"var(--accent-text)" }} title="수정">
-                          <Pencil size={13}/>
-                        </button>
-                      )}
-                      {canEdit && (
-                        <button type="button" onClick={()=>handleDelete(n.id)}
-                          className="flex h-7 w-7 items-center justify-center rounded-[6px]"
-                          style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444" }} title="삭제">
-                          <Trash2 size={13}/>
-                        </button>
+                      {(isAdmin || n.author === me) && (
+                        <>
+                          <button type="button" onClick={()=>{ setEditing(n); closePanel(); }}
+                            title="공지사항 수정"
+                            className="flex h-7 w-7 items-center justify-center rounded-[6px]"
+                            style={{ background:"var(--accent-subtle)", color:"var(--accent-text)" }}>
+                            <Pencil size={13}/>
+                          </button>
+                          <button type="button" onClick={()=>handleDelete(n.id)}
+                            title="공지사항 삭제"
+                            className="flex h-7 w-7 items-center justify-center rounded-[6px]"
+                            style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444" }}>
+                            <Trash2 size={13}/>
+                          </button>
+                        </>
                       )}
                       <button type="button" onClick={closePanel}
                         className="flex h-7 w-7 items-center justify-center rounded-[6px]"
@@ -578,7 +528,7 @@ export default function NoticesPage() {
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-y-auto">
-                      {n.image_url && IMG_RE.test(n.image_url) && (
+                      {n.image_url && /\.(jpg|jpeg|png|gif|webp|svg)/i.test(n.image_url) && (
                         <div style={{ borderBottom:"1px solid var(--border-subtle)" }}>
                           <img src={n.image_url} alt="공지 이미지" className="max-h-[200px] w-full object-contain"
                             style={{ background:"var(--surface-2)" }}/>
@@ -610,14 +560,13 @@ export default function NoticesPage() {
                           <p className="crm-tiny mb-2 mt-4">첨부파일 ({fileUrls.length}개)</p>
                           <div className="space-y-1.5">
                             {fileUrls.map((url,i)=>(
-                              <button key={i} type="button"
-                                onClick={(e)=>{ e.stopPropagation(); downloadNoticeFile(url, fileLabel(url,i)); }}
-                                className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left transition hover:opacity-80"
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" download={getFileName(url)}
+                                className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 transition hover:opacity-80"
                                 style={{ background:"var(--surface-2)", border:"1px solid var(--border)" }}>
                                 <File size={13} style={{ color:"var(--accent-text)" }}/>
-                                <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{fileLabel(url,i)}</span>
+                                <span className="flex-1 truncate text-[12px] font-semibold" style={{ color:"var(--text)" }}>{getFileName(url)}</span>
                                 <Download size={12} style={{ color:"var(--text-faint)" }}/>
-                              </button>
+                              </a>
                             ))}
                           </div>
                         </div>
@@ -663,17 +612,13 @@ export default function NoticesPage() {
         )}
       </div>
 
-      {/* 등록 모달 */}
-      {showCreate && (
-        <NoticeModal me={me} editing={null}
-          onClose={()=>setCreate(false)}
-          onSaved={()=>{ setCreate(false); load(); }}/>
-      )}
-      {/* 수정 모달 */}
-      {editTarget && (
-        <NoticeModal me={me} editing={editTarget}
-          onClose={()=>setEdit(null)}
-          onSaved={()=>{ setEdit(null); closePanel(); load(); }}/>
+      {(showCreate || editing) && (
+        <NoticeFormModal
+          me={me}
+          editing={editing}
+          onClose={() => { setCreate(false); setEditing(null); }}
+          onSaved={() => { setCreate(false); setEditing(null); load(); }}
+        />
       )}
     </div>
   );
