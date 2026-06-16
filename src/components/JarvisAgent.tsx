@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChevronRight,
   ClipboardList,
+  Cpu,
   Loader2,
   Maximize2,
   MessageCircle,
@@ -36,7 +37,7 @@ type JarvisMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  isStreaming?: boolean;  // 타이핑 애니메이션 진행 중 여부
+  isStreaming?: boolean;
 };
 
 type JarvisAgentProps = {
@@ -110,11 +111,158 @@ const JARVIS_ACTIONS: JarvisAction[] = [
   },
 ];
 
-const STATUS_IMAGE: Record<JarvisStatus, string> = {
-  idle: "/jarvis/jarvis-idle.png",
-  talk: "/jarvis/jarvis-talk.png",
-  thinking: "/jarvis/jarvis-thinking.png",
-};
+const JARVIS_CHIP_VIDEO = "/jarvis/jarvis-chip.mp4";
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 경량 마크다운 렌더러 — Gemini의 **굵게**, ###, 리스트, 출처링크 처리
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function renderInline(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
+    const codeMatch = remaining.match(/`([^`]+)`/);
+    const boldIdx = boldMatch ? remaining.indexOf(boldMatch[0]) : -1;
+    const codeIdx = codeMatch ? remaining.indexOf(codeMatch[0]) : -1;
+
+    if (boldIdx === -1 && codeIdx === -1) {
+      parts.push(<span key={key++}>{remaining}</span>);
+      break;
+    }
+
+    const useBold = boldIdx !== -1 && (codeIdx === -1 || boldIdx < codeIdx);
+
+    if (useBold && boldMatch) {
+      if (boldIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, boldIdx)}</span>);
+      parts.push(
+        <strong key={key++} style={{ fontWeight: 600, color: "var(--text-strong)" }}>
+          {boldMatch[1]}
+        </strong>
+      );
+      remaining = remaining.slice(boldIdx + boldMatch[0].length);
+    } else if (codeMatch) {
+      if (codeIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, codeIdx)}</span>);
+      parts.push(
+        <code
+          key={key++}
+          style={{
+            fontSize: "0.9em",
+            padding: "1px 5px",
+            borderRadius: 5,
+            background: "var(--surface-3)",
+            color: "var(--cyan-text)",
+            fontFamily: "monospace",
+          }}
+        >
+          {codeMatch[1]}
+        </code>
+      );
+      remaining = remaining.slice(codeIdx + codeMatch[0].length);
+    }
+  }
+  return <>{parts}</>;
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = (key: string) => {
+    if (listBuffer.length === 0) return;
+    const items = [...listBuffer];
+    listBuffer = [];
+    blocks.push(
+      <ul key={key} style={{ margin: "4px 0", paddingLeft: 2, listStyle: "none" }}>
+        {items.map((item, i) => (
+          <li key={i} style={{ display: "flex", gap: 7, marginBottom: 3, lineHeight: 1.6 }}>
+            <span style={{ color: "var(--cyan)", flexShrink: 0, marginTop: 1 }}>•</span>
+            <span>{renderInline(item)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.replace(/\r$/, "");
+    const key = `b-${idx}`;
+
+    const headerMatch = line.match(/^#{1,4}\s+(.*)$/);
+    if (headerMatch) {
+      flushList(`fl-${idx}`);
+      blocks.push(
+        <div
+          key={key}
+          style={{ fontSize: 12.5, fontWeight: 600, color: "var(--accent-2)", margin: "10px 0 4px" }}
+        >
+          {renderInline(headerMatch[1])}
+        </div>
+      );
+      return;
+    }
+
+    const bulletMatch = line.match(/^\s*[-*·]\s+(.*)$/);
+    const numberMatch = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    if (bulletMatch) {
+      listBuffer.push(bulletMatch[1]);
+      return;
+    }
+    if (numberMatch) {
+      flushList(`fl-${idx}`);
+      blocks.push(
+        <div key={key} style={{ display: "flex", gap: 7, marginBottom: 3, lineHeight: 1.6 }}>
+          <span style={{ color: "var(--cyan)", flexShrink: 0, fontWeight: 600 }}>{numberMatch[1]}.</span>
+          <span>{renderInline(numberMatch[2])}</span>
+        </div>
+      );
+      return;
+    }
+
+    if (/^\s*[→▸]\s*/.test(line) && /↗\s*$/.test(line)) {
+      flushList(`fl-${idx}`);
+      const clean = line.replace(/^\s*[→▸]\s*/, "").replace(/\s*↗\s*$/, "");
+      blocks.push(
+        <div
+          key={key}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            margin: "3px 6px 3px 0",
+            padding: "3px 9px",
+            fontSize: 10.5,
+            color: "var(--accent-3)",
+            background: "rgba(96,165,250,0.1)",
+            border: "1px solid var(--accent-border)",
+            borderRadius: 999,
+          }}
+        >
+          {clean} <span style={{ fontSize: 10 }}>↗</span>
+        </div>
+      );
+      return;
+    }
+
+    if (line.trim() === "") {
+      flushList(`fl-${idx}`);
+      blocks.push(<div key={key} style={{ height: 6 }} />);
+      return;
+    }
+
+    flushList(`fl-${idx}`);
+    blocks.push(
+      <div key={key} style={{ lineHeight: 1.65, marginBottom: 2 }}>
+        {renderInline(line)}
+      </div>
+    );
+  });
+
+  flushList("fl-end");
+  return <>{blocks}</>;
+}
 
 function getNowLabel() {
   return new Date().toLocaleTimeString("ko-KR", {
@@ -138,8 +286,8 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   const [hidden, setHidden] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showQuickButtons, setShowQuickButtons] = useState(false);
-  const [agentMode, setAgentMode] = useState<string | null>(null); // 현재 에이전트 작업 모드
-  const [agentForm, setAgentForm] = useState<Record<string, string>>({}); // 에이전트 양식 값
+  const [agentMode, setAgentMode] = useState<string | null>(null);
+  const [agentForm, setAgentForm] = useState<Record<string, string>>({});
   const [agentSaving, setAgentSaving] = useState(false);
   const [status, setStatus] = useState<JarvisStatus>("idle");
   const [input, setInput] = useState("");
@@ -158,8 +306,6 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const talkTimerRef = useRef<number | null>(null);
 
-  const currentImage = STATUS_IMAGE[status];
-
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem("jarvis-hidden");
@@ -168,7 +314,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
         setOpen(false);
       }
     } catch {
-      // localStorage 접근이 제한된 환경에서는 기본 표시 상태를 유지합니다.
+      // noop
     }
   }, []);
 
@@ -176,7 +322,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     try {
       window.localStorage.setItem("jarvis-hidden", hidden ? "true" : "false");
     } catch {
-      // localStorage 접근이 제한된 환경에서는 현재 세션 상태만 사용합니다.
+      // noop
     }
   }, [hidden]);
 
@@ -221,7 +367,6 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     setInput("");
     setLastActionId(actionId || null);
 
-    // ── 에이전트 모드 키워드 감지 (유연하게) ──
     const lowerText = text.toLowerCase();
     const isDailyGoal =
       lowerText.includes("일별활동") ||
@@ -236,7 +381,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       lowerText.includes("콜드톡 목표") ||
       lowerText.includes("브론즈 목표") ||
       (lowerText.includes("목표") && (lowerText.includes("넣") || lowerText.includes("등록") || lowerText.includes("입력") || lowerText.includes("설정") || lowerText.includes("할게") || lowerText.includes("하자") || lowerText.includes("해줘")));
-    // 활동노트 입력 감지
+
     const noteNameMatch = text.match(/(.{2,6})\s*(활동노트|노트|메모)\s*(입력|작성|쓸게|쓰자|할게|해줘|남길게|등록)/);
     const isNoteInput = !!(noteNameMatch || (
       (lowerText.includes("활동노트") || lowerText.includes("노트 입력") || lowerText.includes("노트입력")) &&
@@ -244,12 +389,10 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     ));
 
     if (isNoteInput) {
-      // 이름 추출
       const nameFromMatch = noteNameMatch?.[1]?.trim() || "";
-      const nameKeywords = ["활동노트","노트","메모","입력","작성","할게","해줘","남길게","등록","의","이"];
+      const nameKeywords = ["활동노트", "노트", "메모", "입력", "작성", "할게", "해줘", "남길게", "등록", "의", "이"];
       let extractedName = nameFromMatch;
       if (!extractedName) {
-        // 텍스트에서 이름 추출 시도
         const words = text.split(/\s+/);
         extractedName = words.find((w) => w.length >= 2 && !nameKeywords.some((k) => w.includes(k))) || "";
       }
@@ -257,7 +400,6 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       const userMsg: JarvisMessage = { role: "user", content: text, timestamp: getNowLabel() };
 
       if (!extractedName || extractedName.length < 2) {
-        // 이름 없으면 물어보기
         setMessages((prev) => [...prev, userMsg, {
           role: "assistant",
           content: "활동노트를 입력할 고객 이름을 알려주세요.",
@@ -267,7 +409,6 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
         return;
       }
 
-      // 고객 조회 후 확인 양식 표시
       const agentMsg: JarvisMessage = {
         role: "assistant",
         content: `__AGENT_NOTE_SEARCH__:${extractedName}`,
@@ -375,12 +516,10 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       setMessages([...nextMessages, assistantMessage]);
       updateTalkState();
 
-      // ── 타이핑 애니메이션 (한글 자연스러운 속도 18ms/자) ──
-      const CHAR_INTERVAL = 18; // ms per character
+      const CHAR_INTERVAL = 18;
       let charIndex = 0;
       const total = fullText.length;
       const typeNext = () => {
-        // 청크 사이즈 — 너무 짧은 텍스트는 한 번에, 긴 텍스트는 2~3자씩 진행
         const chunkSize = total > 400 ? 3 : total > 150 ? 2 : 1;
         charIndex = Math.min(charIndex + chunkSize, total);
         const partial = fullText.slice(0, charIndex);
@@ -468,24 +607,26 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
         }}
         aria-hidden={!open}
       >
-
-
         <div className="relative flex h-full min-h-0 flex-col">
           <header className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
             <div className="flex min-w-0 items-center gap-3">
-              <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+              <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl" style={{ border: "1px solid var(--accent-border)", background: "#0d0f13" }}>
                 {imageFailed ? (
-                  <Bot size={24} className="text-sky-200" />
+                  <Cpu size={22} style={{ color: "var(--accent-3)" }} />
                 ) : (
-                  <img
-                    src={currentImage}
-                    alt="JARVIS"
+                  <video
+                    src={JARVIS_CHIP_VIDEO}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
                     onError={() => setImageFailed(true)}
-                    className="h-12 w-12 object-contain drop-shadow-[0_0_16px_rgba(56,189,248,0.45)]"
+                    className="h-full w-full object-cover"
                   />
                 )}
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-slate-950 ${loading ? "animate-pulse bg-sky-300" : "bg-emerald-400"}`}
+                  className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 ${loading ? "animate-pulse" : ""}`}
+                  style={{ borderColor: "var(--surface)", background: loading ? "var(--accent-3)" : "var(--success)" }}
                 />
               </div>
               <div className="min-w-0">
@@ -493,7 +634,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   <h2 className="truncate text-[15px] font-black tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
                     JARVIS
                   </h2>
-                  <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-2 py-0.5 text-[10px] font-black text-sky-200">
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-black" style={{ color: "var(--cyan-text)", background: "var(--cyan-bg)", border: "1px solid var(--cyan-border)" }}>
                     CRM AGENT
                   </span>
                 </div>
@@ -507,7 +648,8 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <button
                 type="button"
                 onClick={() => setShowQuickButtons((prev) => !prev)}
-                className={`flex h-8 items-center gap-1 rounded-xl px-2 text-[11px] font-bold transition ${showQuickButtons ? "bg-sky-400/20 text-sky-200 ring-1 ring-sky-300/30" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                className={`flex h-8 items-center gap-1 rounded-xl px-2 text-[11px] font-bold transition ${showQuickButtons ? "ring-1" : "hover:bg-white/10"}`}
+                style={showQuickButtons ? { background: "var(--accent-bg)", color: "var(--accent-text)", boxShadow: "0 0 0 1px var(--accent-border)" } : { color: "var(--text-muted)" }}
                 aria-label="퀵버튼 토글"
                 title="업무 퀵버튼"
               >
@@ -566,25 +708,24 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                       type="button"
                       onClick={() => { void sendMessage(action.prompt, action.id); setShowQuickButtons(false); }}
                       disabled={loading}
-                      className={`group min-w-0 rounded-2xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55 ${
-                        active
-                          ? "border-sky-300/45 bg-sky-300/15"
-                          : "border-white/10 bg-white/[0.07] hover:border-sky-300/35 hover:bg-sky-300/10"
-                      }`}
+                      className="group min-w-0 rounded-2xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-55"
+                      style={active
+                        ? { borderColor: "var(--accent-border)", background: "var(--accent-bg)" }
+                        : { borderColor: "var(--border)", background: "var(--surface-2)" }}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl bg-sky-300/10 text-sky-200 ring-1 ring-sky-300/15">
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", color: "var(--accent-3)", boxShadow: "0 0 0 1px var(--accent-border)" }}>
                           {active ? (
                             <Loader2 size={14} className="animate-spin" />
                           ) : (
                             <Icon size={14} />
                           )}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-[11px] font-black text-slate-100">
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-black" style={{ color: "var(--text-strong)" }}>
                           {action.label}
                         </span>
                       </div>
-                      <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed text-slate-400">
+                      <p className="mt-1.5 line-clamp-2 text-[10.5px] font-semibold leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                         {action.description}
                       </p>
                     </button>
@@ -602,15 +743,14 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                   className={`flex gap-2.5 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   {message.role === "assistant" && (
-                    <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
-                      <Bot size={15} className="text-sky-200" />
+                    <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl" style={{ background: "#0d0f13", border: "1px solid var(--accent-border)" }}>
+                      <Cpu size={15} style={{ color: "var(--accent-3)" }} />
                     </div>
                   )}
 
                   <div
                     className={`max-w-[84%] ${message.role === "user" ? "items-end" : "items-start"} flex flex-col`}
                   >
-                    {/* 에이전트 양식: 일별활동 목표 */}
                     {message.content.startsWith("__AGENT_DAILY_GOAL__") ? (
                       <div className="rounded-2xl rounded-bl-md border border-sky-300/30 p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--accent-border)", minWidth: 260 }}>
                         <p className="mb-3 text-[13px] font-black text-sky-200">일별활동 목표 등록</p>
@@ -638,7 +778,6 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                           ))}
                         </div>
 
-                        {/* 특발성 활동목표 */}
                         <div className="mt-3 space-y-1.5">
                           <p className="text-[11px] font-bold" style={{ color: "var(--text-subtle)" }}>특발성 활동목표 (텍스트 입력)</p>
                           {["special1", "special2", "special3"].map((key, i) => (
@@ -749,7 +888,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                           <div className="flex items-center gap-2">
                             <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>직급</span>
                             <div className="flex gap-1.5">
-                              {["본부장","팀장","팀원"].map((t) => (
+                              {["본부장", "팀장", "팀원"].map((t) => (
                                 <button key={t} type="button" onClick={() => setAgentForm((p) => ({ ...p, title: t }))} className="rounded-lg px-2.5 py-1 text-[11px] font-bold transition" style={{ background: agentForm.title === t ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + (agentForm.title === t ? "var(--accent-border)" : "var(--border)"), color: agentForm.title === t ? "var(--accent-text)" : "var(--text-muted)" }}>{t}</button>
                               ))}
                             </div>
@@ -761,7 +900,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                           <div className="flex items-start gap-2">
                             <span className="mt-1 w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>유입경로 *</span>
                             <div className="flex flex-wrap gap-1.5">
-                              {["분양의신DB","컨설턴트VIP DB","완판트럭","분양라인","분양회MGM","대협팀활동"].map((r) => (
+                              {["분양의신DB", "컨설턴트VIP DB", "완판트럭", "분양라인", "분양회MGM", "대협팀활동"].map((r) => (
                                 <button key={r} type="button" onClick={() => setAgentForm((p) => ({ ...p, intakeRoute: r }))} className="rounded-lg px-2 py-1 text-[11px] font-bold transition" style={{ background: agentForm.intakeRoute === r ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + (agentForm.intakeRoute === r ? "var(--accent-border)" : "var(--border)"), color: agentForm.intakeRoute === r ? "var(--accent-text)" : "var(--text-muted)" }}>{r}</button>
                               ))}
                             </div>
@@ -769,7 +908,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                           <div className="flex items-center gap-2">
                             <span className="w-[76px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>활동항목 *</span>
                             <div className="flex gap-1.5">
-                              {["TM","콜드톡"].map((t) => (
+                              {["TM", "콜드톡"].map((t) => (
                                 <button key={t} type="button" onClick={() => setAgentForm((p) => ({ ...p, activityType: t }))} className="rounded-lg px-3 py-1 text-[11px] font-bold transition" style={{ background: (agentForm.activityType || "TM") === t ? "var(--accent-subtle)" : "var(--surface)", border: "1px solid " + ((agentForm.activityType || "TM") === t ? "var(--accent-border)" : "var(--border)"), color: (agentForm.activityType || "TM") === t ? "var(--accent-text)" : "var(--text-muted)" }}>{t}</button>
                               ))}
                             </div>
@@ -799,8 +938,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                                   let existingId: number | null = null;
                                   if (allContacts) {
                                     const found = (allContacts as any[]).find((c: any) =>
-                                      (c.phone || "").replace(/[^0-9]/g,"") === phoneDigits ||
-                                      (c.customer_phone || "").replace(/[^0-9]/g,"") === phoneDigits
+                                      (c.phone || "").replace(/[^0-9]/g, "") === phoneDigits ||
+                                      (c.customer_phone || "").replace(/[^0-9]/g, "") === phoneDigits
                                     );
                                     existingId = found?.id || null;
                                   }
@@ -853,18 +992,18 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                       </div>
                     ) : (
                       <div
-                        className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-[13.5px] leading-[1.65] ${
+                        className={`rounded-2xl px-4 py-3 text-[13.5px] leading-[1.65] ${
                           message.role === "user"
-                            ? "rounded-br-md bg-sky-500 font-medium text-white"
+                            ? "rounded-br-md font-medium text-white whitespace-pre-wrap"
                             : "rounded-bl-md font-normal"
                         }`}
                         style={
-                          message.role === "assistant"
-                            ? { color: "var(--text)", letterSpacing: "-0.01em" }
-                            : { letterSpacing: "-0.01em" }
+                          message.role === "user"
+                            ? { letterSpacing: "-0.01em", background: "linear-gradient(135deg,#8b7cf6,#4f8df7)" }
+                            : { color: "var(--text)", letterSpacing: "-0.01em", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }
                         }
                       >
-                        {message.content}
+                        {message.role === "assistant" ? renderMarkdown(message.content) : message.content}
                         {message.isStreaming && (
                           <span
                             className="jarvis-cursor ml-0.5 inline-block"
@@ -889,7 +1028,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
               {loading && (
                 <div className="flex justify-start gap-2.5">
                   <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
-                    <Loader2 size={15} className="animate-spin text-sky-200" />
+                    <Loader2 size={15} className="animate-spin" style={{ color: "var(--accent-3)" }} />
                   </div>
                   <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px] font-medium leading-relaxed" style={{ border: "1px solid var(--border-subtle)", background: "var(--surface-2)", color: "var(--text-muted)", letterSpacing: "-0.01em" }}>
                     <span className="jarvis-thinking-dots">CRM 데이터를 읽고 우선순위를 계산하고 있습니다</span>
@@ -919,7 +1058,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                 type="button"
                 onClick={() => void sendMessage()}
                 disabled={!input.trim() || loading}
-                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-lg shadow-sky-950/30 transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                style={{ background: "linear-gradient(135deg,#8b7cf6,#4f8df7)" }}
                 aria-label="자비스에게 보내기"
               >
                 {loading ? (
@@ -931,13 +1071,13 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
             </div>
 
             <div className="mt-2 flex items-center justify-between gap-2 px-1">
-              <p className="text-[10px] font-medium text-slate-500">
+              <p className="text-[10px] font-medium" style={{ color: "var(--text-faint)" }}>
                 Enter 전송 · Shift+Enter 줄바꿈
               </p>
               <button
                 type="button"
                 onClick={resetChat}
-                className="flex items-center gap-1 text-[10px] font-bold text-slate-500 transition hover:text-slate-200"
+                className="flex items-center gap-1 text-[10px] font-bold transition" style={{ color: "var(--text-faint)" }}
               >
                 <Trash2 size={11} /> 초기화
               </button>
@@ -963,33 +1103,34 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
             title="JARVIS 자비스"
           >
             <div
-              className="relative flex h-[92px] w-[92px] items-center justify-center rounded-[28px] border border-sky-300/25 bg-slate-950/80 shadow-2xl transition md:h-[104px] md:w-[104px]"
+              className="relative flex h-[92px] w-[92px] items-center justify-center rounded-[28px] md:h-[104px] md:w-[104px]"
               style={{
+                border: "1px solid var(--accent-border)",
+                background: "#0d0f13",
                 boxShadow:
-                  "0 16px 55px rgba(2, 132, 199, 0.28), 0 0 0 1px rgba(255,255,255,0.08) inset",
-                backdropFilter: "blur(18px)",
+                  "0 16px 55px rgba(79, 141, 247, 0.28), 0 0 0 1px rgba(255,255,255,0.08) inset",
               }}
             >
-              <span className="absolute inset-2 rounded-[22px] bg-sky-400/10 blur-xl" />
+              <span className="absolute inset-2 rounded-[22px]" style={{ background: "var(--accent-subtle)" }} />
               {imageFailed ? (
-                <Bot
-                  size={44}
-                  className="relative text-sky-200 drop-shadow-[0_0_20px_rgba(56,189,248,0.55)]"
-                />
+                <Cpu size={44} className="relative" style={{ color: "var(--accent-3)" }} />
               ) : (
-                <img
-                  src={currentImage}
-                  alt="JARVIS"
+                <video
+                  src={JARVIS_CHIP_VIDEO}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
                   onError={() => setImageFailed(true)}
-                  className="relative h-[94px] w-[94px] object-contain drop-shadow-[0_0_20px_rgba(56,189,248,0.55)] md:h-[110px] md:w-[110px]"
+                  className="relative h-[78px] w-[78px] rounded-[20px] object-cover md:h-[88px] md:w-[88px]"
                 />
               )}
               {loading && (
-                <span className="absolute right-2 top-2 h-3 w-3 animate-pulse rounded-full bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.9)]" />
+                <span className="absolute right-2 top-2 h-3 w-3 animate-pulse rounded-full" style={{ background: "var(--accent-3)", boxShadow: "0 0 18px rgba(96,165,250,0.9)" }} />
               )}
             </div>
 
-            <div className="hidden rounded-full border border-sky-300/25 bg-slate-950/80 px-3 py-1 text-[11px] font-black text-sky-100 shadow-lg backdrop-blur md:flex">
+            <div className="hidden rounded-full px-3 py-1 text-[11px] font-black md:flex" style={{ border: "1px solid var(--accent-border)", background: "#0d0f13", color: "var(--accent-text)" }}>
               <MessageCircle size={12} className="mr-1.5" /> JARVIS
             </div>
           </button>
@@ -997,7 +1138,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
           <button
             type="button"
             onClick={hideJarvis}
-            className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full border border-sky-300/25 bg-slate-950/90 text-sky-100 shadow-lg backdrop-blur transition hover:translate-x-0.5 hover:bg-sky-500 hover:text-white"
+            className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full text-white shadow-lg transition hover:translate-x-0.5"
+            style={{ border: "1px solid var(--accent-border)", background: "#0d0f13", color: "var(--accent-text)" }}
             aria-label="자비스를 오른쪽으로 숨기기"
             title="자비스 숨기기"
           >
@@ -1010,7 +1152,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
         <button
           type="button"
           onClick={showJarvis}
-          className="pointer-events-auto absolute bottom-8 right-0 flex h-16 w-8 translate-x-1 items-center justify-center rounded-l-2xl border border-r-0 border-sky-300/25 bg-slate-950/90 text-sky-100 shadow-2xl backdrop-blur transition hover:translate-x-0 hover:bg-sky-500 hover:text-white md:bottom-10"
+          className="pointer-events-auto absolute bottom-8 right-0 flex h-16 w-8 translate-x-1 items-center justify-center rounded-l-2xl shadow-2xl transition hover:translate-x-0 md:bottom-10"
+          style={{ border: "1px solid var(--accent-border)", borderRight: "none", background: "#0d0f13", color: "var(--accent-text)" }}
           aria-label="숨긴 자비스 다시 열기"
           title="자비스 다시 열기"
         >
@@ -1049,6 +1192,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
       `}</style>
     </div>
   );
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // NoteSearchCard — 활동노트 에이전트 카드
@@ -1090,7 +1234,6 @@ function NoteSearchCard({
   } | null | "not_found">(null);
   const [confirmed, setConfirmed] = useState(false);
 
-  // 마운트 시 고객 조회
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -1108,7 +1251,6 @@ function NoteSearchCard({
           return;
         }
 
-        // 담당자 본인 고객 우선, 없으면 첫 번째
         const matched = (data as any[]).find((c) => c.assigned_to === user.name) || data[0] as any;
         const getStageLabel = (c: any) => {
           if (c.management_stage) return c.management_stage;
@@ -1116,7 +1258,7 @@ function NoteSearchCard({
           if (c.meeting_result === "예약완료") return "딜클로징";
           return "리드";
         };
-        
+
         setSearchResult({
           id: matched.id,
           name: matched.name,
@@ -1140,7 +1282,6 @@ function NoteSearchCard({
     minWidth: 270,
   };
 
-  // 로딩 중
   if (searchResult === null) {
     return (
       <div className="rounded-2xl rounded-bl-md p-4" style={cardStyle}>
@@ -1151,7 +1292,6 @@ function NoteSearchCard({
     );
   }
 
-  // 고객 없음
   if (searchResult === "not_found") {
     return (
       <div className="rounded-2xl rounded-bl-md p-4" style={cardStyle}>
@@ -1165,7 +1305,6 @@ function NoteSearchCard({
     );
   }
 
-  // 고객 확인 단계
   if (!confirmed) {
     return (
       <div className="rounded-2xl rounded-bl-md p-4 space-y-3" style={cardStyle}>
@@ -1228,7 +1367,6 @@ function NoteSearchCard({
     );
   }
 
-  // 활동노트 입력 단계
   return (
     <div className="rounded-2xl rounded-bl-md p-4 space-y-3" style={cardStyle}>
       <div>
@@ -1319,6 +1457,4 @@ function NoteSearchCard({
       )}
     </div>
   );
-}
-
 }
