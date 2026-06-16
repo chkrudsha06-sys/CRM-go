@@ -47,13 +47,17 @@ function splitMarkdownIntoChunks(body: string): Array<{ title: string; content: 
 // Gemini 임베딩 (768차원)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function embedText(text: string): Promise<number[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_KEY}`;
+  // gemini-embedding-001: 2026년 정식 임베딩 모델 (text-embedding-004 후속)
+  // outputDimensionality=768로 Supabase VECTOR(768) 스키마와 호환되도록 설정
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${GEMINI_KEY}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      model: "models/gemini-embedding-001",
       content: { parts: [{ text }] },
       taskType: "RETRIEVAL_DOCUMENT",
+      outputDimensionality: 768,
     }),
     cache: "no-store",
   });
