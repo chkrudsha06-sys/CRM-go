@@ -1308,13 +1308,10 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
                   document.head.appendChild(s);
                 });
 
+                // outer wrapper 대신 실제 결재서 DOM만 타깃
+                const target = document.getElementById("approval-preview-inner") || el;
                 try {
                   const html2pdf = await loadHtml2Pdf();
-
-                  // el 내부 최상단 paper div를 직접 타깃 (shadow/padding 없는 실제 문서 영역)
-                  const paperEl = (el.firstElementChild as HTMLElement) || el;
-                  const paperWidth = paperEl.scrollWidth || 794;
-
                   const opt = {
                     margin: 0,
                     filename: `${fileName}.pdf`,
@@ -1324,23 +1321,12 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
                       useCORS: true,
                       allowTaint: true,
                       logging: false,
-                      windowWidth: paperWidth,
-                      width: paperWidth,
-                      onclone: (doc: Document) => {
-                        // 복제된 DOM에서만 shadow 제거 — 원본 영향 없음
-                        const cloned = doc.getElementById("approval-preview-print");
-                        if (cloned) {
-                          (cloned as HTMLElement).style.boxShadow = "none";
-                          (cloned as HTMLElement).style.padding = "0";
-                          (cloned as HTMLElement).style.margin = "0";
-                          (cloned as HTMLElement).style.background = "transparent";
-                        }
-                      },
+                      windowWidth: 794,
                     },
                     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
                     pagebreak: { mode: "avoid-all" },
                   };
-                  await html2pdf().set(opt).from(paperEl).save();
+                  await html2pdf().set(opt).from(target).save();
                 } catch {
                   alert("PDF 저장 중 오류가 발생했습니다. 양식 출력 버튼을 이용해 주세요.");
                 }
@@ -1385,7 +1371,9 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
             style={{ background: "#0b0d12", overflow: "auto", maxWidth: "100%", display: "flex", justifyContent: "center" }}
           >
             <div id="approval-preview-print">
-              <ApprovalPreview form={previewForm} me={me} actions={actions} />
+              <div id="approval-preview-inner">
+                <ApprovalPreview form={previewForm} me={me} actions={actions} />
+              </div>
             </div>
           </div>
         </div>
