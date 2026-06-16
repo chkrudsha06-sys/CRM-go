@@ -1135,6 +1135,8 @@ export default function SalesPage() {
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
+  // 직급 매칭용 — 담당자 필터 무관하게 전체 분양회 입회자
+  const [allMembersForTitle, setAllMembersForTitle] = useState<MemberOption[]>([]);
   const [memberSearch, setMemberSearch] = useState("");
   const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
   const [ciderpayFullSyncing, setCiderpayFullSyncing] = useState(false);
@@ -1207,6 +1209,15 @@ export default function SalesPage() {
     }
 
     setMemberOptions((data || []) as MemberOption[]);
+
+    // 직급 매칭용 — 담당자 필터 없이 전체 분양회 입회자 조회
+    const { data: allMembers } = await supabase
+      .from("contacts")
+      .select("name,title")
+      .in("meeting_result", ["예약완료", "계약완료"])
+      .not("name", "is", null)
+      .limit(5000);
+    setAllMembersForTitle((allMembers || []) as MemberOption[]);
   }, []);
 
   useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
@@ -1241,12 +1252,29 @@ export default function SalesPage() {
 
   const memberTitleMap = useMemo(() => {
     const map = new Map<string, string>();
+    // 이름 정규화: 모든 공백·특수문자 제거하고 소문자화
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    // 전체 분양회 입회자 기준 (담당자 필터 무관)
+    allMembersForTitle.forEach((member) => {
+      const rawName = (member.name || "").trim();
+      const key = normalize(rawName);
+      if (key && member.title) map.set(key, member.title);
+    });
+    // 본인 담당 옵션도 포함 (혹시 누락된 케이스 보완)
     memberOptions.forEach((member) => {
-      const name = (member.name || "").trim();
-      if (name && member.title) map.set(name, member.title);
+      const rawName = (member.name || "").trim();
+      const key = normalize(rawName);
+      if (key && member.title && !map.has(key)) map.set(key, member.title);
     });
     return map;
-  }, [memberOptions]);
+  }, [allMembersForTitle, memberOptions]);
+
+  // 정규화된 이름으로 직급 조회 헬퍼
+  const getTitleByName = (name: string | null | undefined): string => {
+    if (!name) return "-";
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    return memberTitleMap.get(normalize(name)) || "-";
+  };
 
   const memberManagerByNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1883,7 +1911,7 @@ export default function SalesPage() {
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
                   {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div></div></div></td>
-                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{getTitleByName(row.member_name)}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
                     <td className="text-center"><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
