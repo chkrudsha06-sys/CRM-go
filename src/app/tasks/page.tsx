@@ -891,6 +891,111 @@ function approvalStepText(request: ApprovalRequestRow) {
   return `${effectiveCurrentApprover(request) || "-"} 승인대기`;
 }
 
+// ── 결재선 진행상황 컴포넌트 ──
+function ApprovalLineProgress({ request }: { request: ApprovalRequestRow }) {
+  const line = request.approval_line;
+  if (!line || line.length === 0) return null;
+
+  const currentApprover = effectiveCurrentApprover(request);
+  const isDone   = request.status === "완료";
+  const isRejected = request.status === "반려";
+
+  // 각 스텝의 실제 상태 계산
+  type StepItem = { role?: string; name?: string; step?: number; status?: string };
+  function stepStatus(step: StepItem) {
+    if (step.status === "승인" || step.status === "완료") return "approved";
+    if (step.status === "반려") return "rejected";
+    // 현재 승인권자이면 "active"
+    if (step.name === currentApprover && !isDone && !isRejected) return "active";
+    // 완료/반려된 요청의 나머지 스텝은 done/rejected 처리
+    if (isDone) return "done_skip";
+    if (isRejected) return "rejected_skip";
+    return "pending";
+  }
+
+  return (
+    <div
+      className="mt-3 rounded-[12px] border px-3 py-2.5"
+      style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}
+    >
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em]"
+        style={{ color: "var(--text-faint)" }}>결재선 진행현황</p>
+      <div className="flex items-center gap-0">
+        {line.map((step, idx) => {
+          const st = stepStatus(step);
+          const isLast = idx === line.length - 1;
+
+          const dotBg =
+            st === "approved" ? "var(--success)" :
+            st === "rejected" ? "var(--danger)" :
+            st === "active"   ? "var(--accent-text)" :
+            "var(--surface-3)";
+          const dotBorder =
+            st === "active"   ? "2px solid var(--accent-text)" :
+            st === "approved" ? "2px solid var(--success)" :
+            st === "rejected" ? "2px solid var(--danger)" :
+            "2px solid var(--border)";
+          const label =
+            st === "approved" ? "✓" :
+            st === "rejected" ? "✕" :
+            st === "active"   ? "●" : "";
+          const nameColor =
+            st === "active"   ? "var(--accent-text)" :
+            st === "approved" ? "var(--success-text)" :
+            st === "rejected" ? "var(--danger-text)" :
+            "var(--text-faint)";
+          const roleColor =
+            st === "active" ? "var(--accent-text)" : "var(--text-faint)";
+
+          return (
+            <div key={idx} className="flex flex-1 items-center">
+              <div className="flex flex-col items-center gap-1">
+                {/* 스텝 도트 */}
+                <div
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
+                  style={{
+                    background: dotBg,
+                    border: dotBorder,
+                    color: st === "pending" || st === "done_skip" || st === "rejected_skip" ? "var(--text-faint)" : "white",
+                  }}
+                >
+                  {label}
+                </div>
+                {/* 이름 + 역할 */}
+                <div className="flex flex-col items-center text-center" style={{ minWidth: 44 }}>
+                  <span className="text-[10px] font-bold leading-tight" style={{ color: nameColor }}>
+                    {step.name || "-"}
+                  </span>
+                  <span className="text-[9px] font-normal" style={{ color: roleColor }}>
+                    {step.role || ""}
+                  </span>
+                  {st === "active" && (
+                    <span className="mt-0.5 rounded-[5px] px-1 py-px text-[9px] font-bold"
+                      style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
+                      대기중
+                    </span>
+                  )}
+                  {(st === "approved") && (
+                    <span className="mt-0.5 text-[9px] font-bold" style={{ color: "var(--success-text)" }}>승인</span>
+                  )}
+                  {(st === "rejected") && (
+                    <span className="mt-0.5 text-[9px] font-bold" style={{ color: "var(--danger-text)" }}>반려</span>
+                  )}
+                </div>
+              </div>
+              {/* 연결선 */}
+              {!isLast && (
+                <div className="mx-1 h-px flex-1"
+                  style={{ background: st === "approved" ? "var(--success)" : "var(--border-subtle)" }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ApprovalCard({
   request,
   me,
@@ -960,7 +1065,7 @@ function ApprovalCard({
           </p>
 
           <div
-            className="mt-2 grid grid-cols-1 gap-2 text-[12px] font-semibold md:grid-cols-2"
+            className="mt-2 flex flex-wrap items-center gap-3 text-[12px] font-semibold"
             style={{ color: "var(--text-subtle)" }}
           >
             <span>
@@ -970,34 +1075,19 @@ function ApprovalCard({
               </strong>{" "}
               {request.requester_title || ""}
             </span>
-            <span>
-              현재단계{" "}
-              <strong style={{ color: "var(--accent-text)" }}>
-                {approvalStepText(request)}
-              </strong>
-            </span>
-            <span>
-              참조{" "}
-              <strong style={{ color: "var(--text-muted)" }}>
-                {request.reference_name || "-"}
-              </strong>
-            </span>
-            <span>
-              팀장{" "}
-              <strong style={{ color: "var(--text-muted)" }}>
-                {request.team_lead_name || "-"}
-              </strong>
-            </span>
             {PAYMENT_TYPES.includes(request.request_type as ApprovalType) && (
               <span>
                 금액{" "}
-                <strong style={{ color: "var(--text-muted)" }}>
+                <strong style={{ color: "var(--accent-text)" }}>
                   {payload.totalAmount || payload.amount || "-"}
                 </strong>
               </span>
             )}
-            <span>작성 {timeAgo(request.created_at)}</span>
+            <span style={{ color: "var(--text-faint)" }}>작성 {timeAgo(request.created_at)}</span>
           </div>
+
+          {/* ── 결재선 진행상황 ── */}
+          <ApprovalLineProgress request={request} />
 
           {payload.reason || payload.leaveReason ? (
             <p
@@ -2772,13 +2862,38 @@ export default function TasksPage() {
       ]);
     }
 
+    // ── 카카오워크 결제요청 알림 발송 ──
+    if (requestId) {
+      const approvalPayload = (await supabase
+        .from("approval_requests")
+        .select("*")
+        .eq("id", requestId)
+        .single()).data;
+      if (approvalPayload) {
+        try {
+          await fetch("/api/kakaowork/send-approval-notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              request_id: requestId,
+              request_type: requestType,
+              requester_name: requesterName,
+              current_approver: currentApprover,
+              reference_name: APPROVAL_OFFICERS.reference,
+              payload: { ...approvalForm },
+            }),
+          });
+        } catch {}
+      }
+    }
+
     setApprovalForm({
       ...EMPTY_APPROVAL_FORM,
       writer: requesterName,
       department: approvalForm.department,
     });
     setShowApprovalCreate(false);
-    alert("결제요청이 저장되었습니다. 다음 승인자에게 알림이 전송됩니다.");
+    alert("결제요청이 저장되었습니다. 카카오워크로 승인 요청 알림이 발송됩니다.");
   };
 
   const notifyApprovalTarget = async (
@@ -2880,6 +2995,25 @@ export default function TasksPage() {
         `${request.requester_name}님의 요청이 반려되었습니다.`,
       );
     }
+
+    // ── 카카오워크 승인/반려 결과 알림 ──
+    try {
+      await fetch("/api/kakaowork/send-approval-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_id: request.id,
+          request_type: request.request_type,
+          requester_name: request.requester_name,
+          current_approver: action === "승인" ? nextApprover : null,
+          reference_name: request.reference_name,
+          action,
+          actor: me,
+          is_final: action === "승인" && !nextApprover,
+          payload: request.payload || {},
+        }),
+      });
+    } catch {}
 
     loadData();
   };
