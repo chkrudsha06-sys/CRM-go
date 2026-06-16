@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
-  Activity,
   CalendarDays,
   Camera,
   CheckCircle2,
@@ -13,10 +12,10 @@ import {
   ClipboardList,
   FileText,
   Megaphone,
+  Trophy,
   MessageSquareText,
   PackageCheck,
   Plus,
-  RefreshCcw,
   Search,
   Send,
   Sparkles,
@@ -67,11 +66,12 @@ const EVENT_META: Record<string, { color: string; iconLabel: string; badge: stri
   PR완료: { color: "#10b981", iconLabel: "✅", badge: "badge-success" },
   제작불가: { color: "#ef4444", iconLabel: "🚫", badge: "badge-danger" },
   광고집행: { color: "#06b6d4", iconLabel: "📡", badge: "badge-cyan" },
+  "분양회 회비": { color: "#a78bfa", iconLabel: "💎", badge: "badge-purple" },
   활동노트: { color: "#6366f1", iconLabel: "📝", badge: "badge-info" },
   수동: { color: "#f97316", iconLabel: "🔧", badge: "badge-warning" },
 };
 
-const ADD_EVENT_TYPES = ["수동", "리소스확보중", "사진수취", "정보수취", "TF2전달", "PR완료", "제작불가", "광고집행"];
+const ADD_EVENT_TYPES = ["수동", "리소스확보중", "사진수취", "정보수취", "TF2전달", "PR완료", "제작불가", "광고집행", "분양회 회비"];
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -140,6 +140,8 @@ function iconForType(type: string): ReactNode {
       return <XCircle size={size} />;
     case "광고집행":
       return <Megaphone size={size} />;
+    case "분양회 회비":
+      return <Trophy size={size} />;
     case "활동노트":
       return <MessageSquareText size={size} />;
     default:
@@ -148,25 +150,21 @@ function iconForType(type: string): ReactNode {
 }
 
 function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: "info" | "success" | "warning" | "purple" }) {
-  const colorMap = {
+  const toneMap = {
     info: { bg: "var(--info-bg)", border: "var(--info-border)", text: "var(--info-text)" },
     success: { bg: "var(--success-bg)", border: "var(--success-border)", text: "var(--success-text)" },
     warning: { bg: "var(--warning-bg)", border: "var(--warning-border)", text: "var(--warning-text)" },
     purple: { bg: "var(--purple-bg)", border: "var(--purple-border)", text: "var(--purple-text)" },
   }[tone];
-
   return (
-    <div className="premium-card flex items-center justify-between px-4 py-3">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-[13px] border"
-          style={{ background: colorMap.bg, borderColor: colorMap.border, color: colorMap.text }}
-        >
+    <div className="premium-card flex items-center justify-between px-5 py-5">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] border" style={{ background: toneMap.bg, borderColor: toneMap.border, color: toneMap.text }}>
           {icon}
         </div>
-        <div>
-          <p className="crm-tiny">{label}</p>
-          <p className="mt-0.5 text-[22px] font-[830] tracking-[-0.055em]" style={{ color: "var(--text-strong)" }}>
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>{label}</p>
+          <p className="mt-1 text-[28px] font-bold tracking-[-0.02em] leading-none" style={{ color: "var(--text-strong)" }}>
             {value.toLocaleString()}
           </p>
         </div>
@@ -175,44 +173,6 @@ function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string
   );
 }
 
-function SelectFilter({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
-  label: string;
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-[38px] min-w-[126px] appearance-none rounded-full border px-3 pr-8 text-[12.5px] font-[740] outline-none transition-colors"
-        style={{
-          background: value ? "var(--accent-subtle)" : "var(--surface-2)",
-          borderColor: value ? "var(--accent-border)" : "var(--border)",
-          color: value ? "var(--accent-text)" : "var(--text-muted)",
-        }}
-      >
-        <option value="">{label}</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={13}
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
-        style={{ color: "var(--text-faint)" }}
-      />
-    </div>
-  );
-}
 
 function EventTypeBadge({ type }: { type: string }) {
   const meta = getMeta(type);
@@ -407,14 +367,48 @@ export default function MemberTimelinePage() {
         .or(`member_name.eq.${member.name},bunyanghoe_number.eq.${member.bunyanghoe_number}`)
         .order("payment_date", { ascending: true });
 
+      // 활동노트 (contact_notes) — 모든 활동 기록을 타임라인에 표시
+      const { data: notes } = await supabase
+        .from("contact_notes")
+        .select("id,contact_id,note_date,content,author,created_at")
+        .eq("contact_id", contactId)
+        .order("note_date", { ascending: true });
+
+      (notes || []).forEach((note) => {
+        const meta = getMeta("활동노트");
+        allEvents.push({
+          id: `note-${note.id}`,
+          date: note.note_date || String(note.created_at || "").split("T")[0] || today(),
+          type: "활동노트",
+          title: `활동노트 기록`,
+          detail: `${note.content || "내용 없음"}\n작성자: ${fmt(note.author)}`,
+          source: "contact_notes",
+          sourceId: note.id,
+          color: meta.color,
+          iconLabel: meta.iconLabel,
+        });
+      });
+
       (ads || []).forEach((ad) => {
-        const meta = getMeta("광고집행");
+        // 채널 판정: 분양회 입회비/월회비/사이다페이/효성CMS는 '분양회 회비'
+        // 호갱노노, LMS, 하이타겟 등은 '광고집행'
+        const channel = String(ad.channel || "");
+        const isMembershipFee =
+          channel.includes("입회비") ||
+          channel.includes("월회비") ||
+          channel.includes("분양회") ||
+          channel.includes("사이다페이") ||
+          channel.includes("효성CMS") ||
+          channel.includes("효성cms") ||
+          channel.includes("CMS");
+        const eventType = isMembershipFee ? "분양회 회비" : "광고집행";
+        const meta = getMeta(eventType);
         allEvents.push({
           id: `ad-${ad.id}`,
           date: ad.payment_date || today(),
-          type: "광고집행",
-          title: `${ad.channel || "광고"} 집행`,
-          detail: `채널: ${fmt(ad.channel)}\n집행금액: ${(ad.execution_amount || 0).toLocaleString()}원\n결제일: ${fmtFullDate(ad.payment_date)}`,
+          type: eventType,
+          title: isMembershipFee ? `분양회 회비 결제` : `${channel || "광고"} 집행`,
+          detail: `채널: ${fmt(ad.channel)}\n${isMembershipFee ? "결제금액" : "집행금액"}: ${(ad.execution_amount || 0).toLocaleString()}원\n결제일: ${fmtFullDate(ad.payment_date)}`,
           source: "ad_executions",
           sourceId: ad.id,
           color: meta.color,
@@ -544,16 +538,9 @@ export default function MemberTimelinePage() {
 
   const selectedMember = members.find((member) => member.id === selectedId) || null;
   const eventTypes = useMemo(() => Array.from(new Set(events.map((event) => event.type))), [events]);
-  const prDoneCount = events.filter((event) => event.type === "PR완료").length;
+  const feeCount = events.filter((event) => event.type === "분양회 회비").length;
   const adCount = events.filter((event) => event.type === "광고집행").length;
   const manualCount = events.filter((event) => event.source === "member_timeline").length;
-  const activeFilters = [search, filterAssigned, filterType].filter(Boolean).length;
-
-  const resetFilters = () => {
-    setSearch("");
-    setFilterAssigned("");
-    setFilterType("");
-  };
 
   return (
     <div className="premium-page flex h-full flex-col overflow-hidden">
@@ -573,44 +560,72 @@ export default function MemberTimelinePage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[640px]">
-              <StatCard icon={<Users size={17} />} label="입회자" value={members.length} tone="purple" />
-              <StatCard icon={<Activity size={17} />} label="현재 이벤트" value={visibleEvents.length} tone="info" />
-              <StatCard icon={<CheckCircle2 size={17} />} label="PR완료" value={prDoneCount} tone="success" />
-              <StatCard icon={<Megaphone size={17} />} label="광고집행" value={adCount} tone="warning" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[680px]">
+              <StatCard icon={<Users size={22} />} label="입회자" value={members.length} tone="purple" />
+              <StatCard icon={<Trophy size={22} />} label="분양회 회비" value={feeCount} tone="success" />
+              <StatCard icon={<Megaphone size={22} />} label="광고집행" value={adCount} tone="warning" />
             </div>
           </div>
 
-          <div className="premium-filterbar rounded-[18px] px-3 py-3">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <div className="relative min-w-[260px] flex-1 xl:max-w-[420px]">
+          <div className="premium-card rounded-[22px] p-4">
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto]" style={{ justifyContent: "start" }}>
+
+              {/* 검색 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-10 font-normal">회원 검색</span>
+                <div className="relative">
                   <Search
                     size={15}
-                    className="absolute left-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-faint)" }}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--text-muted)" }}
                   />
                   <input
                     type="text"
                     placeholder="회원명, 직급, B넘버, 담당자 검색"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    className="crm-search w-full pl-9 pr-3"
+                    className="crm-search h-12 w-full pl-10 pr-3 font-normal"
                   />
                 </div>
+              </label>
 
-                <SelectFilter value={filterAssigned} onChange={setFilterAssigned} options={assignedList} label="전체 담당자" />
-                <SelectFilter value={filterType} onChange={setFilterType} options={eventTypes} label="전체 이벤트" />
-              </div>
+              {/* 담당자 필터 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">담당자 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3 font-normal"
+                  value={filterAssigned}
+                  onChange={(e) => setFilterAssigned(e.target.value)}
+                >
+                  <option value="">전체 담당자</option>
+                  {assignedList.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </label>
 
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button type="button" onClick={resetFilters} className="btn-premium btn-secondary">
-                  <RefreshCcw size={14} /> 초기화{activeFilters > 0 ? ` ${activeFilters}` : ""}
-                </button>
-                <button type="button" onClick={fetchMembers} className="btn-premium btn-secondary">
-                  <RefreshCcw size={14} /> 최신화
-                </button>
-                <button type="button" onClick={() => setShowAdd(true)} disabled={!selectedMember} className="btn-premium btn-primary">
+              {/* 이벤트 필터 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">이벤트 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3 font-normal"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                >
+                  <option value="">전체 이벤트</option>
+                  {eventTypes.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </label>
+
+              {/* 이벤트 추가 */}
+              <div className="flex flex-col items-start gap-1.5">
+                <span className="crm-meta block text-[11px] font-normal" style={{ color: "transparent", userSelect: "none" }}>
+                  추가
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(true)}
+                  disabled={!selectedMember}
+                  className="btn-premium btn-primary h-12 whitespace-nowrap px-4"
+                >
                   <Plus size={15} /> 이벤트 추가
                 </button>
               </div>
