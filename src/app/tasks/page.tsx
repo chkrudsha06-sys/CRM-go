@@ -56,6 +56,7 @@ type MemberRow = {
   title: string | null;
   bunyanghoe_number: string | null;
   meeting_result: string | null;
+  assigned_to: string | null;
 };
 
 type TaskForm = {
@@ -696,8 +697,10 @@ function buildContent(form: TaskForm) {
     return [
       `[LMS 업무요청]`,
       ``,
-      `0. 고객명: ${form.member_name} ${form.member_title}`,
-      `0. 고객연락처: ${form.member_number}`,
+      `[고객정보]`,
+      `고객명: ${form.member_name} ${form.member_title}`,
+      `연락처: ${form.member_number}`,
+      ``,
       `1. 현장명: ${form.site_name}`,
       `2. 발송채널: LMS_${form.platform}`,
       `3. 조합여부: ${form.combination}`,
@@ -720,8 +723,10 @@ function buildContent(form: TaskForm) {
     return [
       `[호갱노노(직방) 채널톡 업무요청]`,
       ``,
-      `0. 고객명: ${form.member_name} ${form.member_title}`,
-      `0. 고객연락처: ${form.member_number}`,
+      `[고객정보]`,
+      `고객명: ${form.member_name} ${form.member_title}`,
+      `연락처: ${form.member_number}`,
+      ``,
       `1. 현장명: ${form.site_name}`,
       `2. 테스트번호: ${form.test_number}`,
       `2-1. 착신번호(대표번호): ${form.rep_number || ""}`,
@@ -744,8 +749,10 @@ function buildContent(form: TaskForm) {
     return [
       `[호갱노노(직방) 단지마커 업무요청]`,
       ``,
-      `0. 고객명: ${form.member_name} ${form.member_title}`,
-      `0. 고객연락처: ${form.member_number}`,
+      `[고객정보]`,
+      `고객명: ${form.member_name} ${form.member_title}`,
+      `연락처: ${form.member_number}`,
+      ``,
       `광고주명: ${form.advertiser}`,
       `광고집행기간: ${form.ad_period}`,
       `광고시작일: ${form.ad_start_date}`,
@@ -2444,7 +2451,7 @@ export default function TasksPage() {
           .order("created_at", { ascending: true }),
         supabase
           .from("contacts")
-          .select("id,name,title,bunyanghoe_number,meeting_result")
+          .select("id,name,title,bunyanghoe_number,meeting_result,assigned_to")
           .in("meeting_result", ["계약완료", "예약완료"])
           .order("bunyanghoe_number", { ascending: true }),
       ],
@@ -2508,16 +2515,23 @@ export default function TasksPage() {
 
   const filteredMembers = useMemo(() => {
     const keyword = memberSearch.trim().toLowerCase();
-    if (!keyword) return members;
+    const execNames = ["조계현","이세호","기여운","최연전"];
+    const isExecMember = execNames.includes(me);
 
-    return members.filter((member) =>
+    // 실행파트는 본인 assigned_to 고객만 표시
+    const base = isExecMember
+      ? members.filter((m) => m.assigned_to === me)
+      : members;
+
+    if (!keyword) return base;
+    return base.filter((member) =>
       [member.name, member.title, member.bunyanghoe_number]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
         .includes(keyword),
     );
-  }, [members, memberSearch]);
+  }, [members, memberSearch, me]);
 
   const filteredTasks = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -3987,8 +4001,7 @@ export default function TasksPage() {
                           className="text-[13px] font-bold"
                           style={{ color: "var(--accent-text)" }}
                         >
-                          {form.member_number} {form.member_name}{" "}
-                          {form.member_title}
+                          {form.member_name}{" "}{form.member_title}
                         </span>
                         <button
                           type="button"
@@ -4049,13 +4062,7 @@ export default function TasksPage() {
                                 color: "var(--text)",
                               }}
                             >
-                              <span
-                                className="w-14 font-bold"
-                                style={{ color: "var(--accent-text)" }}
-                              >
-                                {member.bunyanghoe_number || "-"}
-                              </span>
-                              <span>{member.name}</span>
+                              <span className="font-bold" style={{ color: "var(--text-strong)" }}>{member.name}</span>
                               <span style={{ color: "var(--text-muted)" }}>
                                 {member.title || ""}
                               </span>
