@@ -180,7 +180,7 @@ export function extractKeywords(text: string): string[] {
     if (text.includes(ch)) keywords.push(ch);
   }
 
-  return [...new Set(keywords)];
+  return Array.from(new Set(keywords));
 }
 
 /**
