@@ -129,7 +129,26 @@ export function classifyByPattern(message: string): IntentResult {
 
   // 쓰기 액션은 다른 카테고리와 함께 나올 수 있음 (예: "이정재 본부장에게 노트 추가")
   const isWrite = matched.includes("write_action");
-  const primary = matched.filter((c) => c !== "write_action")[0] || matched[0] || "unclear";
+
+  // 카테고리 우선순위 (여러 개 매칭 시 더 구체적인 것 우선)
+  // 예: "담당자별 분양회 입회자"는 sales(담당자별)보다 bunyanghoe_ops(입회자)가 우선
+  const PRIORITY: IntentCategory[] = [
+    "knowledge",          // 지식 질문이면 최우선 (가짜 데이터 방지)
+    "bunyanghoe_ops",     // 분양회 회원/입회자
+    "activity_history",   // 활동 이력
+    "customer_lookup",    // 고객 조회
+    "kpi_activity",       // KPI
+    "task_schedule",      // 업무·일정
+    "sales_analytics",    // 매출 (담당자별 등 일반 키워드라 후순위)
+    "insight_combined",
+    "greeting",
+  ];
+  const nonWrite = matched.filter((c) => c !== "write_action");
+  let primary: IntentCategory = "unclear";
+  for (const p of PRIORITY) {
+    if (nonWrite.includes(p)) { primary = p; break; }
+  }
+  if (primary === "unclear" && nonWrite.length > 0) primary = nonWrite[0];
 
   // 키워드 추출 (이름·B넘버 등 핵심 명사)
   const keywords = extractKeywords(text);
