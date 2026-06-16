@@ -1286,50 +1286,45 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               양식 출력
             </button>
 
-            {/* PDF 저장 버튼 — html2pdf.js CDN 사용, 인쇄창 없이 바로 저장 */}
+            {/* PDF 저장 버튼 — 양식 출력과 동일 iframe 방식, 파일명 지정 */}
             <button
               type="button"
-              onClick={async () => {
+              onClick={() => {
                 const el = document.getElementById("approval-preview-print");
                 if (!el) return;
-
                 // 파일명: 요청사항명_신청자명_YYYYMMDD
                 const today = new Date();
                 const yyyymmdd = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
                 const fileName = `${request.request_type}_${request.requester_name || ""}_${yyyymmdd}`;
-
-                // html2pdf.js CDN 동적 로드
-                const loadHtml2Pdf = (): Promise<any> => new Promise((resolve, reject) => {
-                  if ((window as any).html2pdf) { resolve((window as any).html2pdf); return; }
-                  const s = document.createElement("script");
-                  s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-                  s.onload = () => resolve((window as any).html2pdf);
-                  s.onerror = reject;
-                  document.head.appendChild(s);
-                });
-
-                // outer wrapper 대신 실제 결재서 DOM만 타깃
-                const target = document.getElementById("approval-preview-inner") || el;
-                try {
-                  const html2pdf = await loadHtml2Pdf();
-                  const opt = {
-                    margin: 0,
-                    filename: `${fileName}.pdf`,
-                    image: { type: "jpeg", quality: 0.98 },
-                    html2canvas: {
-                      scale: 2,
-                      useCORS: true,
-                      allowTaint: true,
-                      logging: false,
-                      windowWidth: 794,
-                    },
-                    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-                    pagebreak: { mode: "avoid-all" },
-                  };
-                  await html2pdf().set(opt).from(target).save();
-                } catch {
-                  alert("PDF 저장 중 오류가 발생했습니다. 양식 출력 버튼을 이용해 주세요.");
-                }
+                const iframe = document.createElement("iframe");
+                iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;";
+                document.body.appendChild(iframe);
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (!doc) return;
+                doc.open();
+                doc.write(`<!DOCTYPE html><html lang="ko"><head>
+<meta charset="utf-8"/>
+<title>${fileName}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+<style>
+@page { size: A4 portrait; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+html, body { width: 210mm; background: white; }
+body { display: flex; align-items: flex-start; justify-content: center; padding: 5mm; }
+</style>
+</head><body>${el.innerHTML}</body></html>`);
+                doc.close();
+                iframe.onload = () => {
+                  try {
+                    if (iframe.contentWindow) {
+                      iframe.contentWindow.document.title = fileName;
+                      iframe.contentWindow.focus();
+                      iframe.contentWindow.print();
+                    }
+                  } finally {
+                    setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 3000);
+                  }
+                };
               }}
               className="btn-premium btn-secondary h-9"
             >
