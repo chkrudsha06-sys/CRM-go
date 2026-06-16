@@ -862,55 +862,99 @@ export default function ContactsPage() {
             </div>
           </section>
 
-          <section className="premium-filterbar rounded-[24px] p-5 sm:p-6 mt-2">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(320px,1.5fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto]">
-              <TextInput
-                value={search}
-                onChange={setSearch}
-                placeholder="고객명, 직급, 연락처, 유입경로, 관리구간, 고객등급, 메모 검색"
-                icon={<Search className="h-4 w-4" />}
-              />
-              <SelectBox
-                value={filterRoute}
-                onChange={setFilterRoute}
-                options={INTAKE_ROUTES}
-                placeholder="전체 유입경로"
-              />
-              <SelectBox
-                value={filterStage}
-                onChange={setFilterStage}
-                options={[...MANAGEMENT_STAGE_OPTIONS]}
-                placeholder="전체 관리구간"
-              />
-              <SelectBox
-                value={filterGrade}
-                onChange={setFilterGrade}
-                options={CUSTOMER_GRADE_OPTIONS}
-                placeholder="전체 고객등급"
-              />
+          <section className="px-1">
+            <div className="premium-card rounded-[22px] p-4">
+              <div className="grid gap-3 xl:grid-cols-[minmax(320px,1.4fr)_minmax(190px,0.8fr)_minmax(190px,0.8fr)_minmax(190px,0.8fr)_auto]">
 
-              {currentUserInfo.isAdmin && (
-                <select
-                  value={filterAssigned}
-                  onChange={(e) => setFilterAssigned(e.target.value)}
-                  className="crm-search h-12 px-3"
-                  style={{ minWidth: "130px" }}
-                >
-                  <option value="전체">전체 담당자</option>
-                  {["조계현", "이세호", "기여운", "최연전"].map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-              )}
+                {/* 고객 검색 */}
+                <label className="block min-w-0">
+                  <span className="crm-meta mb-2 block">고객 검색</span>
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                      style={{ color: "var(--text-muted)" }}
+                    />
+                    <input
+                      className="crm-search h-12 w-full pl-10 pr-3 font-normal"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="고객명, 직급, 연락처, 유입경로, 관리구간, 고객등급 검색"
+                    />
+                  </div>
+                </label>
 
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="btn-premium btn-secondary h-12 xl:w-auto"
-              >
-                <RefreshCcw className="h-4 w-4" />
-                초기화
-              </button>
+                {/* 유입경로 필터 */}
+                <label className="block min-w-0">
+                  <span className="crm-meta mb-2 block">유입경로 필터</span>
+                  <select
+                    className="crm-search h-12 w-full px-3 font-normal"
+                    value={filterRoute}
+                    onChange={(e) => setFilterRoute(e.target.value)}
+                  >
+                    <option value="">전체 유입경로</option>
+                    {INTAKE_ROUTES.map((route) => (
+                      <option key={route} value={route}>{route}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 관리구간 필터 */}
+                <label className="block min-w-0">
+                  <span className="crm-meta mb-2 block">관리구간 필터</span>
+                  <select
+                    className="crm-search h-12 w-full px-3 font-normal"
+                    value={filterStage}
+                    onChange={(e) => setFilterStage(e.target.value)}
+                  >
+                    <option value="">전체 관리구간</option>
+                    {[...MANAGEMENT_STAGE_OPTIONS].map((stage) => (
+                      <option key={stage} value={stage}>{stage}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 고객등급 필터 */}
+                <label className="block min-w-0">
+                  <span className="crm-meta mb-2 block">고객등급 필터</span>
+                  <select
+                    className="crm-search h-12 w-full px-3 font-normal"
+                    value={filterGrade}
+                    onChange={(e) => setFilterGrade(e.target.value)}
+                  >
+                    <option value="">전체 고객등급</option>
+                    {CUSTOMER_GRADE_OPTIONS.map((grade) => (
+                      <option key={grade} value={grade}>{grade}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 담당자 필터 (관리자 전용) + 초기화 */}
+                <div className="flex items-end gap-2">
+                  {currentUserInfo.isAdmin && (
+                    <label className="block min-w-0 flex-1">
+                      <span className="crm-meta mb-2 block">담당자 필터</span>
+                      <select
+                        className="crm-search h-12 w-full px-3 font-normal"
+                        value={filterAssigned}
+                        onChange={(e) => setFilterAssigned(e.target.value)}
+                      >
+                        <option value="전체">전체 담당자</option>
+                        {["조계현", "이세호", "기여운", "최연전"].map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-premium btn-secondary h-12 whitespace-nowrap px-4"
+                    onClick={resetFilters}
+                  >
+                    <RefreshCcw className="h-4 w-4" />
+                    필터 초기화
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
