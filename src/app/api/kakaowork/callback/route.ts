@@ -5,6 +5,192 @@ export const dynamic = "force-dynamic";
 
 const KAKAO_WORK_API_BASE = "https://api.kakaowork.com/v1";
 
+// ──────────────────────────────────────────────────────
+// 결재 알림 인라인 헬퍼 (외부 fetch 없이 직접 발송)
+// ──────────────────────────────────────────────────────
+function approvalMentionEmail(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const map = process.env.KAKAO_WORK_MENTION_MAP || "";
+  for (const pair of map.split(",")) {
+    const [n, email] = pair.split(":").map((s) => s.trim());
+    if (n === name && email) return email;
+  }
+  return null;
+}
+
+async function approvalFindUserId(appKey: string, email: string): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `${KAKAO_WORK_API_BASE}/users.find_by_email?email=${encodeURIComponent(email)}`,
+      { method: "GET", headers: { Authorization: `Bearer ${appKey}` }, cache: "no-store" }
+    );
+    const data = await res.json();
+    const id = Number(data?.user?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch { return null; }
+}
+
+async function approvalMentionInline(appKey: string, name: string | null | undefined) {
+  if (!name) return { type: "styled", text: "-", bold: false };
+  const email = approvalMentionEmail(name);
+  if (email) {
+    const uid = await approvalFindUserId(appKey, email);
+    if (uid) return { type: "mention", text: `@${name}`, ref: { type: "kw", value: uid } };
+  }
+  return { type: "styled", text: `@${name}`, bold: true };
+}
+
+function approvalTextBlock(text: string) {
+  return { type: "text", text, inlines: [{ type: "styled", text, bold: false }] };
+}
+function approvalBoldBlock(text: string) {
+  return { type: "text", text, inlines: [{ type: "styled", text, bold: true }] };
+}
+function approvalSubmitBtn(label: string, value: string, style: "default"|"primary"|"danger" = "default") {
+  return { type: "button", text: label, style, action: { type: "submit_action", value } };
+}
+
+function approvalPayloadLines(payload: Record<string, any>, requestType: string): string[] {
+  const lines: string[] = [];
+  const add = (label: string, v: any) => {
+    if (v !== undefined && v !== null && v !== "" && v !== "-") lines.push(`${label}: ${v}`);
+  };
+  if (requestType.includes("결제요청")) {
+    add("안건", payload.subject);
+    add("결제금액", payload.totalAmount || payload.amount);
+    add("결제처", payload.payeeName || payload.vendor);
+    const acct = payload.accountNumber
+      ? `${payload.bankName || ""} ${payload.accountNumber}${payload.accountHolder ? ` (${payload.accountHolder})` : ""}`
+      : null;
+    add("계좌", acct);
+    add("사유", payload.reason);
+  } else if (requestType.includes("환불")) {
+    add("안건", payload.subject);
+    add("환불금액", payload.totalAmount || payload.amount);
+    add("사유", payload.reason || payload.refundReason);
+  } else if (requestType.includes("연차") || requestType.includes("반차")) {
+    add("신청일", payload.leaveStartDate);
+    add("종료일", payload.leaveEndDate);
+    add("사유", payload.leaveReason);
+  } else {
+    add("안건", payload.subject);
+    add("금액", payload.totalAmount || payload.amount);
+    add("사유", payload.reason);
+  }
+  return lines;
+}
+
+async function sendApprovalNotifyInline(params: {
+  appKey: string;
+  conversationId: string;
+  crmUrl: string;
+  request_id: number;
+  request_type: string;
+  requester_name: string | null;
+  current_approver: string | null;
+  reference_name: string | null;
+  action?: string;     // undefined=신규 | "승인" | "반려"
+  actor?: string;
+  is_final?: boolean;
+  payload: Record<string, any>;
+}) {
+  const {
+    appKey, conversationId, crmUrl,
+    request_id, request_type, requester_name,
+    current_approver, reference_name,
+    action, actor, is_final = false, payload,
+  } = params;
+
+  const pLines   = approvalPayloadLines(payload, request_type);
+  const isNew    = !action;
+  const isApproved = action === "승인";
+  const isRejected = action === "반려";
+  const isFinal  = !!is_final;
+
+  let blocks: any[] = [];
+  let textFallback = "";
+
+  if (isNew) {
+    const approverMention  = await approvalMentionInline(appKey, current_approver);
+    const requesterMention = await approvalMentionInline(appKey, requester_name);
+    const refMention       = reference_name ? await approvalMentionInline(appKey, reference_name) : null;
+    textFallback = `📋 결재 승인 요청 — ${request_type}\n신청자: ${requester_name}\n승인권자: ${current_approver}`;
+    blocks = [
+      { type: "header", text: `📋 결재 승인 요청 — ${request_type}`, style: "yellow" },
+      { type: "text", text: `신청자: @${requester_name}`, inlines: [{ type: "styled", text: "신청자: ", bold: false }, requesterMention] },
+      ...(refMention ? [{ type: "text", text: `참조: @${reference_name}`, inlines: [{ type: "styled", text: "참조: ", bold: false }, refMention] }] : []),
+      { type: "divider" },
+      approvalBoldBlock(`■ ${request_type} 내용`),
+      ...pLines.map(approvalTextBlock),
+      { type: "divider" },
+      { type: "text", text: `승인권자: @${current_approver}`, inlines: [{ type: "styled", text: "승인권자: ", bold: true }, { ...approverMention }] },
+      { type: "divider" },
+      { type: "button", text: "📄 결재요청서 확인하기", style: "default", action: { type: "open_inapp_browser", value: crmUrl } },
+      approvalSubmitBtn("✅ 승인", `approval:${request_id}:approve`, "primary"),
+      approvalSubmitBtn("❌ 반려", `approval:${request_id}:reject`,  "danger"),
+    ];
+  } else if (isApproved && !isFinal && current_approver) {
+    const nextMention  = await approvalMentionInline(appKey, current_approver);
+    const actorMention = await approvalMentionInline(appKey, actor);
+    textFallback = `✅ 결재 순번 — ${request_type}\n${actor} 승인 완료 → 다음: ${current_approver}`;
+    blocks = [
+      { type: "header", text: `✅ 결재 순번 — ${request_type}`, style: "green" },
+      { type: "text", text: `승인 완료: @${actor}`, inlines: [{ type: "styled", text: "승인 완료: ", bold: false }, actorMention] },
+      approvalTextBlock(`신청자: ${requester_name}`),
+      { type: "divider" },
+      approvalBoldBlock(`■ ${request_type} 내용`),
+      ...pLines.map(approvalTextBlock),
+      { type: "divider" },
+      { type: "text", text: `다음 승인권자: @${current_approver}`, inlines: [{ type: "styled", text: "다음 승인권자: ", bold: true }, nextMention] },
+      { type: "divider" },
+      { type: "button", text: "📄 결재요청서 확인하기", style: "default", action: { type: "open_inapp_browser", value: crmUrl } },
+      approvalSubmitBtn("✅ 승인", `approval:${request_id}:approve`, "primary"),
+      approvalSubmitBtn("❌ 반려", `approval:${request_id}:reject`,  "danger"),
+    ];
+  } else if (isApproved && isFinal) {
+    const actorMention     = await approvalMentionInline(appKey, actor);
+    const requesterMention = await approvalMentionInline(appKey, requester_name);
+    const refMention2      = reference_name ? await approvalMentionInline(appKey, reference_name) : null;
+    textFallback = `🎉 결재 최종 승인 완료 — ${request_type}\n신청자: ${requester_name}`;
+    blocks = [
+      { type: "header", text: `🎉 결재 최종 승인 완료 — ${request_type}`, style: "green" },
+      { type: "text", text: `최종 승인: @${actor}`, inlines: [{ type: "styled", text: "최종 승인: ", bold: false }, actorMention] },
+      { type: "text", text: `신청자: @${requester_name}`, inlines: [{ type: "styled", text: "신청자: ", bold: false }, requesterMention] },
+      ...(refMention2 ? [{ type: "text", text: `참조: @${reference_name}`, inlines: [{ type: "styled", text: "참조: ", bold: false }, refMention2] }] : []),
+      { type: "divider" },
+      approvalBoldBlock(`■ 승인된 ${request_type} 내용`),
+      ...pLines.map(approvalTextBlock),
+      { type: "divider" },
+      { type: "button", text: "📄 결재 내역 확인하기", style: "primary", action: { type: "open_inapp_browser", value: crmUrl } },
+    ];
+  } else if (isRejected) {
+    const actorMention     = await approvalMentionInline(appKey, actor);
+    const requesterMention = await approvalMentionInline(appKey, requester_name);
+    textFallback = `❌ 결재 반려 — ${request_type}\n신청자: ${requester_name} / 반려자: ${actor}`;
+    blocks = [
+      { type: "header", text: `❌ 결재 반려 — ${request_type}`, style: "red" },
+      { type: "text", text: `반려 처리: @${actor}`, inlines: [{ type: "styled", text: "반려 처리: ", bold: false }, actorMention] },
+      { type: "text", text: `신청자: @${requester_name}`, inlines: [{ type: "styled", text: "신청자: ", bold: false }, requesterMention] },
+      { type: "divider" },
+      approvalBoldBlock(`■ 반려된 ${request_type} 내용`),
+      ...pLines.map(approvalTextBlock),
+      { type: "divider" },
+      approvalTextBlock("결재가 반려되었습니다. CRM에서 내용을 수정 후 재요청하세요."),
+      { type: "button", text: "📄 CRM에서 재요청하기", style: "default", action: { type: "open_inapp_browser", value: crmUrl } },
+    ];
+  }
+
+  if (blocks.length === 0) return;
+
+  await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${appKey}`, "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ conversation_id: Number(conversationId), text: textFallback, blocks }),
+  });
+}
+
+
 const EXEC_MEMBERS: Record<string, string> = {
   조계현: "메인",
   이세호: "어쏘",
@@ -351,13 +537,15 @@ export async function POST(request: Request) {
         );
       }
 
-      // CRM 카카오워크 통합 알림 발송 (다음 단계)
+      // 결재 다음 단계 알림 (인라인 — 외부 fetch 없음으로 타임아웃 방지)
       try {
-        await fetch(`${baseUrl}/api/kakaowork/send-approval-notify`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-          body: JSON.stringify({
+        const convId = process.env.KAKAO_WORK_EVENT_CONVERSATION_ID;
+        const bUrl   = process.env.CRM_BASE_URL || "https://crm-go-roan.vercel.app";
+        if (appKey && convId) {
+          await sendApprovalNotifyInline({
+            appKey,
+            conversationId: convId,
+            crmUrl: `${bUrl}/tasks`,
             request_id: requestId,
             request_type: reqData.request_type,
             requester_name: reqData.requester_name,
@@ -367,8 +555,8 @@ export async function POST(request: Request) {
             actor: clickerName,
             is_final: action === "approve" && !nextApprover,
             payload: reqData.payload || {},
-          }),
-        });
+          });
+        }
       } catch {}
 
       return NextResponse.json({ ok: true });
