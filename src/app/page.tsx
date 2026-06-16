@@ -578,7 +578,7 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
         <FileText size={15} />
       </div>
       <p className="text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{title}</p>
-      <p className="mt-1 max-w-[280px] text-[13px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+      <p className="mt-1 text-[13px] font-medium leading-relaxed whitespace-nowrap" style={{ color: "var(--text-subtle)" }}>{desc}</p>
     </div>
   );
 }
