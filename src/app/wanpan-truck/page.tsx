@@ -319,18 +319,18 @@ function StatCard({
 }) {
   const c = toneStyle(tone);
   return (
-    <div className="premium-card flex items-center justify-between px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="premium-card flex items-center justify-between px-5 py-5">
+      <div className="flex min-w-0 items-center gap-4">
         <div
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[13px] border"
+          className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] border"
           style={{ background: c.bg, borderColor: c.border, color: c.color }}
         >
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="crm-tiny">{label}</p>
+          <p className="text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>{label}</p>
           <p
-            className="mt-0.5 text-[22px] font-[600] tracking-[-0.055em]"
+            className="mt-1 text-[28px] font-bold tracking-[-0.02em] leading-none"
             style={{ color: "var(--text-strong)" }}
           >
             {typeof value === "number" ? value.toLocaleString() : value}
@@ -1547,27 +1547,27 @@ export default function WanpanTruckPage() {
               </p>
             </div>
 
-            <div className="stat-grid grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[760px]">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:min-w-[860px]">
               <StatCard
-                icon={<Route size={17} />}
+                icon={<Route size={22} />}
                 label="전체 회차"
                 value={summary.total}
                 tone="purple"
               />
               <StatCard
-                icon={<CheckCircle2 size={17} />}
+                icon={<CheckCircle2 size={22} />}
                 label="발주 완료"
                 value={summary.ordered}
                 tone="success"
               />
               <StatCard
-                icon={<Sparkles size={17} />}
+                icon={<Sparkles size={22} />}
                 label="직발주"
                 value={summary.direct}
                 tone="purple"
               />
               <StatCard
-                icon={<User size={17} />}
+                icon={<User size={22} />}
                 label="확인 완료"
                 value={summary.confirmed}
                 tone="info"
@@ -1575,65 +1575,105 @@ export default function WanpanTruckPage() {
             </div>
           </div>
 
-          <div className="premium-filterbar rounded-[18px] px-3 py-3">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <div className="relative min-w-[260px] flex-1 xl:max-w-[420px]">
+          <div className="premium-card rounded-[22px] p-4">
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto_auto]">
+
+              {/* 검색 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-10 font-normal">통합 검색</span>
+                <div className="relative">
                   <Search
                     size={15}
-                    className="absolute left-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-faint)" }}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--text-muted)" }}
                   />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="현장, 위치, 대행사, 접점, 담당자 검색"
-                    className="crm-search w-full pl-9 pr-3"
+                    className="crm-search h-12 w-full pl-10 pr-3 font-normal"
                   />
                 </div>
-                <SelectFilter
+              </label>
+
+              {/* 월 필터 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">월 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3 font-normal"
                   value={filterMonth}
-                  onChange={setFilterMonth}
-                  options={Array.from(
-                    { length: 12 },
-                    (_, index) => `${index + 1}`,
-                  )}
-                  label="전체 월"
-                />
-                <SelectFilter
+                  onChange={(e) => setFilterMonth(e.target.value)}
+                >
+                  <option value="">전체 월</option>
+                  {Array.from({ length: 12 }, (_, i) => `${i+1}`).map((m) => (
+                    <option key={m} value={m}>{m}월</option>
+                  ))}
+                </select>
+              </label>
+
+              {/* 발주 상태 필터 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">발주 상태 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3 font-normal"
                   value={filterOrder}
-                  onChange={setFilterOrder}
-                  options={["ordered", "not_ordered", "direct", "confirmed"]}
-                  label="발주 상태"
-                />
-                <SelectFilter
+                  onChange={(e) => setFilterOrder(e.target.value)}
+                >
+                  <option value="">전체 발주 상태</option>
+                  <option value="ordered">발주완료</option>
+                  <option value="not_ordered">미발주</option>
+                  <option value="direct">직발주</option>
+                  <option value="confirmed">확인완료</option>
+                </select>
+              </label>
+
+              {/* 촬영 여부 필터 */}
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">촬영 여부 필터</span>
+                <select
+                  className="crm-search h-12 w-full px-3 font-normal"
                   value={filterPhoto}
-                  onChange={setFilterPhoto}
-                  options={["photo", "no_photo"]}
-                  label="촬영여부"
-                />
+                  onChange={(e) => setFilterPhoto(e.target.value)}
+                >
+                  <option value="">전체 촬영여부</option>
+                  <option value="photo">촬영</option>
+                  <option value="no_photo">미촬영</option>
+                </select>
+              </label>
+
+              {/* 필터 초기화 */}
+              <div className="flex flex-col items-start gap-1.5">
+                <span
+                  className="crm-meta block text-[11px] font-normal transition-colors"
+                  style={{ color: activeFilters > 0 ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+                >
+                  필터 적용중
+                </span>
+                <button
+                  type="button"
+                  className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-normal transition-all"
+                  style={{
+                    background: activeFilters > 0 ? "var(--accent-subtle)" : "var(--surface-2)",
+                    border: `1px solid ${activeFilters > 0 ? "var(--accent-border)" : "var(--border)"}`,
+                    color: activeFilters > 0 ? "var(--accent-text)" : "var(--text-subtle)",
+                  }}
+                  onClick={resetFilters}
+                  disabled={activeFilters === 0}
+                >
+                  <RefreshCcw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
+                  필터 초기화
+                </button>
               </div>
 
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="btn-premium btn-secondary"
-                >
-                  <RefreshCcw size={14} /> 초기화
-                  {activeFilters > 0 ? ` ${activeFilters}` : ""}
-                </button>
-                <button
-                  type="button"
-                  onClick={fetchTrucks}
-                  className="btn-premium btn-secondary"
-                >
-                  <Filter size={14} /> 최신화
-                </button>
+              {/* 신규 등록 */}
+              <div className="flex flex-col items-start gap-1.5">
+                <span className="crm-meta block text-[11px] font-normal" style={{ color: "transparent", userSelect: "none" }}>
+                  등록
+                </span>
                 <button
                   type="button"
                   onClick={openAdd}
-                  className="btn-premium btn-primary"
+                  className="btn-premium btn-primary h-12 whitespace-nowrap px-4"
                 >
                   <Plus size={15} /> 신규 등록
                 </button>
