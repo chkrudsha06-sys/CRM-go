@@ -499,8 +499,8 @@ function toneStyle(tone: ToneName) {
 
 /* ─────────────────────────────────────────────────────────────
  * 통일 디자인 시스템 (전 카드 공통 규격)
- *  - 카드 헤더: px-4 py-3 / 타이틀 14px tracking-[-0.02em] / 설명 12px
- *  - 메인 숫자: 20~22px tracking-[-0.04em] / 라벨 11px · 서브 12px
+ *  - 카드 헤더: px-4 py-3 / 타이틀 14px tracking-[-0.01em] / 설명 12px
+ *  - 메인 숫자: 20~22px tracking-[-0.02em] / 라벨 11px · 서브 12px
  *  - 서브카드: rounded-[12px] p-3 surface-2 / 그리드 갭: 외부 gap-4 · 내부 gap-2.5
  * ───────────────────────────────────────────────────────────── */
 
@@ -510,7 +510,7 @@ function Badge({ children, tone = "muted", icon: Icon }: { children: ReactNode; 
   const c = toneStyle(tone);
   return (
     <span
-      className="inline-flex min-h-[22px] items-center gap-1 rounded-[7px] px-2 text-[11px] font-normal tracking-[-0.01em]"
+      className="inline-flex min-h-[22px] items-center gap-1 rounded-[7px] px-2 text-[12px] font-normal tracking-[-0.01em]"
       style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       {Icon ? <Icon size={11} /> : <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.dot }} />}
@@ -539,8 +539,8 @@ function PanelTitle({ icon, tone, title, desc, right }: { icon: ElementType; ton
       <div className="flex min-w-0 items-center gap-2.5">
         <IconBox icon={icon} tone={tone} size="sm" />
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold leading-tight tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{title}</p>
-          {desc && <p className="mt-0.5 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
+          <p className="text-[14px] font-semibold leading-tight tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+          {desc && <p className="mt-0.5 truncate text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{desc}</p>}
         </div>
       </div>
       {right}
@@ -552,11 +552,11 @@ function StatBox({ label, value, sub, tone = "muted" }: { label: string; value: 
   const c = toneStyle(tone);
   return (
     <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-      <p className="truncate text-[11px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
-      <p className="mt-1.5 truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+      <p className="truncate text-[12px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
+      <p className="mt-1.5 truncate text-[22px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
-      {sub && <p className="mt-1 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>}
+      {sub && <p className="mt-1 truncate text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>}
     </div>
   );
 }
@@ -577,8 +577,8 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
       <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "var(--surface-3)", color: "var(--text-faint)" }}>
         <FileText size={15} />
       </div>
-      <p className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{title}</p>
-      <p className="mt-1 max-w-[280px] text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
+      <p className="text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{title}</p>
+      <p className="mt-1 max-w-[280px] text-[13px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
     </div>
   );
 }
@@ -592,10 +592,10 @@ function FunnelBox({ label, value, sub, tone }: { label: string; value: number; 
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
         <p className="truncate text-[13px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
       </div>
-      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
         {value.toLocaleString()}<span className="ml-0.5 text-[14px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
       </p>
-      <p className="mt-2 truncate text-[12px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
+      <p className="mt-2 truncate text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
     </div>
   );
 }
@@ -606,7 +606,7 @@ function FunnelConnector({ rate }: { rate: number | null | undefined }) {
     <div className="mx-3 flex w-[66px] shrink-0 items-center justify-center">
       {rate !== null && rate !== undefined ? (
         <span
-          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.02em]"
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.01em]"
           style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
         >
           {rate}%<ArrowRight size={12} />
@@ -1640,7 +1640,7 @@ export default function HomePage() {
                       <div key={row.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                         <Badge tone={row.tone}>{row.label}</Badge>
                         <div className="flex items-baseline gap-1.5">
-                          <p className="text-[20px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
+                          <p className="text-[20px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[13px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
 
                         </div>
                       </div>
@@ -1674,25 +1674,25 @@ export default function HomePage() {
                       </colgroup>
                       <thead>
                         <tr>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
-                          <th className="border-r px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>리드</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>프로스펙팅</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>클로징</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--success-text)" }}>계약</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--danger-text)" }}>이탈</th>
-                          <th className="px-1.5 pb-1 text-center text-[11px] font-normal tracking-[-0.01em]" style={{ color: "var(--cyan-text)" }}>매출</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
+                          <th className="border-r px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>리드</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>프로스펙팅</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>클로징</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--success-text)" }}>계약</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--danger-text)" }}>이탈</th>
+                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--cyan-text)" }}>매출</th>
                         </tr>
                       </thead>
                       <tbody>
                         {teamRows.map((row) => {
                           const isMine = normalizePersonName(row.owner) === normalizePersonName(activeOwner);
-                          const cellCls = "px-1.5 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.02em]";
+                          const cellCls = "px-1.5 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.01em]";
                           return (
                             <tr key={row.owner} style={{ background: isMine ? "var(--surface-selected)" : "var(--surface-2)" }}>
-                              <td className="rounded-l-[10px] px-1.5 py-2.5 text-center text-[12px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
+                              <td className="rounded-l-[10px] px-1.5 py-2.5 text-center text-[13px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
                               <td className={cellCls} style={{ color: "var(--text)" }}>{row.db}</td>
                               <td className={cellCls} style={{ color: "var(--text)" }}>{row.masterChallenger}</td>
                               <td className={`${cellCls} border-r`} style={{ color: "var(--text)", borderColor: "var(--border)" }}>{row.bronze}</td>
@@ -1721,12 +1721,12 @@ export default function HomePage() {
                           {intakeRows.map((row) => (
                             <div key={row.route} className="rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                               <div className="flex items-center gap-3">
-                                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                                <p className="shrink-0 text-[13px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
                                   DB입력 <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
                                 </p>
                                 <ArrowRight size={13} style={{ color: "var(--text-faint)" }} />
-                                <p className="shrink-0 text-[12px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
+                                <p className="shrink-0 text-[13px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
                                   VIP전환 <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
                                 </p>
                                 <Badge tone={row.vipRate >= 60 ? "success" : row.vipRate >= 30 ? "warning" : "muted"}>{row.vipRate}%</Badge>
@@ -1749,19 +1749,19 @@ export default function HomePage() {
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <Badge tone={row.tone}>{row.grade}</Badge>
-                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
-                                계약 {row.contracts}건 <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
+                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>
+                                계약 {row.contracts}건 <span className="text-[12px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
                               </p>
                             </div>
-                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[12px]">%</span></p>
+                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[13px]">%</span></p>
                           </div>
                           <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
                           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
+                            <span className="text-[12px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
                             {row.routes.length === 0 ? (
-                              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
+                              <span className="text-[12px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
                             ) : row.routes.map(([route, count]) => (
-                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[11px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
+                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[12px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
                                 {route} {count}건
                               </span>
                             ))}
@@ -1782,12 +1782,12 @@ export default function HomePage() {
                         return (
                           <div key={row.label} className="rounded-[12px] border p-3.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
+                              <p className="text-[13px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
                               <Badge tone={row.tone}>{hasGoal ? `달성 ${percent(row.value, row.goal)}%` : "목표 미설정"}</Badge>
                             </div>
                             <div className="mt-2 flex items-baseline justify-between gap-3">
-                              <p className="truncate text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
-                              <p className="shrink-0 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "—"}</p>
+                              <p className="truncate text-[22px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
+                              <p className="shrink-0 text-[13px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "—"}</p>
                             </div>
                             <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
                           </div>
@@ -1808,11 +1808,11 @@ export default function HomePage() {
                         <div key={item.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: toneStyle(item.tone).dot }} />
-                            <span className="truncate text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>{item.label}</span>
+                            <span className="truncate text-[13px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>{item.label}</span>
                           </div>
                           <div className="flex shrink-0 items-baseline gap-2.5">
-                            <span className="text-[14px] font-semibold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
-                            <span className="w-9 text-right text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
+                            <span className="text-[14px] font-semibold tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
+                            <span className="w-9 text-right text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
                           </div>
                         </div>
                       ))}
@@ -1849,20 +1849,20 @@ export default function HomePage() {
                               >
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                   <div className="flex items-center gap-2">
-                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)", color: "#fff" }}>
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold" style={{ background: "linear-gradient(135deg,#8b7cf6,#60a5fa)", color: "#fff" }}>
                                       {memberName.slice(0, 1)}
                                     </div>
                                     <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{memberName}</p>
                                   </div>
-                                  <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{isExpanded ? "▲" : "▼"}</span>
+                                  <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>{isExpanded ? "▲" : "▼"}</span>
                                 </div>
                                 {!memberGoal ? (
-                                  <p className="text-[11px]" style={{ color: "var(--text-faint)" }}>목표 미입력</p>
+                                  <p className="text-[12px]" style={{ color: "var(--text-faint)" }}>목표 미입력</p>
                                 ) : (
                                   <>
                                     <div className="flex items-center justify-between gap-1 mb-1">
-                                      <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>전체 달성률</p>
-                                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: totalRate >= 100 ? "var(--success-bg)" : totalRate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: totalRate >= 100 ? "var(--success-text)" : totalRate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>전체 달성률</p>
+                                      <span className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: totalRate >= 100 ? "var(--success-bg)" : totalRate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: totalRate >= 100 ? "var(--success-text)" : totalRate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
                                         {totalRate}%
                                       </span>
                                     </div>
@@ -1886,9 +1886,9 @@ export default function HomePage() {
                           const memberWorkItems = memberGoal ? (memberGoal.goal_work_items || []).filter((item: { id: string; text: string; done: boolean }) => item.text.trim().length > 0) : [];
                           return (
                             <div className="rounded-[12px] border p-3" style={{ borderColor: "var(--accent-border)", background: "var(--surface-2)" }}>
-                              <p className="text-[12px] font-semibold mb-3" style={{ color: "var(--accent-text)" }}>{expandedDailyMember} 세부내역</p>
+                              <p className="text-[13px] font-semibold mb-3" style={{ color: "var(--accent-text)" }}>{expandedDailyMember} 세부내역</p>
                               {!memberGoal ? (
-                                <p className="text-[12px]" style={{ color: "var(--text-faint)" }}>오늘 활동목표 미입력</p>
+                                <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>오늘 활동목표 미입력</p>
                               ) : (
                                 <>
                                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1897,13 +1897,13 @@ export default function HomePage() {
                                       return (
                                         <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
                                           <div className="flex items-center justify-between gap-2">
-                                            <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
-                                            <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                            <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
+                                            <span className="rounded-full px-2 py-0.5 text-[12px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
                                               {f.goal > 0 ? `${rate}%` : "미설정"}
                                             </span>
                                           </div>
-                                          <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
-                                            목표 {f.goal}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 달성 {f.result}{f.unit}</span>
+                                          <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                            목표 {f.goal}{f.unit} <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>/ 달성 {f.result}{f.unit}</span>
                                           </p>
                                           <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                                             <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
@@ -1914,7 +1914,7 @@ export default function HomePage() {
                                   </div>
                                   {memberWorkItems.length > 0 && (
                                     <div className="mt-3 rounded-[12px] border p-3" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
-                                      <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
+                                      <p className="mb-2 text-[13px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
                                       <div className="space-y-1">
                                         {memberWorkItems.map((item: { id: string; text: string; done: boolean }) => (
                                           <button
@@ -1930,7 +1930,7 @@ export default function HomePage() {
                                             <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
                                               {item.text}
                                             </span>
-                                            {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
+                                            {item.done && <span className="ml-auto text-[12px]" style={{ color: "var(--success-text)" }}>달성</span>}
                                           </button>
                                         ))}
                                       </div>
@@ -1954,13 +1954,13 @@ export default function HomePage() {
                             return (
                               <div key={f.label} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
-                                  <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
+                                  <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{f.label}</p>
+                                  <span className="rounded-full px-2 py-0.5 text-[12px] font-semibold" style={{ background: rate >= 100 ? "var(--success-bg)" : rate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: rate >= 100 ? "var(--success-text)" : rate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
                                     {f.goal > 0 ? `${rate}%` : "미설정"}
                                   </span>
                                 </div>
-                                <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
-                                  {f.result}{f.unit} <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
+                                <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                                  {f.result}{f.unit} <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
                                 </p>
                                 <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                                   <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
@@ -1971,7 +1971,7 @@ export default function HomePage() {
                         </div>
                         {dailyWorkItems.length > 0 && (
                           <div className="mt-3 rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                            <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
+                            <p className="mb-2 text-[13px]" style={{ color: "var(--text-subtle)", fontWeight: 600 }}>특발성 활동목표</p>
                             <div className="space-y-1">
                               {dailyWorkItems.map((item) => (
                                 <button
@@ -1986,7 +1986,7 @@ export default function HomePage() {
                                   <span className="text-[13px]" style={{ color: item.done ? "var(--text-faint)" : "var(--text-strong)", textDecoration: item.done ? "line-through" : "none" }}>
                                     {item.text}
                                   </span>
-                                  {item.done && <span className="ml-auto text-[11px]" style={{ color: "var(--success-text)" }}>달성</span>}
+                                  {item.done && <span className="ml-auto text-[12px]" style={{ color: "var(--success-text)" }}>달성</span>}
                                 </button>
                               ))}
                             </div>
@@ -2024,12 +2024,12 @@ export default function HomePage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <Badge tone={item.tone}>{item.type}</Badge>
-                              <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                              <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>
                                 {item.title}
-                                {target?.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {target.title}</span> : null}
+                                {target?.title ? <span className="ml-1 text-[13px] font-medium" style={{ color: "var(--text-muted)" }}>· {target.title}</span> : null}
                               </p>
                             </div>
-                            <p className="mt-1 line-clamp-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
+                            <p className="mt-1 line-clamp-1 text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>{item.desc}</p>
                           </div>
                           <ChevronRight size={13} className="mt-1.5 shrink-0" style={{ color: "var(--text-faint)" }} />
                         </button>
@@ -2045,15 +2045,15 @@ export default function HomePage() {
                     {paymentDdays.length === 0 ? <EmptyBlock title="결제일 등록 고객이 없습니다" desc="계약전환 시 결제채널과 결제일을 입력하면 자동으로 계산됩니다." /> : paymentDdays.map(({ contact, day, diff, due }) => (
                       <button key={contact.id} type="button" onClick={() => openCustomerEdit(Number(contact.id), `결제 ${ddayLabel(diff)}`)} className="flex w-full items-center gap-2.5 rounded-[12px] p-2.5 text-left transition-colors hover:bg-white/[.04]">
                         <div className="flex h-10 w-[52px] shrink-0 flex-col items-center justify-center rounded-[10px]" style={{ background: diff === 0 ? "var(--danger-bg)" : diff <= 4 ? "var(--warning-bg)" : "var(--surface-3)", color: diff === 0 ? "var(--danger-text)" : diff <= 4 ? "var(--warning-text)" : "var(--text-subtle)", border: `1px solid ${diff === 0 ? "var(--danger-border)" : diff <= 4 ? "var(--warning-border)" : "var(--border)"}` }}>
-                          <span className="text-[11px] font-semibold leading-none">{ddayLabel(diff)}</span>
-                          <span className="mt-0.5 text-[10px] font-medium leading-none">{formatDate(toDateKey(due))}</span>
+                          <span className="text-[12px] font-semibold leading-none">{ddayLabel(diff)}</span>
+                          <span className="mt-0.5 text-[11px] font-medium leading-none">{formatDate(toDateKey(due))}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                          <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>
                             {contact.name || "고객명 없음"}
-                            {contact.title ? <span className="ml-1 text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>· {contact.title}</span> : null}
+                            {contact.title ? <span className="ml-1 text-[13px] font-medium" style={{ color: "var(--text-muted)" }}>· {contact.title}</span> : null}
                           </p>
-                          <p className="mt-0.5 truncate text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
+                          <p className="mt-0.5 truncate text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>{contact.payment_channel || "결제채널 미입력"} · 매월 {day}일</p>
                         </div>
                         <Badge tone={diff <= 4 ? "warning" : "muted"}>{contactOwner(contact)}</Badge>
                       </button>
@@ -2071,8 +2071,8 @@ export default function HomePage() {
                     </div>
                     <div className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <p className="text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>첫 접촉률</p>
-                        <p className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthCustomerDb.length)}%</p>
+                        <p className="text-[13px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>첫 접촉률</p>
+                        <p className="text-[13px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{percent(stats.firstTouch, monthCustomerDb.length)}%</p>
                       </div>
                       <ProgressBar value={stats.firstTouch} total={monthCustomerDb.length} tone="cyan" />
                     </div>
@@ -2090,10 +2090,10 @@ export default function HomePage() {
                           <IconBox icon={Activity} tone="purple" size="sm" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
-                              <span className="shrink-0 text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>{timeAgo(note.created_at || note.note_date)}</span>
+                              <p className="truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{contact?.name || `고객 #${note.contact_id}`}</p>
+                              <span className="shrink-0 text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>{timeAgo(note.created_at || note.note_date)}</span>
                             </div>
-                            <p className="mt-1 line-clamp-2 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
+                            <p className="mt-1 line-clamp-2 text-[13px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content || "활동노트 내용 없음"}</p>
                           </div>
                         </a>
                       );
@@ -2127,11 +2127,11 @@ export default function HomePage() {
                     {editTarget.customer_grade ? <Badge tone={isHighValueContact(editTarget) ? "warning" : "success"}>{editTarget.customer_grade}</Badge> : null}
                     {editTarget.intake_route ? <Badge tone="muted">{editTarget.intake_route}</Badge> : null}
                   </div>
-                  <h2 className="truncate text-[19px] font-semibold tracking-[-0.04em]" style={{ color: "var(--text-strong)" }}>
+                  <h2 className="truncate text-[19px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
                     {editTarget.name || "고객명 없음"}
                     {editTarget.title ? <span className="ml-1.5 text-[14px] font-medium" style={{ color: "var(--text-muted)" }}>{editTarget.title}</span> : null}
                   </h2>
-                  <p className="mt-1 text-[12px] font-medium" style={{ color: "var(--text-subtle)" }}>ID {editTarget.id} · {editTarget.phone || "연락처 미입력"} · 담당 {contactOwner(editTarget)}</p>
+                  <p className="mt-1 text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>ID {editTarget.id} · {editTarget.phone || "연락처 미입력"} · 담당 {contactOwner(editTarget)}</p>
                 </div>
                 <button type="button" onClick={() => !savingEdit && setEditTarget(null)} className="btn-premium btn-secondary h-9 w-9 shrink-0 p-0">
                   <X size={15} />
@@ -2145,8 +2145,8 @@ export default function HomePage() {
                 {popupMode === "view_only" && (
                   <div className="rounded-[12px] border p-4" style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)" }}>
                     <p className="text-[13px] font-semibold" style={{ color: "var(--warning-text)" }}>결제 예정 알림</p>
-                    <p className="mt-1 text-[12px]" style={{ color: "var(--text-muted)" }}>{paymentLabel(editTarget)}</p>
-                    <p className="mt-2 text-[11px]" style={{ color: "var(--text-subtle)" }}>결제채널 또는 결제일 수정이 필요하다면 파이프라인에서 직접 수정하세요.</p>
+                    <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>{paymentLabel(editTarget)}</p>
+                    <p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>결제채널 또는 결제일 수정이 필요하다면 파이프라인에서 직접 수정하세요.</p>
                   </div>
                 )}
 
@@ -2154,18 +2154,18 @@ export default function HomePage() {
                 {popupMode === "payment_missing" && (
                   <>
                     <div className="rounded-[12px] border p-3" style={{ background: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
-                      <p className="text-[12px] font-semibold" style={{ color: "var(--danger-text)" }}>결제채널과 정기결제일을 입력하면 알림이 해제됩니다.</p>
+                      <p className="text-[13px] font-semibold" style={{ color: "var(--danger-text)" }}>결제채널과 정기결제일을 입력하면 알림이 해제됩니다.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2.5">
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                        <span className="mb-1 block text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
                         <select value={editForm.payment_channel} onChange={(e) => setEditForm((prev) => ({ ...prev, payment_channel: e.target.value }))} className="crm-search w-full px-3">
                           <option value="">선택해주세요</option>
                           {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
                       </label>
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                        <span className="mb-1 block text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
                         <select value={editForm.regular_payment_date} onChange={(e) => setEditForm((prev) => ({ ...prev, regular_payment_date: e.target.value }))} className="crm-search w-full px-3">
                           <option value="">선택해주세요</option>
                           {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
@@ -2180,13 +2180,13 @@ export default function HomePage() {
                   <>
                     {/* 활동노트 */}
                     <label className="block">
-                      <span className="mb-1 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
+                      <span className="mb-1 block text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
                       <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={3} placeholder="TM 내용, 고객 반응 등을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
                     </label>
 
                     {/* 고객감도 */}
                     <div>
-                      <span className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>고객감도</span>
+                      <span className="mb-2 block text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>고객감도</span>
                       <div className="grid grid-cols-3 gap-2">
                         {["재TM진행", "미팅진행", "감도없음"].map((s) => (
                           <button key={s} type="button"
@@ -2207,13 +2207,13 @@ export default function HomePage() {
                     <div className="rounded-[14px] border p-3.5" style={{ background: "var(--accent-subtle)", borderColor: "var(--accent-border)" }}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[12px] font-bold" style={{ color: "var(--accent-text)" }}>VIP활동DB 이관</p>
-                          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-subtle)" }}>고객DB → VIP활동DB로 이관 후 심사를 진행합니다</p>
+                          <p className="text-[13px] font-bold" style={{ color: "var(--accent-text)" }}>VIP활동DB 이관</p>
+                          <p className="mt-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>고객DB → VIP활동DB로 이관 후 심사를 진행합니다</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setShowVipTransfer((prev) => !prev)}
-                          className="shrink-0 rounded-[10px] border px-3 py-1.5 text-[12px] font-bold transition-all"
+                          className="shrink-0 rounded-[10px] border px-3 py-1.5 text-[13px] font-bold transition-all"
                           style={{
                             background: showVipTransfer ? "var(--accent)" : "var(--surface-2)",
                             borderColor: showVipTransfer ? "var(--accent)" : "var(--border-subtle)",
@@ -2226,18 +2226,18 @@ export default function HomePage() {
                       {showVipTransfer && (
                         <div className="mt-3 space-y-2 rounded-[10px] border p-3" style={{ background: "var(--surface)", borderColor: "var(--accent-border)" }}>
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black" style={{ background: "var(--accent)", color: "#fff" }}>1</span>
-                            <p className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>저장 시 VIP활동DB로 이관</p>
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: "var(--accent)", color: "#fff" }}>1</span>
+                            <p className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>저장 시 VIP활동DB로 이관</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black" style={{ background: "var(--accent)", color: "#fff" }}>2</span>
-                            <p className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: "var(--accent)", color: "#fff" }}>2</span>
+                            <p className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>
                               심사는&nbsp;
                               <a href="/customer-db" className="underline" style={{ color: "var(--accent-text)" }}>고객DB 메뉴</a>
                               &nbsp;→ VIP이관 버튼에서 진행
                             </p>
                           </div>
-                          <div className="mt-2 rounded-[8px] p-2.5 text-[11px] font-semibold leading-relaxed" style={{ background: "var(--warning-bg)", color: "var(--warning-text)", border: "1px solid var(--warning-border)" }}>
+                          <div className="mt-2 rounded-[8px] p-2.5 text-[12px] font-semibold leading-relaxed" style={{ background: "var(--warning-bg)", color: "var(--warning-text)", border: "1px solid var(--warning-border)" }}>
                             이관 후 관리구간: 리드 / 자동등급: 심사미진행
                           </div>
                         </div>
@@ -2250,17 +2250,17 @@ export default function HomePage() {
                 {(popupMode === "inactive" || popupMode === "closing") && (
                   <>
                     <label className="block">
-                      <span className="mb-1 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
+                      <span className="mb-1 block text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
                       <textarea value={quickNote} onChange={(e) => setQuickNote(e.target.value)} rows={4} placeholder="활동 내용, 다음 단계 계획을 기록하세요..." className="crm-search w-full resize-none px-3 py-2" />
                     </label>
 
                     <div>
-                      <span className="mb-2 block text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>관리구간 전환</span>
+                      <span className="mb-2 block text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>관리구간 전환</span>
                       <div className="grid grid-cols-4 gap-1.5">
                         {["리드", "프로스펙팅", "딜클로징", "리텐션"].map((stage) => (
                           <button key={stage} type="button"
                             onClick={() => setEditForm((prev) => ({ ...prev, management_stage: prev.management_stage === stage ? "" : stage }))}
-                            className="rounded-[10px] border py-2 text-[12px] font-semibold transition-all"
+                            className="rounded-[10px] border py-2 text-[13px] font-semibold transition-all"
                             style={{
                               background: editForm.management_stage === stage ? "var(--accent-subtle)" : "var(--surface-2)",
                               borderColor: editForm.management_stage === stage
@@ -2279,17 +2279,17 @@ export default function HomePage() {
                     {/* 계약전환 시 결제정보 입력 */}
                     {editForm.management_stage === "리텐션" && (
                       <div className="rounded-[12px] border p-3 space-y-2.5" style={{ background: "var(--success-bg)", borderColor: "var(--success-border)" }}>
-                        <p className="text-[12px] font-semibold" style={{ color: "var(--success-text)" }}>계약전환 — 결제정보 입력</p>
+                        <p className="text-[13px] font-semibold" style={{ color: "var(--success-text)" }}>계약전환 — 결제정보 입력</p>
                         <div className="grid grid-cols-2 gap-2.5">
                           <label className="block">
-                            <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
+                            <span className="mb-1 block text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>결제채널</span>
                             <select value={editForm.payment_channel} onChange={(e) => setEditForm((prev) => ({ ...prev, payment_channel: e.target.value }))} className="crm-search w-full px-3">
                               <option value="">선택해주세요</option>
                               {PAYMENT_CHANNEL_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                           </label>
                           <label className="block">
-                            <span className="mb-1 block text-[11px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
+                            <span className="mb-1 block text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>정기결제일</span>
                             <select value={editForm.regular_payment_date} onChange={(e) => setEditForm((prev) => ({ ...prev, regular_payment_date: e.target.value }))} className="crm-search w-full px-3">
                               <option value="">선택해주세요</option>
                               {PAYMENT_DAY_OPTIONS.map((d) => <option key={d} value={String(d)}>매월 {d}일</option>)}
@@ -2304,7 +2304,7 @@ export default function HomePage() {
 
               {/* 팝업 푸터 */}
               <div className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
-                <a href={popupMode === "db_inactive" ? "/customer-db" : "/pipeline3"} className="text-[12px] font-normal" style={{ color: "var(--accent-text)" }}>
+                <a href={popupMode === "db_inactive" ? "/customer-db" : "/pipeline3"} className="text-[13px] font-normal" style={{ color: "var(--accent-text)" }}>
                   {popupMode === "db_inactive" ? "고객DB에서 전체보기 →" : "파이프라인에서 전체 상세보기 →"}
                 </a>
                 <div className="flex items-center gap-2">
