@@ -1310,14 +1310,13 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
 
                 try {
                   const html2pdf = await loadHtml2Pdf();
-                  // shadow/패딩 임시 제거 후 PDF 캡처 → 복원 (잘림 방지)
-                  const prevStyle = el.getAttribute("style") || "";
-                  el.style.boxShadow = "none";
-                  el.style.padding = "0";
 
-                  const elWidth = el.scrollWidth || 794;
+                  // el 내부 최상단 paper div를 직접 타깃 (shadow/padding 없는 실제 문서 영역)
+                  const paperEl = (el.firstElementChild as HTMLElement) || el;
+                  const paperWidth = paperEl.scrollWidth || 794;
+
                   const opt = {
-                    margin: [4, 4, 4, 4],
+                    margin: 0,
                     filename: `${fileName}.pdf`,
                     image: { type: "jpeg", quality: 0.98 },
                     html2canvas: {
@@ -1325,15 +1324,23 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
                       useCORS: true,
                       allowTaint: true,
                       logging: false,
-                      windowWidth: elWidth + 40,
+                      windowWidth: paperWidth,
+                      width: paperWidth,
+                      onclone: (doc: Document) => {
+                        // 복제된 DOM에서만 shadow 제거 — 원본 영향 없음
+                        const cloned = doc.getElementById("approval-preview-print");
+                        if (cloned) {
+                          (cloned as HTMLElement).style.boxShadow = "none";
+                          (cloned as HTMLElement).style.padding = "0";
+                          (cloned as HTMLElement).style.margin = "0";
+                          (cloned as HTMLElement).style.background = "transparent";
+                        }
+                      },
                     },
                     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
                     pagebreak: { mode: "avoid-all" },
                   };
-                  await html2pdf().set(opt).from(el).save();
-
-                  // 스타일 복원
-                  el.setAttribute("style", prevStyle);
+                  await html2pdf().set(opt).from(paperEl).save();
                 } catch {
                   alert("PDF 저장 중 오류가 발생했습니다. 양식 출력 버튼을 이용해 주세요.");
                 }
