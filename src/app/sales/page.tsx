@@ -648,18 +648,49 @@ function PremiumIcon({ icon: Icon, tone = "info", size = "md" }: { icon: Element
 
 function SelectChip({ value, onChange, options, placeholder }: { value: string; onChange: (value: string) => void; options: string[]; placeholder: string }) {
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 min-w-[122px] appearance-none rounded-full border px-3 pr-8 text-[12px] font-bold outline-none"
-        style={{ background: value ? "var(--accent-subtle)" : "var(--surface-2)", borderColor: value ? "var(--accent-border)" : "var(--border)", color: value ? "var(--accent-text)" : "var(--text-muted)" }}
+        className="crm-search h-12 w-full appearance-none px-3 pr-9"
       >
         <option value="">{placeholder}</option>
         {options.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
-      <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
+      <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
     </div>
+  );
+}
+
+function TextSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <label className="relative block min-w-0">
+      <span className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center" style={{ color: "var(--text-faint)" }}>
+        <Search className="h-4 w-4" />
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="crm-search h-12 w-full pl-9 pr-3"
+      />
+    </label>
+  );
+}
+
+function MonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="relative block min-w-0">
+      <span className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center" style={{ color: "var(--text-faint)" }}>
+        <CalendarDays className="h-4 w-4" />
+      </span>
+      <input
+        type="month"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="crm-search h-12 w-full pl-9 pr-3"
+      />
+    </label>
   );
 }
 
@@ -797,13 +828,6 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <p className="text-[12px] font-bold" style={{ color: "var(--success-text)" }}>실매출</p>
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
                 </div>
-                {/* 수기 등록 메모 — 사이다페이/효성CMS 외 채널 */}
-                {item.memo && item.channel !== "사이다페이" && item.channel !== "효성CMS" && (
-                  <div className="mt-4 rounded-[14px] p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
-                    <p className="mb-2 text-[11px] font-bold" style={{ color: "var(--text-faint)" }}>메모</p>
-                    <p className="whitespace-pre-wrap text-[13px] font-semibold leading-relaxed" style={{ color: "var(--text)" }}>{item.memo}</p>
-                  </div>
-                )}
               </section>
               {item.memo && (item.channel === "사이다페이" || item.channel === "효성CMS") && (
                 <section className="premium-card p-4">
@@ -1135,8 +1159,6 @@ export default function SalesPage() {
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
-  // 직급 매칭용 — 담당자 필터 무관하게 전체 분양회 입회자
-  const [allMembersForTitle, setAllMembersForTitle] = useState<MemberOption[]>([]);
   const [memberSearch, setMemberSearch] = useState("");
   const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
   const [ciderpayFullSyncing, setCiderpayFullSyncing] = useState(false);
@@ -1172,35 +1194,13 @@ export default function SalesPage() {
   useEffect(() => { fetchRows(); }, [fetchRows]);
 
   const fetchMemberOptions = useCallback(async () => {
-    // 실행파트 로그인 시 본인 담당 고객만 조회
-    let execName: string | null = null;
-    try {
-      const raw = localStorage.getItem("crm_user");
-      if (raw) {
-        const u = JSON.parse(raw);
-        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
-        const execNames = ["조계현", "이세호", "기여운", "최연전"];
-        const name = String(u?.name || "").trim();
-        const role = String(u?.role || "").toLowerCase();
-        const isAdmin = role === "admin" || adminNames.includes(name);
-        const isExec = role === "exec" || role.includes("실행") || execNames.includes(name);
-        if (isExec && !isAdmin) execName = name;
-      }
-    } catch {}
-
-    let q = supabase
+    const { data, error } = await supabase
       .from("contacts")
       .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .in("meeting_result", ["예약완료", "계약완료"])
       .not("name", "is", null)
       .order("name", { ascending: true })
       .limit(2000);
-
-    if (execName) {
-      q = q.eq("assigned_to", execName) as typeof q;
-    }
-
-    const { data, error } = await q;
 
     if (error) {
       console.error("분양회 입회자 조회 실패:", error.message);
@@ -1209,15 +1209,6 @@ export default function SalesPage() {
     }
 
     setMemberOptions((data || []) as MemberOption[]);
-
-    // 직급 매칭용 — 담당자 필터 없이 전체 분양회 입회자 조회
-    const { data: allMembers } = await supabase
-      .from("contacts")
-      .select("name,title")
-      .in("meeting_result", ["예약완료", "계약완료"])
-      .not("name", "is", null)
-      .limit(5000);
-    setAllMembersForTitle((allMembers || []) as MemberOption[]);
   }, []);
 
   useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
@@ -1252,29 +1243,12 @@ export default function SalesPage() {
 
   const memberTitleMap = useMemo(() => {
     const map = new Map<string, string>();
-    // 이름 정규화: 모든 공백·특수문자 제거하고 소문자화
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-    // 전체 분양회 입회자 기준 (담당자 필터 무관)
-    allMembersForTitle.forEach((member) => {
-      const rawName = (member.name || "").trim();
-      const key = normalize(rawName);
-      if (key && member.title) map.set(key, member.title);
-    });
-    // 본인 담당 옵션도 포함 (혹시 누락된 케이스 보완)
     memberOptions.forEach((member) => {
-      const rawName = (member.name || "").trim();
-      const key = normalize(rawName);
-      if (key && member.title && !map.has(key)) map.set(key, member.title);
+      const name = (member.name || "").trim();
+      if (name && member.title) map.set(name, member.title);
     });
     return map;
-  }, [allMembersForTitle, memberOptions]);
-
-  // 정규화된 이름으로 직급 조회 헬퍼
-  const getTitleByName = (name: string | null | undefined): string => {
-    if (!name) return "-";
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-    return memberTitleMap.get(normalize(name)) || "-";
-  };
+  }, [memberOptions]);
 
   const memberManagerByNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1414,68 +1388,13 @@ export default function SalesPage() {
       memo: memo || null,
     };
     setSaving(true);
-    const { data: savedData, error } = editItem
-      ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id).select("id").single()
-      : await supabase.from("ad_executions").insert(payload).select("id").single();
+    const { error } = editItem ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id) : await supabase.from("ad_executions").insert(payload);
     setSaving(false);
     if (error) return alert(`저장 실패: ${error.message}`);
     setShowModal(false);
     setEditItem(null);
     fetchRows();
     if (selectedItem && editItem?.id === selectedItem.id) setSelectedItem({ ...selectedItem, ...payload } as AdExecution);
-
-    // ── 신규 등록 + 분양회 결제건이면 카카오워크 알림 ──
-    if (!editItem && payload.contract_route?.includes("분양회")) {
-      try {
-        // N회차 계산: 고객명 기준 월별 유니크 결제 건수 (동월 중복 제외)
-        const { data: allPayments } = await supabase
-          .from("ad_executions")
-          .select("payment_date")
-          .eq("member_name", payload.member_name || "")
-          .eq("contract_route", payload.contract_route)
-          .gt("execution_amount", 0)
-          .order("payment_date", { ascending: true });
-
-        // 월별 유니크 카운트 (YYYY-MM 기준)
-        const uniqueMonths = new Set(
-          (allPayments || [])
-            .map((r: any) => (r.payment_date || "").slice(0, 7))
-            .filter(Boolean)
-        );
-        const nth = uniqueMonths.size || 1;
-
-        // 고객 직급/연락처 조회
-        const { data: memberInfo } = await supabase
-          .from("contacts")
-          .select("title, phone")
-          .eq("name", payload.member_name || "")
-          .maybeSingle();
-
-        // 메모 값 (특이사항 하단에 추가)
-        const memoNote = form.memo?.trim() || "";
-
-        await fetch("/api/kakaowork/send-sales-message", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            member_name: payload.member_name,
-            member_title: memberInfo?.title || "",
-            member_phone: memberInfo?.phone || form.contact_phone || "",
-            execution_amount: payload.execution_amount,
-            channel: payload.channel,
-            contract_route: payload.contract_route,
-            payment_date: payload.payment_date,
-            team_member: payload.team_member,
-            payment_card: form.payment_card || "",
-            is_auto: false,
-            payment_count: nth,
-            extra_note: memoNote,
-          }),
-        });
-      } catch (kakaoErr) {
-        console.warn("카카오워크 알림 실패 (무시):", kakaoErr);
-      }
-    }
   };
 
 
@@ -1893,15 +1812,28 @@ export default function SalesPage() {
         </div>
       </div>
 
-      <div className="premium-filterbar sales-modern-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-full border px-3 text-[13px] font-bold outline-none" style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text)" }} />
-        <div className="relative w-full sm:w-[340px]"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="고객명, 결제채널, 담당자, 메모 검색..." className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none" /></div>
-        <SelectChip value={fChannel} onChange={setFChannel} options={CHANNELS} placeholder="결제채널" />
-        <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="결제항목" />
-        <SelectChip value={fTeam} onChange={setFTeam} options={TEAM} placeholder="담당자" />
-        {activeFilters > 0 && <button type="button" onClick={resetFilters} className="btn-premium btn-danger h-8">초기화</button>}
-        <span className="ml-auto hidden text-[12px] font-bold md:block" style={{ color: "var(--text-faint)" }}>{filteredRows.length.toLocaleString()} / {rows.length.toLocaleString()}건</span>
-      </div>
+      <section className="premium-filterbar mx-5 mb-3 mt-3 rounded-[24px] p-4 sm:p-5 md:mx-7">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(170px,0.8fr)_minmax(280px,1.5fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto]">
+          <MonthPicker value={month} onChange={setMonth} />
+          <TextSearch value={search} onChange={setSearch} placeholder="고객명, 결제채널, 담당자, 메모 검색" />
+          <SelectChip value={fChannel} onChange={setFChannel} options={CHANNELS} placeholder="전체 결제채널" />
+          <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="전체 결제항목" />
+          <SelectChip value={fTeam} onChange={setFTeam} options={TEAM} placeholder="전체 담당자" />
+          <button type="button" onClick={resetFilters} className="btn-premium btn-secondary h-12 xl:w-auto">
+            <RefreshCw className="h-4 w-4" />
+            초기화
+          </button>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+          <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted">
+            <Filter className="h-4 w-4 flex-none" />
+            <span>월 · 고객명 · 결제채널 · 결제항목 · 담당자 기준</span>
+          </div>
+          <p className="crm-tiny">
+            검색 결과 {filteredRows.length.toLocaleString()}건 / 전체 {rows.length.toLocaleString()}건
+          </p>
+        </div>
+      </section>
 
       <main className="sales-modern-main min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
         {loading ? <div className="flex h-full items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} /></div> : filteredRows.length === 0 ? <div className="flex h-full items-center justify-center"><div className="premium-card p-8"><EmptyState icon="💳" title="표시할 매출 데이터가 없습니다" description="월 또는 필터 조건을 변경하거나 새 매출을 등록하세요" actionLabel="매출 등록" onAction={openAdd} /></div></div> : (
@@ -1911,7 +1843,7 @@ export default function SalesPage() {
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
                   {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div></div></div></td>
-                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{getTitleByName(row.member_name)}</span></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
                     <td className="text-center"><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
@@ -1976,8 +1908,10 @@ export default function SalesPage() {
                   {memberOptions
                     .filter((member) => {
                       const keyword = memberSearch.trim().toLowerCase();
-                      const matchKeyword = !keyword || [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
-                      return matchKeyword;
+                      if (!keyword) return true;
+                      const matchKeyword = [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                      const matchAssigned = !crmUser || member.assigned_to === crmUser.name;
+                      return matchKeyword && matchAssigned;
                     })
                     .slice(0, 15)
                     .map((member) => (
