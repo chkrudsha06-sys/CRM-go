@@ -4,16 +4,33 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { Shield, UserPlus, Key, Trash2, Eye, EyeOff, Check, X, AlertTriangle } from "lucide-react";
+import {
+  Shield, UserPlus, Key, Trash2, Eye, EyeOff, Check, X,
+  AlertTriangle, Lock, Loader2,
+} from "lucide-react";
 
-interface UserRow { id: string; name: string; title: string; role: string; created_at: string; }
+interface UserRow {
+  id: string;
+  name: string;
+  title: string;
+  role: string;
+  created_at: string;
+}
 
-const ROLE_LABEL: Record<string, { label: string; color: string }> = {
-  admin: { label: "관리자", color: "#f59e0b" },
-  exec: { label: "실행파트", color: "#3b82f6" },
-  ops: { label: "운영파트", color: "#22c55e" },
-  ad: { label: "광고사업부", color: "#a855f7" },
-  shared: { label: "공용", color: "#6b7280" },
+const ROLE_LABEL: Record<string, { label: string; tone: "warning" | "info" | "success" | "purple" | "muted" }> = {
+  admin: { label: "관리자", tone: "warning" },
+  exec: { label: "실행파트", tone: "info" },
+  ops: { label: "운영파트", tone: "success" },
+  ad: { label: "광고사업부", tone: "purple" },
+  shared: { label: "공용", tone: "muted" },
+};
+
+const ROLE_TONE_STYLE = {
+  warning: { bg: "var(--warning-bg)", text: "var(--warning-text)", border: "var(--warning-border)" },
+  info: { bg: "var(--info-bg)", text: "var(--info-text)", border: "var(--info-border)" },
+  success: { bg: "var(--success-bg)", text: "var(--success-text)", border: "var(--success-border)" },
+  purple: { bg: "var(--purple-bg)", text: "var(--purple-text)", border: "var(--purple-border)" },
+  muted: { bg: "var(--surface-3)", text: "var(--text-subtle)", border: "var(--border)" },
 };
 
 export default function AccountManagePage() {
@@ -23,26 +40,23 @@ export default function AccountManagePage() {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
 
-  // 비밀번호 변경 상태
   const [editingPw, setEditingPw] = useState<string | null>(null);
   const [newPw, setNewPw] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
 
-  // 사용자 정보 수정 상태
   const [editingInfo, setEditingInfo] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editRole, setEditRole] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // 신규 계정 추가
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState({ id: "", password: "", name: "", title: "", role: "exec" });
   const [addingUser, setAddingUser] = useState(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
-  const showError = (msg: string) => { setError(msg); setTimeout(() => setError(""), 5000); };
+  const showErr = (msg: string) => { setError(msg); setTimeout(() => setError(""), 5000); };
 
   const fetchUsers = async () => {
     const { data } = await supabase.from("crm_users").select("id, name, title, role, created_at").order("id");
@@ -56,13 +70,11 @@ export default function AccountManagePage() {
     fetchUsers();
   }, []);
 
-  // 비밀번호 변경
   const handleChangePw = async (targetId: string) => {
-    if (!newPw || newPw.length < 6) { showError("비밀번호는 6자 이상이어야 합니다."); return; }
+    if (!newPw || newPw.length < 6) { showErr("비밀번호는 6자 이상이어야 합니다."); return; }
     setSavingPw(true);
     const res = await authFetch("/api/auth/update-user", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ targetId, newPassword: newPw }),
     });
     const data = await res.json();
@@ -70,17 +82,13 @@ export default function AccountManagePage() {
     if (data.success) {
       showToast(`${targetId} 비밀번호 변경 완료`);
       setEditingPw(null); setNewPw(""); setShowPw(false);
-    } else {
-      showError(data.error || "변경 실패");
-    }
+    } else showErr(data.error || "변경 실패");
   };
 
-  // 사용자 정보 수정
   const handleUpdateInfo = async (targetId: string) => {
     setSavingInfo(true);
     const res = await authFetch("/api/auth/update-user", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ targetId, name: editName, title: editTitle, role: editRole }),
     });
     const data = await res.json();
@@ -89,18 +97,14 @@ export default function AccountManagePage() {
       showToast(`${targetId} 정보 수정 완료`);
       setEditingInfo(null);
       fetchUsers();
-    } else {
-      showError(data.error || "수정 실패");
-    }
+    } else showErr(data.error || "수정 실패");
   };
 
-  // 신규 계정
   const handleAddUser = async () => {
-    if (!addForm.id || !addForm.password || !addForm.name || !addForm.title) { showError("모든 필드를 입력해주세요."); return; }
+    if (!addForm.id || !addForm.password || !addForm.name || !addForm.title) { showErr("모든 필드를 입력해주세요."); return; }
     setAddingUser(true);
     const res = await authFetch("/api/auth/update-user", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(addForm),
     });
     const data = await res.json();
@@ -109,137 +113,164 @@ export default function AccountManagePage() {
       showToast(`${addForm.id} 계정 생성 완료`);
       setShowAdd(false); setAddForm({ id: "", password: "", name: "", title: "", role: "exec" });
       fetchUsers();
-    } else {
-      showError(data.error || "생성 실패");
-    }
+    } else showErr(data.error || "생성 실패");
   };
 
-  // 계정 삭제
   const handleDelete = async (targetId: string, name: string) => {
     if (!confirm(`${name} (${targetId}) 계정을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.`)) return;
     const res = await authFetch("/api/auth/update-user", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ targetId }),
     });
     const data = await res.json();
     if (data.success) { showToast(`${name} 계정 삭제 완료`); fetchUsers(); }
-    else showError(data.error || "삭제 실패");
+    else showErr(data.error || "삭제 실패");
   };
 
-  if (!isAdmin) return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <Shield size={48} className="mx-auto mb-4 opacity-20" style={{ color: "var(--text-muted)" }} />
-        <p className="text-lg font-bold" style={{ color: "var(--text)" }}>관리자 전용 페이지</p>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>접근 권한이 없습니다</p>
+  if (!isAdmin) {
+    return (
+      <div className="premium-page flex h-full flex-col items-center justify-center">
+        <Lock size={40} className="mb-3" style={{ color: "var(--text-faint)", opacity: 0.5 }} />
+        <p className="text-[16px] font-bold" style={{ color: "var(--text-strong)" }}>관리자 전용 페이지</p>
+        <p className="mt-1 text-[13px]" style={{ color: "var(--text-subtle)" }}>접근 권한이 없습니다</p>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: "var(--bg)" }}>
-      {/* 헤더 */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">🔐 계정관리</h1>
-            <p className="text-xs text-slate-500 mt-0.5">CRM 사용자 계정 및 비밀번호 관리 · 관리자 전용</p>
-          </div>
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-xl transition-all"
-            style={{ background: "var(--info)", color: "#fff" }}>
-            <UserPlus size={14} />{showAdd ? "닫기" : "신규 계정"}
-          </button>
+    <div className="premium-page mx-auto w-full max-w-[1920px] px-4 pb-12 pt-6 md:px-6 2xl:px-8">
+
+      {/* 토스트 */}
+      {toast && (
+        <div className="fixed right-4 top-4 z-50 inline-flex items-center gap-2 rounded-[12px] border px-4 py-2.5 text-[13px] font-semibold shadow-lg"
+          style={{ background: "var(--success-bg)", color: "var(--success-text)", borderColor: "var(--success-border)" }}>
+          <Check size={14} /> {toast}
         </div>
+      )}
+      {error && (
+        <div className="fixed right-4 top-4 z-50 inline-flex items-center gap-2 rounded-[12px] border px-4 py-2.5 text-[13px] font-semibold shadow-lg"
+          style={{ background: "var(--danger-bg)", color: "var(--danger-text)", borderColor: "var(--danger-border)" }}>
+          <AlertTriangle size={14} /> {error}
+        </div>
+      )}
+
+      {/* 헤더 */}
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[11px] border"
+            style={{ background: "var(--purple-bg)", borderColor: "var(--purple-border)", color: "var(--purple-text)" }}>
+            <Shield size={16} />
+          </div>
+          <div>
+            <h1 className="crm-title">계정관리</h1>
+            <p className="crm-subtitle mt-0.5">CRM 사용자 계정 및 비밀번호 관리 · 관리자 전용</p>
+          </div>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)} className="btn-premium btn-primary h-10">
+          <UserPlus size={14} /> {showAdd ? "닫기" : "신규 계정"}
+        </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        {/* 토스트/에러 */}
-        {toast && <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 shadow-lg flex items-center gap-2"><Check size={14} />{toast}</div>}
-        {error && <div className="fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 shadow-lg flex items-center gap-2"><AlertTriangle size={14} />{error}</div>}
-
-        {/* 신규 계정 추가 폼 */}
-        {showAdd && (
-          <div className="rounded-xl p-5" style={{ background: "var(--surface)", border: "2px solid var(--info)" }}>
-            <p className="text-sm font-bold mb-3" style={{ color: "var(--text)" }}>신규 계정 추가</p>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <input value={addForm.id} onChange={e => setAddForm({ ...addForm, id: e.target.value })}
-                placeholder="아이디" className="px-3 py-2 text-sm rounded-xl outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              <input value={addForm.password} onChange={e => setAddForm({ ...addForm, password: e.target.value })}
-                placeholder="비밀번호 (6자 이상)" className="px-3 py-2 text-sm rounded-xl outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              <input value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })}
-                placeholder="이름" className="px-3 py-2 text-sm rounded-xl outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              <input value={addForm.title} onChange={e => setAddForm({ ...addForm, title: e.target.value })}
-                placeholder="직급" className="px-3 py-2 text-sm rounded-xl outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }} />
-              <div className="flex gap-2">
-                <select value={addForm.role} onChange={e => setAddForm({ ...addForm, role: e.target.value })}
-                  className="flex-1 px-3 py-2 text-sm rounded-xl outline-none"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}>
-                  <option value="admin">관리자</option>
-                  <option value="exec">실행파트</option>
-                  <option value="ops">운영파트</option>
-                  <option value="ad">광고사업부</option>
-                  <option value="shared">공용</option>
-                </select>
-                <button onClick={handleAddUser} disabled={addingUser}
-                  className="px-4 py-2 text-sm font-bold rounded-xl text-white disabled:opacity-50"
-                  style={{ background: "var(--info)" }}>
-                  {addingUser ? "..." : "추가"}
-                </button>
-              </div>
+      {/* 신규 계정 추가 폼 */}
+      {showAdd && (
+        <div className="premium-card mb-5 rounded-[22px] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <UserPlus size={14} style={{ color: "var(--accent-text)" }} />
+            <p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>신규 계정 추가</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(140px,1fr)_minmax(160px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_auto]">
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">아이디</span>
+              <input value={addForm.id} onChange={(e) => setAddForm({ ...addForm, id: e.target.value })}
+                placeholder="아이디" className="crm-search h-11 w-full px-3 font-normal" />
+            </label>
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">비밀번호</span>
+              <input value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+                placeholder="6자 이상" type="password" className="crm-search h-11 w-full px-3 font-normal" />
+            </label>
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">이름</span>
+              <input value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                placeholder="이름" className="crm-search h-11 w-full px-3 font-normal" />
+            </label>
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">직급</span>
+              <input value={addForm.title} onChange={(e) => setAddForm({ ...addForm, title: e.target.value })}
+                placeholder="직급" className="crm-search h-11 w-full px-3 font-normal" />
+            </label>
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">역할</span>
+              <select value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
+                className="crm-search h-11 w-full px-3 font-normal">
+                <option value="admin">관리자</option>
+                <option value="exec">실행파트</option>
+                <option value="ops">운영파트</option>
+                <option value="ad">광고사업부</option>
+                <option value="shared">공용</option>
+              </select>
+            </label>
+            <div className="flex flex-col items-start gap-1.5">
+              <span className="crm-meta block text-[11px] font-normal" style={{ color: "transparent", userSelect: "none" }}>저장</span>
+              <button onClick={handleAddUser} disabled={addingUser} className="btn-premium btn-primary h-11 whitespace-nowrap px-4">
+                {addingUser ? "..." : "계정 추가"}
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* 계정 목록 */}
+      {/* 계정 목록 */}
+      <section className="premium-card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-20"><div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="animate-spin" size={28} style={{ color: "var(--accent-text)" }} />
+          </div>
         ) : (
-          <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-            <table className="w-full" style={{ tableLayout: "fixed" }}>
+          <div className="overflow-x-auto">
+            <table className="crm-table w-full min-w-[1080px]">
               <thead>
-                <tr style={{ borderBottom: "2px solid var(--border)" }}>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 140 }}>ID</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 100 }}>이름</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 80 }}>직급</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 100 }}>역할</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 200 }}>비밀번호</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 100 }}>정보수정</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold" style={{ color: "var(--text-muted)", width: 60 }}>삭제</th>
+                <tr>
+                  <th style={{ width: 160 }}>ID</th>
+                  <th style={{ width: 120 }}>이름</th>
+                  <th style={{ width: 120 }}>직급</th>
+                  <th style={{ width: 130 }}>역할</th>
+                  <th style={{ width: 280 }}>비밀번호</th>
+                  <th style={{ width: 120 }}>정보 수정</th>
+                  <th style={{ width: 80 }}>삭제</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => {
-                  const rl = ROLE_LABEL[u.role] || { label: u.role, color: "#999" };
+                {users.map((u) => {
+                  const rl = ROLE_LABEL[u.role] || { label: u.role, tone: "muted" as const };
+                  const rt = ROLE_TONE_STYLE[rl.tone];
                   const isPwEdit = editingPw === u.id;
                   const isInfoEdit = editingInfo === u.id;
                   return (
-                    <tr key={u.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td className="px-4 py-3 text-center text-sm font-mono font-bold" style={{ color: "var(--text)" }}>{u.id}</td>
-                      <td className="px-4 py-3 text-center text-sm font-semibold" style={{ color: "var(--text)" }}>
-                        {isInfoEdit ? (
-                          <input value={editName} onChange={e => setEditName(e.target.value)}
-                            className="w-20 px-2 py-1 text-sm text-center rounded-lg outline-none"
-                            style={{ background: "var(--bg)", border: "1px solid var(--info)", color: "var(--text)" }} />
-                        ) : u.name}
+                    <tr key={u.id}>
+                      <td>
+                        <span className="font-mono text-[13px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{u.id}</span>
                       </td>
-                      <td className="px-4 py-3 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                      <td>
                         {isInfoEdit ? (
-                          <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                            className="w-20 px-2 py-1 text-sm text-center rounded-lg outline-none"
-                            style={{ background: "var(--bg)", border: "1px solid var(--info)", color: "var(--text)" }} />
-                        ) : u.title}
+                          <input value={editName} onChange={(e) => setEditName(e.target.value)}
+                            className="crm-search h-9 w-24 px-2 text-center font-normal" />
+                        ) : (
+                          <span className="text-[13px]" style={{ color: "var(--text)" }}>{u.name}</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td>
                         {isInfoEdit ? (
-                          <select value={editRole} onChange={e => setEditRole(e.target.value)}
-                            className="px-2 py-1 text-xs rounded-lg outline-none"
-                            style={{ background: "var(--bg)", border: "1px solid var(--info)", color: "var(--text)" }}>
+                          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                            className="crm-search h-9 w-24 px-2 text-center font-normal" />
+                        ) : (
+                          <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>{u.title}</span>
+                        )}
+                      </td>
+                      <td>
+                        {isInfoEdit ? (
+                          <select value={editRole} onChange={(e) => setEditRole(e.target.value)}
+                            className="crm-search h-9 w-28 px-2 font-normal">
                             <option value="admin">관리자</option>
                             <option value="exec">실행파트</option>
                             <option value="ops">운영파트</option>
@@ -247,66 +278,79 @@ export default function AccountManagePage() {
                             <option value="shared">공용</option>
                           </select>
                         ) : (
-                          <span className="text-xs px-2.5 py-1 rounded-full font-bold" style={{ background: `${rl.color}15`, color: rl.color, border: `1px solid ${rl.color}30` }}>
+                          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                            style={{ background: rt.bg, color: rt.text, borderColor: rt.border }}>
                             {rl.label}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td>
                         {isPwEdit ? (
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
                             <div className="relative">
-                              <input type={showPw ? "text" : "password"} value={newPw}
-                                onChange={e => setNewPw(e.target.value)}
+                              <input
+                                type={showPw ? "text" : "password"}
+                                value={newPw}
+                                onChange={(e) => setNewPw(e.target.value)}
                                 placeholder="새 비밀번호"
-                                className="w-32 pl-2 pr-7 py-1 text-sm rounded-lg outline-none"
-                                style={{ background: "var(--bg)", border: "1px solid var(--info)", color: "var(--text)" }}
-                                onKeyDown={e => e.key === "Enter" && handleChangePw(u.id)} />
-                              <button onClick={() => setShowPw(!showPw)} className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }}>
+                                className="crm-search h-9 w-40 pl-2 pr-7 font-normal"
+                                onKeyDown={(e) => e.key === "Enter" && handleChangePw(u.id)}
+                              />
+                              <button onClick={() => setShowPw(!showPw)}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-subtle)" }}>
                                 {showPw ? <EyeOff size={12} /> : <Eye size={12} />}
                               </button>
                             </div>
                             <button onClick={() => handleChangePw(u.id)} disabled={savingPw}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50">
-                              <Check size={12} />
+                              className="flex h-9 w-9 items-center justify-center rounded-[10px] border transition-all disabled:opacity-50"
+                              style={{ background: "var(--success-bg)", color: "var(--success-text)", borderColor: "var(--success-border)" }}>
+                              <Check size={13} />
                             </button>
                             <button onClick={() => { setEditingPw(null); setNewPw(""); setShowPw(false); }}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50" style={{ color: "var(--text-muted)" }}>
-                              <X size={12} />
+                              className="flex h-9 w-9 items-center justify-center rounded-[10px] border"
+                              style={{ background: "var(--surface-2)", color: "var(--text-subtle)", borderColor: "var(--border)" }}>
+                              <X size={13} />
                             </button>
                           </div>
                         ) : (
                           <button onClick={() => { setEditingPw(u.id); setNewPw(""); setEditingInfo(null); }}
-                            className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                            style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.2)" }}>
-                            <Key size={11} className="inline mr-1" />변경
+                            className="inline-flex items-center gap-1 rounded-[10px] border px-3 py-1.5 text-[12px] font-normal transition-all"
+                            style={{ background: "var(--warning-bg)", color: "var(--warning-text)", borderColor: "var(--warning-border)" }}>
+                            <Key size={12} /> 변경
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td>
                         {isInfoEdit ? (
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
                             <button onClick={() => handleUpdateInfo(u.id)} disabled={savingInfo}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-50">
-                              <Check size={12} />
+                              className="flex h-9 w-9 items-center justify-center rounded-[10px] border disabled:opacity-50"
+                              style={{ background: "var(--info-bg)", color: "var(--info-text)", borderColor: "var(--info-border)" }}>
+                              <Check size={13} />
                             </button>
                             <button onClick={() => setEditingInfo(null)}
-                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50" style={{ color: "var(--text-muted)" }}>
-                              <X size={12} />
+                              className="flex h-9 w-9 items-center justify-center rounded-[10px] border"
+                              style={{ background: "var(--surface-2)", color: "var(--text-subtle)", borderColor: "var(--border)" }}>
+                              <X size={13} />
                             </button>
                           </div>
                         ) : (
-                          <button onClick={() => { setEditingInfo(u.id); setEditName(u.name); setEditTitle(u.title); setEditRole(u.role); setEditingPw(null); }}
-                            className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                            style={{ background: "rgba(59,130,246,0.1)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.2)" }}>
+                          <button
+                            onClick={() => {
+                              setEditingInfo(u.id);
+                              setEditName(u.name); setEditTitle(u.title); setEditRole(u.role);
+                              setEditingPw(null);
+                            }}
+                            className="inline-flex items-center rounded-[10px] border px-3 py-1.5 text-[12px] font-normal transition-all"
+                            style={{ background: "var(--info-bg)", color: "var(--info-text)", borderColor: "var(--info-border)" }}>
                             수정
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td>
                         <button onClick={() => handleDelete(u.id, u.name)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors"
-                          style={{ color: "var(--text-muted)" }}>
+                          className="flex h-9 w-9 items-center justify-center rounded-[10px] border transition-all"
+                          style={{ background: "var(--danger-bg)", color: "var(--danger-text)", borderColor: "var(--danger-border)" }}>
                           <Trash2 size={13} />
                         </button>
                       </td>
@@ -317,15 +361,19 @@ export default function AccountManagePage() {
             </table>
           </div>
         )}
+      </section>
 
-        {/* 보안 안내 */}
-        <div className="rounded-xl p-4" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
-          <p className="text-xs font-bold mb-1" style={{ color: "#f59e0b" }}>🔒 보안 안내</p>
-          <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
-            비밀번호는 bcrypt 해시로 암호화되어 저장됩니다. 관리자도 기존 비밀번호를 확인할 수 없으며, 새 비밀번호로만 변경 가능합니다.
-            비밀번호 변경 시 해당 사용자의 기존 세션이 즉시 만료됩니다.
-          </p>
+      {/* 보안 안내 */}
+      <div className="mt-5 rounded-[14px] border p-4"
+        style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)" }}>
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <Lock size={13} style={{ color: "var(--warning-text)" }} />
+          <p className="text-[12px] font-bold" style={{ color: "var(--warning-text)" }}>보안 안내</p>
         </div>
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--text)" }}>
+          비밀번호는 bcrypt 해시로 암호화되어 저장됩니다. 관리자도 기존 비밀번호를 확인할 수 없으며, 새 비밀번호로만 변경 가능합니다.
+          비밀번호 변경 시 해당 사용자의 기존 세션이 즉시 만료됩니다.
+        </p>
       </div>
     </div>
   );
