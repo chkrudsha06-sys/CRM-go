@@ -47,7 +47,7 @@ function approvalBoldBlock(text: string) {
   return { type: "text", text, inlines: [{ type: "styled", text, bold: true }] };
 }
 function approvalSubmitBtn(label: string, value: string, style: "default"|"primary"|"danger" = "default") {
-  return { type: "button", text: label, style, action: { type: "submit_action", value } };
+  return { type: "button", text: label, style, action: { type: "submit_action", name: "approval_action", value } };
 }
 
 function approvalPayloadLines(payload: Record<string, any>, requestType: string): string[] {
