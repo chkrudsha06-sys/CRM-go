@@ -25,6 +25,33 @@ function todayKST(): string {
   return kst.toISOString().slice(0, 10);
 }
 
+// MENTION_MAP (이름:이메일) 으로부터 이메일→이름 역방향 맵 생성
+function getNameByEmail(email: string): string | null {
+  const map = process.env.KAKAO_WORK_MENTION_MAP || "";
+  for (const pair of map.split(",")) {
+    const [n, e] = pair.split(":").map((s) => s.trim());
+    if (e === email) return n;
+  }
+  return null;
+}
+
+// userId → 카카오워크 이메일 조회
+async function getUserEmail(appKey: string, userId: number): Promise<string | null> {
+  try {
+    const res = await fetch(`${KAKAO_WORK_API_BASE}/users.info?user_id=${userId}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${appKey}` },
+      cache: "no-store",
+    });
+    const data = await res.json();
+    return data?.user?.identifications?.find((i: any) => i.type === "email")?.value
+      || data?.user?.work_email
+      || data?.user?.email
+      || null;
+  } catch { return null; }
+}
+
+// userId → CRM 이름 (MENTION_MAP 기반 → 없으면 display_name 폴백)
 async function getUserName(appKey: string, userId: number): Promise<string> {
   try {
     const res = await fetch(`${KAKAO_WORK_API_BASE}/users.info?user_id=${userId}`, {
@@ -33,6 +60,17 @@ async function getUserName(appKey: string, userId: number): Promise<string> {
       cache: "no-store",
     });
     const data = await res.json();
+    // 이메일로 MENTION_MAP에서 CRM 이름 먼저 조회
+    const email =
+      data?.user?.identifications?.find((i: any) => i.type === "email")?.value
+      || data?.user?.work_email
+      || data?.user?.email
+      || null;
+    if (email) {
+      const mapped = getNameByEmail(email);
+      if (mapped) return mapped;
+    }
+    // 폴백: display_name
     return data?.user?.display_name || data?.user?.name || "알 수 없음";
   } catch {
     return "알 수 없음";
