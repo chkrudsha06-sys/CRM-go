@@ -1253,32 +1253,24 @@ function ApprovalDetailSlidePanel({
               onClick={() => {
                 const el = document.getElementById("approval-preview-print");
                 if (!el) return;
-                const iframe = document.createElement("iframe");
-                iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;";
-                document.body.appendChild(iframe);
-                const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                if (!doc) return;
-                doc.open();
-                doc.write(`<!DOCTYPE html><html lang="ko"><head>
+                const origin = window.location.origin;
+                const win = window.open("", "_blank", "width=900,height=1100");
+                if (!win) return;
+                win.document.open();
+                win.document.write(`<!DOCTYPE html><html lang="ko"><head>
 <meta charset="utf-8"/>
-<title></title>
+<title>양식 출력</title>
+<base href="${origin}/"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
 <style>
-@page { size: A4 portrait; margin: 0; }
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-html, body { width: 210mm; height: 297mm; background: white; overflow: hidden; }
-body { display: flex; align-items: flex-start; justify-content: center; padding: 5mm; }
+@page { size: A4 portrait; margin: 5mm; }
+* { box-sizing: border-box; font-family: 'Pretendard', Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+body { background: white; margin: 0; padding: 0; }
 </style>
 </head><body>${el.innerHTML}</body></html>`);
-                doc.close();
-                iframe.onload = () => {
-                  try {
-                    iframe.contentWindow?.focus();
-                    iframe.contentWindow?.print();
-                  } finally {
-                    setTimeout(() => document.body.removeChild(iframe), 2000);
-                  }
-                };
+                win.document.close();
+                win.onload = () => { win.focus(); win.print(); };
+                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 800);
               }}
               className="btn-premium btn-secondary h-9"
             >
@@ -1292,39 +1284,27 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               onClick={() => {
                 const el = document.getElementById("approval-preview-print");
                 if (!el) return;
-                // 파일명: 요청사항명_신청자명_YYYYMMDD
                 const today = new Date();
                 const yyyymmdd = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}`;
                 const fileName = `${request.request_type}_${request.requester_name || ""}_${yyyymmdd}`;
-                const iframe = document.createElement("iframe");
-                iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;";
-                document.body.appendChild(iframe);
-                const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                if (!doc) return;
-                doc.open();
-                doc.write(`<!DOCTYPE html><html lang="ko"><head>
+                const origin = window.location.origin;
+                const win = window.open("", "_blank", "width=900,height=1100");
+                if (!win) return;
+                win.document.open();
+                win.document.write(`<!DOCTYPE html><html lang="ko"><head>
 <meta charset="utf-8"/>
 <title>${fileName}</title>
+<base href="${origin}/"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
 <style>
-@page { size: A4 portrait; margin: 0; }
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-html, body { width: 210mm; background: white; }
-body { display: flex; align-items: flex-start; justify-content: center; padding: 5mm; }
+@page { size: A4 portrait; margin: 5mm; }
+* { box-sizing: border-box; font-family: 'Pretendard', Arial, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+body { background: white; margin: 0; padding: 0; }
 </style>
 </head><body>${el.innerHTML}</body></html>`);
-                doc.close();
-                iframe.onload = () => {
-                  try {
-                    if (iframe.contentWindow) {
-                      iframe.contentWindow.document.title = fileName;
-                      iframe.contentWindow.focus();
-                      iframe.contentWindow.print();
-                    }
-                  } finally {
-                    setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 3000);
-                  }
-                };
+                win.document.close();
+                win.onload = () => { win.focus(); win.print(); };
+                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 800);
               }}
               className="btn-premium btn-secondary h-9"
             >
