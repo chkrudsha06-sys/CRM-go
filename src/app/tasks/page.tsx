@@ -892,101 +892,179 @@ function approvalStepText(request: ApprovalRequestRow) {
 }
 
 // ── 결재선 진행상황 컴포넌트 ──
-function ApprovalLineProgress({ request }: { request: ApprovalRequestRow }) {
+
+// ══════════════════════════════════════════════════════════════
+// 결재선 진행현황 — 충분한 크기 + 승인이력 반영
+// ══════════════════════════════════════════════════════════════
+function ApprovalLineProgress({
+  request,
+  actions = [],
+  large = false,
+}: {
+  request: ApprovalRequestRow;
+  actions?: ApprovalActionRow[];
+  large?: boolean;
+}) {
   const line = request.approval_line;
   if (!line || line.length === 0) return null;
 
   const currentApprover = effectiveCurrentApprover(request);
-  const isDone   = request.status === "완료";
+  const isDone     = request.status === "완료";
   const isRejected = request.status === "반려";
 
-  // 각 스텝의 실제 상태 계산
   type StepItem = { role?: string; name?: string; step?: number; status?: string };
-  function stepStatus(step: StepItem) {
+
+  function stepState(step: StepItem): "approved" | "active" | "rejected" | "pending" {
+    // approval_actions 이력에서 실제 승인 여부 우선 확인
+    const actorAction = actions.find(
+      (a) => a.actor_name === step.name && (a.action === "승인" || a.action === "반려")
+    );
+    if (actorAction) return actorAction.action === "승인" ? "approved" : "rejected";
+    // step 내부 status 확인
     if (step.status === "승인" || step.status === "완료") return "approved";
     if (step.status === "반려") return "rejected";
-    // 현재 승인권자이면 "active"
+    // 현재 대기 중인 승인권자
     if (step.name === currentApprover && !isDone && !isRejected) return "active";
-    // 완료/반려된 요청의 나머지 스텝은 done/rejected 처리
-    if (isDone) return "done_skip";
-    if (isRejected) return "rejected_skip";
+    // 전체 완료인데 별도 이력 없으면 approved 처리 (참조 스텝 등)
+    if (isDone && step.role === "참조") return "approved";
     return "pending";
   }
 
+  function stepAt(step: StepItem): string | null {
+    const a = actions.find(
+      (ac) => ac.actor_name === step.name && (ac.action === "승인" || ac.action === "반려")
+    );
+    return a?.created_at || null;
+  }
+
+  const dotSize  = large ? "h-12 w-12 rounded-full text-[15px]" : "h-9 w-9 rounded-full text-[12px]";
+  const nameSize = large ? "text-[13px]" : "text-[11px]";
+  const roleSize = large ? "text-[11px]" : "text-[10px]";
+  const badgeSize = large ? "text-[11px] px-2 py-0.5" : "text-[9px] px-1.5 py-px";
+
   return (
     <div
-      className="mt-3 rounded-[12px] border px-3 py-2.5"
+      className={large ? "mt-4 rounded-[16px] border p-5" : "mt-3 rounded-[12px] border px-4 py-3"}
       style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}
     >
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em]"
-        style={{ color: "var(--text-faint)" }}>결재선 진행현황</p>
-      <div className="flex items-center gap-0">
+      <p
+        className={`mb-3 font-semibold uppercase tracking-[0.07em] ${large ? "text-[11px]" : "text-[10px]"}`}
+        style={{ color: "var(--text-faint)" }}
+      >
+        결재선 진행현황
+      </p>
+
+      <div className="flex items-start">
         {line.map((step, idx) => {
-          const st = stepStatus(step);
-          const isLast = idx === line.length - 1;
+          const st      = stepState(step);
+          const isLast  = idx === line.length - 1;
+          const atTime  = stepAt(step);
 
           const dotBg =
             st === "approved" ? "var(--success)" :
-            st === "rejected" ? "var(--danger)" :
+            st === "rejected" ? "var(--danger)"  :
             st === "active"   ? "var(--accent-text)" :
-            "var(--surface-3)";
+            "transparent";
+
           const dotBorder =
-            st === "active"   ? "2px solid var(--accent-text)" :
-            st === "approved" ? "2px solid var(--success)" :
-            st === "rejected" ? "2px solid var(--danger)" :
+            st === "approved" ? "2.5px solid var(--success)" :
+            st === "rejected" ? "2.5px solid var(--danger)"  :
+            st === "active"   ? "2.5px solid var(--accent-text)" :
             "2px solid var(--border)";
-          const label =
+
+          const iconText =
             st === "approved" ? "✓" :
             st === "rejected" ? "✕" :
             st === "active"   ? "●" : "";
+
           const nameColor =
-            st === "active"   ? "var(--accent-text)" :
             st === "approved" ? "var(--success-text)" :
-            st === "rejected" ? "var(--danger-text)" :
+            st === "rejected" ? "var(--danger-text)"  :
+            st === "active"   ? "var(--accent-text)"  :
             "var(--text-faint)";
-          const roleColor =
-            st === "active" ? "var(--accent-text)" : "var(--text-faint)";
 
           return (
-            <div key={idx} className="flex flex-1 items-center">
-              <div className="flex flex-col items-center gap-1">
-                {/* 스텝 도트 */}
+            <div key={idx} className="flex flex-1 items-start">
+              {/* 스텝 */}
+              <div className="flex flex-col items-center gap-1.5" style={{ minWidth: large ? 80 : 60 }}>
+                {/* 도트 */}
                 <div
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
+                  className={`flex shrink-0 items-center justify-center font-black ${dotSize}`}
                   style={{
                     background: dotBg,
                     border: dotBorder,
-                    color: st === "pending" || st === "done_skip" || st === "rejected_skip" ? "var(--text-faint)" : "white",
+                    color: st === "pending" ? "var(--text-faint)" : "white",
                   }}
                 >
-                  {label}
+                  {iconText}
                 </div>
-                {/* 이름 + 역할 */}
-                <div className="flex flex-col items-center text-center" style={{ minWidth: 44 }}>
-                  <span className="text-[10px] font-bold leading-tight" style={{ color: nameColor }}>
-                    {step.name || "-"}
+
+                {/* 이름 */}
+                <span
+                  className={`text-center font-bold leading-tight ${nameSize}`}
+                  style={{ color: nameColor }}
+                >
+                  {step.name || "-"}
+                </span>
+
+                {/* 역할 */}
+                <span
+                  className={`text-center font-normal ${roleSize}`}
+                  style={{ color: "var(--text-faint)" }}
+                >
+                  {step.role || ""}
+                </span>
+
+                {/* 상태 뱃지 */}
+                {st === "active" && (
+                  <span
+                    className={`rounded-[6px] font-bold ${badgeSize}`}
+                    style={{
+                      background: "var(--accent-subtle)",
+                      color: "var(--accent-text)",
+                      border: "1px solid var(--accent-border)",
+                    }}
+                  >
+                    대기중
                   </span>
-                  <span className="text-[9px] font-normal" style={{ color: roleColor }}>
-                    {step.role || ""}
+                )}
+                {st === "approved" && (
+                  <span
+                    className={`font-bold ${badgeSize}`}
+                    style={{ color: "var(--success-text)" }}
+                  >
+                    승인
+                    {atTime && large && (
+                      <span
+                        className="ml-1 font-normal"
+                        style={{ color: "var(--text-faint)", fontSize: "10px" }}
+                      >
+                        {timeAgo(atTime)}
+                      </span>
+                    )}
                   </span>
-                  {st === "active" && (
-                    <span className="mt-0.5 rounded-[5px] px-1 py-px text-[9px] font-bold"
-                      style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}>
-                      대기중
-                    </span>
-                  )}
-                  {(st === "approved") && (
-                    <span className="mt-0.5 text-[9px] font-bold" style={{ color: "var(--success-text)" }}>승인</span>
-                  )}
-                  {(st === "rejected") && (
-                    <span className="mt-0.5 text-[9px] font-bold" style={{ color: "var(--danger-text)" }}>반려</span>
-                  )}
-                </div>
+                )}
+                {st === "rejected" && (
+                  <span
+                    className={`font-bold ${badgeSize}`}
+                    style={{ color: "var(--danger-text)" }}
+                  >
+                    반려
+                  </span>
+                )}
               </div>
+
               {/* 연결선 */}
               {!isLast && (
-                <div className="mx-1 h-px flex-1"
-                  style={{ background: st === "approved" ? "var(--success)" : "var(--border-subtle)" }} />
+                <div
+                  className="mx-1 mt-4 h-px flex-1"
+                  style={{
+                    background:
+                      st === "approved" ? "var(--success)" :
+                      st === "active"   ? "var(--accent-border)" :
+                      "var(--border-subtle)",
+                  }}
+                />
               )}
             </div>
           );
@@ -996,6 +1074,9 @@ function ApprovalLineProgress({ request }: { request: ApprovalRequestRow }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// ApprovalCard — 요약 정보만 표시, 클릭하면 슬라이드 패널
+// ══════════════════════════════════════════════════════════════
 function ApprovalCard({
   request,
   me,
@@ -1011,145 +1092,79 @@ function ApprovalCard({
   onReject: () => void;
   onDelete?: () => void;
 }) {
-  const payload = (request.payload || {}) as Partial<ApprovalForm>;
   const currentApprover = effectiveCurrentApprover(request);
   const isReference = request.reference_name === me && currentApprover !== me;
-  const isApprover = currentApprover === me;
+  const isApprover  = currentApprover === me;
   const isRequester = request.requester_name === me;
-  const canApprove = isApprover && request.status === "진행중";
+
+  const statusTone =
+    request.status === "완료"  ? "success" :
+    request.status === "반려"  ? "danger"  : "info";
+
+  const groupTone = LEAVE_TYPES.includes(request.request_type as ApprovalType) ? "success" : "warning";
 
   return (
-    <div className="premium-card premium-card-hover w-full p-4">
-      <div className="flex items-start gap-4">
+    <div
+      className="premium-card premium-card-hover w-full cursor-pointer px-5 py-4"
+      onClick={onView}
+    >
+      <div className="flex items-center gap-4">
         <PremiumIcon
           icon={FileText}
-          tone={
-            LEAVE_TYPES.includes(request.request_type as ApprovalType)
-              ? "success"
-              : "warning"
-          }
+          tone={groupTone}
         />
 
         <div className="min-w-0 flex-1">
+          {/* ── 뱃지 행 ── */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge
-              tone={
-                LEAVE_TYPES.includes(request.request_type as ApprovalType)
-                  ? "success"
-                  : "warning"
-              }
-            >
-              {request.request_group || "결재요청"}
-            </Badge>
-            <Badge
-              tone={
-                request.status === "완료"
-                  ? "success"
-                  : request.status === "반려"
-                    ? "danger"
-                    : "info"
-              }
-            >
-              {request.status || "진행중"}
-            </Badge>
+            <Badge tone={groupTone}>{request.request_group || "결재요청"}</Badge>
+            <Badge tone={statusTone}>{request.status || "진행중"}</Badge>
             {isReference && <Badge tone="purple">참조확인</Badge>}
-            {isApprover && <Badge tone="danger">승인요청</Badge>}
+            {isApprover  && <Badge tone="danger">승인요청</Badge>}
             {isRequester && <Badge tone="muted">내 요청</Badge>}
           </div>
 
+          {/* ── 요청 제목 ── */}
           <p
-            className="mt-3 text-[14px] font-[820] leading-relaxed"
+            className="mt-2 text-[14px] font-[820] leading-snug tracking-[-0.02em]"
             style={{ color: "var(--text)" }}
           >
             {getApprovalLabel(request)}
           </p>
 
-          <div
-            className="mt-2 flex flex-wrap items-center gap-3 text-[12px] font-semibold"
-            style={{ color: "var(--text-subtle)" }}
-          >
-            <span>
+          {/* ── 신청자 · 작성일 ── */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[12px] font-semibold">
+            <span style={{ color: "var(--text-subtle)" }}>
               신청자{" "}
               <strong style={{ color: "var(--text-muted)" }}>
                 {request.requester_name || "-"}
               </strong>{" "}
-              {request.requester_title || ""}
+              <span style={{ color: "var(--text-faint)" }}>{request.requester_title || ""}</span>
             </span>
-            {PAYMENT_TYPES.includes(request.request_type as ApprovalType) && (
-              <span>
-                금액{" "}
-                <strong style={{ color: "var(--accent-text)" }}>
-                  {payload.totalAmount || payload.amount || "-"}
-                </strong>
-              </span>
-            )}
-            <span style={{ color: "var(--text-faint)" }}>작성 {timeAgo(request.created_at)}</span>
+            <span style={{ color: "var(--text-faint)" }}>
+              {timeAgo(request.created_at)}
+            </span>
           </div>
+        </div>
 
-          {/* ── 결재선 진행상황 ── */}
-          <ApprovalLineProgress request={request} />
-
-          {payload.reason || payload.leaveReason ? (
-            <p
-              className="mt-3 line-clamp-2 whitespace-pre-wrap rounded-[12px] px-3 py-2 text-[12.5px] font-semibold leading-relaxed"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--text-muted)",
-                border: "1px solid var(--border-subtle)",
-              }}
-            >
-              {payload.reason || payload.leaveReason}
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onView}
-              className="btn-premium btn-secondary h-8"
-            >
-              <FileText size={13} />
-              작성 양식 보기
-            </button>
-
-            {canApprove && (
-              <>
-                <button
-                  type="button"
-                  onClick={onApprove}
-                  className="btn-premium btn-primary h-8"
-                >
-                  <Check size={13} />
-                  승인
-                </button>
-                <button
-                  type="button"
-                  onClick={onReject}
-                  className="btn-premium btn-danger h-8"
-                >
-                  <X size={13} />
-                  반려
-                </button>
-              </>
-            )}
-            {/* 본인 요청건 삭제 버튼 (모든 상태) */}
-            {onDelete && isRequester && (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="btn-premium btn-danger h-8"
-              >
-                <Trash2 size={13} />
-                삭제
-              </button>
-            )}
-          </div>
+        {/* ── 현재단계 요약 (오른쪽 끝) ── */}
+        <div className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
+          <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>현재단계</span>
+          <span
+            className="text-[13px] font-bold tracking-[-0.01em]"
+            style={{ color: request.status === "완료" ? "var(--success-text)" : request.status === "반려" ? "var(--danger-text)" : "var(--accent-text)" }}
+          >
+            {approvalStepText(request)}
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// ApprovalDetailSlidePanel — 결재선 크게 + 전체 상세 + 이력
+// ══════════════════════════════════════════════════════════════
 function ApprovalDetailSlidePanel({
   request,
   me,
@@ -1167,65 +1182,70 @@ function ApprovalDetailSlidePanel({
   onReject: () => void;
   onDelete?: () => void;
 }) {
-  const payload = (request.payload || {}) as Partial<ApprovalForm>;
+  const payload  = (request.payload || {}) as Partial<ApprovalForm>;
   const currentApprover = effectiveCurrentApprover(request);
   const canApprove = currentApprover === me && request.status === "진행중";
   const isReference = request.reference_name === me && currentApprover !== me;
+
   const previewForm: ApprovalForm = {
     ...EMPTY_APPROVAL_FORM,
     ...(payload as Partial<ApprovalForm>),
-    requestType: request.request_type as ApprovalType,
-    writer: request.requester_name || payload.writer || me,
-    department: payload.department || "실행파트",
-    requestDate: payload.requestDate || request.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+    requestType:  request.request_type as ApprovalType,
+    writer:       request.requester_name || payload.writer || me,
+    department:   payload.department || "실행파트",
+    requestDate:  payload.requestDate || request.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
   };
+
+  const groupTone = LEAVE_TYPES.includes(request.request_type as ApprovalType) ? "success" : "warning";
+  const statusTone =
+    request.status === "완료"  ? "success" :
+    request.status === "반려"  ? "danger"  : "info";
 
   return (
     <>
       <div className="slide-panel-overlay" onClick={onClose} />
       <aside
         className="slide-panel"
-        style={{ width: "min(1280px, calc(100vw - 24px))", maxWidth: "calc(100vw - 24px)" }}
+        style={{ width: "min(860px, calc(100vw - 24px))", maxWidth: "calc(100vw - 24px)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="slide-panel-header">
+        {/* ── 헤더 ── */}
+        <div className="slide-panel-header space-y-4">
+          {/* 상단: 뱃지 + 닫기 */}
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge tone={LEAVE_TYPES.includes(request.request_type as ApprovalType) ? "success" : "warning"}>
-                  {request.request_group || "결재요청"}
-                </Badge>
-                <Badge tone={request.status === "완료" ? "success" : request.status === "반려" ? "danger" : "info"}>
-                  {request.status || "진행중"}
-                </Badge>
+                <Badge tone={groupTone}>{request.request_group || "결재요청"}</Badge>
+                <Badge tone={statusTone}>{request.status || "진행중"}</Badge>
                 {isReference && <Badge tone="purple">참조확인</Badge>}
-                {canApprove && <Badge tone="danger">승인권자</Badge>}
+                {canApprove  && <Badge tone="danger">승인권자</Badge>}
               </div>
+
               <h2
-                className="mt-3 text-[21px] font-[820] leading-snug tracking-[-0.025em]"
+                className="mt-2.5 text-[18px] font-[820] leading-snug tracking-[-0.025em]"
                 style={{ color: "var(--text-strong)" }}
               >
-                작성된 양식 보기
+                {getApprovalLabel(request)}
               </h2>
-              <p
-                className="mt-2 text-[13px] font-semibold"
-                style={{ color: "var(--text-subtle)" }}
-              >
-                신청자 {request.requester_name || "-"} · 현재 결재자 {currentApprover || "-"}
+              <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>
+                신청자 {request.requester_name || "-"}{request.requester_title ? ` · ${request.requester_title}` : ""} · {timeAgo(request.created_at)}
                 {isReference ? " · 참조자는 승인 권한이 없습니다." : ""}
               </p>
             </div>
-
             <button
               type="button"
               onClick={onClose}
-              className="btn-premium btn-secondary h-9 w-9 p-0"
+              className="btn-premium btn-secondary h-9 w-9 shrink-0 p-0"
             >
               <X size={16} />
             </button>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          {/* ── 결재선 진행현황 (크게) ── */}
+          <ApprovalLineProgress request={request} actions={actions} large />
+
+          {/* ── 액션 버튼 ── */}
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
@@ -1263,6 +1283,7 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               <FileText size={14} />
               양식 출력
             </button>
+
             {canApprove && (
               <>
                 <button type="button" onClick={onApprove} className="btn-premium btn-primary h-9">
@@ -1276,31 +1297,25 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               </>
             )}
           </div>
-          {/* 본인 요청건 삭제 버튼 (모든 상태) */}
+
+          {/* 삭제 버튼 */}
           {onDelete && request.requester_name === me && (
-            <div className="mt-3 px-1">
-              <button
-                type="button"
-                onClick={onDelete}
-                className="btn-premium btn-danger w-full h-9 text-[12px]"
-              >
-                <Trash2 size={13} />
-                요청서 삭제
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="btn-premium btn-danger w-full h-9 text-[12px]"
+            >
+              <Trash2 size={13} />
+              요청서 삭제
+            </button>
           )}
         </div>
 
+        {/* ── 본문: 작성된 양식 미리보기 ── */}
         <div className="slide-panel-body">
           <div
             className="rounded-[18px] p-4"
-            style={{
-              background: "#0b0d12",
-              overflow: "auto",
-              maxWidth: "100%",
-              display: "flex",
-              justifyContent: "center",
-            }}
+            style={{ background: "#0b0d12", overflow: "auto", maxWidth: "100%", display: "flex", justifyContent: "center" }}
           >
             <div id="approval-preview-print">
               <ApprovalPreview form={previewForm} me={me} actions={actions} />
@@ -1311,6 +1326,7 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
     </>
   );
 }
+
 
 function DetailSlidePanel({
   task,
