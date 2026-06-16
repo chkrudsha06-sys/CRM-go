@@ -49,10 +49,15 @@ export async function buildCRMContext(intent: IntentResult, user: CRMUser): Prom
 // 고객 조회 / 활동 이력
 // ═══════════════════════════════════════════════════════════════
 async function buildContactContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  const nameKeywords = intent.keywords.filter((k) => /^[가-힣]{2,4}/.test(k));
+  const STOP = ["코어", "자비스", "고객", "담당", "정보", "현황", "분양", "회비", "활동", "노트", "매출", "오늘", "전체", "트럭", "완판"];
+  const nameKeywords = intent.keywords
+    .filter((k) => /^[가-힣]{2,4}$/.test(k.split(" ")[0]))
+    .map((k) => k.split(" ")[0])
+    .filter((k) => !STOP.includes(k));
+
   if (nameKeywords.length === 0) return "[고객 조회] 조회할 고객 이름이 명확하지 않음. 사용자에게 고객명을 물어볼 것.";
 
-  const targetName = nameKeywords[0].split(" ")[0];
+  const targetName = nameKeywords[0];
 
   const { data: contacts } = await supabase
     .from("contacts")
