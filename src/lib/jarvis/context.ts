@@ -166,29 +166,30 @@ function formatContactContext(contacts: any[], notes: any[], sales: any[], conte
 async function buildSalesContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
   // 기간 필터 결정
   const now = new Date();
-  const yyyymm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  let monthStart = `${yyyymm}-01`;
-  let monthEnd = `${yyyymm}-31`;
+  let targetYear = now.getFullYear();
+  let targetMonth = now.getMonth(); // 0-indexed
 
   if (intent.keywords.includes("지난달")) {
     const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const ly = last.getFullYear();
-    const lm = String(last.getMonth() + 1).padStart(2, "0");
-    monthStart = `${ly}-${lm}-01`;
-    monthEnd = `${ly}-${lm}-31`;
+    targetYear = last.getFullYear();
+    targetMonth = last.getMonth();
   }
+
+  // 월 시작 ~ 다음달 시작 (말일 계산 불필요, 존재하지 않는 날짜 회피)
+  const monthStart = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-01`;
+  const nextMonthDate = new Date(targetYear, targetMonth + 1, 1);
+  const monthEnd = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
 
   let query = supabase
     .from("ad_executions")
     .select("payment_date,channel,contract_route,execution_amount,refund_amount,team_member,member_name")
     .gte("payment_date", monthStart)
-    .lte("payment_date", monthEnd)
+    .lt("payment_date", monthEnd)
     .order("payment_date", { ascending: false })
     .limit(500);
 
-  if (!isAdmin && user.name) {
-    query = query.eq("team_member", user.name);
-  }
+  // 매출은 팀 단위 관리이므로 전체 조회 (sales 페이지와 동일 동작)
+  // 권한별 본인 필터를 적용하지 않음 — 대협팀 매출은 팀 공유 데이터
 
   // 채널 필터
   for (const ch of ["사이다페이", "효성CMS", "호갱노노", "LMS", "하이타겟"]) {
@@ -201,7 +202,9 @@ async function buildSalesContext(intent: IntentResult, user: CRMUser, isAdmin: b
   const { data } = await query;
   const sales = data || [];
 
-  if (sales.length === 0) return "[매출 데이터] 해당 기간 조건에 일치하는 매출 없음";
+  if (sales.length === 0) {
+    return `[매출 컨텍스트 — ${monthStart} ~ ${monthEnd}]\n조회된 매출 레코드: 0건\n(주의: 이는 해당 기간 매출이 실제로 없거나, payment_date 형식 차이로 조회되지 않았을 수 있음. 사용자에게 통합매출관리 페이지 직접 확인을 권유할 것.)`;
+  }
 
   // 집계
   const total = sales.reduce((s, r) => s + (r.execution_amount || 0) - (r.refund_amount || 0), 0);
