@@ -257,24 +257,48 @@ export default function Sidebar({
     if (!user?.name) return;
     const storageKey = `crm_user_slogan_${user.name}`;
     const local = localStorage.getItem(storageKey) || "";
+
+    // 1) localStorage 값을 먼저 화면에 반영 (즉시 표시 → 깜빡임 방지)
     if (local) {
       setSlogan(local);
       setSloganDraft(local);
     }
 
+    // 2) Supabase에서 최신 데이터 조회
     const { data, error } = await supabase
       .from("crm_user_slogans")
       .select("slogan")
       .eq("user_name", user.name)
       .maybeSingle();
 
-    if (!error && data?.slogan !== undefined && data?.slogan !== null) {
-      const next = String(data.slogan || "");
+    if (error) {
+      // 테이블/RLS 문제 — 콘솔에만 기록, localStorage 값 유지
+      console.warn("[slogan] load failed, using localStorage:", error.message);
+      return;
+    }
+
+    // 3) Supabase에 값이 있을 때만 덮어쓰기
+    //    값이 없거나 빈 문자열이면 localStorage 값을 그대로 유지
+    if (data?.slogan && String(data.slogan).trim()) {
+      const next = String(data.slogan);
       setSlogan(next);
       setSloganDraft(next);
       localStorage.setItem(storageKey, next);
     }
-  }, [user?.name]);
+    // Supabase가 비어있고 localStorage에 값이 있으면 → 백필(저장)
+    else if (local && local.trim()) {
+      void supabase.from("crm_user_slogans").upsert(
+        {
+          user_name: user.name,
+          user_title: user.title || null,
+          role: user.role || null,
+          slogan: local,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_name" },
+      );
+    }
+  }, [user?.name, user?.title, user?.role]);
 
   useEffect(() => {
     void loadSlogan();
@@ -284,10 +308,13 @@ export default function Sidebar({
     const next = sloganDraft.trim();
     const storageKey = `crm_user_slogan_${user.name}`;
     setSloganSaving(true);
+
+    // 1) 낙관적 업데이트 (즉시 화면 반영)
     localStorage.setItem(storageKey, next);
     setSlogan(next);
 
-    await supabase.from("crm_user_slogans").upsert(
+    // 2) Supabase 저장
+    const { error } = await supabase.from("crm_user_slogans").upsert(
       {
         user_name: user.name,
         user_title: user.title || null,
@@ -300,6 +327,12 @@ export default function Sidebar({
 
     setSloganSaving(false);
     setSloganEditing(false);
+
+    if (error) {
+      // 저장 실패 — 사용자에게 알림
+      console.error("[slogan] save failed:", error.message);
+      alert(`슬로건 저장에 실패했습니다.\n${error.message}\n\n[관리자] Supabase의 crm_user_slogans 테이블 또는 RLS 정책을 확인해주세요.`);
+    }
   };
 
   const toggleSidebarCollapsed = () => {
