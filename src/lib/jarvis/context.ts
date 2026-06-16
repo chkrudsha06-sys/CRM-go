@@ -1,173 +1,131 @@
 // src/lib/jarvis/context.ts
-// CRM 컨텍스트 빌더 — 필요한 데이터만 정확히 가져오기 (기존: 매번 전체 테이블 → 신규: intent별 부분)
+// CRM 컨텍스트 빌더 — 실제 DB 구조에 100% 맞춤 (2026-06-16 진단 반영)
 
 import { supabase } from "@/lib/supabase";
 import type { IntentResult } from "./intent";
 
 export type CRMUser = { name: string; title?: string; role?: string };
 
-/**
- * 카테고리에 맞는 CRM 데이터 수집
- */
 export async function buildCRMContext(intent: IntentResult, user: CRMUser): Promise<string> {
   const isAdmin = user.role === "admin";
-  const contextParts: string[] = [];
+  const parts: string[] = [];
 
   switch (intent.category) {
     case "customer_lookup":
     case "activity_history":
-      contextParts.push(await buildContactContext(intent, user, isAdmin));
+      parts.push(await buildContactContext(intent, user, isAdmin));
       break;
-
     case "sales_analytics":
-      contextParts.push(await buildSalesContext(intent, user, isAdmin));
+      parts.push(await buildSalesContext(intent, user, isAdmin));
       break;
-
     case "task_schedule":
-      contextParts.push(await buildTaskContext(intent, user, isAdmin));
+      parts.push(await buildTaskContext(intent, user, isAdmin));
       break;
-
     case "kpi_activity":
-      contextParts.push(await buildKpiContext(intent, user, isAdmin));
+      parts.push(await buildKpiContext(intent, user, isAdmin));
       break;
-
     case "bunyanghoe_ops":
-      contextParts.push(await buildBunyanghoeContext(intent, user, isAdmin));
+      parts.push(await buildBunyanghoeContext(intent, user, isAdmin));
       break;
-
-    case "insight_combined":
-      // 종합 — 핵심 데이터 모두 가져오기
-      const [c, s, t] = await Promise.all([
-        buildContactContext(intent, user, isAdmin),
+    case "insight_combined": {
+      const [b, s, t] = await Promise.all([
+        buildBunyanghoeContext(intent, user, isAdmin),
         buildSalesContext(intent, user, isAdmin),
         buildTaskContext(intent, user, isAdmin),
       ]);
-      contextParts.push(c, s, t);
+      parts.push(b, s, t);
       break;
-
+    }
     case "write_action":
-      // 쓰기 액션은 대상 고객 정보 필요
       if (intent.keywords.some((k) => /[가-힣]{2,3}/.test(k))) {
-        contextParts.push(await buildContactContext(intent, user, isAdmin));
+        parts.push(await buildContactContext(intent, user, isAdmin));
       }
       break;
   }
-
-  return contextParts.filter(Boolean).join("\n\n");
+  return parts.filter(Boolean).join("\n\n");
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 고객 컨텍스트
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ═══════════════════════════════════════════════════════════════
+// 고객 조회 / 활동 이력
+// ═══════════════════════════════════════════════════════════════
 async function buildContactContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  // 키워드에서 고객 이름 추출
-  const nameKeywords = intent.keywords.filter((k) => /^[가-힣]{2,3}/.test(k));
-  if (nameKeywords.length === 0) return "";
+  const nameKeywords = intent.keywords.filter((k) => /^[가-힣]{2,4}/.test(k));
+  if (nameKeywords.length === 0) return "[고객 조회] 조회할 고객 이름이 명확하지 않음. 사용자에게 고객명을 물어볼 것.";
 
-  const targetName = nameKeywords[0].split(" ")[0]; // "이정재 본부장" → "이정재"
+  const targetName = nameKeywords[0].split(" ")[0];
 
-  let query = supabase
+  const { data: contacts } = await supabase
     .from("contacts")
-    .select("id,name,title,phone,company,intake_route,management_stage,customer_grade,assigned_to,crm_db_source,meeting_result,memo,bunyanghoe_number,contract_date,reservation_date,vip_transferred_at,created_at")
+    .select("id,name,title,phone,mobile,company,intake_route,management_stage,customer_grade,assigned_to,consultant,crm_db_source,meeting_result,memo,site_name,next_site_name,expected_revenue,contract_date,reservation_date,vip_transferred_at,regular_payment_date,payment_channel,created_at")
     .ilike("name", `%${targetName}%`)
     .limit(5);
 
-  if (!isAdmin && user.name) {
-    query = query.eq("assigned_to", user.name);
+  if (!contacts || contacts.length === 0) {
+    return `[고객 조회: "${targetName}"]\n→ 일치하는 고객이 CRM에 없습니다. 이름을 지어내지 말고 "${targetName}님은 CRM에 등록되어 있지 않습니다"라고 답할 것.`;
   }
 
-  const { data: contacts } = await query;
-  if (!contacts || contacts.length === 0) return `[고객 조회: "${targetName}"]\n→ 일치하는 고객을 찾을 수 없습니다.`;
-
-  // 매칭된 고객의 활동노트 가져오기 (최근 5건)
   const contact = contacts[0];
+
   const { data: notes } = await supabase
     .from("contact_notes")
-    .select("id,note_date,content,author")
+    .select("note_date,content,author")
     .eq("contact_id", contact.id)
     .order("note_date", { ascending: false })
-    .limit(5);
+    .limit(6);
 
-  // 최근 매출
   const { data: sales } = await supabase
     .from("ad_executions")
-    .select("payment_date,channel,execution_amount,refund_amount,contract_route")
-    .or(`member_name.eq.${contact.name},contact_id.eq.${contact.id}`)
+    .select("payment_date,channel,contract_route,execution_amount,refund_amount")
+    .eq("member_name", contact.name)
     .order("payment_date", { ascending: false })
-    .limit(5);
+    .limit(6);
 
-  // 콘텐츠 제작 단계
-  const { data: contentStatus } = await supabase
-    .from("content_statuses")
-    .select("*")
-    .eq("contact_id", contact.id)
-    .maybeSingle();
-
-  return formatContactContext(contacts, notes || [], sales || [], contentStatus);
-}
-
-function formatContactContext(contacts: any[], notes: any[], sales: any[], content: any): string {
-  const lines: string[] = ["[CRM 데이터 — 고객 정보]"];
-
+  const lines: string[] = ["[CRM 고객 정보]"];
   contacts.forEach((c, i) => {
     if (i > 0) lines.push("\n──────");
     lines.push(`이름: ${c.name} ${c.title || ""}`);
-    lines.push(`연락처: ${c.phone || "-"}`);
+    lines.push(`연락처: ${c.phone || c.mobile || "-"}`);
     lines.push(`소속: ${c.company || "-"}`);
-    lines.push(`담당자: ${c.assigned_to || "-"}`);
-    lines.push(`분류: ${c.crm_db_source === "vip_activity" ? "VIP활동DB" : "고객DB"}`);
+    lines.push(`담당자(우리팀): ${c.assigned_to || "-"}`);
+    lines.push(`분류: ${c.crm_db_source === "vip_activity" ? "VIP활동DB(분양회 후보/회원)" : "고객DB"}`);
     lines.push(`관리단계: ${c.management_stage || "-"}`);
     lines.push(`고객등급: ${c.customer_grade || "-"}`);
-    lines.push(`미팅결과: ${c.meeting_result || "-"}`);
-    if (c.bunyanghoe_number) lines.push(`분양회 입회번호: B-${c.bunyanghoe_number}`);
-    if (c.contract_date) lines.push(`계약일: ${c.contract_date}`);
+    lines.push(`미팅결과: ${c.meeting_result || "-"}${c.meeting_result === "계약완료" ? " (분양회 가입 완료)" : ""}`);
+    if (c.site_name) lines.push(`현재현장: ${c.site_name}`);
+    if (c.next_site_name) lines.push(`다음현장: ${c.next_site_name}`);
+    if (c.regular_payment_date) lines.push(`정기결제일: ${c.regular_payment_date}`);
+    if (c.payment_channel) lines.push(`결제채널: ${c.payment_channel}`);
     if (c.vip_transferred_at) lines.push(`VIP 이관일: ${String(c.vip_transferred_at).split("T")[0]}`);
     if (c.memo) lines.push(`메모: ${c.memo}`);
-    lines.push(`[내부 ID: ${c.id}]`); // 쓰기 액션 시 참조용
+    lines.push(`[내부 ID: ${c.id}]`);
   });
 
-  if (notes.length > 0) {
+  if (notes && notes.length > 0) {
     lines.push("\n[최근 활동노트]");
-    notes.forEach((n) => {
-      lines.push(`▸ ${n.note_date} (${n.author || "-"}): ${(n.content || "").slice(0, 300).replace(/\n/g, " ")}`);
-    });
+    notes.forEach((n) => lines.push(`▸ ${n.note_date || "-"} (${n.author || "-"}): ${(n.content || "").slice(0, 250).replace(/\n/g, " ")}`));
+  } else {
+    lines.push("\n[활동노트] 기록 없음");
   }
 
-  if (sales.length > 0) {
-    lines.push("\n[최근 매출]");
+  if (sales && sales.length > 0) {
+    lines.push("\n[결제 이력]");
     sales.forEach((s) => {
       const amt = (s.execution_amount || 0).toLocaleString();
-      const ref = s.refund_amount > 0 ? ` (환불 ${s.refund_amount.toLocaleString()}원)` : "";
-      lines.push(`▸ ${s.payment_date} - ${s.channel || s.contract_route || "광고"}: ${amt}원${ref}`);
+      const ref = (s.refund_amount || 0) > 0 ? ` (환불 ${s.refund_amount.toLocaleString()}원)` : "";
+      lines.push(`▸ ${s.payment_date || "-"} ${s.channel || ""}/${s.contract_route || ""}: ${amt}원${ref}`);
     });
-  }
-
-  if (content) {
-    const stages: string[] = [];
-    if (content.resource_collecting) stages.push("리소스확보");
-    if (content.photo_received) stages.push("사진수취");
-    if (content.info_received) stages.push("정보수취");
-    if (content.tf2_delivered) stages.push("TF2전달");
-    if (content.pr_completed) stages.push("PR완료");
-    if (stages.length > 0) {
-      lines.push(`\n[콘텐츠 제작 단계] ${stages.join(" → ")}`);
-    }
-    if (content.production_impossible) {
-      lines.push(`\n[제작불가] 사유: ${content.impossible_reason || "-"}`);
-    }
   }
 
   return lines.join("\n");
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 매출 컨텍스트
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ═══════════════════════════════════════════════════════════════
+// 매출 분석 (ad_executions) — payment_date는 date 타입
+// ═══════════════════════════════════════════════════════════════
 async function buildSalesContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  // 기간 필터 결정
   const now = new Date();
   let targetYear = now.getFullYear();
-  let targetMonth = now.getMonth(); // 0-indexed
+  let targetMonth = now.getMonth();
 
   if (intent.keywords.includes("지난달")) {
     const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -175,12 +133,12 @@ async function buildSalesContext(intent: IntentResult, user: CRMUser, isAdmin: b
     targetMonth = last.getMonth();
   }
 
-  // 월 시작 ~ 다음달 시작 (말일 계산 불필요, 존재하지 않는 날짜 회피)
   const monthStart = `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-01`;
-  const nextMonthDate = new Date(targetYear, targetMonth + 1, 1);
-  const monthEnd = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+  const nextMonth = new Date(targetYear, targetMonth + 1, 1);
+  const monthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
 
-  let query = supabase
+  // 매출은 팀 공유 데이터 — 전체 조회 (권한 필터 없음)
+  const { data } = await supabase
     .from("ad_executions")
     .select("payment_date,channel,contract_route,execution_amount,refund_amount,team_member,member_name")
     .gte("payment_date", monthStart)
@@ -188,215 +146,229 @@ async function buildSalesContext(intent: IntentResult, user: CRMUser, isAdmin: b
     .order("payment_date", { ascending: false })
     .limit(500);
 
-  // 매출은 팀 단위 관리이므로 전체 조회 (sales 페이지와 동일 동작)
-  // 권한별 본인 필터를 적용하지 않음 — 대협팀 매출은 팀 공유 데이터
-
-  // 채널 필터
-  for (const ch of ["사이다페이", "효성CMS", "호갱노노", "LMS", "하이타겟"]) {
-    if (intent.keywords.includes(ch)) {
-      query = query.eq("channel", ch);
-      break;
-    }
-  }
-
-  const { data } = await query;
   const sales = data || [];
 
   if (sales.length === 0) {
-    return `[매출 컨텍스트 — ${monthStart} ~ ${monthEnd}]\n조회된 매출 레코드: 0건\n(주의: 이는 해당 기간 매출이 실제로 없거나, payment_date 형식 차이로 조회되지 않았을 수 있음. 사용자에게 통합매출관리 페이지 직접 확인을 권유할 것.)`;
+    return `[매출 컨텍스트 — ${monthStart.slice(0, 7)}]\n조회된 매출: 0건\n(해당 월에 ad_executions 매출 레코드가 없음. 지어내지 말고 "${targetYear}년 ${targetMonth + 1}월 매출 기록이 없습니다. 통합매출관리에서 확인해 주세요"라고 답할 것.)`;
   }
 
-  // 집계
-  const total = sales.reduce((s, r) => s + (r.execution_amount || 0) - (r.refund_amount || 0), 0);
-  const refund = sales.reduce((s, r) => s + (r.refund_amount || 0), 0);
+  const totalExec = sales.reduce((s, r) => s + (r.execution_amount || 0), 0);
+  const totalRefund = sales.reduce((s, r) => s + (r.refund_amount || 0), 0);
+  const net = totalExec - totalRefund;
 
   const byChannel: Record<string, number> = {};
+  const byRoute: Record<string, number> = {};
   const byMember: Record<string, number> = {};
   for (const r of sales) {
     byChannel[r.channel || "-"] = (byChannel[r.channel || "-"] || 0) + (r.execution_amount || 0);
-    byMember[r.team_member || "-"] = (byMember[r.team_member || "-"] || 0) + (r.execution_amount || 0);
+    byRoute[r.contract_route || "-"] = (byRoute[r.contract_route || "-"] || 0) + (r.execution_amount || 0);
+    byMember[r.team_member || "미지정"] = (byMember[r.team_member || "미지정"] || 0) + (r.execution_amount || 0);
   }
 
-  const lines: string[] = [`[매출 컨텍스트 — ${monthStart} ~ ${monthEnd}]`];
-  lines.push(`총 매출: ${total.toLocaleString()}원 (${sales.length}건)`);
-  if (refund > 0) lines.push(`환불: ${refund.toLocaleString()}원`);
+  const lines: string[] = [`[매출 컨텍스트 — ${targetYear}년 ${targetMonth + 1}월]`];
+  lines.push(`집행 합계: ${totalExec.toLocaleString()}원 (${sales.length}건)`);
+  if (totalRefund > 0) lines.push(`환불: ${totalRefund.toLocaleString()}원`);
+  lines.push(`순매출(환불 차감): ${net.toLocaleString()}원`);
+
+  lines.push("\n[결제항목별]");
+  Object.entries(byRoute).sort(([, a], [, b]) => b - a).forEach(([k, v]) => lines.push(`▸ ${k}: ${v.toLocaleString()}원`));
   lines.push("\n[채널별]");
-  Object.entries(byChannel)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 8)
-    .forEach(([k, v]) => lines.push(`▸ ${k}: ${v.toLocaleString()}원`));
+  Object.entries(byChannel).sort(([, a], [, b]) => b - a).forEach(([k, v]) => lines.push(`▸ ${k}: ${v.toLocaleString()}원`));
   lines.push("\n[담당자별]");
-  Object.entries(byMember)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 8)
-    .forEach(([k, v]) => lines.push(`▸ ${k}: ${v.toLocaleString()}원`));
+  Object.entries(byMember).sort(([, a], [, b]) => b - a).forEach(([k, v]) => lines.push(`▸ ${k}: ${v.toLocaleString()}원`));
+
+  lines.push("\n[개별 결제 내역]");
+  sales.slice(0, 15).forEach((s) => {
+    const ref = (s.refund_amount || 0) > 0 ? ` [환불 ${s.refund_amount.toLocaleString()}]` : "";
+    lines.push(`▸ ${s.payment_date} ${s.member_name || "-"} (${s.contract_route || "-"}, 담당:${s.team_member || "-"}): ${(s.execution_amount || 0).toLocaleString()}원${ref}`);
+  });
 
   return lines.join("\n");
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 업무·일정 컨텍스트
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function buildTaskContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  const lines: string[] = ["[업무·일정 컨텍스트]"];
-
-  // 내 업무요청
-  let taskQuery = supabase
-    .from("tasks")
-    .select("id,title,assignee,requester,status,priority,due_date,created_at")
-    .order("created_at", { ascending: false })
-    .limit(30);
-
-  if (!isAdmin && user.name) {
-    taskQuery = taskQuery.or(`assignee.eq.${user.name},requester.eq.${user.name}`);
-  }
-  const { data: tasks } = await taskQuery;
-
-  const myTasks = (tasks || []).filter((t) => t.assignee === user.name && t.status !== "완료");
-  const requestedTasks = (tasks || []).filter((t) => t.requester === user.name && t.status !== "완료");
-
-  if (myTasks.length > 0) {
-    lines.push(`\n내가 처리할 업무 ${myTasks.length}건:`);
-    myTasks.slice(0, 8).forEach((t) =>
-      lines.push(`▸ [${t.status}] ${t.title} (요청자: ${t.requester}, 기한: ${t.due_date || "미정"})`)
-    );
-  }
-  if (requestedTasks.length > 0) {
-    lines.push(`\n내가 요청한 업무 ${requestedTasks.length}건:`);
-    requestedTasks.slice(0, 5).forEach((t) =>
-      lines.push(`▸ [${t.status}] ${t.title} (담당: ${t.assignee})`)
-    );
-  }
-
-  // 이번주 일정
-  const today = new Date();
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay());
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const wsStr = weekStart.toISOString().split("T")[0];
-  const weStr = weekEnd.toISOString().split("T")[0];
-
-  const { data: events } = await supabase
-    .from("calendar_custom_events")
-    .select("title,event_date,assigned_to,memo")
-    .gte("event_date", wsStr)
-    .lte("event_date", weStr)
-    .order("event_date", { ascending: true })
-    .limit(20);
-
-  if (events && events.length > 0) {
-    lines.push(`\n이번주 일정 (${wsStr} ~ ${weStr}):`);
-    events.forEach((e) =>
-      lines.push(`▸ ${e.event_date} - ${e.title} (담당: ${e.assigned_to || "-"})`)
-    );
-  }
-
-  return lines.join("\n");
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// KPI/활동량 컨텍스트
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function buildKpiContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-
-  // 이번달 KPI 설정 (월간)
-  const { data: kpi } = await supabase
-    .from("kpi_settings")
-    .select("*")
-    .eq("year", year)
-    .eq("month", month)
-    .eq("week", 0);
-
-  // 이번달 활동 기록
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-  let goalQuery = supabase
-    .from("daily_activity_goals")
-    .select("user_name,activity_date,tm_count,coldtalk_count,bronze_db_count,special_goal,special_completed")
-    .gte("activity_date", monthStart);
-
-  if (!isAdmin && user.name) goalQuery = goalQuery.eq("user_name", user.name);
-  const { data: goals } = await goalQuery;
-
-  const lines: string[] = [`[KPI/활동량 컨텍스트 — ${year}년 ${month}월]`];
-
-  if (kpi && kpi.length > 0) {
-    lines.push("\n[월간 KPI 목표]");
-    kpi.forEach((k) => {
-      lines.push(`▸ ${k.scope} / ${k.target_name}: 분양회모집 ${k.recruit_count}명, 회비매출 ${(k.bunyanghoe_revenue || 0).toLocaleString()}, 연계매출 ${(k.linked_revenue || 0).toLocaleString()}`);
-    });
-  }
-
-  if (goals && goals.length > 0) {
-    const byUser: Record<string, { tm: number; cold: number; bronze: number; days: number }> = {};
-    for (const g of goals) {
-      const u = g.user_name || "-";
-      if (!byUser[u]) byUser[u] = { tm: 0, cold: 0, bronze: 0, days: 0 };
-      byUser[u].tm += g.tm_count || 0;
-      byUser[u].cold += g.coldtalk_count || 0;
-      byUser[u].bronze += g.bronze_db_count || 0;
-      byUser[u].days += 1;
-    }
-    lines.push("\n[이번달 활동량 (담당자별)]");
-    Object.entries(byUser).forEach(([u, v]) =>
-      lines.push(`▸ ${u}: TM ${v.tm}건, 콜드톡 ${v.cold}건, 브론즈DB ${v.bronze}건 (${v.days}일 입력)`)
-    );
-  }
-
-  return lines.join("\n");
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 분양회 운영 컨텍스트
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ═══════════════════════════════════════════════════════════════
+// 분양회 운영 (contacts: crm_db_source=vip_activity + meeting_result=계약완료)
+// ═══════════════════════════════════════════════════════════════
 async function buildBunyanghoeContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
-  let query = supabase
+  // 분양회 회원/후보는 팀 공유 — 전체 조회
+  const { data: members } = await supabase
     .from("contacts")
-    .select("id,name,title,company,meeting_result,customer_grade,bunyanghoe_number,contract_date,reservation_date,assigned_to")
+    .select("id,name,title,company,meeting_result,customer_grade,management_stage,assigned_to,site_name,regular_payment_date,vip_transferred_at,contract_date")
     .eq("crm_db_source", "vip_activity")
-    .in("meeting_result", ["계약완료", "예약완료"])
-    .order("bunyanghoe_number", { ascending: true });
+    .limit(300);
 
-  // 분양회 회원은 팀 단위 관리이므로 전체 조회 (담당자별 정리 요청 대응)
-  // 권한 필터 미적용 — 회원 명단은 팀 공유 데이터
-
-  const { data: members } = await query;
   if (!members || members.length === 0) {
-    return "[분양회 운영 컨텍스트]\n조회된 분양회 회원: 0건\n(주의: VIP활동DB에 meeting_result가 계약완료/예약완료인 회원이 없거나 조회되지 않음. 회원 명단을 절대 지어내지 말고, 사용자에게 VIP활동DB/분양회 입회자 페이지 직접 확인을 권유할 것.)";
+    return `[분양회 운영]\n조회된 VIP활동DB 회원: 0건\n(지어내지 말 것. "VIP활동DB에 회원이 없습니다"라고 답할 것.)`;
   }
 
+  // 계약완료 = 분양회 정식 가입, 그 외 = 후보/관리중
   const contracted = members.filter((m) => m.meeting_result === "계약완료");
-  const reserved = members.filter((m) => m.meeting_result === "예약완료");
+  const candidates = members.filter((m) => m.meeting_result !== "계약완료");
 
   const lines: string[] = ["[분양회 운영 컨텍스트]"];
-  lines.push(`총 ${members.length}명 (계약완료 ${contracted.length}명 + 예약완료 ${reserved.length}명)`);
-  lines.push(`VIP 100명 목표 대비 진행률: ${(contracted.length / 100 * 100).toFixed(1)}%`);
+  lines.push(`VIP활동DB 총 ${members.length}명`);
+  lines.push(`├ 계약완료(분양회 정식 가입): ${contracted.length}명`);
+  lines.push(`└ 관리중(후보/리드): ${candidates.length}명`);
+  lines.push(`VIP 100명 목표 대비: ${(contracted.length / 100 * 100).toFixed(0)}% (${contracted.length}/100)`);
 
-  // 등급별
-  const byGrade: Record<string, number> = {};
-  for (const m of contracted) {
-    byGrade[m.customer_grade || "-"] = (byGrade[m.customer_grade || "-"] || 0) + 1;
-  }
-  lines.push("\n[등급별]");
-  Object.entries(byGrade).forEach(([k, v]) => lines.push(`▸ ${k}: ${v}명`));
-
-  // 담당자별 그룹핑
+  // 담당자별 그룹핑 (계약완료 기준)
   const byAssignee: Record<string, typeof contracted> = {};
   for (const m of contracted) {
     const a = m.assigned_to || "미지정";
     if (!byAssignee[a]) byAssignee[a] = [];
     byAssignee[a].push(m);
   }
-  lines.push("\n[담당자별 회원 명단]");
+
+  lines.push("\n[담당자별 분양회 정식 회원(계약완료)]");
   Object.entries(byAssignee).forEach(([assignee, list]) => {
-    lines.push(`\n● ${assignee} (${list.length}명)`);
+    lines.push(`\n● ${assignee} 담당 (${list.length}명)`);
     list.forEach((m) => {
-      lines.push(`  · B-${m.bunyanghoe_number || "?"} ${m.name} ${m.title || ""} (${m.company || "-"}, 계약일: ${m.contract_date || "-"})`);
+      lines.push(`  · ${m.name} ${m.title || ""}${m.site_name ? ` / 현장:${m.site_name}` : ""}${m.regular_payment_date ? ` / 정기결제:${m.regular_payment_date}` : ""}`);
     });
   });
+
+  // 관리중 후보도 간단히
+  if (candidates.length > 0) {
+    lines.push("\n[관리중 후보 (계약 전)]");
+    candidates.slice(0, 15).forEach((m) => {
+      lines.push(`  · ${m.name} ${m.title || ""} (담당:${m.assigned_to || "-"}, 단계:${m.management_stage || "-"})`);
+    });
+  }
+
+  return lines.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 업무 / 일정 (tasks + calendar_custom_events + wanpan_trucks)
+// ═══════════════════════════════════════════════════════════════
+async function buildTaskContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
+  const lines: string[] = ["[업무·일정 컨텍스트]"];
+  const wantsWanpan = intent.keywords.some((k) => k.includes("완판")) || /완판트럭/.test(JSON.stringify(intent.keywords));
+
+  // 완판트럭
+  const { data: trucks } = await supabase
+    .from("wanpan_trucks")
+    .select("dispatch_date,site_name,location,agency,contact_point,contact_point_title,contact_phone,team_size,order_qty_base,order_qty_extra,assigned_to,staff_members,consultant_members,is_ordered,status")
+    .order("dispatch_date", { ascending: false })
+    .limit(30);
+
+  if (trucks && trucks.length > 0) {
+    lines.push("\n[완판트럭 일정]");
+    trucks.slice(0, 15).forEach((t) => {
+      const qty = (t.order_qty_base || 0) + (t.order_qty_extra || 0);
+      lines.push(`▸ ${t.dispatch_date || "-"} ${t.site_name || "-"} (${t.location || "-"}) | 담당:${t.assigned_to || "-"} | 규모:${t.team_size || "-"}명 | 발주:${qty}개 | 컨택:${t.contact_point || "-"} ${t.contact_point_title || ""} | ${t.is_ordered ? "발주완료" : "발주전"}`);
+    });
+  } else {
+    lines.push("\n[완판트럭] 등록된 일정 없음");
+  }
+
+  // 업무요청 (tasks)
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("id,category,content,priority,assignee,requester,status,due_date,created_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (tasks && tasks.length > 0) {
+    const open = tasks.filter((t) => t.status !== "완료");
+    lines.push(`\n[업무요청 — 미완료 ${open.length}건]`);
+    open.slice(0, 12).forEach((t) =>
+      lines.push(`▸ [${t.status || "-"}/${t.priority || "-"}] ${(t.content || t.category || "").slice(0, 60)} (담당:${t.assignee || "-"}, 요청:${t.requester || "-"}, 기한:${t.due_date || "미정"})`)
+    );
+  } else {
+    lines.push("\n[업무요청] 없음");
+  }
+
+  // 일정 (calendar_custom_events) — date_start 기준 이번주~다음달
+  const today = new Date();
+  const start = today.toISOString().split("T")[0];
+  const future = new Date(today); future.setDate(today.getDate() + 30);
+  const end = future.toISOString().split("T")[0];
+
+  const { data: events } = await supabase
+    .from("calendar_custom_events")
+    .select("title,category,detail,date_start,date_end,created_by")
+    .gte("date_start", start)
+    .lte("date_start", end)
+    .order("date_start", { ascending: true })
+    .limit(30);
+
+  if (events && events.length > 0) {
+    lines.push("\n[일정 (오늘~30일)]");
+    events.forEach((e) =>
+      lines.push(`▸ ${e.date_start} [${e.category || "-"}] ${e.title || ""}${e.detail ? ` - ${e.detail}` : ""} (등록:${e.created_by || "-"})`)
+    );
+  } else {
+    lines.push("\n[일정] 예정된 일정 없음");
+  }
+
+  return lines.join("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KPI / 활동량 (kpi_settings + daily_activity_goals)
+// 실제 컬럼: work_date, owner_name, goal_*, result_*
+// ═══════════════════════════════════════════════════════════════
+async function buildKpiContext(intent: IntentResult, user: CRMUser, isAdmin: boolean): Promise<string> {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  const lines: string[] = [`[KPI·활동량 — ${year}년 ${month}월]`];
+
+  // KPI 목표 (월간 = week 0)
+  const { data: kpi } = await supabase
+    .from("kpi_settings")
+    .select("scope,target_name,recruit_count,bunyanghoe_revenue,linked_revenue,special_revenue,wanpan_truck_count,ad_operation_revenue,week")
+    .eq("year", year)
+    .eq("month", month);
+
+  if (kpi && kpi.length > 0) {
+    lines.push("\n[월간 KPI 목표]");
+    kpi.filter((k) => k.week === 0 || k.week === null).forEach((k) => {
+      const items: string[] = [];
+      if (k.recruit_count) items.push(`분양회모집 ${k.recruit_count}명`);
+      if (k.bunyanghoe_revenue) items.push(`회비매출 ${Number(k.bunyanghoe_revenue).toLocaleString()}`);
+      if (k.linked_revenue) items.push(`연계매출 ${Number(k.linked_revenue).toLocaleString()}`);
+      if (k.special_revenue) items.push(`특전매출 ${Number(k.special_revenue).toLocaleString()}`);
+      if (k.wanpan_truck_count) items.push(`완판트럭 ${k.wanpan_truck_count}회`);
+      lines.push(`▸ [${k.scope || "-"}] ${k.target_name || "-"}: ${items.join(", ") || "목표 미설정"}`);
+    });
+  } else {
+    lines.push("\n[월간 KPI] 설정된 목표 없음");
+  }
+
+  // 활동량 (daily_activity_goals) — 이번달, work_date 기준
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const nextMonth = new Date(year, month, 1);
+  const monthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+
+  const { data: goals } = await supabase
+    .from("daily_activity_goals")
+    .select("owner_name,work_date,result_tm,result_new_tm,result_coldtalk,result_bronze_db,result_one_percent_db,result_consultant_db,result_second_touch,is_outside_meeting")
+    .gte("work_date", monthStart)
+    .lt("work_date", monthEnd)
+    .limit(500);
+
+  if (goals && goals.length > 0) {
+    const byOwner: Record<string, { tm: number; newtm: number; cold: number; bronze: number; onepct: number; days: number }> = {};
+    for (const g of goals) {
+      const o = g.owner_name || "-";
+      if (!byOwner[o]) byOwner[o] = { tm: 0, newtm: 0, cold: 0, bronze: 0, onepct: 0, days: 0 };
+      byOwner[o].tm += g.result_tm || 0;
+      byOwner[o].newtm += g.result_new_tm || 0;
+      byOwner[o].cold += g.result_coldtalk || 0;
+      byOwner[o].bronze += g.result_bronze_db || 0;
+      byOwner[o].onepct += g.result_one_percent_db || 0;
+      byOwner[o].days += 1;
+    }
+    lines.push("\n[이번달 활동 실적 (담당자별 누적)]");
+    Object.entries(byOwner).forEach(([o, v]) =>
+      lines.push(`▸ ${o}: 신규TM ${v.newtm}건, 콜드톡 ${v.cold}건, 브론즈DB ${v.bronze}건, 1%DB ${v.onepct}건 (${v.days}일 입력)`)
+    );
+  } else {
+    lines.push("\n[활동 실적] 이번달 입력된 활동 기록 없음");
+  }
 
   return lines.join("\n");
 }
