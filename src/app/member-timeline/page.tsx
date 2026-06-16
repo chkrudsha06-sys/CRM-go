@@ -244,9 +244,7 @@ function MemberCard({ member, selected, onClick }: { member: Member; selected: b
             <span className="crm-tiny truncate">{member.title || ""}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="badge-premium badge-warning h-[22px] px-2 text-[10.5px]">{fmtBun(member.bunyanghoe_number)}</span>
             {member.assigned_to && <span className="crm-tiny" style={{ color: "var(--purple-text)" }}>{member.assigned_to}</span>}
-            {(member.contract_date || member.reservation_date) && <span className="crm-tiny">{fmtDate(member.contract_date || member.reservation_date)}</span>}
           </div>
         </div>
         <ChevronRight size={15} style={{ color: selected ? "var(--accent-text)" : "var(--text-faint)" }} />
