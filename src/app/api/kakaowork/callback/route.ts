@@ -118,7 +118,6 @@ async function sendApprovalNotifyInline(params: {
     blocks = [
       { type: "header", text: `📋 결재 승인 요청 — ${request_type}`, style: "yellow" },
       { type: "text", text: `신청자: @${requester_name}`, inlines: [{ type: "styled", text: "신청자: ", bold: false }, requesterMention] },
-      ...(refMention ? [{ type: "text", text: `참조: @${reference_name}`, inlines: [{ type: "styled", text: "참조: ", bold: false }, refMention] }] : []),
       { type: "divider" },
       approvalBoldBlock(`■ ${request_type} 내용`),
       ...pLines.map(approvalTextBlock),
@@ -132,16 +131,34 @@ async function sendApprovalNotifyInline(params: {
   } else if (isApproved && !isFinal && current_approver) {
     const nextMention  = await approvalMentionInline(appKey, current_approver);
     const actorMention = await approvalMentionInline(appKey, actor);
-    textFallback = `✅ 결재 순번 — ${request_type}\n${actor} 승인 완료 → 다음: ${current_approver}`;
+    textFallback = `✅ ${actor} 승인 완료 — ${request_type}\n최종 승인권자: ${current_approver}`;
     blocks = [
-      { type: "header", text: `✅ 결재 순번 — ${request_type}`, style: "green" },
-      { type: "text", text: `승인 완료: @${actor}`, inlines: [{ type: "styled", text: "승인 완료: ", bold: false }, actorMention] },
+      { type: "header", text: `📋 결재 승인 요청 — ${request_type}`, style: "yellow" },
+      // 신청자
       approvalTextBlock(`신청자: ${requester_name}`),
       { type: "divider" },
+      // 결재 내용
       approvalBoldBlock(`■ ${request_type} 내용`),
       ...pLines.map(approvalTextBlock),
       { type: "divider" },
-      { type: "text", text: `다음 승인권자: @${current_approver}`, inlines: [{ type: "styled", text: "다음 승인권자: ", bold: true }, nextMention] },
+      // 승인 완료된 사람 강조
+      {
+        type: "text",
+        text: `${actor} : 승인완료`,
+        inlines: [
+          actorMention,
+          { type: "styled", text: " : 승인완료 ✅", bold: true },
+        ],
+      },
+      // 다음(최종) 승인권자 @멘션 강조
+      {
+        type: "text",
+        text: `최종 승인권자 : @${current_approver}`,
+        inlines: [
+          { type: "styled", text: "최종 승인권자 : ", bold: true },
+          nextMention,
+        ],
+      },
       { type: "divider" },
       { type: "button", text: "📄 결재요청서 확인하기", style: "default", action: { type: "open_inapp_browser", value: crmUrl } },
       approvalSubmitBtn("✅ 승인", `approval:${request_id}:approve`, "primary"),
@@ -156,7 +173,7 @@ async function sendApprovalNotifyInline(params: {
       { type: "header", text: `🎉 결재 최종 승인 완료 — ${request_type}`, style: "green" },
       { type: "text", text: `최종 승인: @${actor}`, inlines: [{ type: "styled", text: "최종 승인: ", bold: false }, actorMention] },
       { type: "text", text: `신청자: @${requester_name}`, inlines: [{ type: "styled", text: "신청자: ", bold: false }, requesterMention] },
-      ...(refMention2 ? [{ type: "text", text: `참조: @${reference_name}`, inlines: [{ type: "styled", text: "참조: ", bold: false }, refMention2] }] : []),
+
       { type: "divider" },
       approvalBoldBlock(`■ 승인된 ${request_type} 내용`),
       ...pLines.map(approvalTextBlock),
