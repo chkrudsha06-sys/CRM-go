@@ -1042,7 +1042,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
 
           <footer className="p-3" style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--surface)" }}>
             <div className="flex items-end gap-2">
-              <div className="min-w-0 flex-1 rounded-2xl px-3 py-2" style={{ border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+              <div className="min-w-0 flex-1 rounded-2xl px-3 py-2" style={{ border: "1px solid var(--border-2)", background: "var(--surface-2)" }}>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -1051,7 +1051,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                   rows={1}
                   disabled={loading}
                   placeholder="코어에게 CRM 업무를 물어보세요..."
-                  className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed outline-none" style={{ color: "var(--text-strong)" }}
+                  className="jarvis-input max-h-24 min-h-[28px] w-full resize-none text-[12px] font-semibold leading-relaxed"
+                  style={{ color: "var(--text-strong)", background: "transparent", border: "none", outline: "none", boxShadow: "none" }}
                 />
               </div>
               <button
@@ -1188,6 +1189,14 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
 
         .jarvis-scrollbar::-webkit-scrollbar-track {
           background: transparent;
+        }
+
+        .jarvis-input,
+        .jarvis-input:focus {
+          background: transparent !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
         }
       `}</style>
     </div>
