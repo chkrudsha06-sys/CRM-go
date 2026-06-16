@@ -1,745 +1,344 @@
+// src/app/api/ai-chat/confirm/route.ts
+// 사용자가 [확인] 버튼을 누르면 실제 DB 쓰기 실행
+
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-const API_KEY = process.env.GOOGLE_AI_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY;
-
-type AnyRow = Record<string, any>;
-
-type ChatMessage = {
-  role: string;
-  content: string;
-};
-
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-function getKstNow() {
-  return new Date(Date.now() + KST_OFFSET_MS);
-}
-
-function toDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function getTodayKey() {
-  return toDateKey(getKstNow());
-}
-
-function getWeekRange() {
-  const now = getKstNow();
-  const day = now.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  const mon = new Date(now);
-  mon.setUTCDate(now.getUTCDate() + diff);
-  const sun = new Date(mon);
-  sun.setUTCDate(mon.getUTCDate() + 6);
-  return { start: toDateKey(mon), end: toDateKey(sun) };
-}
-
-function getMonthRange() {
-  const now = getKstNow();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1;
-  const last = new Date(Date.UTC(y, m, 0));
-  return {
-    start: `${y}-${String(m).padStart(2, "0")}-01`,
-    end: `${y}-${String(m).padStart(2, "0")}-${String(last.getUTCDate()).padStart(2, "0")}`,
-    label: `${y}년 ${m}월`,
-  };
-}
-
-function fmtDate(value?: string | null) {
-  if (!value) return "-";
-  const raw = String(value).slice(0, 10);
-  const dt = new Date(`${raw}T00:00:00+09:00`);
-  if (Number.isNaN(dt.getTime())) return raw;
-  const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${dt.getMonth() + 1}월 ${dt.getDate()}일(${days[dt.getDay()]})`;
-}
-
-function fmtMoney(value: unknown) {
-  const n = Number(value || 0);
-  if (!Number.isFinite(n)) return "0원";
-  return `${Math.round(n).toLocaleString()}원`;
-}
-
-function compact(value: unknown, fallback = "-") {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
-function firstValue(row: AnyRow, keys: string[], fallback: unknown = null) {
-  for (const key of keys) {
-    if (row && row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") return row[key];
-  }
-  return fallback;
-}
-
-function daysSince(dateValue?: string | null) {
-  if (!dateValue) return 9999;
-  const raw = String(dateValue).slice(0, 10);
-  const target = new Date(`${raw}T00:00:00+09:00`).getTime();
-  if (Number.isNaN(target)) return 9999;
-  const today = new Date(`${getTodayKey()}T00:00:00+09:00`).getTime();
-  return Math.floor((today - target) / (24 * 60 * 60 * 1000));
-}
-
-async function readTable(table: string, limit = 300): Promise<AnyRow[]> {
-  try {
-    const { data, error } = await supabase.from(table).select("*").limit(limit);
-    if (error) {
-      console.warn(`[JARVIS] ${table} load failed:`, error.message);
-      return [];
-    }
-    return (data || []) as AnyRow[];
-  } catch (error: any) {
-    console.warn(`[JARVIS] ${table} exception:`, error?.message || error);
-    return [];
-  }
-}
-
-function sortByDateDesc(rows: AnyRow[], keys: string[]) {
-  return [...rows].sort((a, b) => {
-    const av = firstValue(a, keys, "") as string;
-    const bv = firstValue(b, keys, "") as string;
-    return String(bv).localeCompare(String(av));
-  });
-}
-
-function sortByDateAsc(rows: AnyRow[], keys: string[]) {
-  return [...rows].sort((a, b) => {
-    const av = firstValue(a, keys, "") as string;
-    const bv = firstValue(b, keys, "") as string;
-    return String(av).localeCompare(String(bv));
-  });
-}
-
-async function callAI(systemPrompt: string, messages: ChatMessage[]) {
-  if (!API_KEY) return { reply: null, error: "API 키 없음" };
-
-  try {
-    const contents = messages
-      .filter((message) => message.role !== "system")
-      .map((message) => ({
-        role: message.role === "assistant" ? "model" : "user",
-        parts: [{ text: message.content }],
-      }));
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: "[중요] 마크다운 문법(**굵게**, *기울임*, # 제목, - 목록, --- 구분선 등)을 절대 사용하지 않는다. 단락 구분은 빈 줄, 목록은 숫자나 ▪ 기호만 사용한다.\n\n" + systemPrompt }] },
-          contents,
-          generationConfig: {
-            maxOutputTokens: 2200,
-            temperature: 0.25,
-          },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const errText = await res.text();
-      return { reply: null, error: `Gemini ${res.status}: ${errText.substring(0, 500)}` };
-    }
-
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.map((part: any) => part.text).filter(Boolean).join("\n") || "";
-    return { reply: text || null, error: text ? null : "빈 응답" };
-  } catch (error: any) {
-    return { reply: null, error: `Gemini 예외: ${error?.message || error}` };
-  }
-}
-
-function buildContactSummary(contacts: AnyRow[]) {
-  const resultCount: Record<string, number> = {};
-  const assignCount: Record<string, number> = {};
-  const prospectCount: Record<string, number> = {};
-
-  contacts.forEach((row) => {
-    const meetingResult = compact(firstValue(row, ["meeting_result", "status"], ""), "");
-    const assignedTo = compact(firstValue(row, ["assigned_to", "owner_name", "manager"], ""), "");
-    const prospectType = compact(firstValue(row, ["prospect_type", "grade", "auto_grade"], ""), "");
-    if (meetingResult) resultCount[meetingResult] = (resultCount[meetingResult] || 0) + 1;
-    if (assignedTo) assignCount[assignedTo] = (assignCount[assignedTo] || 0) + 1;
-    if (prospectType) prospectCount[prospectType] = (prospectCount[prospectType] || 0) + 1;
-  });
-
-  return [
-    "## 고객 현황",
-    `총 고객: ${contacts.length}명`,
-    `미팅결과별: ${Object.entries(resultCount).map(([k, v]) => `${k} ${v}명`).join(", ") || "데이터 없음"}`,
-    `가망/등급별: ${Object.entries(prospectCount).map(([k, v]) => `${k} ${v}명`).join(", ") || "데이터 없음"}`,
-    `담당자별: ${Object.entries(assignCount).map(([k, v]) => `${k} ${v}명`).join(", ") || "데이터 없음"}`,
-  ];
-}
-
-function buildInactiveCustomers(contacts: AnyRow[], notes: AnyRow[]) {
-  const latestNoteByContact = new Map<number, AnyRow>();
-
-  sortByDateDesc(notes, ["note_date", "created_at", "updated_at"]).forEach((note) => {
-    const contactId = Number(note.contact_id);
-    if (contactId && !latestNoteByContact.has(contactId)) latestNoteByContact.set(contactId, note);
-  });
-
-  const inactive = contacts
-    .map((contact) => {
-      const id = Number(contact.id);
-      const latestNote = id ? latestNoteByContact.get(id) : null;
-      const latestDate = compact(firstValue(latestNote || {}, ["note_date", "created_at", "updated_at"], ""), "");
-      const fallbackDate = compact(firstValue(contact, ["updated_at", "created_at", "meeting_date", "contract_date"], ""), "");
-      const baseDate = latestDate || fallbackDate;
-      const result = compact(firstValue(contact, ["meeting_result", "status"], ""), "");
-      return {
-        contact,
-        latestNote,
-        latestDate: baseDate,
-        inactiveDays: daysSince(baseDate),
-        result,
-      };
-    })
-    .filter((item) => !["탈퇴", "이탈", "계약완료"].includes(item.result))
-    .sort((a, b) => b.inactiveDays - a.inactiveDays)
-    .slice(0, 15);
-
-  const lines = ["\n## 관리 누락 가능 고객 TOP 15"];
-  if (inactive.length === 0) {
-    lines.push("- 관리 누락 후보를 계산할 수 있는 고객/활동노트 데이터가 부족합니다.");
-    return lines;
-  }
-
-  inactive.forEach(({ contact, latestNote, latestDate, inactiveDays }) => {
-    const name = compact(firstValue(contact, ["name", "member_name"]));
-    const title = compact(firstValue(contact, ["title", "position"], ""), "");
-    const assignedTo = compact(firstValue(contact, ["assigned_to", "owner_name", "manager"]));
-    const prospect = compact(firstValue(contact, ["prospect_type", "grade", "auto_grade"]));
-    const result = compact(firstValue(contact, ["meeting_result", "status"]));
-    const noteText = compact(firstValue(latestNote || {}, ["content", "memo"], ""), "").slice(0, 80);
-    const dayLabel = inactiveDays >= 9999 ? "활동기록 없음" : `${inactiveDays}일 경과`;
-    lines.push(`- ${name}${title ? ` ${title}` : ""} | 담당: ${assignedTo} | 가망/등급: ${prospect} | 상태: ${result} | 최근활동: ${latestDate ? fmtDate(latestDate) : "-"} (${dayLabel}) | 최근노트: ${noteText || "-"}`);
-  });
-
-  return lines;
-}
-
-function buildScheduleContext(contacts: AnyRow[], events: AnyRow[], trucks: AnyRow[]) {
-  const today = getTodayKey();
-  const week = getWeekRange();
-  const lines: string[] = [];
-
-  const weekEvents = sortByDateAsc(
-    events.filter((event) => {
-      const date = compact(firstValue(event, ["date", "event_date", "start_date"], ""), "").slice(0, 10);
-      return date >= week.start && date <= week.end;
-    }),
-    ["date", "event_date", "start_date"]
-  ).slice(0, 30);
-
-  const weekTrucks = sortByDateAsc(
-    trucks.filter((truck) => {
-      const date = compact(firstValue(truck, ["dispatch_date", "date", "event_date"], ""), "").slice(0, 10);
-      return date >= week.start && date <= week.end;
-    }),
-    ["dispatch_date", "date", "event_date"]
-  ).slice(0, 30);
-
-  const weekMeetings = sortByDateAsc(
-    contacts.filter((contact) => {
-      const date = compact(firstValue(contact, ["meeting_date"], ""), "").slice(0, 10);
-      return date >= week.start && date <= week.end;
-    }),
-    ["meeting_date"]
-  ).slice(0, 30);
-
-  lines.push(`\n## 이번주 일정 (${fmtDate(week.start)} ~ ${fmtDate(week.end)})`);
-
-  const todayItems: string[] = [];
-
-  weekEvents.forEach((event) => {
-    const date = compact(firstValue(event, ["date", "event_date", "start_date"]));
-    const row = `- ${fmtDate(date)} | [캘린더] ${compact(firstValue(event, ["event_type", "type"]))} | ${compact(firstValue(event, ["title", "name"]))} | 담당: ${compact(firstValue(event, ["author", "owner_name", "assigned_to"]))}`;
-    lines.push(row);
-    if (String(date).slice(0, 10) === today) todayItems.push(row);
-  });
-
-  weekTrucks.forEach((truck) => {
-    const date = compact(firstValue(truck, ["dispatch_date", "date", "event_date"]));
-    const row = `- ${fmtDate(date)} | [완판트럭] ${compact(firstValue(truck, ["site_name", "title", "name"]))} | 위치: ${compact(firstValue(truck, ["location", "address"]))} | 대행사: ${compact(firstValue(truck, ["agency", "agency_name"]))} | 인원: ${compact(firstValue(truck, ["team_size", "member_count"]))}명 | 발주: ${firstValue(truck, ["is_ordered"], false) ? "완료" : "미완료"}`;
-    lines.push(row);
-    if (String(date).slice(0, 10) === today) todayItems.push(row);
-  });
-
-  weekMeetings.forEach((contact) => {
-    const date = compact(firstValue(contact, ["meeting_date"]));
-    const row = `- ${fmtDate(date)} | [고객미팅] ${compact(firstValue(contact, ["name", "member_name"]))} ${compact(firstValue(contact, ["title", "position"], ""), "")} | 담당: ${compact(firstValue(contact, ["assigned_to", "manager"]))} | 장소: ${compact(firstValue(contact, ["meeting_location", "location"]))}`;
-    lines.push(row);
-    if (String(date).slice(0, 10) === today) todayItems.push(row);
-  });
-
-  if (weekEvents.length + weekTrucks.length + weekMeetings.length === 0) lines.push("- 이번주 등록 일정 없음");
-
-  lines.push(`\n## 오늘 일정 (${fmtDate(today)})`);
-  if (todayItems.length === 0) lines.push("- 오늘 등록된 일정 없음");
-  else todayItems.slice(0, 15).forEach((line) => lines.push(line));
-
-  return lines;
-}
-
-function buildSalesContext(sales: AnyRow[], externalPayments: AnyRow[]) {
-  const month = getMonthRange();
-  const monthSales = sales.filter((sale) => {
-    const date = compact(firstValue(sale, ["payment_date", "paid_at", "created_at", "execution_date"], ""), "").slice(0, 10);
-    return date >= month.start && date <= month.end;
-  });
-
-  const channelMap: Record<string, { count: number; amount: number }> = {};
-  const managerMap: Record<string, { count: number; amount: number }> = {};
-  let total = 0;
-
-  monthSales.forEach((sale) => {
-    const amount = Number(firstValue(sale, ["vat_amount", "execution_amount", "amount", "price"], 0) || 0);
-    total += amount;
-    const channel = compact(firstValue(sale, ["channel", "sales_channel", "product_type"], "기타"));
-    const manager = compact(firstValue(sale, ["team_member", "assigned_to", "manager", "owner_name"], "미지정"));
-    if (!channelMap[channel]) channelMap[channel] = { count: 0, amount: 0 };
-    if (!managerMap[manager]) managerMap[manager] = { count: 0, amount: 0 };
-    channelMap[channel].count += 1;
-    channelMap[channel].amount += amount;
-    managerMap[manager].count += 1;
-    managerMap[manager].amount += amount;
-  });
-
-  const lines = [`\n## ${month.label} 매출 현황`];
-  lines.push(`총 ${monthSales.length}건, 총액 ${fmtMoney(total)}`);
-
-  lines.push("\n담당자별 매출:");
-  const managerEntries = Object.entries(managerMap).sort((a, b) => b[1].amount - a[1].amount);
-  if (managerEntries.length === 0) lines.push("- 데이터 없음");
-  managerEntries.forEach(([name, value]) => lines.push(`- ${name}: ${value.count}건, ${fmtMoney(value.amount)}`));
-
-  lines.push("\n채널별 매출:");
-  const channelEntries = Object.entries(channelMap).sort((a, b) => b[1].amount - a[1].amount);
-  if (channelEntries.length === 0) lines.push("- 데이터 없음");
-  channelEntries.forEach(([name, value]) => lines.push(`- ${name}: ${value.count}건, ${fmtMoney(value.amount)}`));
-
-  const recentSales = sortByDateDesc(monthSales, ["payment_date", "paid_at", "created_at", "execution_date"]).slice(0, 15);
-  lines.push("\n최근 매출 상세:");
-  if (recentSales.length === 0) lines.push("- 데이터 없음");
-  recentSales.forEach((sale) => {
-    const date = compact(firstValue(sale, ["payment_date", "paid_at", "created_at", "execution_date"]));
-    const name = compact(firstValue(sale, ["member_name", "customer_name", "name"]));
-    const amount = Number(firstValue(sale, ["vat_amount", "execution_amount", "amount", "price"], 0) || 0);
-    lines.push(`- ${fmtDate(date)} | ${name} | ${compact(firstValue(sale, ["channel", "sales_channel", "product_type"]))} | ${fmtMoney(amount)} | 담당: ${compact(firstValue(sale, ["team_member", "assigned_to", "manager", "owner_name"]))}`);
-  });
-
-  const paymentRows = externalPayments.slice(0, 300);
-  const cancelRows = paymentRows.filter((row) => firstValue(row, ["cancel_completed_at", "cancel_completed_datetime", "cancel_date", "canceled_at"], null));
-  if (paymentRows.length > 0) {
-    lines.push("\n외부 결제자료 참고:");
-    lines.push(`- 외부 결제자료 ${paymentRows.length}건 중 취소/환불 관련값 보유 ${cancelRows.length}건`);
-    cancelRows.slice(0, 10).forEach((row) => {
-      const name = compact(firstValue(row, ["customer_name", "member_name", "buyer_name", "name"]));
-      const paidAt = compact(firstValue(row, ["payment_completed_at", "paid_at", "payment_date", "created_at"]));
-      const canceledAt = compact(firstValue(row, ["cancel_completed_at", "cancel_completed_datetime", "cancel_date", "canceled_at"]));
-      const amount = firstValue(row, ["amount", "payment_amount", "total_amount", "price"], 0);
-      const sameDay = String(paidAt).slice(0, 10) && String(paidAt).slice(0, 10) === String(canceledAt).slice(0, 10);
-      lines.push(`- ${name} | 결제: ${paidAt || "-"} | 취소: ${canceledAt || "-"} | ${fmtMoney(amount)} | 구분추정: ${sameDay ? "당일취소" : "환불 가능성"}`);
-    });
-  }
-
-  return lines;
-}
-
-function buildTasksContext(tasks: AnyRow[]) {
-  const recent = sortByDateDesc(tasks, ["created_at", "request_date", "date"]).slice(0, 20);
-  const statusCount: Record<string, number> = {};
-  recent.forEach((task) => {
-    const status = compact(firstValue(task, ["status", "state"], "미지정"));
-    statusCount[status] = (statusCount[status] || 0) + 1;
-  });
-
-  const lines = ["\n## 최근 업무요청"];
-  lines.push(`상태별: ${Object.entries(statusCount).map(([k, v]) => `${k} ${v}건`).join(", ") || "데이터 없음"}`);
-  if (recent.length === 0) {
-    lines.push("- 업무요청 데이터 없음");
-    return lines;
-  }
-
-  recent.forEach((task) => {
-    const date = compact(firstValue(task, ["created_at", "request_date", "date"]));
-    const requester = compact(firstValue(task, ["requester", "requester_name", "author"]));
-    const assignee = compact(firstValue(task, ["assignee", "assignee_name", "owner_name"]));
-    const category = compact(firstValue(task, ["category", "type"]));
-    const status = compact(firstValue(task, ["status", "state"]));
-    const content = compact(firstValue(task, ["content", "title", "memo", "description"], ""), "").slice(0, 100);
-    lines.push(`- ${fmtDate(date)} | ${requester} → ${assignee} | [${category}] ${status} | ${content || "-"}`);
-  });
-
-  return lines;
-}
-
-function buildRecentNotesContext(notes: AnyRow[], contacts: AnyRow[]) {
-  const contactById = new Map<number, AnyRow>();
-  contacts.forEach((contact) => {
-    const id = Number(contact.id);
-    if (id) contactById.set(id, contact);
-  });
-
-  const recent = sortByDateDesc(notes, ["note_date", "created_at", "updated_at"]).slice(0, 20);
-  const lines = ["\n## 최근 활동노트 / 통화요약"];
-  if (recent.length === 0) {
-    lines.push("- 활동노트 데이터 없음");
-    return lines;
-  }
-
-  recent.forEach((note) => {
-    const contact = contactById.get(Number(note.contact_id));
-    const name = compact(firstValue(contact || {}, ["name", "member_name"], "미확인 고객"));
-    const assigned = compact(firstValue(contact || {}, ["assigned_to", "manager", "owner_name"], "-"));
-    const date = compact(firstValue(note, ["note_date", "created_at", "updated_at"]));
-    const author = compact(firstValue(note, ["author", "created_by"], "-"));
-    const content = compact(firstValue(note, ["content", "summary", "memo"], ""), "").slice(0, 120);
-    lines.push(`- ${fmtDate(date)} | ${name} | 담당: ${assigned} | 작성: ${author} | ${content || "-"}`);
-  });
-
-  return lines;
-}
-
-function buildGoalsContext(goals: AnyRow[]) {
-  const today = getTodayKey();
-  const todayGoals = goals.filter((goal) => String(firstValue(goal, ["work_date", "date", "goal_date"], "")).slice(0, 10) === today);
-  const lines = [`\n## 오늘 활동목표 (${fmtDate(today)})`];
-  if (todayGoals.length === 0) {
-    lines.push("- 오늘 활동목표 데이터 없음");
-    return lines;
-  }
-
-  todayGoals.slice(0, 20).forEach((goal) => {
-    const owner = compact(firstValue(goal, ["owner_name", "name", "user_name"]));
-    const outside = firstValue(goal, ["is_outside_meeting"], false) ? "외근" : "내근";
-    const raw = Object.entries(goal)
-      .filter(([key, value]) => value !== null && value !== undefined && !["id", "created_at", "updated_at", "work_date"].includes(key))
-      .slice(0, 8)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(" / ");
-    lines.push(`- ${owner} | ${outside} | ${raw}`);
-  });
-
-  return lines;
-}
-
-async function buildContext(question: string, task?: string | null, requestUser?: { name?: string; title?: string; role?: string } | null) {
-  const [contacts, notes, sales, events, trucks, tasks, goals] = await Promise.all([
-    readTable("contacts", 3000),
-    readTable("contact_notes", 1000),
-    readTable("ad_executions", 1000),
-    readTable("calendar_custom_events", 500),
-    readTable("wanpan_trucks", 500),
-    readTable("tasks", 500),
-    readTable("daily_activity_goals", 300),
-  ]);
-
-  const q = `${question} ${task || ""}`.toLowerCase();
-  const userName = requestUser?.name || "";
-  const month = getMonthRange();
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // [1] 데이터 분류 (CRM 로직 정확 반영)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  // VIP활동DB: crm_db_source = 'vip_activity'
-  const allVip = contacts.filter((c) => String(c.crm_db_source || "") === "vip_activity");
-  // 고객DB: crm_db_source = 'customer_db'
-  const allCustomerDb = contacts.filter((c) => String(c.crm_db_source || "") === "customer_db");
-
-  // 분양회 정식 입회자: meeting_result = '계약완료' (예약완료는 아직 입회 전)
-  const allContracted = allVip.filter((c) => String(c.meeting_result || "") === "계약완료");
-  // 예약완료 (계약 전 단계)
-  const allReserved = allVip.filter((c) => String(c.meeting_result || "") === "예약완료");
-
-  // 당월 계약완료: contract_date 기준
-  const thisMonthContracted = allContracted.filter((c) => {
-    const d = String(c.contract_date || "").slice(0, 7);
-    return d === month.start.slice(0, 7);
-  });
-
-  // 담당자 기준 필터
-  const myVip = userName ? allVip.filter((c) => String(c.assigned_to || "") === userName) : allVip;
-  const myCustomerDb = userName ? allCustomerDb.filter((c) => String(c.assigned_to || "") === userName) : allCustomerDb;
-  const myContracted = userName ? allContracted.filter((c) => String(c.assigned_to || "") === userName) : allContracted;
-  const myReserved = userName ? allReserved.filter((c) => String(c.assigned_to || "") === userName) : allReserved;
-  const myThisMonthContracted = userName ? thisMonthContracted.filter((c) => String(c.assigned_to || "") === userName) : thisMonthContracted;
-
-  // VIP 파이프라인 관리구간
-  const getStage = (c: AnyRow) => {
-    const stage = String(c.management_stage || "");
-    const result = String(c.meeting_result || "");
-    if (stage) return stage;
-    if (result === "계약완료") return "리텐션";
-    if (result === "예약완료") return "딜클로징";
-    return "리드";
-  };
-
-  const lines: string[] = [];
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // [2] 전체 현황 요약
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  lines.push("## 전체 CRM 현황");
-  lines.push(`VIP활동DB 전체: ${allVip.length}명`);
-  lines.push(`  분양회 계약완료(정식 입회): ${allContracted.length}명`);
-  lines.push(`  예약완료(계약 전): ${allReserved.length}명`);
-  lines.push(`  당월(${month.label}) 신규 계약: ${thisMonthContracted.length}명`);
-  lines.push(`고객DB 전체: ${allCustomerDb.length}명`);
-
-  // 담당자별 계약완료 현황
-  const byAssigneeContracted: Record<string,number> = {};
-  allContracted.forEach((c) => {
-    const a = String(c.assigned_to || "미지정");
-    byAssigneeContracted[a] = (byAssigneeContracted[a] || 0) + 1;
-  });
-  lines.push("담당자별 계약완료: " + Object.entries(byAssigneeContracted).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}명`).join(", "));
-
-  // 등급별
-  const byGrade: Record<string,number> = {};
-  allVip.forEach((c) => {
-    const g = String(c.customer_grade || "심사미진행");
-    byGrade[g] = (byGrade[g] || 0) + 1;
-  });
-  lines.push("VIP 등급별: " + Object.entries(byGrade).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}명`).join(", "));
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // [3] 로그인 사용자 기준 상세 (항상 포함)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  if (userName) {
-    lines.push(`\n## ${userName} 담당 현황`);
-    lines.push(`VIP 전체: ${myVip.length}명 | 계약완료: ${myContracted.length}명 | 예약완료: ${myReserved.length}명`);
-    lines.push(`당월(${month.label}) 신규 계약: ${myThisMonthContracted.length}명`);
-    lines.push(`고객DB: ${myCustomerDb.length}명`);
-
-    // 파이프라인 현황
-    const stages = ["리드","프로스펙팅","딜클로징","리텐션","이탈/탈퇴"];
-    const stageCounts = stages.map((s) => `${s} ${myVip.filter((c)=>getStage(c)===s).length}명`).join(" / ");
-    lines.push(`파이프라인: ${stageCounts}`);
-
-    // 당월 계약완료 명단
-    if (myThisMonthContracted.length > 0) {
-      lines.push(`\n당월 신규 계약완료 명단 (contract_date 기준):`);
-      myThisMonthContracted.forEach((c) => {
-        lines.push(`  - ${c.name} ${c.title||""} | 계약일: ${fmtDate(String(c.contract_date||""))} | 등급: ${c.customer_grade||"심사미진행"} | 결제: ${c.regular_payment_date ? `매월 ${c.regular_payment_date}일 / ${c.payment_channel||"-"}` : "미등록"}`);
-      });
-    }
-
-    // 계약완료 전체 명단
-    if (myContracted.length > 0) {
-      lines.push(`\n전체 계약완료 명단:`);
-      myContracted.slice(0, 50).forEach((c) => {
-        lines.push(`  - ${c.name} ${c.title||""} | 계약일: ${fmtDate(String(c.contract_date||""))} | 등급: ${c.customer_grade||"심사미진행"} | 결제채널: ${c.payment_channel||"미등록"}`);
-      });
-    }
-
-    // 예약완료 명단
-    if (myReserved.length > 0) {
-      lines.push(`\n예약완료(계약 전) 명단:`);
-      myReserved.slice(0, 20).forEach((c) => {
-        lines.push(`  - ${c.name} ${c.title||""} | 담당: ${c.assigned_to||"-"} | 관리구간: ${getStage(c)}`);
-      });
-    }
-
-    // 내 고객DB 최근 등록
-    const myRecentCustomerDb = myCustomerDb
-      .sort((a,b) => String(b.created_at||"").localeCompare(String(a.created_at||"")))
-      .slice(0, 10);
-    if (myRecentCustomerDb.length > 0) {
-      lines.push(`\n최근 고객DB 등록 (${myRecentCustomerDb.length}건):`);
-      myRecentCustomerDb.forEach((c) => {
-        lines.push(`  - ${c.name} ${c.title||""} | ${c.activity_type||"-"} | 유입: ${c.intake_route||"-"} | ${fmtDate(String(c.created_at||""))}`);
-      });
-    }
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // [4] 이름 매칭 고객 상세
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  const matchedContacts = contacts.filter((c) => {
-    const name = compact(firstValue(c, ["name"], ""), "");
-    return name.length >= 2 && q.includes(name);
-  }).slice(0, 5);
-
-  if (matchedContacts.length > 0) {
-    lines.push("\n## 이름 매칭 고객");
-    matchedContacts.forEach((c) => {
-      const latestNote = notes
-        .filter((n) => Number(n.contact_id) === Number(c.id))
-        .sort((a,b) => String(b.note_date||b.created_at||"").localeCompare(String(a.note_date||a.created_at||"")))[0];
-      lines.push(`- ${c.name} ${c.title||""} | 담당: ${c.assigned_to||"-"} | DB: ${c.crm_db_source||"-"} | 관리구간: ${getStage(c)} | 등급: ${c.customer_grade||"-"} | 계약일: ${c.contract_date||"-"} | 결제: ${c.regular_payment_date ? `매월${c.regular_payment_date}일` : "미등록"}`);
-      if (latestNote) lines.push(`  최근노트(${fmtDate(String(latestNote.note_date||latestNote.created_at||""))}): ${String(latestNote.content||"").slice(0,100)}`);
-    });
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // [5] 매출 / 일정 / 업무요청 / 활동노트 / 목표
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  lines.push(...buildSalesContext(sales, []));
-  lines.push(...buildScheduleContext(contacts, events, trucks));
-  lines.push(...buildTasksContext(tasks));
-  lines.push(...buildRecentNotesContext(notes, contacts));
-  lines.push(...buildGoalsContext(goals));
-
-  if (
-    q.includes("관리") || q.includes("누락") || q.includes("뜸") ||
-    q.includes("브리핑") || q.includes("today_briefing") ||
-    q.includes("inactive_customers") || q.includes("priority_actions")
-  ) {
-    lines.push(...buildInactiveCustomers(contacts, notes));
-  }
-
-  return lines.join("\n");
-}
-
-
-function getTaskGuide(task?: string | null) {
-  if (!task) return "일반 질문으로 판단하고, 질문과 가장 관련 높은 CRM 데이터만 중심으로 답변한다.";
-
-  const guides: Record<string, string> = {
-    today_briefing:
-      "오늘 브리핑 모드다. 오늘 일정, 이번주 일정, 관리 누락 고객, 이번달 매출, 최근 업무요청, 완판트럭, 활동목표를 한 번에 요약하고 마지막에 오늘 우선순위 TOP 5를 제안한다.",
-    inactive_customers:
-      "관리 누락 고객 모드다. 활동노트/최근활동 기준으로 관리가 필요한 고객을 담당자별로 분류하고, 각 고객별 후속 연락 방향을 제안한다.",
-    sales_analysis:
-      "매출 분석 모드다. 이번달 매출을 담당자별/채널별로 정리하고, 특이사항과 추가 확인 포인트를 제시한다.",
-    task_summary:
-      "업무요청 요약 모드다. 최근 업무요청을 요청자/담당자/상태별로 정리하고 미처리 우선순위를 제시한다.",
-    wanpan_schedule:
-      "완판트럭 일정 모드다. 이번주 및 최근 완판트럭 일정과 발주/인원/현장 확인 포인트를 정리한다.",
-    calendar_review:
-      "일정 점검 모드다. 캘린더, 고객미팅, 완판트럭 일정을 날짜순으로 정리하고 담당자별 체크포인트를 제시한다.",
-    priority_actions:
-      "우선순위 추천 모드다. 고객관리, 매출, 일정, 업무요청을 종합해서 지금 처리해야 할 순서대로 제안한다.",
-  };
-
-  return guides[task] || "일반 질문으로 판단하고, 질문과 가장 관련 높은 CRM 데이터만 중심으로 답변한다.";
-}
+import { supabase } from "@/lib/supabase";
+import { ACTION_TABLE_MAP, checkPermission } from "@/lib/jarvis/tools";
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const { message, history, task, user } = await req.json();
-    if (!message) return NextResponse.json({ error: "메시지를 입력해주세요." }, { status: 400 });
-    if (!API_KEY) return NextResponse.json({ error: "AI API 키가 설정되지 않았습니다." }, { status: 500 });
+    const body = await req.json();
+    const actionId: number | undefined = body?.actionId;
+    const confirmed: boolean = !!body?.confirmed;
+    const user = body?.user || { name: "", role: "exec" };
 
-    const crmData = await buildContext(message, task, user);
-    const today = getKstNow();
-    const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
-    const todayStr = `${today.getUTCFullYear()}년 ${today.getUTCMonth() + 1}월 ${today.getUTCDate()}일 (${dayNames[today.getUTCDay()]}요일)`;
-    const userName = compact(user?.name, "현재 사용자");
-    const userTitle = compact(user?.title, "");
+    if (!actionId) {
+      return NextResponse.json({ error: "actionId 누락" }, { status: 400 });
+    }
 
-    const needsBunyanghoeKnowledge =
-    message.toLowerCase().includes("분양회") ||
-    message.toLowerCase().includes("vip") ||
-    message.toLowerCase().includes("모집") ||
-    message.toLowerCase().includes("멤버십") ||
-    message.toLowerCase().includes("110") ||
-    message.toLowerCase().includes("55만") ||
-    message.toLowerCase().includes("스크립트") ||
-    message.toLowerCase().includes("특전") ||
-    message.toLowerCase().includes("설득") ||
-    message.toLowerCase().includes("거절") ||
-    message.toLowerCase().includes("광고특전") ||
-    (task === "today_briefing") ||
-    (task === "inactive_customers") ||
-    (task === "priority_actions");
+    // pending 액션 조회
+    const { data: action, error: fetchErr } = await supabase
+      .from("jarvis_actions")
+      .select("*")
+      .eq("id", actionId)
+      .eq("status", "pending")
+      .maybeSingle();
 
-  const crmKnowledge = `## CRM 운영 로직 (항상 참고)
-고객 흐름: 고객DB → 첫접촉(TM/콜드톡) → VIP심사 → VIP활동DB 이관 → 관리구간(리드>프로스펙팅>딜클로징>리텐션)
-메뉴 역할:
-- 대시보드: 영업 퍼널 KPI + 오늘 챙겨야 할 고객 (결제임박/결제누락/재TM예정/장기미활동/클로징지연)
-- 고객DB: TM/콜드톡 원천 DB, 재TM 예정일 관리([재TM일:YYYY-MM-DD] 태그), VIP이관 심사
-- VIP활동DB(파이프라인3): VIP 회원 파이프라인, 활동노트, 미팅일정(일/장소/목적), 결제정보
-- 통합매출관리: 분양회비·광고 매출 (사이다페이·효성CMS 자동연동)
-- 완판트럭: 현장 방문 일정·발주·리포트
-- 운영캘린더: 팀 공용 (미팅/연차/완판트럭/커스텀 일정 자동 반영)
-- 결제&업무요청: 전자결재 (연차·반차·결제·환불·페이백 요청서)
-- 일별활동기록: TM/콜드톡/DB확보 목표·달성 기록
-등급 체계: 마스터(본부장급 이상) > 챌린저(팀장급) > 브론즈 > 심사미진행
-자동화:
-- 사이다페이 크론(5분): 신규 결제 감지 → CRM 저장 → 카카오워크 매출방 알림(N회차 포함)
-- 효성CMS: 엑셀 업로드 → 자동 매칭 → CRM 저장 → 카카오워크 알림
-- 녹취록 자동요약: Google Drive 녹음 → AI 요약 → 활동노트 자동 등록
-- 카카오워크 봇: 오전 리마인더, 30분 활동 알림, 진행상황 리포트
-대외협력팀 KPI: 분양회 VIP 100명 / 완판트럭 월 6~8회 / 취재아티클 / 광고연계매출은 KPI 제외
-분신 유니버스: 2026.05 앱런칭완료 / 2026.06 광주 투자진흥지구 이전 / 2026년말 VIP100명+대행사27개사`;
-  const bunyanghoeKnowledge = needsBunyanghoeKnowledge ? `## 분양회 영업 지식
-[본질] 팀장·본부장·총괄본부장급 상위 1% VIP 성장 네트워크. 광고 할인 상품 아님. 슬로건: "광고회사 차리지 마세요, 분양회 가입하세요."
-[회비] 55만원(얼리버드) → 110만원(정식 운영가)
-[모집 기준] 총괄본부장>본부장>팀장 / 제외: 각개팀장 이하, 실장·부장·주임·경력 상담사
-[3대 특전] 광고특전(공식 견적서·페이백 금지) / 홍보특전(취재·매거진·브랜딩) / 네트워킹특전(컨퍼런스·대행사 접점)
-[금지어] 가입→모집, 혜택→서포트, 광고할인→광고운영서포트, 누구나가능→기준해당시검토
-[응대 흐름] 권위설정→직급확인→니즈확인→서포트제시→기준검토→자연연결
-[110만원 설득] 직원용홈페이지(개당20~30만, 10명=200~300만) > 광고특전+포인트 > 구인구직노출 > SMS반값문자(안정화중) > 디자인시안물
-[금지표현] "월회비가 다 상계됩니다" / "무조건 다 드립니다" / "바로 사용 가능합니다"
-[시장] 전체50,000명(활성35,000명) / 골드세그먼트10,476명 / 분양회100명=상위1% 선점` : "";
+    if (fetchErr || !action) {
+      return NextResponse.json({ error: "대기 중인 액션을 찾을 수 없습니다." }, { status: 404 });
+    }
 
-  const systemPrompt = `너는 광고인X분양의신 CRM 안에서 동작하는 AI 운영 에이전트 "JARVIS(자비스)"다.
-너는 CRM 화면 오른쪽 하단에 상주하는 AI 비서이며, 사용자는 ${userName}${userTitle ? ` ${userTitle}` : ""}이다.
+    // 본인 액션만 처리 가능 (admin은 모두 가능)
+    if (action.user_name !== user.name && user.role !== "admin") {
+      return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
+    }
 
-반드시 한국어로만 답변한다.
+    // 취소 처리
+    if (!confirmed) {
+      await supabase
+        .from("jarvis_actions")
+        .update({ status: "cancelled", confirmed_at: new Date().toISOString() })
+        .eq("id", actionId);
 
-현재 날짜: ${todayStr}
-현재 작업 모드: ${getTaskGuide(task)}
+      return NextResponse.json({
+        text: "✓ 작업이 취소되었습니다.",
+        cancelled: true,
+      });
+    }
 
-팀 기준:
-- 대표이사: 문시욱
-- 관리자: 김정후 본부장, 김창완 팀장, 최웅 파트장
-- 실행파트: 조계현(메인), 이세호(어쏘), 기여운(어쏘), 최연전(CX)
-- 운영파트: 김재영(어시), 최은정(어시)
+    // 권한 재검증
+    const perm = checkPermission(action.action_type, user.role);
+    if (!perm.allowed) {
+      await supabase
+        .from("jarvis_actions")
+        .update({ status: "failed", result: { error: perm.reason } })
+        .eq("id", actionId);
+      return NextResponse.json({ error: perm.reason || "권한 없음" }, { status: 403 });
+    }
 
-별칭: 계현·조메인→조계현 / 세호→이세호 / 여운→기여운 / 연전→최연전 / 재영→김재영 / 은정→최은정
+    // 실제 실행
+    try {
+      const result = await executeAction(action.action_type, action.payload, action.target_id, user);
 
-답변 규칙:
-1. CRM DATA, CRM 로직, 분양회 지식에 있는 사실만 근거로 답변한다.
-2. 숫자·금액·날짜·담당자 이름은 구체적으로 쓴다.
-3. "요약 → 상세 → 다음 액션" 순서로 정리한다.
-4. 오늘 브리핑·우선순위 요청이면 마지막에 "자비스 추천 우선순위" 3~5개 제안한다.
-5. 관리 누락 고객은 담당자별로 묶고 후속 연락 방향을 제안한다.
-6. 분양회 관련 답변 시 "가입" 대신 "모집·참여 검토", "혜택" 대신 "서포트" 사용.
-7. CRM 데이터를 수정하거나 전송했다고 말하지 않는다. 자비스는 읽기/분석 전용이다.
-8. 모르는 내용은 추측하지 않는다.
-9. 절대로 마크다운 문법을 사용하지 않는다. **, *, #, -, --- 등 기호를 사용하지 않는다.
-10. 단락 구분은 빈 줄로만 한다. 목록은 번호(1. 2. 3.)나 ▪ 기호만 사용한다.
-11. 강조가 필요하면 기호 없이 단어 자체로 강조하거나 [ ] 괄호를 사용한다.
-12. 답변은 간결하게, 실제 업무자가 바로 볼 수 있게 정리한다.
+      await supabase
+        .from("jarvis_actions")
+        .update({
+          status: "executed",
+          confirmed_at: new Date().toISOString(),
+          executed_at: new Date().toISOString(),
+          result,
+        })
+        .eq("id", actionId);
 
-CRM 로직 지식:
-${crmKnowledge}
-${bunyanghoeKnowledge}
+      return NextResponse.json({
+        text: `✅ 작업이 완료되었습니다.\n${result.summary || ""}`,
+        executed: true,
+        result,
+      });
+    } catch (execErr) {
+      const errMsg = execErr instanceof Error ? execErr.message : String(execErr);
+      await supabase
+        .from("jarvis_actions")
+        .update({
+          status: "failed",
+          confirmed_at: new Date().toISOString(),
+          result: { error: errMsg },
+        })
+        .eq("id", actionId);
 
-CRM DATA:
-${crmData}`;
-    const chatMessages: ChatMessage[] = [];
-    if (history && Array.isArray(history)) {
-      for (const item of history.slice(-6)) {
-        if (item?.role && item?.content) chatMessages.push({ role: item.role, content: item.content });
+      return NextResponse.json({ error: `실행 실패: ${errMsg}` }, { status: 500 });
+    }
+  } catch (err) {
+    console.error("[ai-chat/confirm] error:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "확인 처리 실패" },
+      { status: 500 }
+    );
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 실제 액션 실행 디스패처
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+type ExecutionResult = { summary: string; data?: unknown };
+
+async function executeAction(
+  actionType: string,
+  payload: Record<string, unknown>,
+  targetId: number | null,
+  user: { name: string; role?: string }
+): Promise<ExecutionResult> {
+  const tableName = ACTION_TABLE_MAP[actionType];
+  if (!tableName) throw new Error(`알 수 없는 액션 타입: ${actionType}`);
+
+  const now = new Date().toISOString();
+
+  switch (actionType) {
+    case "add_note": {
+      const { data, error } = await supabase
+        .from("contact_notes")
+        .insert({
+          contact_id: payload.contact_id,
+          note_date: payload.note_date || now.split("T")[0],
+          content: payload.content,
+          author: payload.author || user.name,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `활동노트가 추가되었습니다 (ID: ${data?.id})`, data };
+    }
+
+    case "update_contact_field": {
+      if (!targetId) throw new Error("targetId 필요");
+      const { error } = await supabase.from("contacts").update(payload).eq("id", targetId);
+      if (error) throw error;
+      const fields = Object.keys(payload).join(", ");
+      return { summary: `고객 정보 수정 완료 (${fields})` };
+    }
+
+    case "transfer_to_vip": {
+      if (!targetId) throw new Error("targetId 필요");
+      const { error } = await supabase
+        .from("contacts")
+        .update({
+          crm_db_source: "vip_activity",
+          vip_transferred_at: now,
+          ...(payload || {}),
+        })
+        .eq("id", targetId);
+      if (error) throw error;
+      return { summary: "VIP활동DB로 이관 완료" };
+    }
+
+    case "add_sales_record": {
+      const { data, error } = await supabase
+        .from("ad_executions")
+        .insert({
+          ...payload,
+          team_member: payload.team_member || user.name,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `매출 등록 완료 (ID: ${data?.id})`, data };
+    }
+
+    case "update_refund": {
+      if (!targetId) throw new Error("targetId 필요");
+      const { error } = await supabase
+        .from("ad_executions")
+        .update({ refund_amount: payload.refund_amount, refund_reason: payload.refund_reason })
+        .eq("id", targetId);
+      if (error) throw error;
+      return { summary: `환불 처리 완료 (${payload.refund_amount}원)` };
+    }
+
+    case "create_task": {
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert({
+          ...payload,
+          requester: payload.requester || user.name,
+          status: payload.status || "신규",
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `업무요청 생성 (ID: ${data?.id})`, data };
+    }
+
+    case "update_task_status": {
+      if (!targetId) throw new Error("targetId 필요");
+      const { error } = await supabase
+        .from("tasks")
+        .update({ status: payload.status })
+        .eq("id", targetId);
+      if (error) throw error;
+      return { summary: `업무 상태 변경 완료 (${payload.status})` };
+    }
+
+    case "add_task_comment": {
+      const { data, error } = await supabase
+        .from("task_comments")
+        .insert({
+          task_id: payload.task_id,
+          author: payload.author || user.name,
+          content: payload.content,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `코멘트 등록 완료 (ID: ${data?.id})`, data };
+    }
+
+    case "create_approval": {
+      const { data, error } = await supabase
+        .from("approval_requests")
+        .insert({
+          ...payload,
+          requester: payload.requester || user.name,
+          status: payload.status || "신청",
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `결재 신청 완료 (ID: ${data?.id})`, data };
+    }
+
+    case "create_calendar_event": {
+      const { data, error } = await supabase
+        .from("calendar_custom_events")
+        .insert({
+          ...payload,
+          created_by: user.name,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `일정 등록 완료 (${payload.event_date})`, data };
+    }
+
+    case "create_wanpan_truck": {
+      const { data, error } = await supabase
+        .from("wanpan_trucks")
+        .insert({ ...payload, created_at: now })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `완판트럭 일정 등록 완료 (ID: ${data?.id})`, data };
+    }
+
+    case "upsert_daily_activity": {
+      const targetDate = payload.activity_date || now.split("T")[0];
+      const targetUser = payload.user_name || user.name;
+
+      // upsert (있으면 update, 없으면 insert)
+      const { data: existing } = await supabase
+        .from("daily_activity_goals")
+        .select("id")
+        .eq("user_name", targetUser)
+        .eq("activity_date", targetDate)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("daily_activity_goals")
+          .update(payload)
+          .eq("id", existing.id);
+        if (error) throw error;
+        return { summary: `${targetDate} ${targetUser} 활동 기록 업데이트` };
+      } else {
+        const { error } = await supabase.from("daily_activity_goals").insert({
+          user_name: targetUser,
+          activity_date: targetDate,
+          ...payload,
+        });
+        if (error) throw error;
+        return { summary: `${targetDate} ${targetUser} 활동 기록 추가` };
       }
     }
-    chatMessages.push({ role: "user", content: message });
 
-    const result = await callAI(systemPrompt, chatMessages);
-
-    if (!result.reply) {
-      return NextResponse.json({ error: `AI 응답 실패: ${result.error}` }, { status: 500 });
+    case "add_memo": {
+      const { data, error } = await supabase
+        .from("memos")
+        .insert({
+          ...payload,
+          author: payload.author || user.name,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `메모 추가 완료 (ID: ${data?.id})`, data };
     }
 
-    return NextResponse.json({ reply: result.reply });
-  } catch (error: any) {
-    console.error("JARVIS AI Chat error:", error);
-    return NextResponse.json({ error: error?.message || "서버 오류" }, { status: 500 });
+    case "add_notice": {
+      if (user.role !== "admin") throw new Error("관리자만 공지를 등록할 수 있습니다.");
+      const { data, error } = await supabase
+        .from("notices")
+        .insert({
+          ...payload,
+          author: payload.author || user.name,
+          created_at: now,
+        })
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { summary: `공지 등록 완료 (ID: ${data?.id})`, data };
+    }
+
+    case "update_slogan": {
+      const { error } = await supabase
+        .from("crm_user_slogans")
+        .upsert({ user_name: user.name, slogan: payload.slogan, updated_at: now });
+      if (error) throw error;
+      return { summary: "슬로건 업데이트 완료" };
+    }
+
+    case "update_content_status": {
+      if (!payload.contact_id) throw new Error("contact_id 필요");
+      const { error } = await supabase
+        .from("content_statuses")
+        .upsert({
+          contact_id: payload.contact_id,
+          ...payload,
+          updated_at: now,
+        });
+      if (error) throw error;
+      return { summary: "콘텐츠 단계 업데이트 완료" };
+    }
+
+    default:
+      throw new Error(`구현되지 않은 액션: ${actionType}`);
   }
 }
