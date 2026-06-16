@@ -3360,12 +3360,14 @@ export default function TasksPage() {
                   <RefreshCw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
                   필터 초기화
                 </button>
-                <span
-                  className="text-[12px] font-bold"
-                  style={{ color: "var(--text-faint)" }}
-                >
-                  {(filteredTasks.length + filteredApprovals.length).toLocaleString()}건
-                </span>
+                {activeFilters > 0 && (
+                  <span
+                    className="text-[12px] font-medium"
+                    style={{ color: "var(--accent-text)" }}
+                  >
+                    {(filteredTasks.length + filteredApprovals.length).toLocaleString()}건
+                  </span>
+                )}
               </div>
             </div>
 
