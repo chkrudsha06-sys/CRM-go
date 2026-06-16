@@ -143,10 +143,10 @@ export function classifyByPattern(message: string): IntentResult {
     "insight_combined",
     "greeting",
   ];
-  const nonWrite = matched.filter((c) => c !== "write_action");
+  const nonWrite: IntentCategory[] = matched.filter((c) => c !== "write_action");
   let primary: IntentCategory = "unclear";
   for (const p of PRIORITY) {
-    if (nonWrite.includes(p)) { primary = p; break; }
+    if (nonWrite.indexOf(p) !== -1) { primary = p; break; }
   }
   if (primary === "unclear" && nonWrite.length > 0) primary = nonWrite[0];
 
@@ -157,8 +157,8 @@ export function classifyByPattern(message: string): IntentResult {
     category: isWrite ? "write_action" : primary,
     confidence: matched.length > 0 ? 0.8 : 0.3,
     keywords,
-    needsCrmData: ["customer_lookup", "activity_history", "sales_analytics", "task_schedule",
-                   "kpi_activity", "bunyanghoe_ops", "insight_combined", "write_action"].includes(primary),
+    needsCrmData: (["customer_lookup", "activity_history", "sales_analytics", "task_schedule",
+                   "kpi_activity", "bunyanghoe_ops", "insight_combined", "write_action"] as IntentCategory[]).indexOf(primary) !== -1,
     needsKnowledge: primary === "knowledge" || matched.includes("knowledge"),
     isWriteAction: isWrite,
   };
