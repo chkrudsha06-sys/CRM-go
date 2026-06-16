@@ -33,13 +33,13 @@
   --fw-body: 500;
   --fw-ui: 600;
 
-  --bg: #08090b;
+  --bg: #141414;
   --bg-2: #0b0d10;
   --bg-3: #0f1116;
 
-  --surface: #101114;
-  --surface-2: #14161b;
-  --surface-3: #191c22;
+  --surface: #171717;
+  --surface-2: #1b1b1b;
+  --surface-3: #222222;
   --surface-4: #20242c;
   --surface-hover: #171a20;
   --surface-selected: #1b2030;
@@ -48,12 +48,12 @@
   --overlay: rgba(0, 0, 0, 0.58);
 
   --border-subtle: rgba(255, 255, 255, 0.045);
-  --border: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.06);
   --border-2: rgba(255, 255, 255, 0.13);
   --border-strong: rgba(255, 255, 255, 0.2);
 
   --text-strong: #fafafa;
-  --text: #f4f4f5;
+  --text: #ebebeb;
   --text-muted: #c9ced9;
   --text-subtle: #a8aeba;
   --text-faint: #7c8492;
@@ -97,12 +97,12 @@
   --purple-bg: rgba(192, 132, 252, 0.11);
   --purple-border: rgba(192, 132, 252, 0.26);
 
-  --radius-xs: 7px;
-  --radius-sm: 9px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-2xl: 26px;
+  --radius-xs: 4px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
 
   --page-max: 1840px;
   --panel-width: 660px;
@@ -123,7 +123,7 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f3f5f8;
+  --bg: #fcfcfc;
   --bg-2: #eef1f5;
   --bg-3: #e8edf3;
 
@@ -138,12 +138,12 @@
   --overlay: rgba(15, 23, 42, 0.34);
 
   --border-subtle: rgba(15, 23, 42, 0.075);
-  --border: rgba(15, 23, 42, 0.12);
+  --border: rgba(0, 0, 0, 0.10);
   --border-2: rgba(15, 23, 42, 0.18);
   --border-strong: rgba(15, 23, 42, 0.28);
 
   --text-strong: #0f172a;
-  --text: #1e293b;
+  --text: #333333;
   --text-muted: #3f4b5f;
   --text-subtle: #576275;
   --text-faint: #7a8499;
@@ -362,8 +362,8 @@ option, optgroup { background: var(--surface); color: var(--text); }
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.012)), var(--surface);
-  box-shadow: var(--shadow-xs);
+  background: var(--surface);
+  box-shadow: none;
 }
 [data-theme="light"] .premium-card {
   border-color: var(--border);
@@ -427,9 +427,9 @@ option, optgroup { background: var(--surface); color: var(--text); }
 .btn-premium:active { transform: translateY(0); }
 .btn-primary {
   color: #fff;
-  border-color: rgba(167, 139, 250, 0.34);
-  background: linear-gradient(180deg, rgba(255,255,255,.16), transparent), linear-gradient(135deg, #8b7cf6, #6d6cf2 48%, #4f8df7);
-  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.24), inset 0 1px 0 rgba(255,255,255,.22);
+  border-color: transparent;
+  background: var(--accent);
+  box-shadow: none;
 }
 .btn-primary:hover { border-color: rgba(216, 210, 255, 0.44); box-shadow: 0 14px 34px rgba(99,102,241,.32), inset 0 1px 0 rgba(255,255,255,.26); }
 .btn-secondary {
@@ -1607,3 +1607,48 @@ aside span {
   width: 1.2em;
   text-align: left;
 }
+
+
+/* ═══ Twenty UI 유틸리티 (1:1 카피용) ═══ */
+/* 테이블 셀 알약 (도메인/이메일/전화 등) */
+.tw-cell-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 100%; padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 테이블 행 (Twenty: 높이 32px, 셀패딩 8px, 셀간격 2px) */
+.tw-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tw-table th {
+  height: 32px; padding: 0 8px; text-align: left;
+  color: var(--text-tertiary); font-weight: 400; font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.tw-table td {
+  height: 32px; padding: 0 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+.tw-table tr:hover td { background: var(--surface-hover); }
+.tw-col-icon { color: var(--text-tertiary); margin-right: 6px; vertical-align: -2px; }
+/* 하단 집계행 */
+.tw-footer-row {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 8px;
+  color: var(--text-tertiary); font-size: 13px;
+}
+.tw-footer-row b { color: var(--text); font-weight: 500; }
+/* 레코드 패널 필드 행 */
+.tw-field { display: flex; align-items: center; min-height: 32px; gap: 8px; }
+.tw-field-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  width: 100px; flex-shrink: 0;
+  color: var(--text-tertiary); font-size: 13px;
+}
+.tw-field-label .tw-col-icon { margin-right: 0; }
+.tw-field-value { flex: 1; min-width: 0; color: var(--text); font-size: 13px; }
+.tw-section { margin: 6px 0; color: var(--text-faint); font-size: 11px; font-weight: 500; }
