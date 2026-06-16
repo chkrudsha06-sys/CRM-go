@@ -648,49 +648,18 @@ function PremiumIcon({ icon: Icon, tone = "info", size = "md" }: { icon: Element
 
 function SelectChip({ value, onChange, options, placeholder }: { value: string; onChange: (value: string) => void; options: string[]; placeholder: string }) {
   return (
-    <div className="relative min-w-0">
+    <div className="relative">
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="crm-search h-12 w-full appearance-none px-3 pr-9"
+        className="h-8 min-w-[122px] appearance-none rounded-full border px-3 pr-8 text-[12px] font-bold outline-none"
+        style={{ background: value ? "var(--accent-subtle)" : "var(--surface-2)", borderColor: value ? "var(--accent-border)" : "var(--border)", color: value ? "var(--accent-text)" : "var(--text-muted)" }}
       >
         <option value="">{placeholder}</option>
         {options.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
-      <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
+      <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} />
     </div>
-  );
-}
-
-function TextSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  return (
-    <label className="relative block min-w-0">
-      <span className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center" style={{ color: "var(--text-faint)" }}>
-        <Search className="h-4 w-4" />
-      </span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="crm-search h-12 w-full pl-9 pr-3"
-      />
-    </label>
-  );
-}
-
-function MonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="relative block min-w-0">
-      <span className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center" style={{ color: "var(--text-faint)" }}>
-        <CalendarDays className="h-4 w-4" />
-      </span>
-      <input
-        type="month"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="crm-search h-12 w-full pl-9 pr-3"
-      />
-    </label>
   );
 }
 
@@ -828,6 +797,13 @@ function DetailSlidePanel({ item, tab, onTab, onClose, onEdit, onDelete }: { ite
                   <p className="text-[12px] font-bold" style={{ color: "var(--success-text)" }}>실매출</p>
                   <p className="mt-1 text-[30px] font-[780] tracking-[-0.06em]" style={{ color: "var(--text-strong)" }}>{money(effectiveSales(item))}</p>
                 </div>
+                {/* 수기 등록 메모 — 사이다페이/효성CMS 외 채널 */}
+                {item.memo && item.channel !== "사이다페이" && item.channel !== "효성CMS" && (
+                  <div className="mt-4 rounded-[14px] p-4" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <p className="mb-2 text-[11px] font-bold" style={{ color: "var(--text-faint)" }}>메모</p>
+                    <p className="whitespace-pre-wrap text-[13px] font-semibold leading-relaxed" style={{ color: "var(--text)" }}>{item.memo}</p>
+                  </div>
+                )}
               </section>
               {item.memo && (item.channel === "사이다페이" || item.channel === "효성CMS") && (
                 <section className="premium-card p-4">
@@ -1159,6 +1135,8 @@ export default function SalesPage() {
   const [hyosungSummary, setHyosungSummary] = useState<HyosungImportSummary>({ total: 0, paid: 0, failed: 0, duplicate: 0, importedLogs: 0, createdSales: 0 });
   const [hyosungSaving, setHyosungSaving] = useState(false);
   const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
+  // 직급 매칭용 — 담당자 필터 무관하게 전체 분양회 입회자
+  const [allMembersForTitle, setAllMembersForTitle] = useState<MemberOption[]>([]);
   const [memberSearch, setMemberSearch] = useState("");
   const [ciderpaySyncing, setCiderpaySyncing] = useState(false);
   const [ciderpayFullSyncing, setCiderpayFullSyncing] = useState(false);
@@ -1194,13 +1172,35 @@ export default function SalesPage() {
   useEffect(() => { fetchRows(); }, [fetchRows]);
 
   const fetchMemberOptions = useCallback(async () => {
-    const { data, error } = await supabase
+    // 실행파트 로그인 시 본인 담당 고객만 조회
+    let execName: string | null = null;
+    try {
+      const raw = localStorage.getItem("crm_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
+        const execNames = ["조계현", "이세호", "기여운", "최연전"];
+        const name = String(u?.name || "").trim();
+        const role = String(u?.role || "").toLowerCase();
+        const isAdmin = role === "admin" || adminNames.includes(name);
+        const isExec = role === "exec" || role.includes("실행") || execNames.includes(name);
+        if (isExec && !isAdmin) execName = name;
+      }
+    } catch {}
+
+    let q = supabase
       .from("contacts")
       .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .in("meeting_result", ["예약완료", "계약완료"])
       .not("name", "is", null)
       .order("name", { ascending: true })
       .limit(2000);
+
+    if (execName) {
+      q = q.eq("assigned_to", execName) as typeof q;
+    }
+
+    const { data, error } = await q;
 
     if (error) {
       console.error("분양회 입회자 조회 실패:", error.message);
@@ -1209,6 +1209,15 @@ export default function SalesPage() {
     }
 
     setMemberOptions((data || []) as MemberOption[]);
+
+    // 직급 매칭용 — 담당자 필터 없이 전체 분양회 입회자 조회
+    const { data: allMembers } = await supabase
+      .from("contacts")
+      .select("name,title")
+      .in("meeting_result", ["예약완료", "계약완료"])
+      .not("name", "is", null)
+      .limit(5000);
+    setAllMembersForTitle((allMembers || []) as MemberOption[]);
   }, []);
 
   useEffect(() => { fetchMemberOptions(); }, [fetchMemberOptions]);
@@ -1243,12 +1252,29 @@ export default function SalesPage() {
 
   const memberTitleMap = useMemo(() => {
     const map = new Map<string, string>();
+    // 이름 정규화: 모든 공백·특수문자 제거하고 소문자화
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    // 전체 분양회 입회자 기준 (담당자 필터 무관)
+    allMembersForTitle.forEach((member) => {
+      const rawName = (member.name || "").trim();
+      const key = normalize(rawName);
+      if (key && member.title) map.set(key, member.title);
+    });
+    // 본인 담당 옵션도 포함 (혹시 누락된 케이스 보완)
     memberOptions.forEach((member) => {
-      const name = (member.name || "").trim();
-      if (name && member.title) map.set(name, member.title);
+      const rawName = (member.name || "").trim();
+      const key = normalize(rawName);
+      if (key && member.title && !map.has(key)) map.set(key, member.title);
     });
     return map;
-  }, [memberOptions]);
+  }, [allMembersForTitle, memberOptions]);
+
+  // 정규화된 이름으로 직급 조회 헬퍼
+  const getTitleByName = (name: string | null | undefined): string => {
+    if (!name) return "-";
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    return memberTitleMap.get(normalize(name)) || "-";
+  };
 
   const memberManagerByNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1388,13 +1414,68 @@ export default function SalesPage() {
       memo: memo || null,
     };
     setSaving(true);
-    const { error } = editItem ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id) : await supabase.from("ad_executions").insert(payload);
+    const { data: savedData, error } = editItem
+      ? await supabase.from("ad_executions").update(payload).eq("id", editItem.id).select("id").single()
+      : await supabase.from("ad_executions").insert(payload).select("id").single();
     setSaving(false);
     if (error) return alert(`저장 실패: ${error.message}`);
     setShowModal(false);
     setEditItem(null);
     fetchRows();
     if (selectedItem && editItem?.id === selectedItem.id) setSelectedItem({ ...selectedItem, ...payload } as AdExecution);
+
+    // ── 신규 등록 + 분양회 결제건이면 카카오워크 알림 ──
+    if (!editItem && payload.contract_route?.includes("분양회")) {
+      try {
+        // N회차 계산: 고객명 기준 월별 유니크 결제 건수 (동월 중복 제외)
+        const { data: allPayments } = await supabase
+          .from("ad_executions")
+          .select("payment_date")
+          .eq("member_name", payload.member_name || "")
+          .eq("contract_route", payload.contract_route)
+          .gt("execution_amount", 0)
+          .order("payment_date", { ascending: true });
+
+        // 월별 유니크 카운트 (YYYY-MM 기준)
+        const uniqueMonths = new Set(
+          (allPayments || [])
+            .map((r: any) => (r.payment_date || "").slice(0, 7))
+            .filter(Boolean)
+        );
+        const nth = uniqueMonths.size || 1;
+
+        // 고객 직급/연락처 조회
+        const { data: memberInfo } = await supabase
+          .from("contacts")
+          .select("title, phone")
+          .eq("name", payload.member_name || "")
+          .maybeSingle();
+
+        // 메모 값 (특이사항 하단에 추가)
+        const memoNote = form.memo?.trim() || "";
+
+        await fetch("/api/kakaowork/send-sales-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            member_name: payload.member_name,
+            member_title: memberInfo?.title || "",
+            member_phone: memberInfo?.phone || form.contact_phone || "",
+            execution_amount: payload.execution_amount,
+            channel: payload.channel,
+            contract_route: payload.contract_route,
+            payment_date: payload.payment_date,
+            team_member: payload.team_member,
+            payment_card: form.payment_card || "",
+            is_auto: false,
+            payment_count: nth,
+            extra_note: memoNote,
+          }),
+        });
+      } catch (kakaoErr) {
+        console.warn("카카오워크 알림 실패 (무시):", kakaoErr);
+      }
+    }
   };
 
 
@@ -1812,28 +1893,104 @@ export default function SalesPage() {
         </div>
       </div>
 
-      <section className="premium-filterbar mx-5 mb-3 mt-3 rounded-[24px] p-4 sm:p-5 md:mx-7">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(170px,0.8fr)_minmax(280px,1.5fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto]">
-          <MonthPicker value={month} onChange={setMonth} />
-          <TextSearch value={search} onChange={setSearch} placeholder="고객명, 결제채널, 담당자, 메모 검색" />
-          <SelectChip value={fChannel} onChange={setFChannel} options={CHANNELS} placeholder="전체 결제채널" />
-          <SelectChip value={fRoute} onChange={setFRoute} options={CONTRACT_ROUTES} placeholder="전체 결제항목" />
-          <SelectChip value={fTeam} onChange={setFTeam} options={TEAM} placeholder="전체 담당자" />
-          <button type="button" onClick={resetFilters} className="btn-premium btn-secondary h-12 xl:w-auto">
-            <RefreshCw className="h-4 w-4" />
-            초기화
-          </button>
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
-          <div className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-[850] badge-muted">
-            <Filter className="h-4 w-4 flex-none" />
-            <span>월 · 고객명 · 결제채널 · 결제항목 · 담당자 기준</span>
+      <div className="flex-shrink-0 px-5 py-3 md:px-7">
+        <div className="premium-card rounded-[22px] p-4">
+          <div className="grid gap-3 xl:grid-cols-[auto_minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto]" style={{ justifyContent: "start" }}>
+
+            {/* 월 선택 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">월 선택</span>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="crm-search h-12 w-[160px] px-3 font-normal"
+              />
+            </label>
+
+            {/* 검색 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-10 font-normal">통합 검색</span>
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="고객명, 결제채널, 담당자, 메모 검색"
+                  className="crm-search h-12 w-full pl-10 pr-3 font-normal"
+                />
+              </div>
+            </label>
+
+            {/* 결제채널 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">결제채널 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3 font-normal"
+                value={fChannel}
+                onChange={(e) => setFChannel(e.target.value)}
+              >
+                <option value="">전체 결제채널</option>
+                {CHANNELS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </label>
+
+            {/* 결제항목 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">결제항목 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3 font-normal"
+                value={fRoute}
+                onChange={(e) => setFRoute(e.target.value)}
+              >
+                <option value="">전체 결제항목</option>
+                {CONTRACT_ROUTES.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </label>
+
+            {/* 담당자 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3 font-normal">담당자 필터</span>
+              <select
+                className="crm-search h-12 w-full px-3 font-normal"
+                value={fTeam}
+                onChange={(e) => setFTeam(e.target.value)}
+              >
+                <option value="">전체 담당자</option>
+                {TEAM.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </label>
+
+            {/* 필터 초기화 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span
+                className="crm-meta block text-[11px] font-normal transition-colors"
+                style={{ color: activeFilters > 0 ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+              >
+                필터 적용중
+              </span>
+              <button
+                type="button"
+                className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-normal transition-all"
+                style={{
+                  background: activeFilters > 0 ? "var(--accent-subtle)" : "var(--surface-2)",
+                  border: `1px solid ${activeFilters > 0 ? "var(--accent-border)" : "var(--border)"}`,
+                  color: activeFilters > 0 ? "var(--accent-text)" : "var(--text-subtle)",
+                }}
+                onClick={resetFilters}
+                disabled={activeFilters === 0}
+              >
+                <RefreshCw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
+                필터 초기화
+              </button>
+            </div>
           </div>
-          <p className="crm-tiny">
-            검색 결과 {filteredRows.length.toLocaleString()}건 / 전체 {rows.length.toLocaleString()}건
-          </p>
         </div>
-      </section>
+      </div>
 
       <main className="sales-modern-main min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
         {loading ? <div className="flex h-full items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} /></div> : filteredRows.length === 0 ? <div className="flex h-full items-center justify-center"><div className="premium-card p-8"><EmptyState icon="💳" title="표시할 매출 데이터가 없습니다" description="월 또는 필터 조건을 변경하거나 새 매출을 등록하세요" actionLabel="매출 등록" onAction={openAdd} /></div></div> : (
@@ -1843,7 +2000,7 @@ export default function SalesPage() {
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
                   {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div></div></div></td>
-                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{memberTitleMap.get((row.member_name || "").trim()) || "-"}</span></td>
+                    <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{getTitleByName(row.member_name)}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
                     <td className="text-center"><Badge tone={channelTone(row.channel)}>{row.channel || "-"}</Badge></td>
                     <td className="text-center"><Badge tone={routeTone(normalizePaymentItem(row.contract_route))}>{normalizePaymentItem(row.contract_route) || "-"}</Badge></td>
@@ -1908,10 +2065,8 @@ export default function SalesPage() {
                   {memberOptions
                     .filter((member) => {
                       const keyword = memberSearch.trim().toLowerCase();
-                      if (!keyword) return true;
-                      const matchKeyword = [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
-                      const matchAssigned = !crmUser || member.assigned_to === crmUser.name;
-                      return matchKeyword && matchAssigned;
+                      const matchKeyword = !keyword || [member.name, member.title, member.bunyanghoe_number, member.phone, member.meeting_result].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+                      return matchKeyword;
                     })
                     .slice(0, 15)
                     .map((member) => (
