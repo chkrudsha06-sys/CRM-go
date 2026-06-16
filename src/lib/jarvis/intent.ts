@@ -156,7 +156,8 @@ export function extractKeywords(text: string): string[] {
   if (bMatch) keywords.push(bMatch[0].replace(/\s/g, ""));
 
   // 이름 + 직급 패턴 (이정재 본부장, 김중석 본부장 등)
-  const nameTitle = text.matchAll(/([가-힣]{2,3})\s*(본부장|총괄본부장|팀장|부장|차장|과장|대리|컨설턴트)/g);
+  // Array.from으로 감싸서 TypeScript target ES5 호환
+  const nameTitle = Array.from(text.matchAll(/([가-힣]{2,3})\s*(본부장|총괄본부장|팀장|부장|차장|과장|대리|컨설턴트)/g));
   for (const m of nameTitle) {
     keywords.push(`${m[1]} ${m[2]}`);
     keywords.push(m[1]);
