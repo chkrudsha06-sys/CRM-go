@@ -652,20 +652,14 @@ function getMemberTitle(name: string) {
 function getApprovalLine(type: ApprovalType, requesterName: string) {
   const base = [
     { role: "담당", name: requesterName, step: 0, status: "기안" },
-    {
-      role: "참조",
-      name: APPROVAL_OFFICERS.reference,
-      step: 1,
-      status: "대기",
-    },
-    { role: "팀장", name: APPROVAL_OFFICERS.teamLead, step: 2, status: "대기" },
+    { role: "팀장", name: APPROVAL_OFFICERS.teamLead, step: 1, status: "대기" },
   ];
 
   if (LEAVE_TYPES.includes(type)) return base;
 
   return [
     ...base,
-    { role: "본부장", name: APPROVAL_OFFICERS.head, step: 3, status: "대기" },
+    { role: "본부장", name: APPROVAL_OFFICERS.head, step: 2, status: "대기" },
   ];
 }
 
@@ -883,12 +877,6 @@ function getApprovalLabel(request: ApprovalRequestRow) {
 }
 
 function effectiveCurrentApprover(request: ApprovalRequestRow) {
-  // 참조자는 승인권자가 아닙니다.
-  // 이전 버전에서 current_approver_name에 참조자(최웅)가 들어간 요청도
-  // 화면과 처리 기준에서는 실제 1차 승인자인 팀장으로 보정합니다.
-  if (request.current_approver_name === request.reference_name) {
-    return request.team_lead_name || request.current_approver_name || null;
-  }
   return request.current_approver_name || null;
 }
 
@@ -1100,7 +1088,7 @@ function ApprovalCard({
   onDelete?: () => void;
 }) {
   const currentApprover = effectiveCurrentApprover(request);
-  const isReference = request.reference_name === me && currentApprover !== me;
+
   const isApprover  = currentApprover === me;
   const isRequester = request.requester_name === me;
 
@@ -1126,7 +1114,6 @@ function ApprovalCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={groupTone}>{request.request_group || "결재요청"}</Badge>
             <Badge tone={statusTone}>{request.status || "진행중"}</Badge>
-            {isReference && <Badge tone="purple">참조확인</Badge>}
             {isApprover  && <Badge tone="danger">승인요청</Badge>}
             {isRequester && <Badge tone="muted">내 요청</Badge>}
           </div>
@@ -1202,7 +1189,7 @@ function ApprovalDetailSlidePanel({
   const payload  = (request.payload || {}) as Partial<ApprovalForm>;
   const currentApprover = effectiveCurrentApprover(request);
   const canApprove = currentApprover === me && request.status === "진행중";
-  const isReference = request.reference_name === me && currentApprover !== me;
+
 
   const previewForm: ApprovalForm = {
     ...EMPTY_APPROVAL_FORM,
@@ -1234,7 +1221,6 @@ function ApprovalDetailSlidePanel({
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge tone={groupTone}>{request.request_group || "결재요청"}</Badge>
                 <Badge tone={statusTone}>{request.status || "진행중"}</Badge>
-                {isReference && <Badge tone="purple">참조확인</Badge>}
                 {canApprove  && <Badge tone="danger">승인권자</Badge>}
               </div>
 
@@ -1246,7 +1232,6 @@ function ApprovalDetailSlidePanel({
               </h2>
               <p className="mt-1 text-[12px] font-semibold" style={{ color: "var(--text-subtle)" }}>
                 신청자 {request.requester_name || "-"}{request.requester_title ? ` · ${request.requester_title}` : ""} · {timeAgo(request.created_at)}
-                {isReference ? " · 참조자는 승인 권한이 없습니다." : ""}
               </p>
             </div>
             <button
@@ -2634,7 +2619,6 @@ export default function TasksPage() {
     return approvals.filter((request) => {
       const visibleToMe =
         request.requester_name === me ||
-        request.reference_name === me ||
         request.current_approver_name === me ||
         request.team_lead_name === me ||
         request.head_name === me ||
@@ -2642,7 +2626,7 @@ export default function TasksPage() {
 
       if (
         tab === "나에게 온" &&
-        !(request.reference_name === me || request.current_approver_name === me)
+        !(request.current_approver_name === me)
       )
         return false;
       if (tab === "내가 요청한" && request.requester_name !== me) return false;
@@ -2696,8 +2680,7 @@ export default function TasksPage() {
 
   const stats = useMemo(() => {
     const approvalInbox = approvals.filter(
-      (request) =>
-        request.reference_name === me || request.current_approver_name === me,
+      (request) => request.current_approver_name === me,
     ).length;
     const approvalRequested = approvals.filter(
       (request) => request.requester_name === me,
@@ -2889,7 +2872,7 @@ export default function TasksPage() {
         request_group: getApprovalGroup(requestType),
         requester_name: requesterName,
         requester_title: getMemberTitle(requesterName),
-        reference_name: APPROVAL_OFFICERS.reference,
+        reference_name: null,
         team_lead_name: APPROVAL_OFFICERS.teamLead,
         head_name: LEAVE_TYPES.includes(requestType)
           ? null
@@ -2919,14 +2902,6 @@ export default function TasksPage() {
 
       await supabase.from("notifications").insert([
         {
-          assignee_name: APPROVAL_OFFICERS.reference,
-          title: `${requesterName}님의 ${requestType} 요청`,
-          message: `${requestType} 참조 확인이 필요합니다. 실제 승인권자는 ${currentApprover}입니다.`,
-          source_type: "결제요청",
-          source_id: requestId,
-          is_read: false,
-        },
-        {
           assignee_name: currentApprover,
           title: `${requesterName}님의 ${requestType} 승인 요청`,
           message: `${requestType} 승인 처리가 필요합니다.`,
@@ -2954,7 +2929,7 @@ export default function TasksPage() {
               request_type: requestType,
               requester_name: requesterName,
               current_approver: currentApprover,
-              reference_name: APPROVAL_OFFICERS.reference,
+              reference_name: null,
               payload: { ...approvalForm },
             }),
           });
@@ -3048,12 +3023,6 @@ export default function TasksPage() {
         `${request.request_type} 결재 완료`,
         `${request.request_type} 요청이 최종 승인되었습니다.`,
       );
-      await notifyApprovalTarget(
-        request.id,
-        request.reference_name,
-        `${request.request_type} 결재 완료`,
-        `${request.requester_name}님의 요청이 최종 승인되었습니다.`,
-      );
     }
 
     if (action === "반려") {
@@ -3062,12 +3031,6 @@ export default function TasksPage() {
         request.requester_name,
         `${request.request_type} 반려`,
         `${me}님이 요청을 반려했습니다.`,
-      );
-      await notifyApprovalTarget(
-        request.id,
-        request.reference_name,
-        `${request.request_type} 반려`,
-        `${request.requester_name}님의 요청이 반려되었습니다.`,
       );
     }
 
