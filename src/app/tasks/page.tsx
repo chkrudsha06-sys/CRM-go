@@ -1154,8 +1154,8 @@ function ApprovalCard({
           </div>
         </div>
 
-        {/* ── 현재단계 요약 (오른쪽 끝) ── */}
-        <div className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
+        {/* ── 현재단계 + 삭제 (오른쪽 끝) ── */}
+        <div className="hidden shrink-0 flex-col items-end gap-2 sm:flex">
           <span className="text-[11px] font-normal" style={{ color: "var(--text-faint)" }}>현재단계</span>
           <span
             className="text-[13px] font-bold tracking-[-0.01em]"
@@ -1163,6 +1163,16 @@ function ApprovalCard({
           >
             {approvalStepText(request)}
           </span>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="btn-premium btn-danger h-7 px-2 text-[11px]"
+            >
+              <Trash2 size={11} />
+              삭제
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1291,6 +1301,45 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
               양식 출력
             </button>
 
+            {/* PDF 저장 버튼 */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById("approval-preview-print");
+                if (!el) return;
+                const title = `${request.request_type}_${request.requester_name || ""}_${(request.created_at || "").slice(0,10)}`;
+                const iframe = document.createElement("iframe");
+                iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;";
+                document.body.appendChild(iframe);
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (!doc) return;
+                doc.open();
+                doc.write(`<!DOCTYPE html><html lang="ko"><head>
+<meta charset="utf-8"/>
+<title>${title}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+<style>
+@page { size: A4 portrait; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+html, body { width: 210mm; height: 297mm; background: white; overflow: hidden; }
+body { display: flex; align-items: flex-start; justify-content: center; padding: 5mm; }
+</style>
+<script>
+  window.onload = function() {
+    window.document.title = "${title}";
+    window.print();
+    setTimeout(function(){ window.close(); }, 1000);
+  };
+</script>
+</head><body>${el.innerHTML}</body></html>`);
+                doc.close();
+              }}
+              className="btn-premium btn-secondary h-9"
+            >
+              <Download size={14} />
+              PDF 저장
+            </button>
+
             {canApprove && (
               <>
                 <button type="button" onClick={onApprove} className="btn-premium btn-primary h-9">
@@ -1305,8 +1354,8 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
             )}
           </div>
 
-          {/* 삭제 버튼 */}
-          {onDelete && request.requester_name === me && (
+          {/* 삭제 버튼 — 전체 구성원 가능 */}
+          {onDelete && (
             <button
               type="button"
               onClick={onDelete}
