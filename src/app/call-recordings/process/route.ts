@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type DriveFile = {
   id: string;
@@ -630,10 +631,6 @@ function formatStructuredSummaryAsText(params: {
     lines.push("");
     lines.push(`키워드: ${s.추출키워드.join(", ")}`);
   }
-  lines.push("");
-  lines.push("---");
-  lines.push("[원문 전사]");
-  lines.push(params.transcript);
   return lines.join("\n");
 }
 
@@ -835,6 +832,8 @@ async function upsertLog(params: {
   contactName?: string | null;
   contactPhone?: string | null;
   summaryText?: string | null;
+  transcriptText?: string | null;
+  structuredSummary?: Record<string, unknown> | null;
   noteId?: number | null;
   status: string;
   errorMessage?: string | null;
@@ -856,6 +855,8 @@ async function upsertLog(params: {
         contact_name: params.contactName || null,
         contact_phone: params.contactPhone || null,
         summary_text: params.summaryText || null,
+        transcript_text: params.transcriptText || null,
+        structured_summary: params.structuredSummary || null,
         note_id: params.noteId || null,
         status: params.status,
         error_message: params.errorMessage || null,
@@ -1076,6 +1077,8 @@ async function processAudioFile(params: {
     contactName: matchedContact.name,
     contactPhone: matchedContact.phone,
     summaryText: audioSummary.summary,
+    transcriptText: audioSummary.transcript || null,
+    structuredSummary: (audioSummary.structured as unknown as Record<string, unknown>) || null,
     noteId:
       noteSave.note &&
       typeof noteSave.note === "object" &&
