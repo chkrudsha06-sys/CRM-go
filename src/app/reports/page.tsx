@@ -4,17 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ElementType, ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  Activity, AlertTriangle, ArrowRight, BarChart3,
-  ChevronDown, ChevronUp, CircleDollarSign, Lightbulb,
-  Loader2, RefreshCw, Target, TrendingDown, TrendingUp,
-  Truck, Users, WalletCards, Zap,
+  Activity, AlertTriangle, BarChart3, ChevronDown, ChevronUp,
+  CircleDollarSign, Lightbulb, Loader2, RefreshCw, Target,
+  TrendingDown, TrendingUp, Truck, Users, WalletCards,
+  Phone, MessageSquare, Award, Crown, ArrowRight, UserPlus,
+  CheckCircle2, FileText, Filter,
 } from "lucide-react";
 
 // ━━━ 상수 ━━━
 const EXEC = ["조계현", "이세호", "기여운", "최연전"] as const;
-const CONSULTANTS = ["박경화","박혜은","조승현","박민경","백선중","강아름","전정훈","박나라"];
-type ExecName = (typeof EXEC)[number];
 type ToneName = "info"|"success"|"warning"|"danger"|"purple"|"cyan"|"muted";
+
+const VIP_DB_SOURCE = "vip_activity";
 
 // ━━━ 포맷 ━━━
 function money(n: number) {
@@ -23,9 +24,7 @@ function money(n: number) {
   if (abs >= 10_000) return `${sign}${Math.round(abs/10_000).toLocaleString()}만원`;
   return `${sign}${abs.toLocaleString()}원`;
 }
-function moneyFull(n: number) { return `${n.toLocaleString()}원`; }
-function pct(a: number, b: number) { return b > 0 ? Math.round((a/b)*100) : 0; }
-function monthLabel(y: number, m: number) { return `${y}년 ${m}월`; }
+function pct1(a: number, b: number) { return b > 0 ? Math.round((a/b)*1000)/10 : 0; }
 function prevMonth(y: number, m: number) { return m === 1 ? { y: y-1, m: 12 } : { y, m: m-1 }; }
 function monthRange(y: number, m: number) {
   const ms = String(m).padStart(2,"0");
@@ -71,32 +70,22 @@ function PanelTitle({ icon, tone, title, desc, right }: {
       <div className="flex min-w-0 items-center gap-2.5">
         <IconBox icon={icon} tone={tone} size="sm" />
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold leading-tight tracking-[-0.02em]"
+          <p className="text-[14px] font-semibold leading-tight tracking-[-0.01em]"
             style={{ color:"var(--text-strong)" }}>{title}</p>
-          {desc && <p className="mt-0.5 truncate text-[12px] font-medium tracking-[-0.01em]"
+          {desc && <p className="text-[12px] font-medium leading-tight"
             style={{ color:"var(--text-subtle)" }}>{desc}</p>}
         </div>
       </div>
-      {right}
+      {right && <div className="shrink-0">{right}</div>}
     </div>
   );
 }
 
-function Badge({ children, tone = "muted" }: { children: ReactNode; tone?: ToneName }) {
-  const c = toneStyle(tone);
-  return (
-    <span className="inline-flex min-h-[22px] items-center gap-1 rounded-[7px] px-2 text-[11px] font-normal tracking-[-0.01em]"
-      style={{ background:c.bg, color:c.text, border:`1px solid ${c.border}` }}>
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background:c.dot }} />{children}
-    </span>
-  );
-}
-
-function Bar({ value, total, tone = "info", height = 6 }: {
-  value: number; total: number; tone?: ToneName; height?: number;
+function Bar({ value, max, tone = "info", height = 8 }: {
+  value: number; max: number; tone?: ToneName; height?: number;
 }) {
   const c = toneStyle(tone);
-  const w = Math.min(100, pct(value, total || Math.max(value, 1)));
+  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div className="overflow-hidden rounded-full" style={{ height, background:"var(--surface-3)" }}>
       <div className="h-full rounded-full transition-all"
@@ -105,22 +94,28 @@ function Bar({ value, total, tone = "info", height = 6 }: {
   );
 }
 
-function DeltaBadge({ curr, prev, invert = false, unit = "%" }: {
-  curr: number; prev: number; invert?: boolean; unit?: string;
-}) {
-  if (prev === 0 && curr === 0) return null;
-  const delta = prev > 0 ? Math.round(((curr - prev) / prev) * 100) : (curr > 0 ? 100 : 0);
-  const isUp = invert ? delta < 0 : delta > 0;
-  const isDown = invert ? delta > 0 : delta < 0;
-  const tone: ToneName = isUp ? "success" : isDown ? "danger" : "muted";
-  const Icon = isUp ? TrendingUp : isDown ? TrendingDown : Activity;
-  const label = delta === 0 ? `±0${unit}` : `${delta > 0 ? "+" : ""}${delta}${unit}`;
+function Badge({ tone, children }: { tone: ToneName; children: ReactNode }) {
   const c = toneStyle(tone);
   return (
-    <span className="inline-flex items-center gap-1 rounded-[7px] px-2 py-0.5 text-[11px] font-semibold"
+    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
       style={{ background:c.bg, color:c.text, border:`1px solid ${c.border}` }}>
-      <Icon size={11} />{label}
+      {children}
     </span>
+  );
+}
+
+function MetricCard({ icon, tone, label, value, sub }: {
+  icon: ElementType; tone: ToneName; label: string; value: ReactNode; sub?: ReactNode;
+}) {
+  return (
+    <div className="premium-card flex items-center gap-3 rounded-[14px] p-4">
+      <IconBox icon={icon} tone={tone} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-medium tracking-[-0.01em]" style={{ color:"var(--text-subtle)" }}>{label}</p>
+        <p className="mt-0.5 text-[20px] font-bold tracking-[-0.02em]" style={{ color:"var(--text-strong)" }}>{value}</p>
+        {sub && <p className="mt-0.5 text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>{sub}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -133,18 +128,20 @@ function netAmt(e: Record<string,any>) {
 
 function chGroup(e: Record<string,any>) {
   const ch = String(e.channel || "기타");
-  if (ch.includes("하이타겟")) return "하이타겟";
-  if (ch.includes("입회비")) return "분양회 입회비";
   if (ch.includes("월회비")) return "분양회 월회비";
+  if (ch.includes("입회비")) return "분양회 입회비";
   if (ch.includes("LMS")) return "LMS";
   if (ch.includes("호갱")) return "호갱노노";
+  if (ch.includes("하이타겟")) return "하이타겟";
   return ch || "기타";
 }
 
-const PERSON_TONES: ToneName[] = ["info", "purple", "success", "warning"];
 const CH_TONES: Record<string,ToneName> = {
-  "하이타겟":"purple","분양회 입회비":"warning","분양회 월회비":"cyan","LMS":"success","호갱노노":"info",
+  "분양회 월회비":"cyan", "분양회 입회비":"warning",
+  "LMS":"success", "호갱노노":"info", "하이타겟":"purple",
 };
+
+const PERSON_TONES: ToneName[] = ["info", "purple", "success", "warning"];
 
 // ════════════════════════════════════════════════════════
 // 메인 컴포넌트
@@ -157,6 +154,7 @@ export default function ReportsPage() {
   const [prevExecs, setPrevExecs] = useState<Record<string,any>[]>([]);
   const [contacts,  setContacts]  = useState<Record<string,any>[]>([]);
   const [wanpans,   setWanpans]   = useState<Record<string,any>[]>([]);
+  const [dailyGoals, setDailyGoals] = useState<Record<string,any>[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [expandedPerson, setExpandedPerson] = useState<string|null>(null);
 
@@ -165,16 +163,18 @@ export default function ReportsPage() {
     const { s, e } = monthRange(year, month);
     const { y: py, m: pm } = prevMonth(year, month);
     const { s: ps, e: pe } = monthRange(py, pm);
-    const [r1, r2, r3, r4] = await Promise.all([
+    const [r1, r2, r3, r4, r5] = await Promise.all([
       supabase.from("ad_executions").select("*").gte("payment_date", s).lte("payment_date", e),
       supabase.from("ad_executions").select("*").gte("payment_date", ps).lte("payment_date", pe),
       supabase.from("contacts").select("*"),
       supabase.from("wanpan_trucks").select("*").gte("dispatch_date", s).lte("dispatch_date", e),
+      supabase.from("daily_activity_goals").select("*").gte("work_date", s).lte("work_date", e),
     ]);
     setExecs(r1.data || []);
     setPrevExecs(r2.data || []);
     setContacts(r3.data || []);
     setWanpans(r4.data || []);
+    setDailyGoals(r5.data || []);
     setLoading(false);
   }, [year, month]);
 
@@ -185,712 +185,665 @@ export default function ReportsPage() {
   const { y: py, m: pm } = prevMonth(year, month);
   const pmPrefix = `${py}-${String(pm).padStart(2, "0")}`;
 
-  // ── 1. 월간 종합 ──
+  // 1. 월간 종합
   const summary = useMemo(() => {
-    const totalRev  = execs.reduce((s,e) => s + netAmt(e), 0);
-    const prevRev   = prevExecs.reduce((s,e) => s + netAmt(e), 0);
+    const totalRev = execs.reduce((s,e) => s + netAmt(e), 0);
     const refundAmt = execs.reduce((s,e) => s + (e.refund_amount || 0), 0);
-    const grossRev  = totalRev + refundAmt;
-    const refundRate = grossRev > 0 ? Math.round(refundAmt/grossRev*1000)/10 : 0;
-    const prevRefund = prevExecs.reduce((s,e) => s + (e.refund_amount || 0), 0);
-    const prevGross  = prevExecs.reduce((s,e) => s + netAmt(e), 0) + prevRefund;
-    const prevRefundRate = prevGross > 0 ? Math.round(prevRefund/prevGross*1000)/10 : 0;
+    const monthFeeAmt = execs.filter(e => chGroup(e) === "분양회 월회비").reduce((s,e)=>s+netAmt(e), 0);
 
-    const byCh: Record<string,number> = {};
-    execs.forEach(e => { const k = chGroup(e); byCh[k] = (byCh[k] || 0) + netAmt(e); });
+    const refundByCh: Record<string, number> = {};
+    execs.forEach(e => {
+      if (e.refund_amount > 0) {
+        const k = chGroup(e);
+        refundByCh[k] = (refundByCh[k] || 0) + (e.refund_amount || 0);
+      }
+    });
 
-    const newContracts  = contacts.filter(c => c.contract_date?.startsWith(mPrefix)).length;
-    const newReservs    = contacts.filter(c => c.reservation_date?.startsWith(mPrefix)).length;
-    const prevContracts = contacts.filter(c => c.contract_date?.startsWith(pmPrefix)).length;
+    const contracts = contacts.filter(c => c.contract_date?.startsWith(mPrefix));
+    const reservs   = contacts.filter(c => c.reservation_date?.startsWith(mPrefix));
+    const truckCount = wanpans.length;
+    const truckTotalAttendees = wanpans.reduce((s,w) => s + (w.attendee_count || 0), 0);
 
-    const wpCount  = wanpans.length;
-    const wpPeople = wanpans.reduce((s,w) => s + (w.team_size || 0), 0);
+    return {
+      totalRev, refundAmt, monthFeeAmt, refundByCh,
+      contractCount: contracts.length,
+      reservCount: reservs.length,
+      truckCount, truckTotalAttendees,
+    };
+  }, [execs, contacts, wanpans, mPrefix]);
 
-    const feeRev  = execs.filter(e => (e.channel||"").includes("월회비")).reduce((s,e) => s + netAmt(e), 0);
-    const prevFee = prevExecs.filter(e => (e.channel||"").includes("월회비")).reduce((s,e) => s + netAmt(e), 0);
+  // 2. 담당자별 영업 플로우
+  const personFlow = useMemo(() => {
+    return EXEC.map((name) => {
+      const myContacts = contacts.filter(c => c.assigned_to === name);
+      const newDb = myContacts.filter(c => String(c.created_at || "").startsWith(mPrefix));
+      const vipDb = myContacts.filter(c => c.crm_db_source === VIP_DB_SOURCE);
+      const vipTransferThisMonth = myContacts.filter(c =>
+        String(c.vip_transferred_at || "").startsWith(mPrefix)
+      );
+      const contracts = myContacts.filter(c => c.contract_date?.startsWith(mPrefix));
+      const reservs   = myContacts.filter(c => c.reservation_date?.startsWith(mPrefix));
 
-    return { totalRev, prevRev, refundAmt, refundRate, prevRefundRate,
-             byCh, newContracts, newReservs, prevContracts,
-             wpCount, wpPeople, feeRev, prevFee };
-  }, [execs, prevExecs, contacts, wanpans, mPrefix, pmPrefix]);
+      const revenue = execs.filter(e => e.team_member === name).reduce((s,e) => s + netAmt(e), 0);
+      const prevRev = prevExecs.filter(e => e.team_member === name).reduce((s,e) => s + netAmt(e), 0);
 
-  // ── 2. 담당자별 성과 ──
-  const personData = useMemo(() => {
-    return (EXEC as readonly string[]).map(name => {
-      const myExecs   = execs.filter(e => (e.team_member || "").includes(name));
-      const totalAmt  = myExecs.reduce((s,e) => s + netAmt(e), 0);
-      const hitAmt    = myExecs.filter(e => (e.channel||"").includes("하이타겟")).reduce((s,e) => s + netAmt(e), 0);
-      const feeAmt    = myExecs.filter(e => (e.channel||"").includes("월회비")).reduce((s,e) => s + netAmt(e), 0);
-      const lmsAmt    = myExecs.filter(e => (e.channel||"").includes("LMS")).reduce((s,e) => s + netAmt(e), 0);
-      const hogAmt    = myExecs.filter(e => (e.channel||"").includes("호갱")).reduce((s,e) => s + netAmt(e), 0);
-      const refundAmt = myExecs.reduce((s,e) => s + (e.refund_amount || 0), 0);
-      const execCount = myExecs.length;
-
-      const mine       = contacts.filter(c => c.assigned_to === name);
-      const total      = mine.length;
-      const contracted = mine.filter(c => c.contract_date?.startsWith(mPrefix)).length;
-      const reserved   = mine.filter(c => c.reservation_date?.startsWith(mPrefix)).length;
-      const hasMeeting = mine.filter(c => ["계약완료","예약완료","미팅후가망관리","계약거부","미팅불발"]
-        .includes(c.meeting_result || "")).length;
-      const convRate   = hasMeeting > 0 ? pct(contracted + reserved, hasMeeting) : 0;
-
-      const wpTrips = wanpans.filter(w => {
-        try { return JSON.parse(w.staff_members || "[]").includes(name); } catch { return false; }
-      }).length;
-
-      const prevMyExecs = prevExecs.filter(e => (e.team_member || "").includes(name));
-      const prevAmt     = prevMyExecs.reduce((s,e) => s + netAmt(e), 0);
-      const avgDeal     = contracted > 0 ? Math.round(totalAmt / contracted) : 0;
-
-      return { name, totalAmt, hitAmt, feeAmt, lmsAmt, hogAmt, refundAmt, execCount,
-               total, contracted, reserved, hasMeeting, convRate, wpTrips,
-               prevAmt, avgDeal };
-    }).sort((a,b) => b.totalAmt - a.totalAmt);
-  }, [execs, prevExecs, contacts, wanpans, mPrefix]);
-
-  // ── 3. 주차별 추이 ──
-  const weeklyData = useMemo(() => {
-    const ld = new Date(year, month, 0).getDate();
-    const weeks: {label:string;s:number;e:number;rev:number;contracts:number;byPerson:Record<string,number>;count:number}[] = [];
-    for (let w = 0; w < 5; w++) {
-      const s = w*7+1, e2 = Math.min((w+1)*7, ld);
-      if (s > ld) break;
-      const ms2 = String(month).padStart(2,"0");
-      const sD = `${year}-${ms2}-${String(s).padStart(2,"0")}`;
-      const eD = `${year}-${ms2}-${String(e2).padStart(2,"0")}`;
-      const wExecs = execs.filter(ex => ex.payment_date >= sD && ex.payment_date <= eD);
-      const rev = wExecs.reduce((sum,ex) => sum + netAmt(ex), 0);
-      const contracts = contacts.filter(c =>
-        (c.contract_date >= sD && c.contract_date <= eD) ||
-        (c.reservation_date >= sD && c.reservation_date <= eD)).length;
-      const byPerson: Record<string,number> = {};
-      (EXEC as readonly string[]).forEach(n => {
-        byPerson[n] = wExecs.filter(ex => (ex.team_member||"").includes(n)).reduce((sum,ex) => sum + netAmt(ex), 0);
+      const byCh: Record<string, number> = {};
+      execs.filter(e => e.team_member === name).forEach(e => {
+        const k = chGroup(e);
+        byCh[k] = (byCh[k] || 0) + netAmt(e);
       });
-      weeks.push({ label:`${w+1}주차`, s, e:e2, rev, contracts, byPerson, count:wExecs.length });
-    }
-    return weeks;
-  }, [execs, contacts, month, year]);
 
-  // ── 4. 채널 매출구조 ──
-  const salesStructure = useMemo(() => {
-    const total = summary.totalRev;
-    return Object.entries(summary.byCh)
-      .sort((a,b) => b[1]-a[1])
-      .map(([k,v]) => ({ label:k, value:v, pct:pct(v, total), tone:(CH_TONES[k]||"muted") as ToneName }));
-  }, [summary]);
+      const vipConvRate = pct1(vipTransferThisMonth.length, newDb.length);
+      const contractConvRate = pct1(contracts.length + reservs.length, vipDb.length);
 
-  // ── 5. 컨설턴트별 ──
-  const consultantData = useMemo(() => {
-    return CONSULTANTS.map(name => {
-      const mine   = execs.filter(e => (e.consultant || "") === name);
-      const amt    = mine.reduce((s,e) => s + netAmt(e), 0);
-      const cnt    = mine.length;
-      const refund = mine.reduce((s,e) => s + (e.refund_amount || 0), 0);
-      return { name, amt, cnt, refund };
-    }).sort((a,b) => b.amt-a.amt);
-  }, [execs]);
+      return {
+        name, newDb: newDb.length, vipTransferred: vipTransferThisMonth.length,
+        vipDb: vipDb.length,
+        contracts: contracts.length, reservs: reservs.length,
+        revenue, prevRev, byCh,
+        vipConvRate, contractConvRate,
+      };
+    });
+  }, [contacts, execs, prevExecs, mPrefix]);
 
-  // ── 6. AI 인사이트 ──
+  // 3. 유입경로별 성과
+  const intakeFlow = useMemo(() => {
+    const monthContacts = contacts.filter(c => String(c.created_at || "").startsWith(mPrefix));
+    const routes = Array.from(new Set(monthContacts.map(c => c.intake_route).filter(Boolean)));
+    return routes.map(route => {
+      const all = monthContacts.filter(c => c.intake_route === route);
+      const vip = all.filter(c => c.crm_db_source === VIP_DB_SOURCE);
+      const contracted = all.filter(c => c.contract_date || c.reservation_date);
+      return {
+        route: String(route),
+        total: all.length,
+        vip: vip.length,
+        vipRate: pct1(vip.length, all.length),
+        contracted: contracted.length,
+        contractedRate: pct1(contracted.length, all.length),
+      };
+    }).sort((a, b) => b.total - a.total);
+  }, [contacts, mPrefix]);
+
+  // 4. 계약 고객 유입경로
+  const contractRoutes = useMemo(() => {
+    const closed = contacts.filter(c =>
+      c.contract_date?.startsWith(mPrefix) || c.reservation_date?.startsWith(mPrefix)
+    );
+    const routeMap: Record<string, number> = {};
+    closed.forEach(c => {
+      const r = String(c.intake_route || "미분류");
+      routeMap[r] = (routeMap[r] || 0) + 1;
+    });
+    const total = closed.length;
+    return Object.entries(routeMap)
+      .map(([route, count]) => ({ route, count, share: pct1(count, total) }))
+      .sort((a, b) => b.count - a.count);
+  }, [contacts, mPrefix]);
+
+  // 5. 활동량 분석
+  const activityStats = useMemo(() => {
+    const totalTm = dailyGoals.reduce((s, r) => s + (r.result_new_tm || 0), 0);
+    const totalCold = dailyGoals.reduce((s, r) => s + (r.result_coldtalk || 0), 0);
+    const goalTm = dailyGoals.reduce((s, r) => s + (r.goal_new_tm || 0), 0);
+    const goalCold = dailyGoals.reduce((s, r) => s + (r.goal_coldtalk || 0), 0);
+    const totalManageTm = dailyGoals.reduce((s, r) => s + (r.result_manage_tm || 0), 0);
+    const totalConsultantDb = dailyGoals.reduce((s, r) => s + (r.result_consultant_db || 0), 0);
+    const totalSecondTouch = dailyGoals.reduce((s, r) => s + (r.result_second_touch || 0), 0);
+
+    const byPerson = EXEC.map(name => {
+      const rows = dailyGoals.filter(r => r.owner_name === name);
+      return {
+        name,
+        tm: rows.reduce((s, r) => s + (r.result_new_tm || 0), 0),
+        cold: rows.reduce((s, r) => s + (r.result_coldtalk || 0), 0),
+        manageTm: rows.reduce((s, r) => s + (r.result_manage_tm || 0), 0),
+        consultantDb: rows.reduce((s, r) => s + (r.result_consultant_db || 0), 0),
+      };
+    });
+
+    return {
+      totalTm, totalCold, goalTm, goalCold,
+      tmAchievement: pct1(totalTm, goalTm),
+      coldAchievement: pct1(totalCold, goalCold),
+      totalManageTm, totalConsultantDb, totalSecondTouch,
+      byPerson,
+    };
+  }, [dailyGoals]);
+
+  // 6. 활동노트 품질
+  const notesQuality = useMemo(() => {
+    return EXEC.map(name => {
+      const myContacts = contacts.filter(c =>
+        c.assigned_to === name && c.crm_db_source === VIP_DB_SOURCE
+      );
+      const withNotes = myContacts.filter(c => c.memo && String(c.memo).trim().length > 30);
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 7);
+      const recentlyTouched = myContacts.filter(c => {
+        const up = c.updated_at ? new Date(c.updated_at).getTime() : 0;
+        return up >= recentDate.getTime();
+      });
+      return {
+        name,
+        totalVip: myContacts.length,
+        withNotes: withNotes.length,
+        recentlyTouched: recentlyTouched.length,
+        noteRate: pct1(withNotes.length, myContacts.length),
+        recencyRate: pct1(recentlyTouched.length, myContacts.length),
+      };
+    });
+  }, [contacts]);
+
+  // 7. 일별 활동목표
+  const dailyGoalStats = useMemo(() => {
+    return EXEC.map(name => {
+      const rows = dailyGoals.filter(r => r.owner_name === name);
+      const daysInput = rows.length;
+      const tmGoal = rows.reduce((s, r) => s + (r.goal_new_tm || 0), 0);
+      const tmResult = rows.reduce((s, r) => s + (r.result_new_tm || 0), 0);
+      const coldGoal = rows.reduce((s, r) => s + (r.goal_coldtalk || 0), 0);
+      const coldResult = rows.reduce((s, r) => s + (r.result_coldtalk || 0), 0);
+      const totalGoal = tmGoal + coldGoal;
+      const totalResult = tmResult + coldResult;
+      const businessDays = 22;
+      return {
+        name,
+        daysInput,
+        inputRate: pct1(daysInput, businessDays),
+        achievement: pct1(totalResult, totalGoal),
+      };
+    });
+  }, [dailyGoals]);
+
+  // 8. 인사이트
   const insights = useMemo(() => {
-    const list: { tone: ToneName; icon: ElementType; title: string; body: string }[] = [];
-    const { totalRev, prevRev, refundRate, newContracts, prevContracts, wpCount } = summary;
-    const growth = prevRev > 0 ? Math.round((totalRev-prevRev)/prevRev*100) : 0;
+    const items: { tone: ToneName; icon: ElementType; title: string; desc: string }[] = [];
 
-    if (growth >= 20)     list.push({ tone:"success", icon:TrendingUp,    title:`매출 급성장 +${growth}%`,        body:"전월 대비 크게 성장했습니다. 성장세를 이어가려면 상위 채널 집중 투자와 담당자 활동량 유지가 핵심입니다." });
-    else if (growth >= 5) list.push({ tone:"info",    icon:TrendingUp,    title:`매출 소폭 상승 +${growth}%`,     body:"안정적 상승이지만 목표 달성을 위해 고전환율 가망 고객 집중 관리가 필요합니다." });
-    else if (growth < -5) list.push({ tone:"danger",  icon:TrendingDown,  title:`매출 하락 ${growth}%`,           body:"담당자별 실적 편차를 점검하고 주차별 추이에서 하락 시점을 확인하세요." });
-
-    if (refundRate > 10)  list.push({ tone:"danger",  icon:AlertTriangle, title:`환불률 ${refundRate}% — 위험`,   body:"환불률이 10%를 초과했습니다. 계약 전 고객 검증 프로세스와 약정 이행 관리를 강화하세요." });
-    else if (refundRate > 5) list.push({ tone:"warning", icon:AlertTriangle, title:`환불률 ${refundRate}% — 주의`, body:"가입 직후 30일 관리를 강화하면 환불률을 낮출 수 있습니다." });
-
-    const contractGrowth = prevContracts > 0 ? Math.round((newContracts-prevContracts)/prevContracts*100) : 0;
-    if (newContracts === 0) list.push({ tone:"danger", icon:Target, title:"이달 계약 0건", body:"미팅 전환율이 낮은 담당자의 미팅 품질 개선이 우선입니다." });
-    else if (contractGrowth >= 30) list.push({ tone:"success", icon:Target, title:`계약 급증 +${contractGrowth}%`, body:`${newContracts}건으로 전월 대비 크게 증가했습니다. 성공 패턴을 분석해 팀 전체에 공유하세요.` });
-
-    const topCh = salesStructure[0];
-    if (topCh && topCh.pct >= 60) list.push({ tone:"warning", icon:BarChart3, title:`${topCh.label} 의존도 ${topCh.pct}%`, body:"매출의 절반 이상이 단일 채널에 집중됩니다. 호갱노노·LMS 등 보조 채널 비중을 높여 리스크를 분산하세요." });
-
-    const amts = personData.map(p => p.totalAmt);
-    const maxAmt = Math.max(...amts, 1), minAmt = Math.min(...amts);
-    const gap = maxAmt > 0 ? Math.round((maxAmt-minAmt)/maxAmt*100) : 0;
-    if (gap >= 70 && personData.length > 1) {
-      const top = personData[0], bot = personData[personData.length-1];
-      list.push({ tone:"warning", icon:Users, title:`팀 내 실적 편차 ${gap}%`, body:`${top.name}(${money(top.totalAmt)})과 ${bot.name}(${money(bot.totalAmt)})의 격차가 큽니다. 상위 담당자의 성공 전략을 팀에 전파하세요.` });
+    const sortedRev = [...personFlow].sort((a, b) => b.revenue - a.revenue);
+    if (sortedRev[0]?.revenue > 0) {
+      items.push({
+        tone: "success", icon: Crown,
+        title: `매출 1위 — ${sortedRev[0].name}`,
+        desc: `${money(sortedRev[0].revenue)} / 2위 ${sortedRev[1]?.name || "-"}(${money(sortedRev[1]?.revenue || 0)})와 ${money(sortedRev[0].revenue - (sortedRev[1]?.revenue || 0))} 격차`,
+      });
     }
 
-    if (wpCount === 0)    list.push({ tone:"muted",   icon:Truck, title:"이달 완판트럭 0회",        body:"네트워킹 망 유지를 위해 다음 달 일정을 조기에 확정하세요." });
-    else if (wpCount >= 6) list.push({ tone:"success", icon:Truck, title:`완판트럭 ${wpCount}회 달성`, body:"목표 월 6~8회를 달성했습니다. 접촉 현장의 후속 관리(TM/콜드톡)로 분양회 가입 전환을 이어가세요." });
+    const sortedVipConv = [...personFlow].filter(p => p.newDb > 0).sort((a, b) => b.vipConvRate - a.vipConvRate);
+    if (sortedVipConv.length >= 2) {
+      const top = sortedVipConv[0], bottom = sortedVipConv[sortedVipConv.length - 1];
+      if (top.vipConvRate - bottom.vipConvRate > 20) {
+        items.push({
+          tone: "warning", icon: TrendingUp,
+          title: `VIP 전환율 편차 ${(top.vipConvRate - bottom.vipConvRate).toFixed(1)}%p`,
+          desc: `${top.name}(${top.vipConvRate}%) vs ${bottom.name}(${bottom.vipConvRate}%) — ${top.name}의 심사 기준을 공유하세요.`,
+        });
+      }
+    }
 
-    const bestConv = [...personData].sort((a,b) => b.convRate-a.convRate)[0];
-    if (bestConv?.convRate >= 50) list.push({ tone:"success", icon:Activity, title:`${bestConv.name} 미팅전환율 ${bestConv.convRate}%`, body:"미팅 전환율이 탁월합니다. 제안 방식·타이밍·고객 유형을 문서화해 팀 표준으로 삼으세요." });
+    const sortedCtrConv = [...personFlow].filter(p => p.vipDb > 0).sort((a, b) => b.contractConvRate - a.contractConvRate);
+    if (sortedCtrConv[0]?.contractConvRate > 0) {
+      items.push({
+        tone: "info", icon: Target,
+        title: `계약전환율 최상위 — ${sortedCtrConv[0].name}`,
+        desc: `VIP DB → 계약/예약 ${sortedCtrConv[0].contractConvRate}% — 영업 클로징 노하우를 팀 전파하세요.`,
+      });
+    }
 
-    return list.slice(0, 6);
-  }, [summary, salesStructure, personData]);
+    const sortedActivity = [...activityStats.byPerson].sort((a, b) => (b.tm + b.cold) - (a.tm + a.cold));
+    if (sortedActivity.length >= 2) {
+      const top = sortedActivity[0];
+      const sum = top.tm + top.cold;
+      if (sum > 0) {
+        items.push({
+          tone: "purple", icon: Activity,
+          title: `활동량 최상위 — ${top.name}`,
+          desc: `TM ${top.tm}건 · 콜드톡 ${top.cold}건 = 총 ${sum}건. 활동 패턴 분석으로 팀 평균을 끌어올리세요.`,
+        });
+      }
+    }
 
-  // ━━━ 스케일 최대값 ━━━
-  const maxPersonAmt  = Math.max(...personData.map(p => p.totalAmt), 1);
-  const maxWeekRev    = Math.max(...weeklyData.map(w => w.rev), 1);
-  const maxConsultAmt = Math.max(...consultantData.map(c => c.amt), 1);
+    const lowNote = notesQuality.filter(n => n.totalVip > 0 && n.noteRate < 50);
+    if (lowNote.length > 0) {
+      items.push({
+        tone: "danger", icon: AlertTriangle,
+        title: `활동노트 누락 — ${lowNote.map(n => n.name).join(", ")}`,
+        desc: `VIP 고객 중 활동노트 작성률이 50% 미만입니다. 정기 활동 기록을 강화하세요.`,
+      });
+    }
 
-  if (loading) return (
-    <div className="flex h-full items-center justify-center">
-      <Loader2 size={22} className="animate-spin" style={{ color:"var(--text-faint)" }} />
-    </div>
-  );
+    const lowInput = dailyGoalStats.filter(d => d.inputRate < 50);
+    if (lowInput.length > 0) {
+      items.push({
+        tone: "warning", icon: FileText,
+        title: `일별 활동목표 입력 부족 — ${lowInput.map(d => d.name).join(", ")}`,
+        desc: `이번달 활동기록 입력률이 50% 미만입니다. 매일 활동기록을 입력하도록 챙겨주세요.`,
+      });
+    }
+
+    if (summary.refundAmt > 0) {
+      const refundRate = pct1(summary.refundAmt, summary.totalRev + summary.refundAmt);
+      if (refundRate > 10) {
+        items.push({
+          tone: "danger", icon: AlertTriangle,
+          title: `환불률 ${refundRate}% — 위험`,
+          desc: `환불 ${money(summary.refundAmt)}. 계약 전 약정 이행과 고객 검증 프로세스를 점검하세요.`,
+        });
+      }
+    }
+
+    return items;
+  }, [personFlow, activityStats, notesQuality, dailyGoalStats, summary]);
+
+  if (loading) {
+    return (
+      <div className="premium-page flex h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="animate-spin" size={32} style={{ color: "var(--accent-text)" }} />
+          <p className="crm-meta">데이터를 분석하고 있습니다...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="premium-page flex h-full flex-col overflow-hidden">
+    <div className="premium-page mx-auto w-full max-w-[1920px] px-4 pb-12 pt-6 md:px-6 2xl:px-8">
 
-      {/* ── 헤더 ── */}
-      <div className="premium-header flex shrink-0 items-center justify-between gap-4 px-5 py-4 md:px-7">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <BarChart3 size={20} style={{ color:"var(--accent-text)" }} />
+      {/* 헤더 */}
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <IconBox icon={BarChart3} tone="purple" />
+          <div>
             <h1 className="crm-title">팀 성과 분석</h1>
+            <p className="crm-subtitle mt-0.5">{year}년 {month}월 · 실행파트 영업 종합 인사이트</p>
           </div>
-          <p className="crm-subtitle mt-1">{monthLabel(year,month)} · 실행파트 영업 종합 인사이트</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <select value={month} onChange={e => setMonth(Number(e.target.value))}
-            className="h-9 rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
-            style={{ background:"var(--surface-2)", borderColor:"var(--border)", color:"var(--text-strong)" }}>
-            {Array.from({length:12},(_,i) => i+1).map(m => (
-              <option key={m} value={m}>{m}월</option>
+        <div className="flex items-center gap-2">
+          <select
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+            className="crm-search h-10 w-[110px] px-3 font-normal"
+          >
+            {Array.from({ length: 12 }).map((_, i) => (
+              <option key={i+1} value={i+1}>{i+1}월</option>
             ))}
           </select>
-          <button type="button" onClick={load} className="btn-premium btn-secondary">
-            <RefreshCw size={14} />새로고침
+          <button type="button" onClick={load} className="btn-premium btn-secondary h-10">
+            <RefreshCw size={14} /> 새로고침
           </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8 md:px-7">
-        <div className="mx-auto max-w-[1400px] space-y-5 pt-4">
+      {/* 1. 핵심 지표 */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+        <MetricCard
+          icon={CircleDollarSign} tone="success"
+          label="당월 총매출"
+          value={money(summary.totalRev)}
+          sub="광고특전 + 분양회 월회비"
+        />
+        <MetricCard
+          icon={WalletCards} tone="cyan"
+          label="당월 분양회 월회비"
+          value={money(summary.monthFeeAmt)}
+          sub={`전체 매출 중 ${pct1(summary.monthFeeAmt, summary.totalRev)}%`}
+        />
+        <MetricCard
+          icon={Award} tone="purple"
+          label="당월 계약 + 예약"
+          value={`${summary.contractCount + summary.reservCount}건`}
+          sub={`계약 ${summary.contractCount} · 예약 ${summary.reservCount}`}
+        />
+        <MetricCard
+          icon={AlertTriangle} tone={summary.refundAmt > 0 ? "danger" : "muted"}
+          label="당월 환불금액"
+          value={money(summary.refundAmt)}
+          sub={summary.refundAmt > 0 ? `${Object.keys(summary.refundByCh).length}개 항목` : "환불 없음"}
+        />
+        <MetricCard
+          icon={Truck} tone="warning"
+          label="완판트럭 출장"
+          value={`${summary.truckCount}회`}
+          sub={`접촉 ${summary.truckTotalAttendees}명`}
+        />
+        <MetricCard
+          icon={Users} tone="info"
+          label="신규 DB 등록"
+          value={`${personFlow.reduce((s, p) => s + p.newDb, 0)}건`}
+          sub={`팀 합산 · ${EXEC.length}명`}
+        />
+      </div>
 
-          {/* ══════════════════════════════
-               1. 월간 종합 지표 카드 6종
-          ══════════════════════════════ */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-
-            {/* 총매출 */}
-            <div className="premium-card col-span-2 p-4 sm:col-span-1">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={CircleDollarSign} tone="info" size="sm" />
-                <DeltaBadge curr={summary.totalRev} prev={summary.prevRev} />
+      {/* 환불 항목별 (환불 있을 때만) */}
+      {Object.keys(summary.refundByCh).length > 0 && (
+        <Panel className="mb-5">
+          <PanelTitle icon={AlertTriangle} tone="danger" title="환불 항목별 분해" desc="채널별 환불 발생 내역" />
+          <div className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-3">
+            {Object.entries(summary.refundByCh).sort((a,b)=>b[1]-a[1]).map(([ch, amt]) => (
+              <div key={ch} className="flex items-center justify-between rounded-[10px] border px-3 py-2.5"
+                style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <Badge tone={CH_TONES[ch] || "muted"}>{ch}</Badge>
+                <p className="text-[14px] font-bold tabular-nums" style={{ color: "var(--danger-text)" }}>
+                  {money(amt)}
+                </p>
               </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>월 총매출</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>{money(summary.totalRev)}</p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>전월 {money(summary.prevRev)}</p>
-            </div>
-
-            {/* 계약+예약 */}
-            <div className="premium-card p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={Target} tone="success" size="sm" />
-                <DeltaBadge curr={summary.newContracts} prev={summary.prevContracts} />
-              </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>계약+예약</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>
-                {summary.newContracts + summary.newReservs}<span className="text-[14px]">건</span>
-              </p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>계약 {summary.newContracts} · 예약 {summary.newReservs}</p>
-            </div>
-
-            {/* 분양회 월회비 */}
-            <div className="premium-card p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={WalletCards} tone="cyan" size="sm" />
-                <DeltaBadge curr={summary.feeRev} prev={summary.prevFee} />
-              </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>분양회 월회비</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>{money(summary.feeRev)}</p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>전월 {money(summary.prevFee)}</p>
-            </div>
-
-            {/* 환불률 */}
-            <div className="premium-card p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={AlertTriangle} tone={summary.refundRate > 10 ? "danger" : summary.refundRate > 5 ? "warning" : "muted"} size="sm" />
-                <Badge tone={summary.refundRate > 10 ? "danger" : summary.refundRate > 5 ? "warning" : "success"}>
-                  {summary.refundRate > 10 ? "위험" : summary.refundRate > 5 ? "주의" : "양호"}
-                </Badge>
-              </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>환불률</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>
-                {summary.refundRate}<span className="text-[14px]">%</span>
-              </p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>환불 {money(summary.refundAmt)}</p>
-            </div>
-
-            {/* 완판트럭 */}
-            <div className="premium-card p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={Truck} tone="warning" size="sm" />
-                <Badge tone={summary.wpCount >= 6 ? "success" : summary.wpCount >= 3 ? "info" : "muted"}>
-                  {summary.wpCount >= 6 ? "목표달성" : "진행중"}
-                </Badge>
-              </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>완판트럭 출장</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>
-                {summary.wpCount}<span className="text-[14px]">회</span>
-              </p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>접촉 {summary.wpPeople}명</p>
-            </div>
-
-            {/* 총 실행건수 */}
-            <div className="premium-card p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <IconBox icon={Zap} tone="purple" size="sm" />
-              </div>
-              <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>총 실행건수</p>
-              <p className="mt-1 text-[22px] font-semibold leading-none tracking-[-0.04em]" style={{ color:"var(--text-strong)" }}>
-                {execs.length}<span className="text-[14px]">건</span>
-              </p>
-              <p className="mt-1 text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>
-                평균 {execs.length > 0 ? money(Math.round(summary.totalRev / execs.length)) : "0"}/건
-              </p>
-            </div>
+            ))}
           </div>
+        </Panel>
+      )}
 
-          {/* ══════════════════════════
-               2. 데이터 인사이트
-          ══════════════════════════ */}
-          {insights.length > 0 && (
-            <Panel>
-              <PanelTitle icon={Lightbulb} tone="warning" title="이달의 인사이트"
-                desc="데이터 기반 자동 생성 — 주목해야 할 시그널과 액션 포인트" />
-              <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-                {insights.map((ins, i) => {
-                  const c = toneStyle(ins.tone);
-                  const Icon = ins.icon;
-                  return (
-                    <div key={i} className="rounded-[12px] border p-3.5" style={{ background:c.bg, borderColor:c.border }}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <Icon size={14} style={{ color:c.text }} />
-                        <p className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color:c.text }}>{ins.title}</p>
-                      </div>
-                      <p className="text-[12px] font-medium leading-relaxed tracking-[-0.01em]" style={{ color:"var(--text-muted)" }}>{ins.body}</p>
+      {/* 담당자별 영업 플로우 */}
+      <Panel className="mb-5">
+        <PanelTitle icon={TrendingUp} tone="purple" title="담당자별 영업 플로우" desc="신규 DB → VIP 이관 → 계약/예약 전환율" />
+        <div className="space-y-3 p-4">
+          {personFlow.map((p, idx) => {
+            const tone = PERSON_TONES[idx % PERSON_TONES.length];
+            const expanded = expandedPerson === p.name;
+            return (
+              <div key={p.name} className="rounded-[14px] border p-4"
+                style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full text-[14px] font-bold"
+                      style={{ background: toneStyle(tone).bg, color: toneStyle(tone).text }}>
+                      {p.name.charAt(0)}
                     </div>
-                  );
-                })}
-              </div>
-            </Panel>
-          )}
-
-          {/* ══════════════════════════
-               3. 담당자별 성과
-          ══════════════════════════ */}
-          <Panel>
-            <PanelTitle icon={Users} tone="info" title="담당자별 성과"
-              desc="매출 · 영업활동 · 미팅전환 · 채널별 구성 — 이름 클릭 시 채널 상세 확장" />
-            <div className="p-4 space-y-4">
-
-              {/* 카드 그리드 */}
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {personData.map((p, idx) => {
-                  const tone = PERSON_TONES[idx % 4];
-                  const c    = toneStyle(tone);
-                  const isExpanded = expandedPerson === p.name;
-                  return (
-                    <div key={p.name} className="rounded-[14px] border overflow-hidden"
-                      style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-
-                      {/* 이름+순위 헤더 (클릭 → 채널 상세 토글) */}
-                      <button type="button"
-                        onClick={() => setExpandedPerson(isExpanded ? null : p.name)}
-                        className="flex w-full items-center justify-between px-4 py-3 text-left transition hover:opacity-80">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-[13px] font-black"
-                            style={{ background:c.bar }}>
-                            {p.name[0]}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[14px] font-semibold tracking-[-0.02em]" style={{ color:"var(--text-strong)" }}>{p.name}</span>
-                              {idx === 0 && <Badge tone="warning">1위</Badge>}
-                            </div>
-                            <DeltaBadge curr={p.totalAmt} prev={p.prevAmt} />
-                          </div>
-                        </div>
-                        {isExpanded
-                          ? <ChevronUp size={14} style={{ color:"var(--text-faint)" }} />
-                          : <ChevronDown size={14} style={{ color:"var(--text-faint)" }} />
-                        }
-                      </button>
-
-                      {/* 총매출 + 바 */}
-                      <div className="px-4 pb-3">
-                        <div className="mb-1 flex items-baseline justify-between">
-                          <span className="text-[20px] font-semibold leading-none tracking-[-0.04em]"
-                            style={{ color:"var(--text-strong)" }}>{money(p.totalAmt)}</span>
-                          <span className="text-[11px] font-medium" style={{ color:"var(--text-subtle)" }}>
-                            {pct(p.totalAmt, maxPersonAmt)}%
-                          </span>
-                        </div>
-                        <Bar value={p.totalAmt} total={maxPersonAmt} tone={tone} height={6} />
-                      </div>
-
-                      {/* KPI 4종 격자 */}
-                      <div className="grid grid-cols-4 border-t" style={{ borderColor:"var(--border-subtle)" }}>
-                        {[
-                          { label:"계약",   value:`${p.contracted}건`, tone:"success" as ToneName },
-                          { label:"전환율", value:`${p.convRate}%`,    tone:(p.convRate>=40?"success":p.convRate>=20?"warning":"muted") as ToneName },
-                          { label:"완판",   value:`${p.wpTrips}회`,    tone:"warning" as ToneName },
-                          { label:"실행",   value:`${p.execCount}건`,  tone:"cyan" as ToneName },
-                        ].map(k => {
-                          const kc = toneStyle(k.tone);
-                          return (
-                            <div key={k.label} className="flex flex-col items-center py-2.5">
-                              <span className="text-[10px] font-normal" style={{ color:"var(--text-faint)" }}>{k.label}</span>
-                              <span className="mt-0.5 text-[13px] font-semibold tabular-nums" style={{ color:kc.text }}>{k.value}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* 채널별 상세 (확장) */}
-                      {isExpanded && (
-                        <div className="border-t p-4 space-y-3" style={{ borderColor:"var(--border-subtle)" }}>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color:"var(--text-faint)" }}>채널별 매출</p>
-                          {[
-                            { label:"하이타겟",    value:p.hitAmt, tone:"purple" as ToneName },
-                            { label:"분양회 월회비", value:p.feeAmt, tone:"cyan" as ToneName },
-                            { label:"LMS",        value:p.lmsAmt, tone:"success" as ToneName },
-                            { label:"호갱노노",    value:p.hogAmt, tone:"info" as ToneName },
-                          ].filter(item => item.value > 0).map(item => (
-                            <div key={item.label}>
-                              <div className="mb-1 flex items-center justify-between">
-                                <span className="text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>{item.label}</span>
-                                <span className="text-[12px] font-semibold tabular-nums" style={{ color:"var(--text-strong)" }}>{money(item.value)}</span>
-                              </div>
-                              <Bar value={item.value} total={p.totalAmt || 1} tone={item.tone} height={4} />
-                            </div>
-                          ))}
-                          {[p.hitAmt,p.feeAmt,p.lmsAmt,p.hogAmt].every(v=>v===0) && (
-                            <p className="text-[12px]" style={{ color:"var(--text-faint)" }}>채널 데이터 없음</p>
-                          )}
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <div className="rounded-[10px] border p-2.5" style={{ background:"var(--surface-3)", borderColor:"var(--border-subtle)" }}>
-                              <p className="text-[10px] font-normal" style={{ color:"var(--text-faint)" }}>평균 계약 단가</p>
-                              <p className="mt-0.5 text-[14px] font-semibold" style={{ color:"var(--text-strong)" }}>{p.avgDeal > 0 ? money(p.avgDeal) : "—"}</p>
-                            </div>
-                            <div className="rounded-[10px] border p-2.5" style={{ background:"var(--surface-3)", borderColor:"var(--border-subtle)" }}>
-                              <p className="text-[10px] font-normal" style={{ color:"var(--text-faint)" }}>환불액</p>
-                              <p className="mt-0.5 text-[14px] font-semibold"
-                                style={{ color:p.refundAmt > 0 ? "var(--danger-text)" : "var(--text-strong)" }}>
-                                {p.refundAmt > 0 ? money(p.refundAmt) : "0원"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="rounded-[10px] border p-2.5" style={{ background:"var(--surface-3)", borderColor:"var(--border-subtle)" }}>
-                            <p className="text-[10px] font-normal mb-1" style={{ color:"var(--text-faint)" }}>고객 파이프라인</p>
-                            <div className="flex gap-3 text-[12px]">
-                              <span style={{ color:"var(--text-muted)" }}>총 <strong style={{ color:"var(--text-strong)" }}>{p.total}명</strong></span>
-                              <span style={{ color:"var(--text-muted)" }}>미팅 <strong style={{ color:"var(--text-strong)" }}>{p.hasMeeting}건</strong></span>
-                              <span style={{ color:"var(--text-muted)" }}>예약 <strong style={{ color:"var(--success-text)" }}>{p.reserved}건</strong></span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                    <div>
+                      <p className="text-[15px] font-bold" style={{ color: "var(--text-strong)" }}>{p.name}</p>
+                      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>매출 {money(p.revenue)}</p>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* 비교 테이블 */}
-              <div className="overflow-x-auto rounded-[12px] border" style={{ borderColor:"var(--border-subtle)" }}>
-                <table className="w-full min-w-[960px] border-collapse text-center">
-                  <thead>
-                    <tr className="text-[11px] font-semibold uppercase tracking-[0.06em]"
-                      style={{ background:"var(--surface-2)", color:"var(--text-faint)", borderBottom:"1px solid var(--border-subtle)" }}>
-                      {["순위","담당자","총매출","하이타겟","월회비","LMS","호갱노노","계약","예약","미팅전환율","완판트럭","평균단가"].map(h => (
-                        <th key={h} className="px-4 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {personData.map((p, idx) => (
-                      <tr key={p.name} className="text-[13px] font-medium transition hover:bg-white/[0.03]"
-                        style={{ color:"var(--text-muted)", borderBottom:"1px solid var(--border-subtle)" }}>
-                        <td className="px-4 py-3">
-                          <span className="text-[13px] font-black"
-                            style={{ color:idx===0?"var(--warning-text)":idx===1?"var(--text-subtle)":"var(--text-faint)" }}>
-                            {idx+1}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-[14px] font-semibold" style={{ color:"var(--text-strong)" }}>{p.name}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="font-bold tabular-nums" style={{ color:"var(--text-strong)" }}>{moneyFull(p.totalAmt)}</span>
-                        </td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color:"var(--purple-text)" }}>{p.hitAmt > 0 ? moneyFull(p.hitAmt) : "—"}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color:"var(--cyan-text)" }}>{p.feeAmt > 0 ? moneyFull(p.feeAmt) : "—"}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color:"var(--success-text)" }}>{p.lmsAmt > 0 ? moneyFull(p.lmsAmt) : "—"}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color:"var(--info-text)" }}>{p.hogAmt > 0 ? moneyFull(p.hogAmt) : "—"}</td>
-                        <td className="px-4 py-3"><Badge tone={p.contracted > 0 ? "success" : "muted"}>{p.contracted}건</Badge></td>
-                        <td className="px-4 py-3"><Badge tone={p.reserved > 0 ? "info" : "muted"}>{p.reserved}건</Badge></td>
-                        <td className="px-4 py-3">
-                          <Badge tone={p.convRate >= 40 ? "success" : p.convRate >= 20 ? "warning" : "muted"}>{p.convRate}%</Badge>
-                        </td>
-                        <td className="px-4 py-3 font-semibold" style={{ color:"var(--text)" }}>{p.wpTrips}회</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color:"var(--text-muted)" }}>{p.avgDeal > 0 ? money(p.avgDeal) : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </Panel>
-
-          {/* ══════════════════════════
-               4. 매출구조 + 주차별 추이
-          ══════════════════════════ */}
-          <div className="grid gap-4 xl:grid-cols-2">
-
-            {/* 채널별 매출구성 */}
-            <Panel>
-              <PanelTitle icon={CircleDollarSign} tone="cyan" title="채널별 매출 구성"
-                desc={`${monthLabel(year,month)} 합계 ${moneyFull(summary.totalRev)}`} />
-              <div className="p-4 space-y-3">
-                {/* 스택 바 */}
-                <div className="flex h-3 w-full overflow-hidden rounded-full" style={{ background:"var(--surface-3)" }}>
-                  {salesStructure.filter(s => s.value > 0).map(s => (
-                    <div key={s.label} style={{ width:`${s.pct}%`, background:toneStyle(s.tone).bar }} />
-                  ))}
+                  </div>
+                  <button type="button"
+                    onClick={() => setExpandedPerson(expanded ? null : p.name)}
+                    className="btn-premium btn-secondary h-8">
+                    {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {expanded ? "접기" : "상세"}
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  {salesStructure.map(s => (
-                    <div key={s.label} className="rounded-[12px] border px-3 py-2.5"
-                      style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background:toneStyle(s.tone).dot }} />
-                          <span className="truncate text-[13px] font-semibold tracking-[-0.02em]" style={{ color:"var(--text-strong)" }}>{s.label}</span>
-                        </div>
-                        <div className="flex shrink-0 items-baseline gap-2">
-                          <span className="text-[14px] font-semibold tabular-nums" style={{ color:"var(--text-strong)" }}>{moneyFull(s.value)}</span>
-                          <span className="w-9 text-right text-[11px] font-semibold" style={{ color:"var(--text-subtle)" }}>{s.pct}%</span>
-                        </div>
-                      </div>
-                      <div className="mt-2">
-                        <Bar value={s.value} total={summary.totalRev || 1} tone={s.tone} height={4} />
-                      </div>
-                    </div>
-                  ))}
-                  {salesStructure.length === 0 && (
-                    <p className="py-8 text-center text-[12px]" style={{ color:"var(--text-faint)" }}>이달 매출 데이터가 없습니다</p>
-                  )}
-                </div>
-              </div>
-            </Panel>
 
-            {/* 주차별 추이 */}
-            <Panel>
-              <PanelTitle icon={TrendingUp} tone="success" title="주차별 매출 추이"
-                desc="전체 채널 합산 · 담당자별 기여도" />
-              <div className="p-4 space-y-2">
-                {weeklyData.map(w => {
-                  const weekMax = Math.max(...(EXEC as readonly string[]).map(n => w.byPerson[n] || 0), 1);
-                  return (
-                    <div key={w.label} className="rounded-[12px] border p-3"
-                      style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-                      <div className="mb-2 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold" style={{ color:"var(--text-strong)" }}>{w.label}</span>
-                          <span className="text-[11px]" style={{ color:"var(--text-faint)" }}>{w.s}~{w.e}일</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge tone="success">{w.contracts}건</Badge>
-                          <span className="text-[13px] font-semibold tabular-nums" style={{ color:"var(--text-strong)" }}>{money(w.rev)}</span>
-                        </div>
-                      </div>
-                      <Bar value={w.rev} total={maxWeekRev} tone="info" height={6} />
-                      <div className="mt-2.5 grid grid-cols-4 gap-1.5">
-                        {(EXEC as readonly string[]).map((n, ni) => {
-                          const val  = w.byPerson[n] || 0;
-                          const tone = PERSON_TONES[ni];
-                          return (
-                            <div key={n}>
-                              <div className="mb-0.5 flex items-center justify-between">
-                                <span className="text-[10px]" style={{ color:"var(--text-faint)" }}>{n[0]}</span>
-                                <span className="text-[10px] tabular-nums" style={{ color:"var(--text-subtle)" }}>{val > 0 ? money(val) : "—"}</span>
-                              </div>
-                              <Bar value={val} total={weekMax} tone={tone} height={3} />
+                <div className="grid gap-2 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-center">
+                  <FlowStep label="신규 DB" count={p.newDb} tone="info" icon={UserPlus} />
+                  <ArrowRight size={16} className="hidden lg:block mx-auto" style={{ color: "var(--text-faint)" }} />
+                  <FlowStep label="VIP 이관" count={p.vipTransferred} tone="purple" icon={CheckCircle2}
+                    rate={p.vipConvRate} rateLabel="전환율" />
+                  <ArrowRight size={16} className="hidden lg:block mx-auto" style={{ color: "var(--text-faint)" }} />
+                  <FlowStep label="VIP DB 보유" count={p.vipDb} tone="cyan" icon={Users} />
+                  <ArrowRight size={16} className="hidden lg:block mx-auto" style={{ color: "var(--text-faint)" }} />
+                  <FlowStep label="계약/예약" count={p.contracts + p.reservs} tone="success" icon={Award}
+                    rate={p.contractConvRate} rateLabel="계약전환" />
+                </div>
+
+                {expanded && (
+                  <div className="mt-4 grid gap-3 rounded-[10px] border p-3 lg:grid-cols-2"
+                    style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
+                    <div>
+                      <p className="mb-2 text-[12px] font-semibold" style={{ color: "var(--text-strong)" }}>채널별 매출 구성</p>
+                      {Object.keys(p.byCh).length === 0 ? (
+                        <p className="text-[11px]" style={{ color: "var(--text-faint)" }}>매출 데이터 없음</p>
+                      ) : Object.entries(p.byCh).sort((a,b)=>b[1]-a[1]).map(([ch, amt]) => {
+                        const max = Math.max(...Object.values(p.byCh), 1);
+                        return (
+                          <div key={ch} className="mb-1.5">
+                            <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                              <Badge tone={CH_TONES[ch] || "muted"}>{ch}</Badge>
+                              <span className="font-bold tabular-nums" style={{ color: "var(--text-strong)" }}>{money(amt)}</span>
                             </div>
-                          );
-                        })}
+                            <Bar value={amt} max={max} tone={CH_TONES[ch] || "muted"} height={5} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div>
+                      <p className="mb-2 text-[12px] font-semibold" style={{ color: "var(--text-strong)" }}>활동 요약</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <MiniStat label="TM" value={activityStats.byPerson.find(x=>x.name===p.name)?.tm || 0} unit="건" />
+                        <MiniStat label="콜드톡" value={activityStats.byPerson.find(x=>x.name===p.name)?.cold || 0} unit="건" />
+                        <MiniStat label="활동노트 작성률" value={notesQuality.find(x=>x.name===p.name)?.noteRate || 0} unit="%" />
+                        <MiniStat label="활동기록 입력률" value={dailyGoalStats.find(x=>x.name===p.name)?.inputRate || 0} unit="%" />
                       </div>
                     </div>
-                  );
-                })}
-                {weeklyData.length === 0 && (
-                  <p className="py-8 text-center text-[12px]" style={{ color:"var(--text-faint)" }}>이달 데이터가 없습니다</p>
+                  </div>
                 )}
-
-                {/* 주차×개인 교차표 */}
-                <div className="mt-3 overflow-x-auto rounded-[10px] border" style={{ borderColor:"var(--border-subtle)" }}>
-                  <table className="w-full border-collapse text-center text-[12px]">
-                    <thead>
-                      <tr style={{ background:"var(--surface-3)", borderBottom:"1px solid var(--border-subtle)" }}>
-                        <th className="px-3 py-2 font-semibold" style={{ color:"var(--text-faint)" }}>주차</th>
-                        {(EXEC as readonly string[]).map(n => (
-                          <th key={n} className="px-3 py-2 font-semibold" style={{ color:"var(--text-faint)" }}>{n}</th>
-                        ))}
-                        <th className="px-3 py-2 font-semibold" style={{ color:"var(--text-faint)" }}>합계</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {weeklyData.map(w => (
-                        <tr key={w.label} style={{ borderBottom:"1px solid var(--border-subtle)" }}>
-                          <td className="px-3 py-2 font-semibold" style={{ color:"var(--text-muted)" }}>{w.label}</td>
-                          {(EXEC as readonly string[]).map((n, ni) => {
-                            const val   = w.byPerson[n] || 0;
-                            const ratio = val > 0 ? Math.max(pct(val, Math.max(...(EXEC as readonly string[]).map(nn => w.byPerson[nn]||0), 1)), 20) : 0;
-                            const tone  = PERSON_TONES[ni];
-                            const tc    = toneStyle(tone);
-                            return (
-                              <td key={n} className="px-3 py-2 tabular-nums"
-                                style={{ color:val > 0 ? tc.text : "var(--text-faint)" }}>
-                                {val > 0 ? money(val) : "—"}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-2 font-bold tabular-nums" style={{ color:"var(--text-strong)" }}>{money(w.rev)}</td>
-                        </tr>
-                      ))}
-                      <tr style={{ background:"var(--surface-2)" }}>
-                        <td className="px-3 py-2 font-bold" style={{ color:"var(--text-strong)" }}>합계</td>
-                        {(EXEC as readonly string[]).map((n, ni) => {
-                          const total = weeklyData.reduce((s,w) => s + (w.byPerson[n] || 0), 0);
-                          const tc    = toneStyle(PERSON_TONES[ni]);
-                          return (
-                            <td key={n} className="px-3 py-2 font-bold tabular-nums" style={{ color:tc.text }}>{money(total)}</td>
-                          );
-                        })}
-                        <td className="px-3 py-2 font-black tabular-nums" style={{ color:"var(--text-strong)" }}>
-                          {money(weeklyData.reduce((s,w) => s + w.rev, 0))}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
               </div>
-            </Panel>
-          </div>
+            );
+          })}
+        </div>
+      </Panel>
 
-          {/* ══════════════════════════
-               5. 컨설턴트별 매출
-          ══════════════════════════ */}
-          <Panel>
-            <PanelTitle icon={Users} tone="purple" title="담당컨설턴트별 매출"
-              desc="전체 채널 합산 · 환불 차감 순매출" />
-            <div className="p-4">
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {consultantData.map((c, i) => (
-                  <div key={c.name} className="rounded-[12px] border p-3"
-                    style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-black"
-                          style={{ background:i===0?"var(--warning)":i===1?"var(--text-subtle)":i===2?"var(--cyan)":"var(--surface-3)" }}>
-                          {i < 3 ? i+1 : c.name[0]}
-                        </div>
-                        <span className="text-[13px] font-semibold tracking-[-0.02em]" style={{ color:"var(--text-strong)" }}>{c.name}</span>
-                      </div>
-                      <span className="text-[11px]" style={{ color:"var(--text-faint)" }}>{c.cnt}건</span>
+      {/* 유입경로별 분석 */}
+      <div className="mb-5 grid gap-4 xl:grid-cols-2">
+        <Panel>
+          <PanelTitle icon={Filter} tone="info" title="당월 유입경로별 성과" desc="DB 입력 대비 VIP 전환 현황" />
+          <div className="p-4">
+            {intakeFlow.length === 0 ? (
+              <p className="py-6 text-center text-[12px]" style={{ color: "var(--text-faint)" }}>당월 유입경로 데이터 없음</p>
+            ) : (
+              <div className="space-y-2">
+                {intakeFlow.map((r) => (
+                  <div key={r.route} className="rounded-[10px] border px-3 py-2.5"
+                    style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <p className="flex-1 truncate text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{r.route}</p>
+                      <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>DB <strong style={{color:"var(--text-strong)"}}>{r.total}건</strong></span>
+                      <ArrowRight size={11} style={{ color: "var(--text-faint)" }} />
+                      <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>VIP <strong style={{color:"var(--purple-text)"}}>{r.vip}건</strong></span>
+                      <Badge tone={r.vipRate >= 60 ? "success" : r.vipRate >= 30 ? "warning" : "muted"}>{r.vipRate}%</Badge>
                     </div>
-                    <p className="text-[17px] font-semibold tabular-nums leading-none tracking-[-0.03em]"
-                      style={{ color:c.amt > 0 ? "var(--info-text)" : "var(--text-faint)" }}>
-                      {c.amt > 0 ? moneyFull(c.amt) : "실적 없음"}
-                    </p>
-                    {c.amt > 0 && (
-                      <>
-                        <div className="mt-2"><Bar value={c.amt} total={maxConsultAmt} tone="info" height={4} /></div>
-                        {c.refund > 0 && <p className="mt-1 text-[11px]" style={{ color:"var(--danger-text)" }}>환불 {money(c.refund)}</p>}
-                      </>
-                    )}
+                    <Bar value={r.vip} max={r.total} tone="purple" height={5} />
                   </div>
                 ))}
               </div>
-            </div>
-          </Panel>
+            )}
+          </div>
+        </Panel>
 
-          {/* ══════════════════════════
-               6. 전월 대비 종합 비교
-          ══════════════════════════ */}
-          <Panel>
-            <PanelTitle icon={BarChart3} tone="muted" title="전월 대비 종합 비교"
-              desc={`${monthLabel(py,pm)} → ${monthLabel(year,month)}`} />
-            <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                { label:"총매출",      curr:summary.totalRev,                     prev:summary.prevRev,   fmt:moneyFull, tone:"info"    as ToneName, invert:false },
-                { label:"계약+예약",   curr:summary.newContracts+summary.newReservs, prev:summary.prevContracts, fmt:(n:number)=>`${n}건`, tone:"success" as ToneName, invert:false },
-                { label:"분양회 월회비", curr:summary.feeRev,                      prev:summary.prevFee,   fmt:moneyFull, tone:"cyan"    as ToneName, invert:false },
-                { label:"환불률",      curr:summary.refundRate,                    prev:summary.prevRefundRate, fmt:(n:number)=>`${n}%`, tone:"danger" as ToneName, invert:true },
-              ].map(item => {
-                const isUp = item.invert
-                  ? item.curr < item.prev
-                  : item.curr > item.prev;
+        <Panel>
+          <PanelTitle icon={Award} tone="success" title="계약 고객 유입경로" desc="어떤 경로에서 계약이 나왔는가" />
+          <div className="p-4">
+            {contractRoutes.length === 0 ? (
+              <p className="py-6 text-center text-[12px]" style={{ color: "var(--text-faint)" }}>당월 계약 없음</p>
+            ) : (
+              <div className="space-y-2">
+                {contractRoutes.map((r) => (
+                  <div key={r.route} className="flex items-center gap-2 rounded-[10px] border px-3 py-2.5"
+                    style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <p className="flex-1 truncate text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{r.route}</p>
+                    <span className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>{r.count}건</span>
+                    <Badge tone="success">{r.share}%</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </div>
+
+      {/* 활동량 분석 */}
+      <Panel className="mb-5">
+        <PanelTitle icon={Phone} tone="cyan" title="당월 활동량 분석" desc="TM · 콜드톡 활동 건수와 달성률" />
+        <div className="grid gap-4 p-4 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
+            <ActivityBlock label="당월 TM" value={activityStats.totalTm}
+              goal={activityStats.goalTm} tone="info" icon={Phone} />
+            <ActivityBlock label="당월 콜드톡" value={activityStats.totalCold}
+              goal={activityStats.goalCold} tone="success" icon={MessageSquare} />
+            <ActivityBlock label="관리 TM" value={activityStats.totalManageTm} tone="purple" icon={Activity} />
+            <ActivityBlock label="브론즈 DB 확보" value={activityStats.totalConsultantDb} tone="warning" icon={UserPlus} />
+          </div>
+          <div className="rounded-[12px] border p-3"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+            <p className="mb-2 text-[12px] font-bold" style={{ color: "var(--text-strong)" }}>담당자별 활동량 비교</p>
+            <div className="space-y-2.5">
+              {activityStats.byPerson.map(p => {
+                const maxVal = Math.max(...activityStats.byPerson.map(x => x.tm + x.cold), 1);
+                const total = p.tm + p.cold;
                 return (
-                  <div key={item.label} className="rounded-[12px] border p-4"
-                    style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-                    <p className="text-[11px] font-normal" style={{ color:"var(--text-subtle)" }}>{item.label}</p>
-                    <div className="mt-2 flex items-baseline gap-2">
-                      <span className="text-[20px] font-semibold tabular-nums leading-none tracking-[-0.04em]"
-                        style={{ color:"var(--text-strong)" }}>{item.fmt(item.curr)}</span>
-                      <DeltaBadge curr={item.curr} prev={item.prev} invert={item.invert} />
+                  <div key={p.name}>
+                    <div className="mb-0.5 flex items-center justify-between text-[12px]">
+                      <span className="font-bold" style={{ color: "var(--text)" }}>{p.name}</span>
+                      <span className="font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>
+                        TM {p.tm} · 콜드톡 {p.cold} = <strong style={{color:"var(--text-strong)"}}>{total}건</strong>
+                      </span>
                     </div>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <ArrowRight size={11} style={{ color:"var(--text-faint)" }} />
-                      <span className="text-[12px] font-medium" style={{ color:"var(--text-muted)" }}>전월 {item.fmt(item.prev)}</span>
-                    </div>
-                    <div className="mt-3">
-                      <Bar value={item.curr} total={Math.max(item.curr, item.prev, 1)} tone={isUp ? item.tone : "muted"} height={4} />
-                    </div>
+                    <Bar value={total} max={maxVal} tone="cyan" height={6} />
                   </div>
                 );
               })}
             </div>
-
-            {/* 담당자별 전월 비교 */}
-            <div className="border-t px-4 pb-4 pt-3" style={{ borderColor:"var(--border-subtle)" }}>
-              <p className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em]" style={{ color:"var(--text-faint)" }}>담당자별 전월 대비</p>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {personData.map((p) => (
-                  <div key={p.name} className="rounded-[12px] border p-3"
-                    style={{ background:"var(--surface-2)", borderColor:"var(--border-subtle)" }}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[13px] font-semibold" style={{ color:"var(--text-strong)" }}>{p.name}</span>
-                      <DeltaBadge curr={p.totalAmt} prev={p.prevAmt} />
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
-                      <div className="flex justify-between">
-                        <span style={{ color:"var(--text-faint)" }}>이번달</span>
-                        <span className="font-semibold tabular-nums" style={{ color:"var(--text-strong)" }}>{money(p.totalAmt)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span style={{ color:"var(--text-faint)" }}>전월</span>
-                        <span className="tabular-nums" style={{ color:"var(--text-muted)" }}>{money(p.prevAmt)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span style={{ color:"var(--text-faint)" }}>계약</span>
-                        <span className="font-semibold" style={{ color:"var(--success-text)" }}>{p.contracted}건</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span style={{ color:"var(--text-faint)" }}>전환율</span>
-                        <span className="font-semibold" style={{ color:"var(--text-strong)" }}>{p.convRate}%</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Panel>
-
+          </div>
         </div>
+      </Panel>
+
+      {/* 활동노트 + 일별 활동목표 */}
+      <div className="mb-5 grid gap-4 xl:grid-cols-2">
+        <Panel>
+          <PanelTitle icon={FileText} tone="purple" title="활동노트 관리 품질" desc="VIP 고객 정기 관리 현황" />
+          <div className="space-y-2.5 p-4">
+            {notesQuality.map(n => (
+              <div key={n.name} className="rounded-[10px] border p-3"
+                style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{n.name}</p>
+                  <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>VIP {n.totalVip}명</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span style={{ color: "var(--text-subtle)" }}>활동노트 작성</span>
+                      <strong style={{ color: "var(--text-strong)" }}>{n.noteRate}%</strong>
+                    </div>
+                    <Bar value={n.withNotes} max={Math.max(n.totalVip, 1)} tone={n.noteRate >= 70 ? "success" : n.noteRate >= 40 ? "warning" : "danger"} height={4} />
+                  </div>
+                  <div>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span style={{ color: "var(--text-subtle)" }}>최근 7일 활동</span>
+                      <strong style={{ color: "var(--text-strong)" }}>{n.recencyRate}%</strong>
+                    </div>
+                    <Bar value={n.recentlyTouched} max={Math.max(n.totalVip, 1)} tone={n.recencyRate >= 70 ? "success" : n.recencyRate >= 40 ? "warning" : "danger"} height={4} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelTitle icon={Target} tone="warning" title="일별 활동기록 입력·달성률" desc="당월 매일 활동 입력 충실도" />
+          <div className="space-y-2.5 p-4">
+            {dailyGoalStats.map(d => (
+              <div key={d.name} className="rounded-[10px] border p-3"
+                style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{d.name}</p>
+                  <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>입력 {d.daysInput}일</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span style={{ color: "var(--text-subtle)" }}>입력률</span>
+                      <strong style={{ color: "var(--text-strong)" }}>{d.inputRate}%</strong>
+                    </div>
+                    <Bar value={d.daysInput} max={22} tone={d.inputRate >= 70 ? "success" : d.inputRate >= 40 ? "warning" : "danger"} height={4} />
+                  </div>
+                  <div>
+                    <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                      <span style={{ color: "var(--text-subtle)" }}>달성률</span>
+                      <strong style={{ color: "var(--text-strong)" }}>{d.achievement}%</strong>
+                    </div>
+                    <Bar value={d.achievement} max={100} tone={d.achievement >= 70 ? "success" : d.achievement >= 40 ? "warning" : "danger"} height={4} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
       </div>
+
+      {/* 인사이트 (하단) */}
+      <Panel>
+        <PanelTitle icon={Lightbulb} tone="warning" title="당월 인사이트" desc="데이터 기반 자동 분석 — 상대평가와 액션포인트" />
+        <div className="p-4">
+          {insights.length === 0 ? (
+            <p className="py-6 text-center text-[12px]" style={{ color: "var(--text-faint)" }}>인사이트를 생성할 데이터가 부족합니다</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {insights.map((it, idx) => {
+                const c = toneStyle(it.tone);
+                return (
+                  <div key={idx} className="rounded-[12px] border p-3.5"
+                    style={{ background: c.bg, borderColor: c.border }}>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <it.icon size={14} style={{ color: c.text }} />
+                      <p className="text-[13px] font-bold leading-tight" style={{ color: c.text }}>{it.title}</p>
+                    </div>
+                    <p className="text-[12px] leading-relaxed" style={{ color: "var(--text)" }}>{it.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ━━━ 보조 컴포넌트 ━━━
+function FlowStep({ label, count, tone, icon: Icon, rate, rateLabel }: {
+  label: string; count: number; tone: ToneName; icon: ElementType; rate?: number; rateLabel?: string;
+}) {
+  const c = toneStyle(tone);
+  return (
+    <div className="rounded-[10px] border p-3 text-center"
+      style={{ background: c.bg, borderColor: c.border }}>
+      <div className="mb-1 flex items-center justify-center gap-1.5">
+        <Icon size={12} style={{ color: c.text }} />
+        <p className="text-[11px] font-semibold" style={{ color: c.text }}>{label}</p>
+      </div>
+      <p className="text-[18px] font-bold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+        {count}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span>
+      </p>
+      {rate !== undefined && (
+        <p className="mt-0.5 text-[11px] font-semibold" style={{ color: c.text }}>
+          {rateLabel} {rate}%
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return (
+    <div className="rounded-[8px] border px-2.5 py-1.5"
+      style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+      <p className="text-[10px]" style={{ color: "var(--text-subtle)" }}>{label}</p>
+      <p className="text-[13px] font-bold tabular-nums" style={{ color: "var(--text-strong)" }}>
+        {value}<span className="ml-0.5 text-[10px] font-normal" style={{ color: "var(--text-subtle)" }}>{unit}</span>
+      </p>
+    </div>
+  );
+}
+
+function ActivityBlock({ label, value, goal, tone, icon: Icon }: {
+  label: string; value: number; goal?: number; tone: ToneName; icon: ElementType;
+}) {
+  const c = toneStyle(tone);
+  const achievement = goal !== undefined && goal > 0 ? pct1(value, goal) : null;
+  return (
+    <div className="rounded-[12px] border p-3"
+      style={{ background: c.bg, borderColor: c.border }}>
+      <div className="mb-1 flex items-center gap-1.5">
+        <Icon size={13} style={{ color: c.text }} />
+        <p className="text-[11px] font-semibold" style={{ color: c.text }}>{label}</p>
+      </div>
+      <p className="text-[20px] font-bold tabular-nums tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+        {value}<span className="ml-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>건</span>
+      </p>
+      {achievement !== null && (
+        <p className="text-[11px] font-semibold" style={{ color: c.text }}>
+          목표 {goal} · 달성 {achievement}%
+        </p>
+      )}
     </div>
   );
 }
