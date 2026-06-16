@@ -430,7 +430,8 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
     sensitivity_updated_at: (() => {
       const memoText = String(record.memo || "");
       const match = memoText.match(/\[재TM일:\s*(.+?)\]/);
-      return match ? match[1].trim() : String(record.updated_at || "").slice(0, 10);
+      // 태그가 없으면 created_at(등록일) 기준 → updated_at은 수정 때마다 바뀌어 기준 오염
+      return match ? match[1].trim() : String(record.created_at || record.updated_at || "").slice(0, 10);
     })(),
     notes: Array.isArray(record.notes) ? record.notes : [],
     created_at: String(record.created_at || new Date().toISOString()),
@@ -1083,7 +1084,8 @@ export default function CustomerDbPage() {
           sensitivity_updated_at: (() => {
             const m = String(row.memo || "");
             const match = m.match(/\[재TM일:\s*(.+?)\]/);
-            return match ? match[1].trim() : String(row.updated_at || "").slice(0, 10);
+            // 태그가 없으면 created_at(등록일) 기준 — updated_at은 수정 시 갱신되어 기준 오염
+            return match ? match[1].trim() : String(row.created_at || row.updated_at || "").slice(0, 10);
           })(),
           notes: [],
           created_at: row.created_at || new Date().toISOString(),
@@ -1264,7 +1266,7 @@ export default function CustomerDbPage() {
     return filteredRecords
       .filter((r) => r.sensitivity === "재TM진행")
       .map((r) => {
-        const baseDate = r.sensitivity_updated_at || r.updated_at?.slice(0, 10) || today;
+        const baseDate = r.sensitivity_updated_at || r.created_at?.slice(0, 10) || today;
         const retmDate = addBusinessDays(baseDate, 3);
         return { ...r, retmDate };
       })
