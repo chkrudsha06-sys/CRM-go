@@ -59,7 +59,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "일정·고객·매출·업무요청 요약",
     icon: Sparkles,
     prompt:
-      "자비스, 오늘 CRM 기준으로 내가 확인해야 할 일정, 고객관리 포인트, 이번달 매출 흐름, 최근 업무요청, 완판트럭 일정을 한 번에 브리핑해줘. 마지막에는 오늘 우선순위 TOP 5를 정리해줘.",
+      "코어, 오늘 CRM 기준으로 내가 확인해야 할 일정, 고객관리 포인트, 이번달 매출 흐름, 최근 업무요청, 완판트럭 일정을 한 번에 브리핑해줘. 마지막에는 오늘 우선순위 TOP 5를 정리해줘.",
   },
   {
     id: "inactive_customers",
@@ -67,7 +67,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "최근 활동노트가 뜸한 고객 추출",
     icon: UsersRound,
     prompt:
-      "자비스, CRM 고객 중 최근 활동이 뜸하거나 관리 누락 가능성이 높은 고객을 담당자별로 정리해줘. 최근 활동일, 미팅결과, 가망구분, 후속조치까지 함께 알려줘.",
+      "코어, CRM 고객 중 최근 활동이 뜸하거나 관리 누락 가능성이 높은 고객을 담당자별로 정리해줘. 최근 활동일, 미팅결과, 가망구분, 후속조치까지 함께 알려줘.",
   },
   {
     id: "sales_analysis",
@@ -75,7 +75,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "담당자·채널별 매출 흐름 분석",
     icon: BarChart3,
     prompt:
-      "자비스, 이번달 통합매출관리 기준으로 매출 현황을 담당자별, 채널별로 정리해줘. 특이사항, 부족한 부분, 추가로 챙겨야 할 매출 포인트도 알려줘.",
+      "코어, 이번달 통합매출관리 기준으로 매출 현황을 담당자별, 채널별로 정리해줘. 특이사항, 부족한 부분, 추가로 챙겨야 할 매출 포인트도 알려줘.",
   },
   {
     id: "task_summary",
@@ -83,7 +83,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "업무요청 미처리·진행사항 정리",
     icon: ClipboardList,
     prompt:
-      "자비스, 최근 업무요청을 요청자, 담당자, 상태별로 정리해줘. 미처리 또는 확인이 필요한 항목을 우선순위로 알려줘.",
+      "코어, 최근 업무요청을 요청자, 담당자, 상태별로 정리해줘. 미처리 또는 확인이 필요한 항목을 우선순위로 알려줘.",
   },
   {
     id: "wanpan_schedule",
@@ -91,7 +91,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "이번주 출동·발주 상태 확인",
     icon: Truck,
     prompt:
-      "자비스, 이번주와 최근 완판트럭 일정을 정리해줘. 현장명, 위치, 대행사, 인원, 발주 여부 기준으로 확인해야 할 내용을 알려줘.",
+      "코어, 이번주와 최근 완판트럭 일정을 정리해줘. 현장명, 위치, 대행사, 인원, 발주 여부 기준으로 확인해야 할 내용을 알려줘.",
   },
   {
     id: "calendar_review",
@@ -99,7 +99,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "캘린더·미팅 일정 확인",
     icon: CalendarDays,
     prompt:
-      "자비스, 이번주 CRM 캘린더와 고객 미팅 일정을 정리해줘. 오늘 확인할 일정과 담당자별 체크포인트를 알려줘.",
+      "코어, 이번주 CRM 캘린더와 고객 미팅 일정을 정리해줘. 오늘 확인할 일정과 담당자별 체크포인트를 알려줘.",
   },
   {
     id: "priority_actions",
@@ -107,7 +107,7 @@ const JARVIS_ACTIONS: JarvisAction[] = [
     description: "지금 바로 해야 할 일 추천",
     icon: Target,
     prompt:
-      "자비스, 현재 CRM 데이터를 기준으로 지금 바로 해야 할 업무 우선순위를 추천해줘. 고객관리, 매출, 일정, 업무요청으로 구분해서 실행 순서대로 알려줘.",
+      "코어, 현재 CRM 데이터를 기준으로 지금 바로 해야 할 업무 우선순위를 추천해줘. 고객관리, 매출, 일정, 업무요청으로 구분해서 실행 순서대로 알려줘.",
   },
 ];
 
@@ -278,7 +278,7 @@ function normalizeErrorMessage(error: unknown) {
 }
 
 function buildWelcomeMessage(user: CRMUser) {
-  return `${user.name}님, 자비스 대기 중입니다.\n오늘 브리핑, 관리 누락 고객, 매출 분석, 업무요청 정리를 바로 도와드릴 수 있습니다.`;
+  return `${user.name}님, 코어 대기 중입니다.\n오늘 브리핑, 관리 누락 고객, 매출 분석, 업무요청 정리를 바로 도와드릴 수 있습니다.`;
 }
 
 export default function JarvisAgent({ user }: JarvisAgentProps) {
@@ -502,7 +502,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data?.error || "자비스 응답 생성에 실패했습니다.");
+        throw new Error(data?.error || "코어 응답 생성에 실패했습니다.");
       }
 
       const fullText = data?.reply || "응답을 받을 수 없습니다.";
@@ -542,7 +542,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
     } catch (error) {
       const assistantMessage: JarvisMessage = {
         role: "assistant",
-        content: `⚠️ 자비스 연결 중 문제가 발생했습니다.\n${normalizeErrorMessage(error)}`,
+        content: `⚠️ 코어 연결 중 문제가 발생했습니다.\n${normalizeErrorMessage(error)}`,
         timestamp: getNowLabel(),
       };
       setMessages([...nextMessages, assistantMessage]);
@@ -562,7 +562,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
   };
 
   const resetChat = () => {
-    if (!confirm("자비스 대화 내용을 초기화할까요?")) return;
+    if (!confirm("코어 대화 내용을 초기화할까요?")) return;
     setMessages([
       {
         role: "assistant",
@@ -632,7 +632,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="truncate text-[15px] font-black tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>
-                    JARVIS
+                    CORE
                   </h2>
                   <span className="rounded-full px-2 py-0.5 text-[10px] font-black" style={{ color: "var(--cyan-text)", background: "var(--cyan-bg)", border: "1px solid var(--cyan-border)" }}>
                     CRM AGENT
@@ -677,7 +677,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                 type="button"
                 onClick={closePanel}
                 className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
-                aria-label="자비스 패널만 접기"
+                aria-label="코어 패널만 접기"
                 title="패널 접기"
               >
                 <ChevronRight size={17} />
@@ -686,8 +686,8 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                 type="button"
                 onClick={hideJarvis}
                 className="flex h-8 w-8 items-center justify-center rounded-xl transition hover:bg-white/10" style={{ color: "var(--text-muted)" }}
-                aria-label="자비스 완전히 숨기기"
-                title="자비스 숨기기"
+                aria-label="코어 완전히 숨기기"
+                title="코어 숨기기"
               >
                 <X size={15} />
               </button>
@@ -1050,7 +1050,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                   onKeyDown={handleKeyDown}
                   rows={1}
                   disabled={loading}
-                  placeholder="자비스에게 CRM 업무를 물어보세요..."
+                  placeholder="코어에게 CRM 업무를 물어보세요..."
                   className="max-h-24 min-h-[28px] w-full resize-none border-none bg-transparent text-[12px] font-semibold leading-relaxed outline-none" style={{ color: "var(--text-strong)" }}
                 />
               </div>
@@ -1060,7 +1060,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                 disabled={!input.trim() || loading}
                 className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl text-white shadow-lg transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
                 style={{ background: "linear-gradient(135deg,#8b7cf6,#4f8df7)" }}
-                aria-label="자비스에게 보내기"
+                aria-label="코어에게 보내기"
               >
                 {loading ? (
                   <Loader2 size={16} className="animate-spin" />
@@ -1099,8 +1099,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
             type="button"
             onClick={() => setOpen((prev) => !prev)}
             className="flex flex-col items-center gap-1 outline-none transition hover:-translate-y-1 jarvis-floating-button"
-            aria-label="자비스 열기"
-            title="JARVIS 자비스"
+            aria-label="코어 열기"
+            title="CORE 코어"
           >
             <div
               className="relative flex h-[92px] w-[92px] items-center justify-center rounded-[28px] md:h-[104px] md:w-[104px]"
@@ -1130,8 +1130,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
               )}
             </div>
 
-            <div className="hidden rounded-full px-3 py-1 text-[11px] font-black md:flex" style={{ border: "1px solid var(--accent-border)", background: "#0d0f13", color: "var(--accent-text)" }}>
-              <MessageCircle size={12} className="mr-1.5" /> JARVIS
+            <div className="hidden rounded-full px-3 py-1 text-[11px] font-black md:flex" style={{ border: "1px solid var(--accent-border)", background: "var(--surface)", color: "var(--accent)" }}>
+              <MessageCircle size={12} className="mr-1.5" /> CORE
             </div>
           </button>
 
@@ -1140,8 +1140,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
             onClick={hideJarvis}
             className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full text-white shadow-lg transition hover:translate-x-0.5"
             style={{ border: "1px solid var(--accent-border)", background: "#0d0f13", color: "var(--accent-text)" }}
-            aria-label="자비스를 오른쪽으로 숨기기"
-            title="자비스 숨기기"
+            aria-label="코어를 오른쪽으로 숨기기"
+            title="코어 숨기기"
           >
             <ChevronRight size={16} />
           </button>
@@ -1154,8 +1154,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
           onClick={showJarvis}
           className="pointer-events-auto absolute bottom-8 right-0 flex h-16 w-8 translate-x-1 items-center justify-center rounded-l-2xl shadow-2xl transition hover:translate-x-0 md:bottom-10"
           style={{ border: "1px solid var(--accent-border)", borderRight: "none", background: "#0d0f13", color: "var(--accent-text)" }}
-          aria-label="숨긴 자비스 다시 열기"
-          title="자비스 다시 열기"
+          aria-label="숨긴 코어 다시 열기"
+          title="코어 다시 열기"
         >
           <ChevronRight size={15} className="rotate-180" />
         </button>
@@ -1173,7 +1173,7 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
         }
 
         .jarvis-floating-button > div:first-child {
-          animation: jarvisFloat 3.8s ease-in-out infinite;
+          /* 위아래 움직임 제거 — 정적 표시 */
         }
 
         .jarvis-scrollbar::-webkit-scrollbar {
