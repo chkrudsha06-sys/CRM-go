@@ -633,12 +633,6 @@ function MemberDayCard({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="crm-tiny">당일 특발성활동목표</p>
-              <p
-                className="mt-1 text-[12px] font-[500]"
-                style={{ color: "var(--text-faint)" }}
-              >
-                스크롤 없이 입력한 목표 텍스트를 전체 표시합니다.
-              </p>
             </div>
             <p
               className="rounded-full border px-2.5 py-1 text-[13px] font-[700]"
@@ -664,7 +658,7 @@ function MemberDayCard({
                   }}
                 >
                   <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-[700]"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-[700]"
                     style={{
                       background: item.done ? "var(--success-bg)" : "var(--accent-subtle)",
                       color: item.done ? "var(--success-text)" : "var(--accent-text)",
@@ -673,7 +667,7 @@ function MemberDayCard({
                     {index + 1}
                   </span>
                   <p
-                    className={`m-0 whitespace-pre-wrap break-words text-[13.5px] font-[600] leading-[1.65] ${item.done ? "line-through" : ""}`}
+                    className={`m-0 whitespace-pre-wrap break-words text-[15px] font-[600] leading-[1.6] ${item.done ? "line-through" : ""}`}
                     style={{ color: item.done ? "var(--text-faint)" : "var(--text)" }}
                   >
                     {item.text}
