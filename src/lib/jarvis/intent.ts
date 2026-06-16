@@ -170,16 +170,33 @@ export function classifyByPattern(message: string): IntentResult {
 export function extractKeywords(text: string): string[] {
   const keywords: string[] = [];
 
+  // 0. 호칭·명령어 제거 (코어/자비스 등) — 이름 오인식 방지
+  let cleaned = text
+    .replace(/코어|자비스|jarvis|core/gi, " ")
+    .replace(/알려줘|보여줘|찾아줘|조회해줘|정리해줘|확인해줘|해줘|어때|뭐야|누구야/g, " ");
+
   // B넘버
-  const bMatch = text.match(/B\s*-?\s*\d+/i);
+  const bMatch = cleaned.match(/B\s*-?\s*\d+/i);
   if (bMatch) keywords.push(bMatch[0].replace(/\s/g, ""));
 
-  // 이름 + 직급 패턴 (이정재 본부장, 김중석 본부장 등)
-  // Array.from으로 감싸서 TypeScript target ES5 호환
-  const nameTitle = Array.from(text.matchAll(/([가-힣]{2,3})\s*(본부장|총괄본부장|팀장|부장|차장|과장|대리|컨설턴트)/g));
+  // 1. 이름 + 직급 패턴 (이정재 총괄본부장, 김선호 본부장 등) — 직급 긴 것 우선
+  const nameTitle = Array.from(cleaned.matchAll(/([가-힣]{2,4})\s*(총괄본부장|본부장|팀장|부장|차장|과장|대리|이사|상무|전무|대표|컨설턴트|소장|실장)/g));
   for (const m of nameTitle) {
     keywords.push(`${m[1]} ${m[2]}`);
     keywords.push(m[1]);
+  }
+
+  // 2. 직급 없는 순수 이름 추출
+  //    직급 단어를 먼저 제거한 뒤, 조사 떼고 이름만
+  const noTitle = cleaned.replace(/(총괄본부장|본부장|팀장|부장|차장|과장|대리|이사|상무|전무|대표|컨설턴트|소장|실장)/g, " ");
+  const stopWords = ["고객", "담당", "매출", "분양", "회비", "활동", "노트", "메모", "정보", "현황", "오늘", "어제", "내일", "이번", "지난", "다음", "목표", "실적", "일정", "업무", "요청", "확인", "관리", "누락", "입회", "회원", "명단", "리스트", "파이프", "데이터", "기준", "전체", "각각", "우리", "분신", "트럭", "완판", "최근", "기준"];
+  const tokens = noTitle.split(/[\s,.]+/);
+  for (const tok of tokens) {
+    // 조사 제거
+    const name = tok.replace(/(님|씨|의|은|는|이|가|을|를|에게|한테|와|과|도)$/, "");
+    if (/^[가-힣]{2,4}$/.test(name) && !stopWords.includes(name) && !stopWords.some((w) => name.includes(w))) {
+      keywords.push(name);
+    }
   }
 
   // 회사명 (한신그룹, ○○그룹 등)
