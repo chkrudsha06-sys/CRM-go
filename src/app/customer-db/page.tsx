@@ -1873,23 +1873,23 @@ export default function CustomerDbPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="고객명, 연락처, 소속회사, 메모 검색"
-              className="crm-search h-10 w-full pl-9 pr-3"
+              className="crm-search h-10 w-full pl-9 pr-3 font-normal"
             />
           </label>
-          <select value={filterTitle} onChange={(event) => setFilterTitle(event.target.value)} className="crm-search h-10 w-[120px] px-3">
+          <select value={filterTitle} onChange={(event) => setFilterTitle(event.target.value)} className="crm-search h-10 w-[120px] px-3 font-normal">
             <option value="">전체 직급</option>
             {TITLE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={filterRoute} onChange={(event) => setFilterRoute(event.target.value)} className="crm-search h-10 w-[140px] px-3">
+          <select value={filterRoute} onChange={(event) => setFilterRoute(event.target.value)} className="crm-search h-10 w-[140px] px-3 font-normal">
             <option value="">전체 유입경로</option>
             {INTAKE_ROUTES.map((route) => <option key={route} value={route}>{route}</option>)}
           </select>
-          <select value={filterActivity} onChange={(event) => setFilterActivity(event.target.value)} className="crm-search h-10 w-[140px] px-3">
+          <select value={filterActivity} onChange={(event) => setFilterActivity(event.target.value)} className="crm-search h-10 w-[140px] px-3 font-normal">
             <option value="">전체 활동항목</option>
             {ACTIVITY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
           {customerDbUserInfo.isAdmin && (
-            <select value={filterAssigned} onChange={(event) => setFilterAssigned(event.target.value)} className="crm-search h-10 w-[130px] px-3">
+            <select value={filterAssigned} onChange={(event) => setFilterAssigned(event.target.value)} className="crm-search h-10 w-[130px] px-3 font-normal">
               <option value="전체">전체 담당자</option>
               {["조계현", "이세호", "기여운", "최연전"].map((name) => (
                 <option key={name} value={name}>{name}</option>
