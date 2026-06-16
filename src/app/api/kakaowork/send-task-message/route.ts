@@ -146,6 +146,7 @@ export async function POST(request: Request) {
         style: "primary",
         action: {
           type: "submit_action",
+          name: "task_action",
           value: `task:${task_id}:accept`,
         },
       });
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
         style: "danger",
         action: {
           type: "submit_action",
+          name: "task_action",
           value: `task:${task_id}:hold`,
         },
       });
