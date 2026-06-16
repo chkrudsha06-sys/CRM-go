@@ -1269,8 +1269,7 @@ body { background: white; margin: 0; padding: 0; }
 </style>
 </head><body>${el.innerHTML}</body></html>`);
                 win.document.close();
-                win.onload = () => { win.focus(); win.print(); };
-                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 800);
+                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
               }}
               className="btn-premium btn-secondary h-9"
             >
@@ -1303,8 +1302,7 @@ body { background: white; margin: 0; padding: 0; }
 </style>
 </head><body>${el.innerHTML}</body></html>`);
                 win.document.close();
-                win.onload = () => { win.focus(); win.print(); };
-                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 800);
+                setTimeout(() => { try { win.focus(); win.print(); } catch {} }, 600);
               }}
               className="btn-premium btn-secondary h-9"
             >
