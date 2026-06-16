@@ -107,6 +107,7 @@ export async function POST(req: Request) {
       if (!perm.allowed) {
         return NextResponse.json({
           text: `죄송합니다. ${perm.reason}`,
+          reply: `죄송합니다. ${perm.reason}`,
           sources: [],
           model: llmResponse.model,
         });
@@ -130,6 +131,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         text: llmResponse.text || "다음 작업을 진행하시겠습니까?",
+        reply: llmResponse.text || "다음 작업을 진행하시겠습니까?",
         pendingAction: {
           actionId: actionRow?.id,
           actionType,
@@ -150,6 +152,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       text: llmResponse.text,
+      reply: llmResponse.text,
       sources,
       model: llmResponse.model,
       intent: intent.category,
