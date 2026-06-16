@@ -809,7 +809,7 @@ export default function VipMembersPage() {
           </div>
 
           <div className="premium-card rounded-[22px] p-4">
-            <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto_auto]">
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto]" style={{ justifyContent: "start" }}>
 
               {/* 검색 */}
               <label className="block min-w-0">
@@ -856,19 +856,6 @@ export default function VipMembersPage() {
                 </select>
               </label>
 
-              {/* 담당컨설턴트 필터 */}
-              <label className="block min-w-0">
-                <span className="crm-meta mb-2 block pl-3 font-normal">담당컨설턴트</span>
-                <select
-                  className="crm-search h-12 w-full px-3 font-normal"
-                  value={filterConsultant}
-                  onChange={(e) => setFilterConsultant(e.target.value)}
-                >
-                  <option value="">전체 컨설턴트</option>
-                  {consultantOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
-
               {/* 필터 초기화 */}
               <div className="flex flex-col items-start gap-1.5">
                 <span
@@ -893,19 +880,6 @@ export default function VipMembersPage() {
                 </button>
               </div>
 
-              {/* 최신화 */}
-              <div className="flex flex-col items-start gap-1.5">
-                <span className="crm-meta block text-[11px] font-normal" style={{ color: "transparent", userSelect: "none" }}>
-                  데이터
-                </span>
-                <button
-                  type="button"
-                  onClick={fetchVipMembers}
-                  className="btn-premium btn-secondary h-12 whitespace-nowrap px-4"
-                >
-                  <Filter size={14} /> 최신화
-                </button>
-              </div>
             </div>
           </div>
         </div>
