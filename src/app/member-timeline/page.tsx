@@ -642,7 +642,6 @@ export default function MemberTimelinePage() {
                 <p className="crm-section-title">입회자 목록</p>
                 <p className="crm-tiny mt-1">총 {filteredMembers.length.toLocaleString()}명</p>
               </div>
-              <span className="badge-premium badge-muted">B번호순</span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
