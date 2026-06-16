@@ -3276,54 +3276,101 @@ export default function TasksPage() {
         })}
       </div>
 
-      <div className="premium-filterbar flex flex-shrink-0 flex-wrap items-center gap-2 px-5 py-3 md:px-7">
-        <div className="relative w-full sm:w-[340px]">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2"
-            style={{ color: "var(--text-faint)" }}
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="업무 내용, 요청자, 담당자 검색..."
-            className="h-9 w-full rounded-full border pl-9 pr-3 text-[13px] font-semibold outline-none"
-          />
-        </div>
+      <div className="flex-shrink-0 px-5 py-3 md:px-7">
+        <div className="premium-card rounded-[22px] p-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(280px,1.6fr)_minmax(150px,0.7fr)_minmax(150px,0.7fr)_minmax(150px,0.7fr)_auto]">
 
-        <SelectChip
-          value={fStatus}
-          onChange={setFStatus}
-          options={STATUSES}
-          placeholder="상태"
-        />
-        <SelectChip
-          value={fPriority}
-          onChange={setFPriority}
-          options={PRIORITIES}
-          placeholder="우선순위"
-        />
-        <SelectChip
-          value={fCategory}
-          onChange={setFCategory}
-          options={CATEGORIES}
-          placeholder="카테고리"
-        />
-        {activeFilters > 0 && (
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="btn-premium btn-danger h-8"
-          >
-            초기화
-          </button>
-        )}
-        <span
-          className="ml-auto hidden text-[12px] font-bold md:block"
-          style={{ color: "var(--text-faint)" }}
-        >
-          {(filteredTasks.length + filteredApprovals.length).toLocaleString()}건
-        </span>
+            {/* 업무 검색 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-10">업무 검색</span>
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="업무 내용, 요청자, 담당자 검색..."
+                  className="crm-search h-12 w-full pl-10 pr-3 font-normal"
+                />
+              </div>
+            </label>
+
+            {/* 상태 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3">상태 필터</span>
+              <select
+                value={fStatus}
+                onChange={(e) => setFStatus(e.target.value)}
+                className="crm-search h-12 w-full px-3 font-normal"
+              >
+                <option value="">전체 상태</option>
+                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+
+            {/* 우선순위 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3">우선순위 필터</span>
+              <select
+                value={fPriority}
+                onChange={(e) => setFPriority(e.target.value)}
+                className="crm-search h-12 w-full px-3 font-normal"
+              >
+                <option value="">전체 우선순위</option>
+                {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+
+            {/* 카테고리 필터 */}
+            <label className="block min-w-0">
+              <span className="crm-meta mb-2 block pl-3">카테고리 필터</span>
+              <select
+                value={fCategory}
+                onChange={(e) => setFCategory(e.target.value)}
+                className="crm-search h-12 w-full px-3 font-normal"
+              >
+                <option value="">전체 카테고리</option>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+
+            {/* 초기화 + 건수 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span
+                className="crm-meta block text-[11px] font-semibold transition-colors"
+                style={{ color: activeFilters > 0 ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+              >
+                필터 적용중
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-semibold transition-all"
+                  style={{
+                    background: activeFilters > 0 ? "var(--accent-subtle)" : "var(--surface-2)",
+                    border: `1px solid ${activeFilters > 0 ? "var(--accent-border)" : "var(--border)"}`,
+                    color: activeFilters > 0 ? "var(--accent-text)" : "var(--text-subtle)",
+                  }}
+                  onClick={resetFilters}
+                  disabled={activeFilters === 0}
+                >
+                  <RefreshCw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
+                  필터 초기화
+                </button>
+                <span
+                  className="text-[12px] font-bold"
+                  style={{ color: "var(--text-faint)" }}
+                >
+                  {(filteredTasks.length + filteredApprovals.length).toLocaleString()}건
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
 
       <main className="min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
