@@ -1880,11 +1880,11 @@ export default function CustomerDbPage() {
 
       <section className="mb-3 px-0">
         <div className="premium-card rounded-[22px] p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(280px,1.4fr)_minmax(160px,0.7fr)_minmax(160px,0.7fr)_minmax(160px,0.7fr)_auto]">
+          <div className={`grid gap-3 ${customerDbUserInfo.isAdmin ? "xl:grid-cols-[minmax(260px,1.4fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto]" : "xl:grid-cols-[minmax(280px,1.4fr)_minmax(160px,0.7fr)_minmax(160px,0.7fr)_minmax(160px,0.7fr)_auto]"}`}>
 
             {/* 고객 검색 */}
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block pl-10">고객 검색</span>
+              <span className="crm-meta mb-2 block pl-10 font-normal">고객 검색</span>
               <div className="relative">
                 <Search
                   size={15}
@@ -1902,7 +1902,7 @@ export default function CustomerDbPage() {
 
             {/* 직급 필터 */}
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block pl-3">직급 필터</span>
+              <span className="crm-meta mb-2 block pl-3 font-normal">직급 필터</span>
               <select
                 value={filterTitle}
                 onChange={(event) => setFilterTitle(event.target.value)}
@@ -1915,7 +1915,7 @@ export default function CustomerDbPage() {
 
             {/* 유입경로 필터 */}
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block pl-3">유입경로 필터</span>
+              <span className="crm-meta mb-2 block pl-3 font-normal">유입경로 필터</span>
               <select
                 value={filterRoute}
                 onChange={(event) => setFilterRoute(event.target.value)}
@@ -1928,7 +1928,7 @@ export default function CustomerDbPage() {
 
             {/* 활동항목 필터 */}
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block pl-3">활동항목 필터</span>
+              <span className="crm-meta mb-2 block pl-3 font-normal">활동항목 필터</span>
               <select
                 value={filterActivity}
                 onChange={(event) => setFilterActivity(event.target.value)}
@@ -1939,45 +1939,45 @@ export default function CustomerDbPage() {
               </select>
             </label>
 
-            {/* 담당자 필터 (관리자 전용) + 초기화 */}
-            <div className="flex items-end gap-2">
-              {customerDbUserInfo.isAdmin && (
-                <label className="block min-w-0 flex-1">
-                  <span className="crm-meta mb-2 block pl-3">담당자 필터</span>
-                  <select
-                    value={filterAssigned}
-                    onChange={(event) => setFilterAssigned(event.target.value)}
-                    className="crm-search h-12 w-full px-3 font-normal"
-                  >
-                    <option value="전체">전체 담당자</option>
-                    {["조계현", "이세호", "기여운", "최연전"].map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <div className="flex flex-col items-start gap-1.5">
-                <span
-                  className="crm-meta block text-[11px] font-semibold transition-colors"
-                  style={{ color: hasActiveFilter ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+            {/* 담당자 필터 (관리자 전용) — 독립 컬럼 */}
+            {customerDbUserInfo.isAdmin && (
+              <label className="block min-w-0">
+                <span className="crm-meta mb-2 block pl-3 font-normal">담당자 필터</span>
+                <select
+                  value={filterAssigned}
+                  onChange={(event) => setFilterAssigned(event.target.value)}
+                  className="crm-search h-12 w-full px-3 font-normal"
                 >
-                  필터 적용중
-                </span>
-                <button
-                  type="button"
-                  className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-semibold transition-all"
-                  style={{
-                    background: hasActiveFilter ? "var(--accent-subtle)" : "var(--surface-2)",
-                    border: `1px solid ${hasActiveFilter ? "var(--accent-border)" : "var(--border)"}`,
-                    color: hasActiveFilter ? "var(--accent-text)" : "var(--text-subtle)",
-                  }}
-                  onClick={resetFilters}
-                  disabled={!hasActiveFilter}
-                >
-                  <RefreshCcw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
-                  필터 초기화
-                </button>
-              </div>
+                  <option value="전체">전체 담당자</option>
+                  {["조계현", "이세호", "기여운", "최연전"].map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {/* 필터 초기화 — 독립 컬럼 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span
+                className="crm-meta block text-[11px] font-normal transition-colors"
+                style={{ color: hasActiveFilter ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+              >
+                필터 적용중
+              </span>
+              <button
+                type="button"
+                className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-normal transition-all"
+                style={{
+                  background: hasActiveFilter ? "var(--accent-subtle)" : "var(--surface-2)",
+                  border: `1px solid ${hasActiveFilter ? "var(--accent-border)" : "var(--border)"}`,
+                  color: hasActiveFilter ? "var(--accent-text)" : "var(--text-subtle)",
+                }}
+                onClick={resetFilters}
+                disabled={!hasActiveFilter}
+              >
+                <RefreshCcw className="inline-block h-4 w-4 mr-1.5 -mt-0.5" />
+                필터 초기화
+              </button>
             </div>
           </div>
         </div>
