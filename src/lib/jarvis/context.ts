@@ -360,10 +360,13 @@ async function buildBunyanghoeContext(intent: IntentResult, user: CRMUser, isAdm
     .in("meeting_result", ["계약완료", "예약완료"])
     .order("bunyanghoe_number", { ascending: true });
 
-  if (!isAdmin && user.name) query = query.eq("assigned_to", user.name);
+  // 분양회 회원은 팀 단위 관리이므로 전체 조회 (담당자별 정리 요청 대응)
+  // 권한 필터 미적용 — 회원 명단은 팀 공유 데이터
 
   const { data: members } = await query;
-  if (!members || members.length === 0) return "[분양회 운영] 회원 없음";
+  if (!members || members.length === 0) {
+    return "[분양회 운영 컨텍스트]\n조회된 분양회 회원: 0건\n(주의: VIP활동DB에 meeting_result가 계약완료/예약완료인 회원이 없거나 조회되지 않음. 회원 명단을 절대 지어내지 말고, 사용자에게 VIP활동DB/분양회 입회자 페이지 직접 확인을 권유할 것.)";
+  }
 
   const contracted = members.filter((m) => m.meeting_result === "계약완료");
   const reserved = members.filter((m) => m.meeting_result === "예약완료");
@@ -380,10 +383,19 @@ async function buildBunyanghoeContext(intent: IntentResult, user: CRMUser, isAdm
   lines.push("\n[등급별]");
   Object.entries(byGrade).forEach(([k, v]) => lines.push(`▸ ${k}: ${v}명`));
 
-  // 회원 명단 (최대 20명만)
-  lines.push("\n[회원 명단 (최근 입회순)]");
-  contracted.slice(-20).reverse().forEach((m) => {
-    lines.push(`▸ B-${m.bunyanghoe_number || "?"} ${m.name} ${m.title || ""} (${m.company || "-"}, 담당: ${m.assigned_to || "-"})`);
+  // 담당자별 그룹핑
+  const byAssignee: Record<string, typeof contracted> = {};
+  for (const m of contracted) {
+    const a = m.assigned_to || "미지정";
+    if (!byAssignee[a]) byAssignee[a] = [];
+    byAssignee[a].push(m);
+  }
+  lines.push("\n[담당자별 회원 명단]");
+  Object.entries(byAssignee).forEach(([assignee, list]) => {
+    lines.push(`\n● ${assignee} (${list.length}명)`);
+    list.forEach((m) => {
+      lines.push(`  · B-${m.bunyanghoe_number || "?"} ${m.name} ${m.title || ""} (${m.company || "-"}, 계약일: ${m.contract_date || "-"})`);
+    });
   });
 
   return lines.join("\n");
