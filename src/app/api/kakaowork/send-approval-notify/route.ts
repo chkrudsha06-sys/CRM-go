@@ -71,6 +71,7 @@ function submitButton(label: string, value: string, style: "default" | "primary"
     style,
     action: {
       type: "submit_action",
+      name: "approval_action",
       value,
     },
   };
