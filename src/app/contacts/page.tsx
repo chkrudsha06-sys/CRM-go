@@ -298,7 +298,7 @@ function TextInput({
     <label className="relative block min-w-0">
       {icon ? (
         <span
-          className="absolute left-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center"
+          className="absolute left-3.5 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center"
           style={{ color: "var(--text-faint)" }}
         >
           {icon}
@@ -308,7 +308,7 @@ function TextInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`crm-search h-12 w-full ${icon ? "pl-9" : "pl-3"} pr-3`}
+        className={`crm-search h-12 w-full ${icon ? "pl-10" : "pl-4"} pr-4`}
       />
     </label>
   );
@@ -736,7 +736,7 @@ export default function ContactsPage() {
           </div>
         )}
 
-        <div className="w-full space-y-5 px-4 py-5 sm:px-5 md:px-6 lg:px-7 2xl:px-9">
+        <div className="w-full space-y-5 px-5 py-5 sm:px-6 md:px-8 lg:px-10 2xl:px-12">
           <header className="premium-card relative overflow-hidden rounded-[24px] p-4 sm:p-5">
             <div
               className="absolute right-0 top-0 h-56 w-56 rounded-full blur-3xl"
@@ -862,7 +862,7 @@ export default function ContactsPage() {
             </div>
           </section>
 
-          <section className="premium-filterbar rounded-[24px] p-4 sm:p-5">
+          <section className="premium-filterbar rounded-[24px] p-5 sm:p-6 mt-2">
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(320px,1.5fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_auto]">
               <TextInput
                 value={search}
