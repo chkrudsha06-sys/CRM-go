@@ -36,6 +36,7 @@ type JarvisMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+  isStreaming?: boolean;  // 타이핑 애니메이션 진행 중 여부
 };
 
 type JarvisAgentProps = {
@@ -363,14 +364,42 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
         throw new Error(data?.error || "자비스 응답 생성에 실패했습니다.");
       }
 
+      const fullText = data?.reply || "응답을 받을 수 없습니다.";
       const assistantMessage: JarvisMessage = {
         role: "assistant",
-        content: data?.reply || "응답을 받을 수 없습니다.",
+        content: "",
         timestamp: getNowLabel(),
+        isStreaming: true,
       };
 
       setMessages([...nextMessages, assistantMessage]);
       updateTalkState();
+
+      // ── 타이핑 애니메이션 (한글 자연스러운 속도 18ms/자) ──
+      const CHAR_INTERVAL = 18; // ms per character
+      let charIndex = 0;
+      const total = fullText.length;
+      const typeNext = () => {
+        // 청크 사이즈 — 너무 짧은 텍스트는 한 번에, 긴 텍스트는 2~3자씩 진행
+        const chunkSize = total > 400 ? 3 : total > 150 ? 2 : 1;
+        charIndex = Math.min(charIndex + chunkSize, total);
+        const partial = fullText.slice(0, charIndex);
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== "assistant") return prev;
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...last,
+            content: partial,
+            isStreaming: charIndex < total,
+          };
+          return updated;
+        });
+        if (charIndex < total) {
+          window.setTimeout(typeNext, CHAR_INTERVAL);
+        }
+      };
+      window.setTimeout(typeNext, 80);
     } catch (error) {
       const assistantMessage: JarvisMessage = {
         role: "assistant",
@@ -824,16 +853,33 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                       </div>
                     ) : (
                       <div
-                        className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12px] font-medium leading-relaxed ${
+                        className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-[13.5px] leading-[1.65] ${
                           message.role === "user"
-                            ? "rounded-br-md bg-sky-500 text-white"
-                            : "rounded-bl-md"
+                            ? "rounded-br-md bg-sky-500 font-medium text-white"
+                            : "rounded-bl-md font-normal"
                         }`}
+                        style={
+                          message.role === "assistant"
+                            ? { color: "var(--text)", letterSpacing: "-0.01em" }
+                            : { letterSpacing: "-0.01em" }
+                        }
                       >
                         {message.content}
+                        {message.isStreaming && (
+                          <span
+                            className="jarvis-cursor ml-0.5 inline-block"
+                            style={{
+                              width: "2px",
+                              height: "1em",
+                              background: "var(--accent-text)",
+                              verticalAlign: "text-bottom",
+                              animation: "jarvisBlink 0.8s steps(2, start) infinite",
+                            }}
+                          />
+                        )}
                       </div>
                     )}
-                    <span className="mt-1 px-1 text-[10px] font-semibold" style={{ color: "var(--text-faint)" }}>
+                    <span className="mt-1.5 px-1 text-[11px] font-medium" style={{ color: "var(--text-subtle)" }}>
                       {message.timestamp}
                     </span>
                   </div>
@@ -845,8 +891,8 @@ TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈
                   <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
                     <Loader2 size={15} className="animate-spin text-sky-200" />
                   </div>
-                  <div className="rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[12px] font-bold" style={{ border: "1px solid var(--border-subtle)", background: "var(--surface-2)", color: "var(--text-subtle)" }}>
-                    CRM 데이터를 읽고 우선순위를 계산하고 있습니다...
+                  <div className="rounded-2xl rounded-bl-md px-4 py-3 text-[13px] font-medium leading-relaxed" style={{ border: "1px solid var(--border-subtle)", background: "var(--surface-2)", color: "var(--text-muted)", letterSpacing: "-0.01em" }}>
+                    <span className="jarvis-thinking-dots">CRM 데이터를 읽고 우선순위를 계산하고 있습니다</span>
                   </div>
                 </div>
               )}
