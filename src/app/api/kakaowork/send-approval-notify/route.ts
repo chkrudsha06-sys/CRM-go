@@ -186,15 +186,6 @@ export async function POST(request: Request) {
         },
 
         // 참조자 행
-        ...(refMention ? [{
-          type: "text",
-          text: `참조: @${reference_name}`,
-          inlines: [
-            { type: "styled", text: "참조: ", bold: false },
-            refMention,
-          ],
-        }] : []),
-
         { type: "divider" },
 
         // 결재 내용
@@ -230,25 +221,18 @@ export async function POST(request: Request) {
     }
 
     // ─────────────────────────────────────────
-    // 케이스 B: 중간 승인 → 다음 승인권자에게
+    // 케이스 B: 중간 승인 → 다음(최종) 승인권자에게
+    //   actor : 승인완료 ✅  /  최종 승인권자 : @next (멘션)
     // ─────────────────────────────────────────
     if (isApproved && !isFinal && current_approver) {
       const nextMention  = await mentionInline(appKey, current_approver);
       const actorMention = await mentionInline(appKey, actor);
 
-      textFallback = `✅ 결재 순번 — ${request_type}\n${actor} 승인 완료 → 다음: ${current_approver}`;
+      textFallback = `✅ ${actor} 승인 완료 — ${request_type}\n최종 승인권자: ${current_approver}`;
 
       blocks = [
-        { type: "header", text: `✅ 결재 순번 — ${request_type}`, style: "green" },
+        { type: "header", text: `📋 결재 승인 요청 — ${request_type}`, style: "yellow" },
 
-        {
-          type: "text",
-          text: `승인 완료: @${actor}`,
-          inlines: [
-            { type: "styled", text: "승인 완료: ", bold: false },
-            actorMention,
-          ],
-        },
         textBlock(`신청자: ${requester_name}`),
 
         { type: "divider" },
@@ -258,11 +242,22 @@ export async function POST(request: Request) {
 
         { type: "divider" },
 
+        // 승인 완료된 결재자
         {
           type: "text",
-          text: `다음 승인권자: @${current_approver}`,
+          text: `승인완료 ✅ : @${actor}`,
           inlines: [
-            { type: "styled", text: "다음 승인권자: ", bold: true },
+            { type: "styled", text: "승인완료 ✅ : ", bold: true },
+            actorMention,
+          ],
+        },
+
+        // 다음(최종) 승인권자 강조 멘션
+        {
+          type: "text",
+          text: `최종 승인권자 : @${current_approver}`,
+          inlines: [
+            { type: "styled", text: "최종 승인권자 : ", bold: true },
             nextMention,
           ],
         },
@@ -286,8 +281,6 @@ export async function POST(request: Request) {
     if (isApproved && isFinal) {
       const actorMention      = await mentionInline(appKey, actor);
       const requesterMention  = await mentionInline(appKey, requester_name);
-      const refMention2       = reference_name ? await mentionInline(appKey, reference_name) : null;
-
       textFallback = `🎉 결재 최종 승인 완료 — ${request_type}\n신청자: ${requester_name}`;
 
       blocks = [
@@ -309,15 +302,6 @@ export async function POST(request: Request) {
             requesterMention,
           ],
         },
-        ...(refMention2 ? [{
-          type: "text",
-          text: `참조: @${reference_name}`,
-          inlines: [
-            { type: "styled", text: "참조: ", bold: false },
-            refMention2,
-          ],
-        }] : []),
-
         { type: "divider" },
 
         boldBlock(`■ 승인된 ${request_type} 내용`),
