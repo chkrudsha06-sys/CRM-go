@@ -54,6 +54,7 @@ type MemberRow = {
   id: number;
   name: string | null;
   title: string | null;
+  phone: string | null;
   bunyanghoe_number: string | null;
   meeting_result: string | null;
   assigned_to: string | null;
@@ -852,17 +853,16 @@ function TaskCard({
         </div>
 
         {canDelete && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="btn-premium btn-danger h-8 w-8 flex-shrink-0 p-0 opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <Trash2 size={13} />
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="btn-premium btn-danger h-8 px-3 text-[12px]"
+            >
+              <Trash2 size={12} />
+              삭제
+            </button>
+          </div>
         )}
       </div>
     </button>
@@ -2500,7 +2500,7 @@ export default function TasksPage() {
           .order("created_at", { ascending: true }),
         supabase
           .from("contacts")
-          .select("id,name,title,bunyanghoe_number,meeting_result,assigned_to")
+          .select("id,name,title,phone,bunyanghoe_number,meeting_result,assigned_to")
           .in("meeting_result", ["계약완료", "예약완료"])
           .order("bunyanghoe_number", { ascending: true }),
       ],
@@ -4100,7 +4100,7 @@ export default function TasksPage() {
                                 setForm({
                                   ...form,
                                   member_name: member.name || "",
-                                  member_number: member.bunyanghoe_number || "",
+                                  member_number: member.phone || "",
                                   member_title: member.title || "",
                                 });
                                 setMemberSearch("");
