@@ -114,8 +114,32 @@ const JARVIS_ACTIONS: JarvisAction[] = [
 const JARVIS_CHIP_VIDEO = "/jarvis/jarvis-chip.mp4";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 경량 마크다운 렌더러 — Gemini의 **굵게**, ###, 리스트, 출처링크 처리
+// 마크다운 + 구조화 카드 렌더러
+// **굵게**, ###헤더, 리스트, 출처링크, 키-값 카드, 금액 강조, 구분선
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// 금액(1,650,000원)을 강조 색으로
+function highlightAmount(text: string, baseKey: number): { node: React.ReactNode; key: number } {
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let key = baseKey;
+  const amountRe = /([0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)\s*원/;
+  while (remaining.length > 0) {
+    const m = remaining.match(amountRe);
+    if (!m) {
+      parts.push(<span key={key++}>{remaining}</span>);
+      break;
+    }
+    const idx = remaining.indexOf(m[0]);
+    if (idx > 0) parts.push(<span key={key++}>{remaining.slice(0, idx)}</span>);
+    parts.push(
+      <span key={key++} style={{ color: "var(--cyan-text)", fontWeight: 600 }}>{m[0]}</span>
+    );
+    remaining = remaining.slice(idx + m[0].length);
+  }
+  return { node: <>{parts}</>, key };
+}
+
 function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = text;
@@ -128,14 +152,18 @@ function renderInline(text: string): React.ReactNode {
     const codeIdx = codeMatch ? remaining.indexOf(codeMatch[0]) : -1;
 
     if (boldIdx === -1 && codeIdx === -1) {
-      parts.push(<span key={key++}>{remaining}</span>);
+      const hl = highlightAmount(remaining, key);
+      parts.push(<span key={key++}>{hl.node}</span>);
       break;
     }
 
     const useBold = boldIdx !== -1 && (codeIdx === -1 || boldIdx < codeIdx);
 
     if (useBold && boldMatch) {
-      if (boldIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, boldIdx)}</span>);
+      if (boldIdx > 0) {
+        const hl = highlightAmount(remaining.slice(0, boldIdx), key);
+        parts.push(<span key={key++}>{hl.node}</span>);
+      }
       parts.push(
         <strong key={key++} style={{ fontWeight: 600, color: "var(--text-strong)" }}>
           {boldMatch[1]}
@@ -143,7 +171,10 @@ function renderInline(text: string): React.ReactNode {
       );
       remaining = remaining.slice(boldIdx + boldMatch[0].length);
     } else if (codeMatch) {
-      if (codeIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, codeIdx)}</span>);
+      if (codeIdx > 0) {
+        const hl = highlightAmount(remaining.slice(0, codeIdx), key);
+        parts.push(<span key={key++}>{hl.node}</span>);
+      }
       parts.push(
         <code
           key={key++}
@@ -165,10 +196,22 @@ function renderInline(text: string): React.ReactNode {
   return <>{parts}</>;
 }
 
+// "키: 값" 형태 라인 판별 (담당: 조계현 등)
+function parseKeyValue(line: string): { key: string; value: string } | null {
+  // 글머리표/번호 제거
+  const cleaned = line.replace(/^\s*[-*·▸•]\s*/, "").trim();
+  const m = cleaned.match(/^([가-힣A-Za-z][가-힣A-Za-z0-9 ()]{0,14})\s*[:：]\s*(.+)$/);
+  if (!m) return null;
+  // 값이 너무 길면 (문장형) 카드로 안 만듦
+  if (m[2].length > 40) return null;
+  return { key: m[1].trim(), value: m[2].trim() };
+}
+
 function renderMarkdown(text: string): React.ReactNode {
   const lines = text.split("\n");
   const blocks: React.ReactNode[] = [];
   let listBuffer: string[] = [];
+  let kvBuffer: { key: string; value: string }[] = [];
 
   const flushList = (key: string) => {
     if (listBuffer.length === 0) return;
@@ -186,43 +229,100 @@ function renderMarkdown(text: string): React.ReactNode {
     );
   };
 
+  // 키-값 묶음을 카드로
+  const flushKV = (key: string) => {
+    if (kvBuffer.length === 0) return;
+    const items = [...kvBuffer];
+    kvBuffer = [];
+    // 2개 이상 모였을 때만 카드 (단발성은 일반 텍스트가 자연스러움)
+    if (items.length < 2) {
+      items.forEach((kv, i) => {
+        blocks.push(
+          <div key={`${key}-s${i}`} style={{ lineHeight: 1.65, marginBottom: 2 }}>
+            <span style={{ color: "var(--text-subtle)" }}>{kv.key}</span>
+            <span style={{ margin: "0 6px", color: "var(--text-faint)" }}>·</span>
+            {renderInline(kv.value)}
+          </div>
+        );
+      });
+      return;
+    }
+    blocks.push(
+      <div
+        key={key}
+        style={{
+          margin: "6px 0",
+          padding: "9px 12px",
+          background: "var(--surface-3)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+        }}
+      >
+        {items.map((kv, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 12,
+              padding: "3px 0",
+              borderBottom: i < items.length - 1 ? "1px solid var(--border-subtle)" : "none",
+            }}
+          >
+            <span style={{ color: "var(--text-subtle)", fontSize: 12, flexShrink: 0 }}>{kv.key}</span>
+            <span style={{ color: "var(--text)", fontWeight: 500, textAlign: "right" }}>{renderInline(kv.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const flushAll = (key: string) => {
+    flushList(`${key}-l`);
+    flushKV(`${key}-kv`);
+  };
+
   lines.forEach((rawLine, idx) => {
     const line = rawLine.replace(/\r$/, "");
     const key = `b-${idx}`;
 
+    // 구분선 (───, ===, --- 3개 이상)
+    if (/^\s*[─—=-]{3,}\s*$/.test(line)) {
+      flushAll(`fa-${idx}`);
+      blocks.push(<div key={key} style={{ height: 1, background: "var(--border)", margin: "8px 0" }} />);
+      return;
+    }
+
+    // ### 헤더 또는 ■/▶ 섹션 제목
     const headerMatch = line.match(/^#{1,4}\s+(.*)$/);
-    if (headerMatch) {
-      flushList(`fl-${idx}`);
+    const sectionMatch = line.match(/^\s*[■▶◆●]\s*(.+)$/) || line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (headerMatch || sectionMatch) {
+      flushAll(`fa-${idx}`);
+      const titleText = headerMatch ? headerMatch[1] : sectionMatch![1];
       blocks.push(
         <div
           key={key}
-          style={{ fontSize: 12.5, fontWeight: 600, color: "var(--accent-2)", margin: "10px 0 4px" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "var(--accent-2)",
+            margin: "10px 0 5px",
+          }}
         >
-          {renderInline(headerMatch[1])}
+          <span style={{ width: 3, height: 13, borderRadius: 2, background: "var(--accent-2)", flexShrink: 0 }} />
+          {renderInline(titleText)}
         </div>
       );
       return;
     }
 
-    const bulletMatch = line.match(/^\s*[-*·]\s+(.*)$/);
-    const numberMatch = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
-    if (bulletMatch) {
-      listBuffer.push(bulletMatch[1]);
-      return;
-    }
-    if (numberMatch) {
-      flushList(`fl-${idx}`);
-      blocks.push(
-        <div key={key} style={{ display: "flex", gap: 7, marginBottom: 3, lineHeight: 1.6 }}>
-          <span style={{ color: "var(--cyan)", flexShrink: 0, fontWeight: 600 }}>{numberMatch[1]}.</span>
-          <span>{renderInline(numberMatch[2])}</span>
-        </div>
-      );
-      return;
-    }
-
+    // 출처 링크 (→ ... ↗)
     if (/^\s*[→▸]\s*/.test(line) && /↗\s*$/.test(line)) {
-      flushList(`fl-${idx}`);
+      flushAll(`fa-${idx}`);
       const clean = line.replace(/^\s*[→▸]\s*/, "").replace(/\s*↗\s*$/, "");
       blocks.push(
         <div
@@ -246,13 +346,44 @@ function renderMarkdown(text: string): React.ReactNode {
       return;
     }
 
-    if (line.trim() === "") {
+    // 키-값 라인 (담당: 조계현)
+    const kv = parseKeyValue(line);
+    if (kv) {
       flushList(`fl-${idx}`);
+      kvBuffer.push(kv);
+      return;
+    }
+
+    // 번호 리스트
+    const numberMatch = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    if (numberMatch) {
+      flushAll(`fa-${idx}`);
+      blocks.push(
+        <div key={key} style={{ display: "flex", gap: 7, marginBottom: 3, lineHeight: 1.6 }}>
+          <span style={{ color: "var(--cyan)", flexShrink: 0, fontWeight: 600 }}>{numberMatch[1]}.</span>
+          <span>{renderInline(numberMatch[2])}</span>
+        </div>
+      );
+      return;
+    }
+
+    // 글머리표
+    const bulletMatch = line.match(/^\s*[-*·]\s+(.*)$/);
+    if (bulletMatch) {
+      flushKV(`fkv-${idx}`);
+      listBuffer.push(bulletMatch[1]);
+      return;
+    }
+
+    // 빈 줄
+    if (line.trim() === "") {
+      flushAll(`fa-${idx}`);
       blocks.push(<div key={key} style={{ height: 6 }} />);
       return;
     }
 
-    flushList(`fl-${idx}`);
+    // 일반 문단
+    flushAll(`fa-${idx}`);
     blocks.push(
       <div key={key} style={{ lineHeight: 1.65, marginBottom: 2 }}>
         {renderInline(line)}
@@ -260,9 +391,10 @@ function renderMarkdown(text: string): React.ReactNode {
     );
   });
 
-  flushList("fl-end");
+  flushAll("fa-end");
   return <>{blocks}</>;
 }
+
 
 function getNowLabel() {
   return new Date().toLocaleTimeString("ko-KR", {
