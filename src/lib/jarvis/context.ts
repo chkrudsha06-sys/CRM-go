@@ -71,7 +71,7 @@ async function buildContactContext(intent: IntentResult, user: CRMUser, isAdmin:
     .select("note_date,content,author")
     .eq("contact_id", contact.id)
     .order("note_date", { ascending: false })
-    .limit(6);
+    .limit(10);
 
   const { data: sales } = await supabase
     .from("ad_executions")
@@ -102,7 +102,7 @@ async function buildContactContext(intent: IntentResult, user: CRMUser, isAdmin:
 
   if (notes && notes.length > 0) {
     lines.push("\n[최근 활동노트]");
-    notes.forEach((n) => lines.push(`▸ ${n.note_date || "-"} (${n.author || "-"}): ${(n.content || "").slice(0, 250).replace(/\n/g, " ")}`));
+    notes.forEach((n) => lines.push(`▸ ${n.note_date || "-"} (${n.author || "-"}): ${(n.content || "").slice(0, 800).replace(/\n/g, " ")}`));
   } else {
     lines.push("\n[활동노트] 기록 없음");
   }
