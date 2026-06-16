@@ -545,7 +545,7 @@ function TextInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="crm-search h-11 w-full px-3"
+        className="crm-search h-11 w-full px-3 font-normal"
       />
     </label>
   );
@@ -570,7 +570,7 @@ function SelectInput({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="crm-search h-11 w-full px-3"
+        className="crm-search h-11 w-full px-3 font-normal"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -682,7 +682,7 @@ function NoteComposer({
         ))}
       </div>
 
-      <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="활동 내용을 입력하세요." rows={2} className="min-h-[56px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] leading-5 outline-none" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }} />
+      <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="활동 내용을 입력하세요." rows={2} className="min-h-[56px] w-full resize-none rounded-[10px] border px-2.5 py-2 text-[12px] font-normal leading-5 outline-none" style={{ background: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--text-strong)" }} />
 
       <button type="button" onClick={handleAdd} className="btn-premium btn-primary h-8 w-full text-[12px]">
         <Plus size={13} /> 저장
@@ -1698,16 +1698,16 @@ export default function CustomerDbPage() {
         background: var(--surface-2) !important;
         color: var(--text-muted) !important;
         font-size: 13px !important;
-        font-weight: 950 !important;
+        font-weight: 700 !important;
         letter-spacing: -0.02em !important;
         white-space: nowrap !important;
       }
 
       .customer-db-force-center tbody td {
         height: 72px !important;
-        color: var(--text-strong) !important;
+        color: var(--text) !important;
         font-size: 14px !important;
-        font-weight: 850 !important;
+        font-weight: 400 !important;
         white-space: nowrap !important;
       }
 
@@ -1753,7 +1753,7 @@ export default function CustomerDbPage() {
         min-height: 30px !important;
         padding: 0 14px !important;
         font-size: 13px !important;
-        font-weight: 950 !important;
+        font-weight: 600 !important;
         line-height: 1 !important;
         text-align: center !important;
       }
@@ -1816,7 +1816,7 @@ export default function CustomerDbPage() {
       }
 
       .customer-db-typography .customer-db-cell-text {
-        font-weight: 500 !important;
+        font-weight: 400 !important;
       }
 
       .customer-db-typography .customer-db-badge {
@@ -2269,7 +2269,7 @@ export default function CustomerDbPage() {
                     <td className="customer-db-td">
                       <div className="customer-db-center-cell">
                         <div className="flex flex-col items-center gap-0.5">
-                          <span className="customer-db-cell-text font-[700]" style={{ color: "var(--warning-text)" }}>
+                          <span className="customer-db-cell-text font-[600]" style={{ color: "var(--warning-text)" }}>
                             {formatRetmDate((record as any).retmDate)}
                           </span>
                           <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>
@@ -2509,7 +2509,7 @@ export default function CustomerDbPage() {
                   onChange={(event) => setForm((current) => ({ ...current, memo: event.target.value }))}
                   placeholder="고객 관련 메모를 입력하세요."
                   rows={6}
-                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-normal leading-7 outline-none"
                   style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
                 />
               </label>
@@ -2520,7 +2520,7 @@ export default function CustomerDbPage() {
                   onChange={(event) => setForm((current) => ({ ...current, first_note: event.target.value }))}
                   placeholder={editingRecord ? "수정하면서 추가할 활동노트가 있으면 입력하세요." : "TM 또는 콜드톡 활동내용을 입력하세요."}
                   rows={6}
-                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-semibold leading-7 outline-none"
+                  className="w-full resize-none rounded-[14px] border px-3 py-3 text-[13px] font-normal leading-7 outline-none"
                   style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-strong)" }}
                 />
               </label>
