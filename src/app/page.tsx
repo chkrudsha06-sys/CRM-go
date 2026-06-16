@@ -1049,24 +1049,38 @@ export default function HomePage() {
       }
     });
 
-    // ── 3. 장기미활동 (고객DB): 재TM 예정일이 지난 고객 ──
+    // ── 3. 장기미활동 (고객DB): 재TM 예정일(등록일+영업일3일)이 오늘 이하인 고객 ──
+    // [재TM일: YYYY-MM-DD] = 재TM 등록일 → 여기에 영업일 3일을 더한 날이 오늘 이상이면 표시
+    const addBizDays = (startStr: string, days: number): Date => {
+      const d = new Date(startStr + "T00:00:00");
+      let count = 0;
+      while (count < days) {
+        d.setDate(d.getDate() + 1);
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) count++; // 주말 제외 (공휴일은 단순화)
+      }
+      return d;
+    };
+
     customerDbContacts.forEach((contact) => {
       const contactId = Number(contact.id);
       const memo = String(contact.memo || "");
-      // 재TM일 파싱: [재TM일: YYYY-MM-DD]
+      // [재TM일: YYYY-MM-DD] = 재TM 감도를 설정한 날짜
       const reTmMatch = memo.match(/\[재TM일:\s*(\d{4}-\d{2}-\d{2})\]/);
       if (reTmMatch) {
-        const reTmDate = parseDate(reTmMatch[1]);
+        // 등록일 + 영업일 3일 = 실제 재TM 예정일
+        const retmScheduled = addBizDays(reTmMatch[1], 3);
         const today = new Date(); today.setHours(0, 0, 0, 0);
-        if (reTmDate && reTmDate <= today) {
-          const overdueDays = Math.floor((today.getTime() - reTmDate.getTime()) / 86400000);
+        if (retmScheduled <= today) {
+          const overdueDays = Math.floor((today.getTime() - retmScheduled.getTime()) / 86400000);
+          const scheduledStr = retmScheduled.toISOString().slice(0, 10);
           counts.inactive += 1;
           items.push({
             key: `db-retm-${contact.id}`,
             type: "재TM 예정",
             tone: overdueDays === 0 ? "info" : "warning",
             title: contact.name || "고객명 없음",
-            desc: `고객DB · 재TM 예정일 ${reTmMatch[1]}${overdueDays > 0 ? ` (${overdueDays}일 초과)` : " (오늘)"}`,
+            desc: `고객DB · 재TM 예정일 ${scheduledStr}${overdueDays > 0 ? ` (${overdueDays}일 초과)` : " (오늘)"}`,
             href: "/customer-db",
             priority: 200 - overdueDays,
             contactId,
