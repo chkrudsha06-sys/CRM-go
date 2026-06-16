@@ -194,8 +194,8 @@ export function extractKeywords(text: string): string[] {
   if (/이번달/.test(text)) keywords.push("이번달");
   if (/지난달/.test(text)) keywords.push("지난달");
 
-  // 채널명
-  for (const ch of ["사이다페이", "효성CMS", "호갱노노", "LMS", "하이타겟", "하이타켓", "분양회 회비", "광고특전"]) {
+  // 채널명·키워드
+  for (const ch of ["사이다페이", "효성CMS", "호갱노노", "LMS", "하이타겟", "하이타켓", "분양회 회비", "광고특전", "완판트럭", "완판", "분양회"]) {
     if (text.includes(ch)) keywords.push(ch);
   }
 
