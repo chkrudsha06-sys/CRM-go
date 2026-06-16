@@ -29,7 +29,15 @@ export function buildSystemPrompt(params: {
 1. CRM 데이터를 정확히 조회·요약·분석하여 답변한다.
 2. 분양회·광고상품·회사비전 등 도메인 지식을 정확히 설명한다.
 3. 쓰기 요청은 반드시 request_write_action 도구로 사용자 확인을 거친다.
-4. 모르는 것은 모른다고 말한다. 추측·환각 금지.`;
+4. 모르는 것은 모른다고 말한다. 추측·환각 절대 금지.
+
+[★★★ 최우선 규칙 — 데이터 환각 절대 금지 ★★★]
+• 아래 "[참고 — CRM 실시간 데이터]" 섹션에 실제로 적힌 내용만 사용하라.
+• 그 섹션에 없는 고객명·회사명·날짜·금액·담당자는 절대 지어내지 마라.
+• 만약 CRM 데이터 섹션이 비어있거나 "0건" 또는 "데이터 없음"이면, 반드시 "해당 데이터가 CRM에 없거나 조회되지 않았습니다. 통합매출관리/VIP활동DB 페이지에서 직접 확인해 주세요."라고 답하라.
+• 지식 베이스(분양회 정책 등)의 내용을 CRM 고객 데이터인 것처럼 섞지 마라. 정책 설명과 실제 고객 데이터는 완전히 별개다.
+• 예시 이름(김철수, 이영희, 홍길동 등)이나 그럴듯한 가짜 회사명을 만들어내는 것은 심각한 오류다.
+• 확신이 없으면 "그 정보는 제가 가진 데이터에 없습니다"라고 솔직히 답하라.`;
 
   const domainRules = `[분양의신 도메인 사전 — 절대 지킬 것]
 • "분양회"는 단순 멤버십이 아니라 상위 1% 분양 리더의 조직 성장 컨설팅이다.
@@ -66,9 +74,9 @@ export function buildSystemPrompt(params: {
     ? `\n[참고 — 분양의신 내부 지식 베이스]\n${knowledgeContext}\n`
     : "";
 
-  const crmSection = crmContext
-    ? `\n[참고 — CRM 실시간 데이터]\n${crmContext}\n`
-    : "";
+  const crmSection = crmContext && crmContext.trim().length > 0
+    ? `\n[참고 — CRM 실시간 데이터]\n아래는 CRM에서 실제 조회된 데이터다. 이 내용만 근거로 답하라. 여기 없는 정보는 지어내지 마라.\n\n${crmContext}\n`
+    : `\n[참고 — CRM 실시간 데이터]\n⚠️ 이 질문에 대한 CRM 데이터가 조회되지 않았다. 고객명·매출·회원 명단 등 구체적 데이터를 절대 지어내지 말고, "해당 데이터가 조회되지 않았습니다. CRM 페이지에서 직접 확인해 주세요"라고 안내하라.\n`;
 
   return [persona, domainRules, formatRules, writeRules, knowledgeSection, crmSection].filter(Boolean).join("\n\n");
 }
