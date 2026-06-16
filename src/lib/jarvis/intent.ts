@@ -36,10 +36,11 @@ const PATTERNS = {
     /완료\s*처리/, /상태.*변경/,
   ],
 
-  // 고객 조회
+  // 고객 조회 (이름+직급, 또는 정보/연락처 등 명확한 조회 단어)
   customer_lookup: [
-    /\b(누구|어떤 사람|정보|프로필|상세)\b/,
-    /연락처/, /전화번호/, /담당자/, /소속/, /회사/,
+    /(누구|어떤 사람|프로필|상세)/,
+    /연락처/, /전화번호/, /소속/,
+    /([가-힣]{2,4})\s*(총괄본부장|본부장|팀장|부장|차장|과장|대리|이사|상무|전무|대표|컨설턴트|소장|실장)/,
     /B\s*-?\s*\d+/, /B넘버/, /입회번호/,
   ],
 
@@ -152,6 +153,16 @@ export function classifyByPattern(message: string): IntentResult {
 
   // 키워드 추출 (이름·B넘버 등 핵심 명사)
   const keywords = extractKeywords(text);
+
+  // 폴백: 사람 이름이 추출됐는데 분류가 애매하면 고객 조회로
+  // (예: "권호원 정보 알려줘" — 직급 없고 매출/지식 키워드도 없음)
+  const hasPersonName = keywords.some((k) => /^[가-힣]{2,4}$/.test(k));
+  const KNOWLEDGE_OR_SALES = primary === "knowledge" || primary === "sales_analytics" ||
+                             primary === "bunyanghoe_ops" || primary === "insight_combined" ||
+                             primary === "kpi_activity" || primary === "task_schedule";
+  if (hasPersonName && (primary === "unclear" || !KNOWLEDGE_OR_SALES)) {
+    if (primary === "unclear") primary = "customer_lookup";
+  }
 
   return {
     category: isWrite ? "write_action" : primary,
