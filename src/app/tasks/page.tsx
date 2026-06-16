@@ -2737,11 +2737,15 @@ export default function TasksPage() {
       file_urls: fileUrls.length > 0 ? fileUrls : null,
       file_names: fileNames.length > 0 ? fileNames : null,
     };
-    // file_names 컬럼이 아직 없을 수 있으므로 실패 시 제외하고 재시도
-    let insertRes = await supabase.from("tasks").insert(insertData);
+    // ── insert + 즉시 id 반환 (select 체인) ──
+    let savedTaskId: number | null = null;
+
+    // 1차: file_names 포함해서 시도
+    let insertRes = await supabase.from("tasks").insert(insertData).select("id").single();
     if (insertRes.error && /file_names|column/i.test(insertRes.error.message || "")) {
+      // 2차: file_names 제외 fallback
       const { file_names: _fn, ...fallback } = insertData;
-      insertRes = await supabase.from("tasks").insert(fallback);
+      insertRes = await supabase.from("tasks").insert(fallback).select("id").single();
     }
     const error = insertRes.error;
 
@@ -2750,19 +2754,7 @@ export default function TasksPage() {
       return;
     }
 
-    // ── 저장된 task id 조회 ──
-    let savedTaskId: number | null = null;
-    try {
-      const { data: latestTask } = await supabase
-        .from("tasks")
-        .select("id")
-        .eq("requester", me)
-        .eq("category", form.category)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      savedTaskId = (latestTask as any)?.id || null;
-    } catch {}
+    savedTaskId = (insertRes.data as any)?.id || null;
 
     // ── 카카오워크 업무요청 알림 발송 + message_id 저장 ──
     try {
