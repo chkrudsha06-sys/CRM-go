@@ -2414,7 +2414,7 @@ export default function TasksPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [tab, setTab] = useState("나에게 온");
+  const [tab, setTab] = useState("전체");
   const [search, setSearch] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [fPriority, setFPriority] = useState("");
