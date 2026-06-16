@@ -507,12 +507,7 @@ export async function POST(request: Request) {
       }
 
       const currentApprover = reqData.current_approver_name;
-      if (clickerName !== currentApprover && currentApprover) {
-        if (appKey && conversationId) {
-          await sendResultMessage(appKey, Number(conversationId), `⚠️ 현재 승인권자(${currentApprover})만 처리할 수 있습니다.`);
-        }
-        return NextResponse.json({ ok: true });
-      }
+      // [테스트 모드] 승인권자 제한 해제 — 누구나 처리 가능
 
       // 다음 승인자 계산 (팀장 → 본부장 순)
       let nextApprover: string | null = null;
