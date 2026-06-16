@@ -3195,16 +3195,16 @@ export default function Pipeline3Page() {
 
       <div className="flex-shrink-0 px-5 pb-4 md:px-7">
         <div className="premium-card rounded-[22px] p-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(320px,1.4fr)_minmax(190px,0.8fr)_minmax(190px,0.8fr)_auto]">
+          <div className={`grid gap-3 ${currentUser.isAdmin ? "xl:grid-cols-[minmax(240px,1.3fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_auto]" : "xl:grid-cols-[minmax(280px,1.4fr)_minmax(160px,0.7fr)_minmax(160px,0.7fr)_auto]"}`}>
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block">고객 검색</span>
+              <span className="crm-meta mb-2 block pl-10 font-normal">고객 검색</span>
               <div className="relative">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
                   style={{ color: "var(--text-muted)" }}
                 />
                 <input
-                  className="crm-search h-12 w-full pl-10 pr-3"
+                  className="crm-search h-12 w-full pl-10 pr-3 font-normal"
                   value={searchKeyword}
                   onChange={(event) => setSearchKeyword(event.target.value)}
                   placeholder="고객명, 연락처, 직급, 소속회사 검색"
@@ -3213,9 +3213,9 @@ export default function Pipeline3Page() {
             </label>
 
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block">유입경로 필터</span>
+              <span className="crm-meta mb-2 block pl-3 font-normal">유입경로 필터</span>
               <select
-                className="crm-search h-12 w-full px-3"
+                className="crm-search h-12 w-full px-3 font-normal"
                 value={intakeFilter}
                 onChange={(event) => setIntakeFilter(event.target.value)}
               >
@@ -3229,9 +3229,9 @@ export default function Pipeline3Page() {
             </label>
 
             <label className="block min-w-0">
-              <span className="crm-meta mb-2 block">관리구간 필터</span>
+              <span className="crm-meta mb-2 block pl-3 font-normal">관리구간 필터</span>
               <select
-                className="crm-search h-12 w-full px-3"
+                className="crm-search h-12 w-full px-3 font-normal"
                 value={stageFilter}
                 onChange={(event) => setStageFilter(event.target.value)}
               >
@@ -3247,9 +3247,9 @@ export default function Pipeline3Page() {
             {/* 관리자 전용: 담당자 필터 */}
             {currentUser.isAdmin && (
               <label className="block min-w-0">
-                <span className="crm-meta mb-2 block">담당자 필터</span>
+                <span className="crm-meta mb-2 block pl-3 font-normal">담당자 필터</span>
                 <select
-                  className="crm-search h-12 w-full px-3"
+                  className="crm-search h-12 w-full px-3 font-normal"
                   value={assignedFilter}
                   onChange={(event) => setAssignedFilter(event.target.value)}
                 >
@@ -3261,10 +3261,22 @@ export default function Pipeline3Page() {
               </label>
             )}
 
-            <div className="flex items-end gap-2">
+            {/* 필터 초기화 — 독립 컬럼 */}
+            <div className="flex flex-col items-start gap-1.5">
+              <span
+                className="crm-meta block text-[11px] font-normal transition-colors"
+                style={{ color: hasActiveFilter ? "var(--accent-text)" : "transparent", userSelect: "none" }}
+              >
+                필터 적용중
+              </span>
               <button
                 type="button"
-                className="btn-premium btn-secondary h-12 whitespace-nowrap px-4"
+                className="h-12 whitespace-nowrap rounded-[12px] px-4 text-[13px] font-normal transition-all"
+                style={{
+                  background: hasActiveFilter ? "var(--accent-subtle)" : "var(--surface-2)",
+                  border: `1px solid ${hasActiveFilter ? "var(--accent-border)" : "var(--border)"}`,
+                  color: hasActiveFilter ? "var(--accent-text)" : "var(--text-subtle)",
+                }}
                 onClick={() => {
                   setSearchKeyword("");
                   setIntakeFilter("전체");
