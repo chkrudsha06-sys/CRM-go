@@ -9,7 +9,6 @@ import {
   Grid3X3,
   Minus,
   Plus,
-  RefreshCcw,
   Save,
   Search,
   Sparkles,
@@ -326,15 +325,17 @@ function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string
   }[tone];
 
   return (
-    <div className="premium-card flex items-center gap-3 px-4 py-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-[13px] border" style={{ background: toneMap.bg, borderColor: toneMap.border, color: toneMap.text }}>
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="crm-tiny">{label}</p>
-        <p className="mt-0.5 text-[22px] font-[830] tracking-[-0.055em]" style={{ color: "var(--text-strong)" }}>
-          {value}
-        </p>
+    <div className="premium-card flex items-center justify-between px-5 py-5">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] border" style={{ background: toneMap.bg, borderColor: toneMap.border, color: toneMap.text }}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium" style={{ color: "var(--text-subtle)" }}>{label}</p>
+          <p className="mt-1 text-[28px] font-bold tracking-[-0.02em] leading-none" style={{ color: "var(--text-strong)" }}>
+            {value}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -493,14 +494,14 @@ export default function MemoPage() {
               <p className="crm-subtitle mt-2">텍스트 메모와 간단한 스프레드시트를 저장하고, 이전 기록을 빠르게 불러와 수정합니다.</p>
             </div>
 
-            <div className="stat-grid grid grid-cols-3 gap-2 xl:min-w-[560px]">
-              <StatCard icon={<FileText size={17} />} label="텍스트 메모" value={textCount} tone="info" />
-              <StatCard icon={<Grid3X3 size={17} />} label="스프레드시트" value={sheetCount} tone="success" />
-              <StatCard icon={<Clock size={17} />} label="전체 기록" value={memos.length} tone="purple" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[680px]">
+              <StatCard icon={<FileText size={22} />} label="텍스트 메모" value={textCount} tone="info" />
+              <StatCard icon={<Grid3X3 size={22} />} label="스프레드시트" value={sheetCount} tone="success" />
+              <StatCard icon={<Clock size={22} />} label="전체 기록" value={memos.length} tone="purple" />
             </div>
           </div>
 
-          <div className="premium-filterbar rounded-[18px] px-3 py-3">
+          <div className="premium-card rounded-[22px] p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <TabButton active={tab === "text"} label="메모" icon={<FileText size={15} />} onClick={() => setTab("text")} />
@@ -520,9 +521,6 @@ export default function MemoPage() {
                     />
                   </div>
                 )}
-                <button type="button" onClick={fetchMemos} className="btn-premium btn-secondary">
-                  <RefreshCcw size={14} /> 최신화
-                </button>
                 {editId && (
                   <button type="button" onClick={resetForm} className="btn-premium btn-secondary">
                     <X size={14} /> 새로 작성
