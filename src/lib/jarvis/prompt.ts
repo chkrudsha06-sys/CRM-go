@@ -83,11 +83,11 @@ export type SourceLink = { label: string; url: string; type: "crm" | "knowledge"
 export function extractCRMSourceLinks(crmContext: string, intent: IntentCategory): SourceLink[] {
   const links: SourceLink[] = [];
 
-  // 고객 ID 추출
-  const idMatches = crmContext.matchAll(/\[내부 ID:\s*(\d+)\]/g);
-  const nameMatches = crmContext.matchAll(/이름:\s*([가-힣]+)\s*([^\n]*)/g);
-  const names = Array.from(nameMatches).map((m) => `${m[1].trim()} ${m[2].trim()}`.trim());
-  const ids = Array.from(idMatches).map((m) => parseInt(m[1], 10));
+  // 고객 ID 추출 (Array.from으로 TypeScript target ES5 호환)
+  const idMatches = Array.from(crmContext.matchAll(/\[내부 ID:\s*(\d+)\]/g));
+  const nameMatches = Array.from(crmContext.matchAll(/이름:\s*([가-힣]+)\s*([^\n]*)/g));
+  const names = nameMatches.map((m) => `${m[1].trim()} ${m[2].trim()}`.trim());
+  const ids = idMatches.map((m) => parseInt(m[1], 10));
 
   ids.forEach((id, i) => {
     const name = names[i] || `고객 ${id}`;
