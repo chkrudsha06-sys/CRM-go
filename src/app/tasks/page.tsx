@@ -1310,15 +1310,30 @@ body { display: flex; align-items: flex-start; justify-content: center; padding:
 
                 try {
                   const html2pdf = await loadHtml2Pdf();
+                  // shadow/패딩 임시 제거 후 PDF 캡처 → 복원 (잘림 방지)
+                  const prevStyle = el.getAttribute("style") || "";
+                  el.style.boxShadow = "none";
+                  el.style.padding = "0";
+
+                  const elWidth = el.scrollWidth || 794;
                   const opt = {
-                    margin: [8, 8, 8, 8],
+                    margin: [4, 4, 4, 4],
                     filename: `${fileName}.pdf`,
                     image: { type: "jpeg", quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
+                    html2canvas: {
+                      scale: 2,
+                      useCORS: true,
+                      allowTaint: true,
+                      logging: false,
+                      windowWidth: elWidth + 40,
+                    },
                     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-                    pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+                    pagebreak: { mode: "avoid-all" },
                   };
                   await html2pdf().set(opt).from(el).save();
+
+                  // 스타일 복원
+                  el.setAttribute("style", prevStyle);
                 } catch {
                   alert("PDF 저장 중 오류가 발생했습니다. 양식 출력 버튼을 이용해 주세요.");
                 }
