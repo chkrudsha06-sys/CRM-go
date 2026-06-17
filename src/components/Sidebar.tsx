@@ -75,6 +75,7 @@ type MenuItem = {
 // Twenty식 5섹션 구성 (경로/라벨은 현재 배포본 유지)
 const WORKSPACE_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
+  { href: "/management-dashboard", label: "관리대시보드", icon: ChartBarIcon },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
   { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
   { href: "/member-timeline", label: "회원 타임라인", icon: TimelineIcon },
@@ -268,13 +269,11 @@ export default function Sidebar({
     const storageKey = `crm_user_slogan_${user.name}`;
     const local = localStorage.getItem(storageKey) || "";
 
-    // 1) localStorage 값을 먼저 화면에 반영 (즉시 표시 → 깜빡임 방지)
     if (local) {
       setSlogan(local);
       setSloganDraft(local);
     }
 
-    // 2) Supabase에서 최신 데이터 조회
     const { data, error } = await supabase
       .from("crm_user_slogans")
       .select("slogan")
@@ -282,21 +281,16 @@ export default function Sidebar({
       .maybeSingle();
 
     if (error) {
-      // 테이블/RLS 문제 — 콘솔에만 기록, localStorage 값 유지
       console.warn("[slogan] load failed, using localStorage:", error.message);
       return;
     }
 
-    // 3) Supabase에 값이 있을 때만 덮어쓰기
-    //    값이 없거나 빈 문자열이면 localStorage 값을 그대로 유지
     if (data?.slogan && String(data.slogan).trim()) {
       const next = String(data.slogan);
       setSlogan(next);
       setSloganDraft(next);
       localStorage.setItem(storageKey, next);
-    }
-    // Supabase가 비어있고 localStorage에 값이 있으면 → 백필(저장)
-    else if (local && local.trim()) {
+    } else if (local && local.trim()) {
       void supabase.from("crm_user_slogans").upsert(
         {
           user_name: user.name,
@@ -319,11 +313,9 @@ export default function Sidebar({
     const storageKey = `crm_user_slogan_${user.name}`;
     setSloganSaving(true);
 
-    // 1) 낙관적 업데이트 (즉시 화면 반영)
     localStorage.setItem(storageKey, next);
     setSlogan(next);
 
-    // 2) Supabase 저장
     const { error } = await supabase.from("crm_user_slogans").upsert(
       {
         user_name: user.name,
@@ -339,9 +331,10 @@ export default function Sidebar({
     setSloganEditing(false);
 
     if (error) {
-      // 저장 실패 — 사용자에게 알림
       console.error("[slogan] save failed:", error.message);
-      alert(`슬로건 저장에 실패했습니다.\n${error.message}\n\n[관리자] Supabase의 crm_user_slogans 테이블 또는 RLS 정책을 확인해주세요.`);
+      alert(
+        `슬로건 저장에 실패했습니다.\n${error.message}\n\n[관리자] Supabase의 crm_user_slogans 테이블 또는 RLS 정책을 확인해주세요.`,
+      );
     }
   };
 
@@ -398,6 +391,7 @@ export default function Sidebar({
       room_type?: string | null;
       created_at: string;
     }[];
+
     const unread = messages.filter((message) => {
       if (message.sender_name === user.name) return false;
       if (message.receiver_name && message.receiver_name !== user.name)
@@ -408,7 +402,7 @@ export default function Sidebar({
     }).length;
 
     setChatUnreadCount(unread);
-  }, [user.name, user.role, user.title]);
+  }, [user.name]);
 
   useEffect(() => {
     void upsertPresence(user);
@@ -499,14 +493,17 @@ export default function Sidebar({
 
   const goNotification = async (notification: NotificationItem) => {
     if (!notification.is_read) await onNotificationRead?.(notification.id);
+
     if (
       notification.source_type === "결제&업무요청" ||
       notification.source_type === "업무전달" ||
       notification.source_type === "결제요청"
-    )
+    ) {
       router.push("/tasks");
-    else if (notification.source_type === "완판트럭")
+    } else if (notification.source_type === "완판트럭") {
       router.push("/wanpan-truck");
+    }
+
     onPanelClose?.();
     onMobileClose?.();
   };
@@ -954,7 +951,9 @@ export default function Sidebar({
               background: chatOpen
                 ? "var(--accent-subtle)"
                 : "var(--surface-2)",
-              border: `1px solid ${chatOpen ? "var(--accent-border)" : "var(--border)"}`,
+              border: `1px solid ${
+                chatOpen ? "var(--accent-border)" : "var(--border)"
+              }`,
               color:
                 chatUnreadCount > 0
                   ? "var(--warning-text)"
@@ -987,7 +986,9 @@ export default function Sidebar({
               background: showPanel
                 ? "var(--accent-subtle)"
                 : "var(--surface-2)",
-              border: `1px solid ${showPanel ? "var(--accent-border)" : "var(--border)"}`,
+              border: `1px solid ${
+                showPanel ? "var(--accent-border)" : "var(--border)"
+              }`,
               color:
                 unreadCount > 0 ? "var(--warning-text)" : "var(--text-subtle)",
             }}
@@ -1114,7 +1115,9 @@ export default function Sidebar({
   return (
     <>
       <aside
-        className={`hidden flex-shrink-0 transition-[width] duration-300 md:flex ${sidebarCollapsed ? "w-[32px]" : "w-[248px]"}`}
+        className={`hidden flex-shrink-0 transition-[width] duration-300 md:flex ${
+          sidebarCollapsed ? "w-[32px]" : "w-[248px]"
+        }`}
         style={{
           background: "var(--surface)",
           borderRight: "1px solid var(--border-subtle)",
