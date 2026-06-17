@@ -128,6 +128,7 @@ type EditForm = {
 type AdRequestForm = {
   category: string;
   content: string;
+  etc_note: string;
   priority: string;
   assignee: string;
   tagged: string[];
@@ -260,6 +261,12 @@ const CATEGORIES = [
   "호갱노노(기타광고)",
   "일반 업무요청",
 ];
+const TASK_CATEGORIES_WITH_ETC_NOTE = [
+  "LMS업무요청",
+  "호갱노노(직방)_채널톡",
+  "호갱노노(직방)_단지마커",
+  "호갱노노(기타광고)",
+];
 const PRIORITIES = ["긴급", "높음", "보통", "낮음"];
 const LMS_PLATFORMS = [
   "삼성카드",
@@ -285,6 +292,7 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
   category: "LMS업무요청",
   content: "",
+  etc_note: "",
   priority: "보통",
   assignee: "",
   tagged: [],
@@ -615,6 +623,20 @@ function formatPhoneAuto(val: string): string {
   return digits;
 }
 
+function fieldValue(value: string) {
+  return value?.trim() || "-";
+}
+
+function buildEtcNoteBlock(form: AdRequestForm) {
+  if (!TASK_CATEGORIES_WITH_ETC_NOTE.includes(form.category)) return [];
+
+  return [
+    ``,
+    `[기타사항]`,
+    `${fieldValue(form.etc_note)}`,
+  ];
+}
+
 function buildTaskContent(form: AdRequestForm) {
   if (form.category === "LMS업무요청") {
     return [
@@ -635,6 +657,7 @@ function buildTaskContent(form: AdRequestForm) {
       `9. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
       `10. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
       `11. 발송도메인: ${form.domain || "X"}`,
+      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -662,6 +685,7 @@ function buildTaskContent(form: AdRequestForm) {
       `13. CTA 영역: 왼) ${form.cta_left} , 오) ${form.cta_right}`,
       `→ 발송도메인: ${form.domain || "X"}`,
       `14. 쿠폰여부: ${form.coupon === "O" ? form.coupon_text || "별도첨부" : "해당없음"}`,
+      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -687,6 +711,14 @@ function buildTaskContent(form: AdRequestForm) {
       ``,
       `PSD첨부: ${form.psd_file || "없음"}`,
       `조감도 첨부: ${form.bird_file || "없음"}`,
+      ...buildEtcNoteBlock(form),
+    ].join("\n");
+  }
+
+  if (form.category === "호갱노노(기타광고)") {
+    return [
+      form.content,
+      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -2692,6 +2724,21 @@ function AdRequestModal({
                   setForm({ ...form, content: event.target.value })
                 }
                 placeholder="업무 요청 내용을 상세히 입력하세요."
+              />
+            </div>
+          )}
+
+          {TASK_CATEGORIES_WITH_ETC_NOTE.includes(form.category) && (
+            <div>
+              <InputLabel>기타사항</InputLabel>
+              <textarea
+                className={textareaClass}
+                value={form.etc_note}
+                onChange={(event) =>
+                  setForm({ ...form, etc_note: event.target.value })
+                }
+                placeholder="업무요청에 추가로 전달할 기타사항을 입력하세요."
+                rows={4}
               />
             </div>
           )}
