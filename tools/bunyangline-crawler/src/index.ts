@@ -30,6 +30,7 @@ type CrawledRow = {
   site_name: string | null;
   site_address: string | null;
   posted_at: string | null;
+  posted_datetime: string | null;
   manager_name: string | null;
   manager_phone: string | null;
   agency_company: string | null;
@@ -43,6 +44,18 @@ type RecruitIdCandidate = {
   id: string;
   source: string;
   title?: string | null;
+};
+
+type ExistingCrmRow = {
+  source_url?: string | null;
+  posted_at?: string | null;
+  posted_datetime?: string | null;
+};
+
+type ExistingState = {
+  latestEpoch: number | null;
+  latestLabel: string | null;
+  existingSourceUrls: Set<string>;
 };
 
 const DEFAULT_IMPORT_BATCH_SIZE = Number(process.env.BUNYANGLINE_IMPORT_BATCH_SIZE || '2');
@@ -122,6 +135,32 @@ function normalizeDate(value: unknown) {
   return null;
 }
 
+function normalizeDateTime(value: unknown) {
+  const text = normalizeSpace(value);
+  if (!text) return null;
+
+  if (/^20\d{2}-\d{2}-\d{2}T/.test(text)) return text;
+
+  const match = text.match(/(20\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})(?:[일\sT]+(\d{1,2})[:시\s]+(\d{1,2})(?:[:분\s]+(\d{1,2}))?)?/);
+  if (!match) return null;
+
+  const y = match[1];
+  const m = match[2].padStart(2, '0');
+  const d = match[3].padStart(2, '0');
+  const hh = (match[4] || '00').padStart(2, '0');
+  const mm = (match[5] || '00').padStart(2, '0');
+  const ss = (match[6] || '00').padStart(2, '0');
+
+  return `${y}-${m}-${d}T${hh}:${mm}:${ss}+09:00`;
+}
+
+function toEpoch(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = value.length === 10 ? `${value}T00:00:00+09:00` : value;
+  const epoch = Date.parse(normalized);
+  return Number.isFinite(epoch) ? epoch : null;
+}
+
 function isDateOnOrAfter(value: string | null, minDate: string) {
   if (!value) return false;
   return value >= minDate;
@@ -131,7 +170,7 @@ function normalizePhone(value: unknown) {
   const text = normalizeSpace(value);
   if (!text) return null;
 
-  const raw = text.match(/0\d{1,3}[-.\s]?\d{3,4}[-.\s]?\d{4}/)?.[0] || text;
+  const raw = text.match(/0\d{1,3}[-.\s]?\d{3,4}[-.\s]?\d{4}/)?.[0] || text.match(/\b\d{4}[-.\s]?\d{4}\b/)?.[0] || text;
   const digits = raw.replace(/\D/g, '');
 
   if (!digits) return null;
@@ -191,9 +230,15 @@ function sectionBetween(text: string, startLabels: string[], endLabels: string[]
   return lines.slice(startIndex + 1, endIndex).join('\n');
 }
 
-function extractPostedAtFromDetail(text: string) {
+function extractPostedDateInfoFromDetail(text: string) {
   const afterDetailTitle = sectionBetween(text, ['구인글 상세보기'], ['근무지 정보', '사업자 정보', '사업지 정보']) || text;
-  return normalizeDate(afterDetailTitle);
+  const fullMatch = afterDetailTitle.match(/20\d{2}[.\/년\s-]+\d{1,2}[.\/월\s-]+\d{1,2}(?:[일\sT]+\d{1,2}[:시\s]+\d{1,2}(?:[:분\s]+\d{1,2})?)?/);
+  const raw = fullMatch?.[0] || afterDetailTitle;
+
+  return {
+    postedAt: normalizeDate(raw),
+    postedDateTime: normalizeDateTime(raw),
+  };
 }
 
 function extractSiteName(text: string) {
@@ -297,7 +342,7 @@ function parseDetailPageText(text: string, sourceUrl: string, region: Region): C
     return null;
   }
 
-  const postedAt = extractPostedAtFromDetail(detailText);
+  const { postedAt, postedDateTime } = extractPostedDateInfoFromDetail(detailText);
   const siteName = extractSiteName(detailText);
   const siteAddress = extractSiteAddress(detailText);
   const { managerName, managerPhone } = extractManagerInfo(detailText);
@@ -317,6 +362,7 @@ function parseDetailPageText(text: string, sourceUrl: string, region: Region): C
     site_name: compact(siteName),
     site_address: compact(siteAddress),
     posted_at: postedAt,
+    posted_datetime: postedDateTime,
     manager_name: compact(managerName),
     manager_phone: compact(managerPhone),
     agency_company: compact(agencyCompany),
@@ -460,12 +506,87 @@ async function crawlDetailPage(page: Page, id: string, region: Region) {
       return null;
     }
 
-    console.log(`[${region.name}] 상세 파싱 완료: ${id} / ${row.site_name || '-'} / ${row.posted_at || '등록일 없음'}`);
+    console.log(`[${region.name}] 상세 파싱 완료: ${id} / ${row.site_name || '-'} / ${row.posted_datetime || row.posted_at || '등록일 없음'}`);
     return row;
   } catch (error) {
     console.log(`[${region.name}] 상세 접속 실패: ${id} / ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+function deriveListUrlFromImportUrl(importUrl: string) {
+  if (!importUrl) return '';
+  return importUrl.replace(/\/api\/bunyangline-data\/import\/?$/, '/api/bunyangline-data/list');
+}
+
+async function fetchExistingState(): Promise<ExistingState> {
+  const explicitListUrl = env('CRM_BUNYANGLINE_LIST_URL');
+  const importUrl = env('CRM_BUNYANGLINE_IMPORT_URL');
+  const listUrl = explicitListUrl || deriveListUrlFromImportUrl(importUrl);
+
+  if (!listUrl) {
+    console.log('증분 기준 조회 생략: CRM_BUNYANGLINE_LIST_URL 또는 CRM_BUNYANGLINE_IMPORT_URL이 없습니다.');
+    return { latestEpoch: null, latestLabel: null, existingSourceUrls: new Set() };
+  }
+
+  const params = new URLSearchParams({
+    region: '모든지역',
+    onlyNew: 'false',
+    limit: '500',
+  });
+
+  try {
+    const response = await fetch(`${listUrl}?${params.toString()}`, { cache: 'no-store' });
+    const result = await response.json() as { ok?: boolean; data?: ExistingCrmRow[]; error?: string; message?: string };
+
+    if (!response.ok || !result.ok) {
+      console.log(`증분 기준 조회 실패: ${response.status} ${result.error || result.message || '응답 오류'}`);
+      return { latestEpoch: null, latestLabel: null, existingSourceUrls: new Set() };
+    }
+
+    const rows = Array.isArray(result.data) ? result.data : [];
+    const existingSourceUrls = new Set<string>();
+    let latestEpoch: number | null = null;
+    let latestLabel: string | null = null;
+
+    rows.forEach((row) => {
+      if (row.source_url) existingSourceUrls.add(row.source_url);
+      const label = row.posted_datetime || row.posted_at || null;
+      const epoch = toEpoch(label);
+      if (epoch != null && (latestEpoch == null || epoch > latestEpoch)) {
+        latestEpoch = epoch;
+        latestLabel = label;
+      }
+    });
+
+    console.log(`증분 기준 조회 완료: 기존 최근 등록일시 ${latestLabel || '없음'} / 최근 URL 캐시 ${existingSourceUrls.size}건`);
+    return { latestEpoch, latestLabel, existingSourceUrls };
+  } catch (error) {
+    console.log(`증분 기준 조회 실패: ${error instanceof Error ? error.message : String(error)}`);
+    return { latestEpoch: null, latestLabel: null, existingSourceUrls: new Set() };
+  }
+}
+
+function shouldKeepByIncremental(row: CrawledRow, state: ExistingState, incremental: boolean) {
+  if (!incremental) return true;
+
+  if (state.existingSourceUrls.has(row.source_url)) {
+    console.log(`증분 필터 제외: 이미 저장된 공고 URL / ${row.region_name} / ${row.site_name || '-'} / ${row.source_url}`);
+    return false;
+  }
+
+  if (state.latestEpoch == null) return true;
+
+  const rowEpoch = toEpoch(row.posted_datetime || row.posted_at);
+  if (rowEpoch == null) return false;
+
+  if (rowEpoch < state.latestEpoch) {
+    console.log(`증분 필터 제외: 마지막 수집 이전 공고 / ${row.region_name} / ${row.site_name || '-'} / ${row.posted_datetime || row.posted_at || '등록일 없음'}`);
+    return false;
+  }
+
+  if (rowEpoch === state.latestEpoch && state.existingSourceUrls.has(row.source_url)) return false;
+  return true;
 }
 
 async function postRowsToCrm(rows: CrawledRow[]) {
@@ -530,6 +651,7 @@ async function main() {
   const maxPages = Number(env('BUNYANGLINE_MAX_PAGES', '1'));
   const maxDetailsPerRegion = Number(env('BUNYANGLINE_MAX_DETAILS_PER_REGION', '30'));
   const minPostedAt = normalizeDate(env('BUNYANGLINE_MIN_POSTED_AT', '2026-05-01')) || '2026-05-01';
+  const incremental = env('BUNYANGLINE_INCREMENTAL', 'true') !== 'false';
   const headless = env('HEADLESS', 'true') !== 'false';
 
   const targetRegions = regionArg === 'all'
@@ -541,9 +663,14 @@ async function main() {
   }
 
   console.log(`등록일 필터: ${minPostedAt} 이후 공고만 저장합니다.`);
+  console.log(`증분 수집: ${incremental ? 'ON - 마지막 저장 등록일시 이후 공고만 CRM에 저장' : 'OFF - 중복 URL은 CRM upsert 기준 처리'}`);
   console.log('수집 방식: 지역 리스트에서 공고 ID 추출 → /recruit/view/{id}/ 상세페이지 접속 → 상세페이지 기준 파싱');
   console.log(`CRM 저장 배치 크기: ${IMPORT_BATCH_SIZE}건`);
   console.log(`상세정보 최대 길이: ${MAX_DETAIL_TEXT_LENGTH}자 / raw_text 최대 길이: ${MAX_RAW_TEXT_LENGTH}자`);
+
+  const existingState = incremental
+    ? await fetchExistingState()
+    : { latestEpoch: null, latestLabel: null, existingSourceUrls: new Set<string>() };
 
   const browser = await chromium.launch({ headless });
   const listPage = await browser.newPage({
@@ -588,6 +715,8 @@ async function main() {
           continue;
         }
 
+        if (!shouldKeepByIncremental(row, existingState, incremental)) continue;
+
         if (seenSourceUrls.has(row.source_url)) continue;
         seenSourceUrls.add(row.source_url);
         regionRows.push(row);
@@ -599,7 +728,8 @@ async function main() {
     }
 
     if (allRows.length === 0) {
-      throw new Error(`${minPostedAt} 이후 저장 대상이 0건입니다. 상세 ID 추출 또는 상세페이지 파싱 로그를 확인해야 합니다.`);
+      console.log('CRM 저장 대상 0건: 마지막 크롤링 이후 신규 등록 공고가 없습니다. 작업을 정상 종료합니다.');
+      return;
     }
 
     console.log(`CRM 저장 요청: ${allRows.length}건`);
