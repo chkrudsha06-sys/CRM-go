@@ -1,0 +1,39 @@
+name: Bunyangline Data Crawler
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1,5,9 * * *'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install crawler dependencies
+        working-directory: tools/bunyangline-crawler
+        run: npm install
+
+      - name: Install Playwright browser
+        working-directory: tools/bunyangline-crawler
+        run: npm run install:browser
+
+      - name: Run Bunyangline crawler
+        working-directory: tools/bunyangline-crawler
+        env:
+          CRM_BUNYANGLINE_IMPORT_URL: ${{ secrets.CRM_BUNYANGLINE_IMPORT_URL }}
+          BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
+          BUNYANGLINE_REGION_IDS: all
+          BUNYANGLINE_MAX_PAGES: '1'
+          BUNYANGLINE_MAX_DETAILS_PER_REGION: '30'
+          HEADLESS: 'true'
+        run: npm run start
