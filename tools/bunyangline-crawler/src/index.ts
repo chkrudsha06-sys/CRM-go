@@ -1,4 +1,4 @@
-import { chromium, Page } from '@playwright/test';
+import { chromium, Page, Response } from '@playwright/test';
 
 const BASE_URL = 'https://www.bunyangline.com';
 
@@ -20,6 +20,8 @@ const REGIONS = [
   { id: '15', name: '제주도' },
 ];
 
+type Region = (typeof REGIONS)[number];
+
 type CrawledRow = {
   source_url: string;
   source_post_key: string;
@@ -35,6 +37,11 @@ type CrawledRow = {
   detail_text: string | null;
   raw_text: string | null;
   crawled_at: string;
+};
+
+type JsonCandidate = {
+  value: Record<string, unknown>;
+  responseUrl: string;
 };
 
 function env(name: string, fallback = '') {
@@ -67,10 +74,11 @@ function sourceKey(url: string) {
   return `bunyangline_${Math.abs(hash)}`;
 }
 
-function normalizePhone(value: string | null) {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, '');
-  return digits || null;
+function normalizePhone(value: unknown) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.length < 9 || digits.length > 11) return digits;
+  return digits;
 }
 
 function extractPhone(text: string) {
@@ -78,11 +86,23 @@ function extractPhone(text: string) {
   return normalizePhone(match?.[0] ?? null);
 }
 
-function normalizeDate(value: string | null) {
-  if (!value) return null;
-  const match = value.match(/(20\d{2})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/);
-  if (!match) return null;
-  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+function normalizeDate(value: unknown) {
+  const text = normalizeSpace(value);
+  if (!text) return null;
+
+  const iso = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+
+  const kr = text.match(/(20\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})/);
+  if (kr) return `${kr[1]}-${kr[2].padStart(2, '0')}-${kr[3].padStart(2, '0')}`;
+
+  const yy = text.match(/(^|\D)(\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})(\D|$)/);
+  if (yy) {
+    const year = Number(yy[2]) >= 70 ? `19${yy[2]}` : `20${yy[2]}`;
+    return `${year}-${yy[3].padStart(2, '0')}-${yy[4].padStart(2, '0')}`;
+  }
+
+  return null;
 }
 
 function isDateOnOrAfter(value: string | null, minDate: string) {
@@ -151,7 +171,7 @@ function extractApartmentFee(text: string) {
     return fee?.[0] ? normalizeSpace(fee[0]) : normalizeSpace(chunk);
   }
 
-  const fallback = text.match(/(?:수수료|팀수수료|본부수수료)[^\n]{0,40}/);
+  const fallback = text.match(/(?:수수료|팀수수료|본부수수료)[^\n]{0,50}/);
   return fallback?.[0] ? normalizeSpace(fallback[0]) : null;
 }
 
@@ -178,126 +198,216 @@ function extractPageTitle(text: string) {
   return lines.find((line) => !skip.has(line) && line.length >= 5 && line.length <= 100) ?? null;
 }
 
-function isBunyanglineRecruitDetailUrl(url: URL) {
-  const path = url.pathname.replace(/\/+$/, '') || '/';
+function getByKey(obj: Record<string, unknown>, keys: string[]) {
+  const entries = Object.entries(obj);
+  const normalized = keys.map((key) => key.toLowerCase());
 
-  if (url.hostname !== 'www.bunyangline.com' && url.hostname !== 'bunyangline.com') return false;
-  if (!path.includes('/recruit')) return false;
+  for (const [key, value] of entries) {
+    const lower = key.toLowerCase();
+    if (normalized.includes(lower)) return value;
+  }
 
-  const blockedPrefixes = [
-    '/recruit/custom',
-    '/recruit/map',
-    '/recruit/favorite',
-    '/recruit/supporters',
-    '/login',
-    '/register',
-  ];
+  for (const [key, value] of entries) {
+    const lower = key.toLowerCase();
+    if (normalized.some((item) => lower.includes(item))) return value;
+  }
 
-  if (blockedPrefixes.some((prefix) => path.startsWith(prefix))) return false;
+  return null;
+}
 
-  // 지역현장 목록 페이지 자체는 제외합니다.
-  // 단, 상세 URL이 /recruit/regional/2/123 처럼 regional 하위에 있을 수 있으므로
-  // /recruit/regional 전체를 무조건 제외하면 안 됩니다.
-  const regionalListOnly = /^\/recruit\/regional\/\d+$/.test(path);
-  const rootListOnly = path === '/recruit' || path === '/recruit/regional';
-  const searchKeys = Array.from(url.searchParams.keys());
-  const hasOnlyListParams = searchKeys.every((key) => ['keyword', 'page'].includes(key));
+function getStringByKey(obj: Record<string, unknown>, keys: string[]) {
+  const value = getByKey(obj, keys);
+  if (value == null) return null;
+  if (Array.isArray(value) || typeof value === 'object') return null;
+  return compact(value);
+}
 
-  if ((regionalListOnly || rootListOnly) && hasOnlyListParams) return false;
+function getId(obj: Record<string, unknown>) {
+  const value = getByKey(obj, ['id', 'idx', 'seq', 'no', 'uid', 'wr_id', 'recruit_id', 'post_id', 'site_idx', 'recruitIdx']);
+  const text = normalizeSpace(value);
+  return text || null;
+}
 
-  const detailSearchKeys = ['id', 'idx', 'seq', 'no', 'post_id', 'recruit_id', 'wr_id', 'uid'];
-  if (detailSearchKeys.some((key) => url.searchParams.has(key))) return true;
+function getUrlFromObj(obj: Record<string, unknown>, region: Region) {
+  const raw = getStringByKey(obj, ['url', 'href', 'link', 'source_url', 'view_url', 'detail_url', 'recruit_url']);
+  if (raw) {
+    try {
+      return new URL(raw, BASE_URL).toString();
+    } catch {
+      // 아래 id 기반 URL로 대체합니다.
+    }
+  }
 
-  if (/\/recruit\/(view|detail|read|show|info)\//i.test(path)) return true;
-  if (/\/recruit\/regional\/\d+\/\d+/i.test(path)) return true;
-  if (/\/recruit\/\d{2,}/i.test(path)) return true;
+  const id = getId(obj);
+  if (id) return `${BASE_URL}/recruit/regional/${region.id}?idx=${encodeURIComponent(id)}`;
 
-  // 숫자가 포함된 recruit 하위 경로는 상세 후보로 둡니다.
-  // 예: /recruit/area/123, /recruit/regional/view/123 등
-  if (/\/recruit\//i.test(path) && /\d{2,}/.test(path)) return true;
+  const title = getStringByKey(obj, ['title', 'subject', 'site_name', 'siteName', 'field_name', 'name']) || 'unknown';
+  return `${BASE_URL}/recruit/regional/${region.id}?virtual=${encodeURIComponent(title)}`;
+}
 
+function objectText(obj: Record<string, unknown>) {
+  try {
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return String(obj);
+  }
+}
+
+function extractDateFromObject(obj: Record<string, unknown>) {
+  const raw = getStringByKey(obj, [
+    'posted_at',
+    'post_date',
+    'created_at',
+    'createdAt',
+    'reg_date',
+    'regDate',
+    'registered_at',
+    'registeredAt',
+    'write_date',
+    'writeDate',
+    'wdate',
+    'date',
+    'insert_dt',
+    'insertDate',
+    'updated_at',
+  ]);
+
+  return normalizeDate(raw || objectText(obj));
+}
+
+function extractApartmentFeeFromObject(obj: Record<string, unknown>) {
+  const direct = getStringByKey(obj, [
+    'apartment_fee',
+    'apartmentFee',
+    'apt_fee',
+    'fee',
+    'pay',
+    'payroll',
+    'payroll_text',
+    'salary',
+    'salary_detail',
+    'commission',
+    '수수료',
+  ]);
+
+  if (direct) return direct;
+  return extractApartmentFee(objectText(obj));
+}
+
+function looksLikeRecruitObject(obj: Record<string, unknown>) {
+  const text = objectText(obj);
+  const title = getStringByKey(obj, ['title', 'subject', 'site_name', 'siteName', 'field_name', 'fieldName', 'name']);
+  const company = getStringByKey(obj, ['company_name', 'companyName', 'agency_company', 'agencyCompany', 'company', '대행사']);
+  const id = getId(obj);
+  const hasRecruitWords = /계약 수수료|아파트|오피스텔|본부|팀장|팀원|경력무관|수수료|분양/.test(text);
+  const hasNoiseWords = /이용약관|개인정보|공지사항|로그인|회원가입/.test(text);
+
+  if (hasNoiseWords && !title) return false;
+  if (title && title.length >= 4 && hasRecruitWords) return true;
+  if (id && company && hasRecruitWords) return true;
   return false;
 }
 
-async function extractDetailUrls(page: Page, regionId: string) {
-  const out = new Set<string>();
-  let rawHrefCount = 0;
-  let rawOnclickCount = 0;
+function collectObjects(value: unknown, responseUrl: string, out: JsonCandidate[], depth = 0) {
+  if (depth > 8 || value == null) return;
 
-  function add(raw: string | null) {
-    if (!raw) return;
-    const value = raw.trim();
-    if (!value || value.startsWith('javascript:void') || value === 'javascript:;' || value === '#') return;
-
-    let url: URL;
-    try {
-      url = new URL(value, BASE_URL);
-    } catch {
-      return;
-    }
-
-    if (!isBunyanglineRecruitDetailUrl(url)) return;
-
-    url.hash = '';
-    out.add(url.toString());
+  if (Array.isArray(value)) {
+    for (const item of value) collectObjects(item, responseUrl, out, depth + 1);
+    return;
   }
 
-  // 1) a[href]에서 상세 URL 수집
-  const anchors = await page.locator('a[href]').all();
-  rawHrefCount = anchors.length;
+  if (typeof value !== 'object') return;
 
-  for (const anchor of anchors) {
-    add(await anchor.getAttribute('href').catch(() => null));
+  const obj = value as Record<string, unknown>;
+  if (looksLikeRecruitObject(obj)) out.push({ value: obj, responseUrl });
+
+  for (const child of Object.values(obj)) {
+    if (child && typeof child === 'object') collectObjects(child, responseUrl, out, depth + 1);
   }
-
-  // 2) onclick 속성에서 상세 URL 또는 공고번호 수집
-  const clickableNodes = await page.locator('[onclick]').all();
-  rawOnclickCount = clickableNodes.length;
-
-  for (const node of clickableNodes) {
-    const onclick = await node.getAttribute('onclick').catch(() => null);
-    if (!onclick) continue;
-
-    // location.href='/recruit/...', go('/recruit/...') 같은 패턴
-    const quotedMatches = onclick.match(/["']([^"']+)["']/g) || [];
-    quotedMatches.forEach((match) => add(match.slice(1, -1)));
-
-    // view(123), detail(123), idx=123 같은 패턴
-    const numberMatches = Array.from(onclick.matchAll(/(?:idx|id|seq|no|uid|wr_id)?[^0-9]{0,8}(\d{2,})/gi));
-    for (const match of numberMatches) {
-      const id = match[1];
-      add(`/recruit/regional/${regionId}/${id}`);
-      add(`/recruit/detail/${id}`);
-      add(`/recruit/view/${id}`);
-      add(`/recruit/${id}`);
-    }
-  }
-
-  console.log(`상세 URL 추출 진단: a[href] ${rawHrefCount}개, onclick ${rawOnclickCount}개, 통과 ${out.size}개`);
-
-  return Array.from(out);
 }
 
-async function parseDetailPage(page: Page, url: string, region: { id: string; name: string }): Promise<CrawledRow> {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
-  await sleep(500);
+async function handleJsonResponse(response: Response, out: JsonCandidate[]) {
+  const url = response.url();
+  if (!url.includes('bunyangline.com')) return;
 
-  const text = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }));
-  const pageTitle = normalizeSpace(await page.title().catch(() => '')) || extractPageTitle(text);
+  const headers = response.headers();
+  const contentType = headers['content-type'] || '';
+  const likelyJson = contentType.includes('application/json') || /api|ajax|list|recruit|regional/i.test(url);
+  if (!likelyJson) return;
 
-  const siteName = extractProjectName(text, pageTitle);
-  const siteAddress = pickAfterLabel(text, ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '주소', '근무지 주소'], 220);
-  const postedAt = normalizeDate(pickAfterLabel(text, ['등록일', '작성일', '게시일'], 80) || text);
-  const managerName = pickAfterLabel(text, ['담당자 이름', '담당자이름', '담당자명', '담당자'], 80);
-  const managerPhone = extractPhone(pickAfterLabel(text, ['담당자 연락처', '담당자연락처', '연락처', '휴대폰'], 100) || text);
-  const agencyCompany = pickAfterLabel(text, ['대행사', '분양대행사', '분양 대행사'], 120);
-  const apartmentFee = extractApartmentFee(text);
-  const detailText = extractSection(text, ['상세정보', '상세 정보', '상세요강', '모집내용', '급여정보'], 180);
+  try {
+    const parsed = await response.json();
+    const before = out.length;
+    collectObjects(parsed, url, out);
+    const added = out.length - before;
+    if (added > 0) {
+      console.log(`JSON 후보 감지: ${added}건 / ${url}`);
+      const sample = out[out.length - 1]?.value;
+      if (sample) console.log(`JSON 후보 샘플 키: ${Object.keys(sample).slice(0, 30).join(', ')}`);
+    }
+  } catch {
+    // JSON이 아니거나 CORS/본문 재사용 문제면 무시합니다.
+  }
+}
+
+async function collectNetworkCandidatesForList(page: Page, listUrl: string) {
+  const candidates: JsonCandidate[] = [];
+  const jobs: Promise<void>[] = [];
+
+  const listener = (response: Response) => {
+    jobs.push(handleJsonResponse(response, candidates));
+  };
+
+  page.on('response', listener);
+
+  try {
+    await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined);
+    await sleep(1500);
+    await Promise.allSettled(jobs);
+  } finally {
+    page.off('response', listener);
+  }
+
+  return candidates;
+}
+
+function rowFromJsonCandidate(candidate: JsonCandidate, region: Region): CrawledRow {
+  const obj = candidate.value;
+  const rawText = objectText(obj);
+  const sourceUrl = getUrlFromObj(obj, region);
+
+  const siteName =
+    getStringByKey(obj, ['site_name', 'siteName', 'field_name', 'fieldName', 'project_name', 'projectName', 'title', 'subject', 'name']) ||
+    extractProjectName(rawText, null);
+
+  const siteAddress =
+    getStringByKey(obj, ['site_address', 'siteAddress', 'address', 'addr', 'field_address', 'work_address', 'location_address']) ||
+    pickAfterLabel(rawText, ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '주소', '근무지 주소'], 220);
+
+  const postedAt = extractDateFromObject(obj);
+
+  const managerName =
+    getStringByKey(obj, ['manager_name', 'managerName', 'manager', 'contact_name', 'contactName', 'person_name', 'personName', '담당자']) ||
+    pickAfterLabel(rawText, ['담당자 이름', '담당자이름', '담당자명', '담당자'], 80);
+
+  const managerPhone =
+    normalizePhone(getStringByKey(obj, ['manager_phone', 'managerPhone', 'phone', 'tel', 'mobile', 'contact_phone', 'contactPhone', '담당자연락처'])) ||
+    extractPhone(rawText);
+
+  const agencyCompany =
+    getStringByKey(obj, ['agency_company', 'agencyCompany', 'company_name', 'companyName', 'company', '대행사', 'corp_name']) ||
+    pickAfterLabel(rawText, ['대행사', '분양대행사', '분양 대행사', '업체명', '회사명'], 120);
+
+  const apartmentFee = extractApartmentFeeFromObject(obj);
+
+  const detailText =
+    getStringByKey(obj, ['detail_text', 'detailText', 'content', 'contents', 'description', 'desc', 'memo', 'body']) ||
+    extractSection(rawText, ['상세정보', '상세 정보', '상세요강', '모집내용', '급여정보'], 180);
 
   return {
-    source_url: url,
-    source_post_key: sourceKey(url),
+    source_url: sourceUrl,
+    source_post_key: sourceKey(sourceUrl),
     region_id: region.id,
     region_name: region.name,
     site_name: compact(siteName),
@@ -308,9 +418,56 @@ async function parseDetailPage(page: Page, url: string, region: { id: string; na
     agency_company: compact(agencyCompany),
     apartment_fee: compact(apartmentFee),
     detail_text: compact(detailText),
-    raw_text: compact(text),
+    raw_text: compact(rawText),
     crawled_at: new Date().toISOString(),
   };
+}
+
+async function parseListFallback(page: Page, listUrl: string, region: Region): Promise<CrawledRow[]> {
+  const text = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }).catch(() => ''));
+  if (!text) return [];
+
+  // 상세 URL/JSON 후보가 없는 경우, 화면에 보이는 리스트값이라도 임시 저장할 수 있도록 하는 보조 파서입니다.
+  // 등록일이 없는 행은 날짜 필터 때문에 최종 저장에서 제외됩니다.
+  const lines = linesOf(text);
+  const productTypes = new Set(['아파트', '오피스텔', '상가', '쇼핑몰', '오피스', '아파트/오피스텔', '오피스텔/상가/쇼핑몰/오피스']);
+  const rows: CrawledRow[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!productTypes.has(line)) continue;
+
+    const title = lines[i + 1] || null;
+    const summary = lines[i + 2] || null;
+    const company = lines.slice(i + 3, i + 10).find((item) => {
+      if (/팀장|팀원|본부|계약 수수료|기본급|일비|숙소비|경력/.test(item)) return false;
+      if (productTypes.has(item)) return false;
+      return item.length >= 2 && item.length <= 40;
+    }) || null;
+
+    if (!title || title.length < 4) continue;
+
+    const sourceUrl = `${listUrl}#${encodeURIComponent(title)}`;
+    rows.push({
+      source_url: sourceUrl,
+      source_post_key: sourceKey(sourceUrl),
+      region_id: region.id,
+      region_name: region.name,
+      site_name: compact(title),
+      site_address: null,
+      posted_at: null,
+      manager_name: null,
+      manager_phone: null,
+      agency_company: compact(company),
+      apartment_fee: extractApartmentFee([line, title, summary, ...lines.slice(i + 3, i + 10)].filter(Boolean).join('\n')),
+      detail_text: compact(summary),
+      raw_text: compact(lines.slice(i, i + 10).join('\n')),
+      crawled_at: new Date().toISOString(),
+    });
+  }
+
+  console.log(`[${region.name}] 화면 리스트 보조 파싱 후보: ${rows.length}건`);
+  return rows;
 }
 
 async function sendToCrm(rows: CrawledRow[]) {
@@ -354,6 +511,7 @@ async function main() {
   }
 
   console.log(`등록일 필터: ${minPostedAt} 이후 공고만 저장합니다.`);
+  console.log('수집 방식: 상세 URL 추출이 아니라 네트워크 JSON 응답 우선 수집 방식으로 실행합니다.');
 
   const browser = await chromium.launch({ headless });
   const page = await browser.newPage({
@@ -362,60 +520,57 @@ async function main() {
   });
 
   const allRows: CrawledRow[] = [];
-  const errors: Array<{ url: string; message: string }> = [];
+  const seen = new Set<string>();
 
   try {
     for (const region of targetRegions) {
-      const detailUrls = new Set<string>();
+      const regionRows: CrawledRow[] = [];
 
       for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
         const listUrl = `${BASE_URL}/recruit/regional/${region.id}/?keyword=&page=${pageNo}`;
         console.log(`[${region.name}] 리스트 접근: ${listUrl}`);
-        await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
-        await sleep(1000);
 
-        const urls = await extractDetailUrls(page, region.id);
-        urls.forEach((url) => detailUrls.add(url));
-        console.log(`[${region.name}] ${pageNo}페이지 상세 URL 후보: ${urls.length}개`);
-      }
+        const candidates = await collectNetworkCandidatesForList(page, listUrl);
+        console.log(`[${region.name}] 네트워크 JSON 후보: ${candidates.length}건`);
 
-      const selectedUrls = Array.from(detailUrls).slice(0, maxDetailsPerRegion);
-      console.log(`[${region.name}] 상세 수집 시작: ${selectedUrls.length}개`);
+        const jsonRows = candidates.map((candidate) => rowFromJsonCandidate(candidate, region));
+        regionRows.push(...jsonRows);
 
-      for (const url of selectedUrls) {
-        try {
-          const row = await parseDetailPage(page, url, region);
-
-          if (!isDateOnOrAfter(row.posted_at, minPostedAt)) {
-            console.log(
-              `등록일 필터 제외: ${region.name} / ${row.site_name || '-'} / 등록일 ${row.posted_at || '없음'} / ${url}`,
-            );
-            continue;
-          }
-
-          allRows.push(row);
-          console.log(`수집 완료: ${region.name} / ${row.site_name || '-'} / 등록일 ${row.posted_at} / ${url}`);
-        } catch (error) {
-          errors.push({ url, message: error instanceof Error ? error.message : String(error) });
-          console.error(`수집 실패: ${url}`, error);
+        if (jsonRows.length === 0) {
+          const fallbackRows = await parseListFallback(page, listUrl, region);
+          regionRows.push(...fallbackRows);
         }
-
-        await sleep(900);
       }
+
+      const deduped = regionRows.filter((row) => {
+        if (seen.has(row.source_url)) return false;
+        seen.add(row.source_url);
+        return true;
+      });
+
+      const filtered = deduped
+        .filter((row) => {
+          const ok = isDateOnOrAfter(row.posted_at, minPostedAt);
+          if (!ok) {
+            console.log(`등록일 필터 제외: ${region.name} / ${row.site_name || '-'} / 등록일 ${row.posted_at || '없음'}`);
+          }
+          return ok;
+        })
+        .slice(0, maxDetailsPerRegion);
+
+      console.log(`[${region.name}] 최종 저장 대상: ${filtered.length}건`);
+      allRows.push(...filtered);
     }
 
     if (allRows.length === 0) {
-      throw new Error(`${minPostedAt} 이후 등록된 수집 대상 데이터가 없습니다. 등록일 파싱 또는 상세 URL 추출 패턴 보완이 필요합니다.`);
+      throw new Error(
+        `${minPostedAt} 이후 저장 대상이 0건입니다. 네트워크 JSON 후보가 없거나 등록일 필드명이 다를 수 있습니다. 로그의 'JSON 후보 샘플 키'를 확인해야 합니다.`,
+      );
     }
 
     console.log(`CRM 저장 요청: ${allRows.length}건`);
     const result = await sendToCrm(allRows);
     console.log('CRM 저장 완료:', JSON.stringify(result, null, 2));
-
-    if (errors.length > 0) {
-      console.warn('일부 수집 실패:', JSON.stringify(errors, null, 2));
-    }
   } finally {
     await browser.close();
   }
