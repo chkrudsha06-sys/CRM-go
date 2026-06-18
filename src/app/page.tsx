@@ -103,6 +103,9 @@ type KpiRow = Record<string, any> & {
   scope: "team" | "execution" | "operation";
   target_name: string;
   recruit_count?: number | null;
+  master_count?: number | null;
+  challenger_count?: number | null;
+  bronze_count?: number | null;
   bunyanghoe_revenue?: number | null;
   linked_revenue?: number | null;
   special_revenue?: number | null;
@@ -130,6 +133,7 @@ type FunnelRow = {
 };
 
 const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const OPERATION_PART_NAMES = ["김재영", "최은정"];
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
 const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
@@ -166,6 +170,12 @@ function isExecutionUser(user?: CRMUserLite | null) {
   const role = String(user?.role || "").toLowerCase();
   const name = normalizePersonName(user?.name);
   return role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((item) => normalizePersonName(item) === name);
+}
+
+function isOperationUser(user?: CRMUserLite | null) {
+  const role = String(user?.role || "").toLowerCase();
+  const name = normalizePersonName(user?.name);
+  return role === "ops" || role.includes("운영") || OPERATION_PART_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
 function isAdminUser(user?: CRMUserLite | null) {
@@ -342,8 +352,7 @@ function timeAgo(value?: string | null) {
 
 function effectiveSales(row: SalesRow) {
   // 통합매출관리 기준과 동일하게 집행금액에서 환불금액을 그대로 차감합니다.
-  // 사이다페이 환불 데이터는 execution_amount=0, refund_amount=금액 형태로 들어오기 때문에
-  // Math.max(..., 0)으로 막으면 환불 행이 대시보드 매출에서 차감되지 않습니다.
+  // 환불 행은 execution_amount=0, refund_amount=금액 형태로 들어올 수 있으므로 Math.max(..., 0)을 사용하지 않습니다.
   const execution = Number(row.execution_amount || 0);
   const refund = Number(row.refund_amount || 0);
   return execution - refund;
@@ -365,6 +374,7 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
     route.includes("분양회") ||
     channel.includes("효성CMS") ||
     channel.includes("사이다페이") ||
+    item.includes("분양회") ||
     item.includes("월회비") ||
     item.includes("회비")
   ) {
@@ -634,10 +644,10 @@ export default function HomePage() {
   const [filterWeekNum, setFilterWeekNum] = useState(() => getCurrentWeekNum(new Date().getFullYear(), new Date().getMonth() + 1));
   const [filterYear] = useState(new Date().getFullYear());
   const [ownerFilter, setOwnerFilter] = useState<string>(() => {
-    // 실행파트 담당자면 초기 렌더부터 본인 이름으로 고정
+    // 실행파트/운영파트 담당자면 초기 렌더부터 본인 이름으로 고정
     try {
       const u = readUserFromStorage();
-      if (isExecutionUser(u)) return u?.name || "전체";
+      if (isExecutionUser(u) || isOperationUser(u)) return u?.name || "전체";
     } catch {}
     return "전체";
   });
@@ -680,19 +690,19 @@ export default function HomePage() {
 
     const { year, month } = getMonthWindow(selectedMonth);
 
-    // 실행파트 담당자면 Supabase 쿼리 자체에 assigned_to 필터 적용
-    const isExecUser = isExecutionUser(currentUser) && !isAdminUser(currentUser);
-    const execName = isExecUser ? (currentUser?.name || "") : null;
+    // 실행파트/운영파트 담당자면 Supabase 쿼리 자체에 본인 필터 적용
+    const isPersonalUser = (isExecutionUser(currentUser) || isOperationUser(currentUser)) && !isAdminUser(currentUser);
+    const personalName = isPersonalUser ? (currentUser?.name || "") : null;
 
     try {
       let customerDbQuery = supabase.from("contacts").select("*").eq("crm_db_source", "customer_db").order("created_at", { ascending: false });
       let vipQuery = supabase.from("contacts").select("*").eq("crm_db_source", "vip_activity").order("created_at", { ascending: false });
       let salesQuery = supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000);
 
-      if (execName) {
-        customerDbQuery = customerDbQuery.eq("assigned_to", execName);
-        vipQuery = vipQuery.eq("assigned_to", execName);
-        salesQuery = salesQuery.eq("team_member", execName);
+      if (personalName) {
+        customerDbQuery = customerDbQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
+        vipQuery = vipQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
+        salesQuery = salesQuery.or(`team_member.eq.${personalName},consultant.eq.${personalName}`);
       }
 
       const [customerDbRes, vipRes, noteRes, salesRes, kpiRes] = await Promise.all([
@@ -884,7 +894,7 @@ export default function HomePage() {
     }
   }, [editForm, editTarget, fetchDashboard, me?.name, popupMode, quickNote]);
 
-  const fixedOwner = isExecutionUser(me);
+  const fixedOwner = isExecutionUser(me) || isOperationUser(me);
   const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
 
   const notesByContact = useMemo(() => {
@@ -1252,41 +1262,73 @@ export default function HomePage() {
     });
   }, [vipContacts, rangeStart, rangeEnd]);
 
-  const kpiTarget = useMemo(() => {
-    if (activeOwner === "전체") {
-      const execRows = kpis.filter((row) =>
-        row.scope === "execution" &&
-        EXECUTION_PART_NAMES.some((name) => normalizePersonName(name) === normalizePersonName(row.target_name))
+  const kpiPanelDesc = useMemo(() => {
+    if (isAdminUser(me)) return "실행파트 전체목표 · 운영파트 전체목표";
+    if (isOperationUser(me)) return "광고특전운영매출";
+    if (isExecutionUser(me)) return "등급별 분양회 모집 · 분양회 회비";
+    return "분양회 모집 · 분양회 회비 · 광고특전운영매출";
+  }, [me]);
+
+  const kpiRows = useMemo(() => {
+    const isOwnerIn = (row: Pick<ContactRow, "assigned_to" | "consultant">, owners: string[]) =>
+      owners.some((owner) => rowMatchesOwner(row, owner));
+    const salesOwnerIn = (row: SalesRow, owners: string[]) =>
+      owners.some((owner) => salesMatchesOwner(row, owner));
+
+    const contractedMembers = (sourceContacts: ContactRow[]) =>
+      sourceContacts.filter((contact) =>
+        isVipContact(contact) &&
+        isContracted(contact) &&
+        isInRange(contact.contract_date, rangeStart, rangeEnd)
       );
-      if (execRows.length > 0) {
-        return {
-          year: execRows[0].year,
-          month: execRows[0].month,
-          week: 0,
-          scope: "team" as const,
-          target_name: "team",
-          recruit_count: execRows.reduce((sum, r) => sum + Number(r.recruit_count || 0), 0),
-          bunyanghoe_revenue: execRows.reduce((sum, r) => sum + Number(r.bunyanghoe_revenue || 0), 0),
-          linked_revenue: execRows.reduce((sum, r) => sum + Number(r.linked_revenue || 0), 0),
-          special_revenue: execRows.reduce((sum, r) => sum + Number(r.special_revenue || 0), 0),
-          wanpan_truck_count: execRows.reduce((sum, r) => sum + Number(r.wanpan_truck_count || 0), 0),
-          ad_operation_revenue: execRows.reduce((sum, r) => sum + Number(r.ad_operation_revenue || 0), 0),
-        } as KpiRow;
-      }
-      return kpis.find((row) => row.scope === "team" && row.target_name === "team") || null;
+
+    const salesAmount = (sourceSales: SalesRow[], category: "membership" | "lms" | "hogang") =>
+      sourceSales
+        .filter((row) => salesCategory(row) === category && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd))
+        .reduce((sum, row) => sum + effectiveSales(row), 0);
+
+    const teamTarget = kpis.find((row) => row.scope === "team" && row.target_name === "team") || null;
+
+    if (isAdminUser(me)) {
+      const execContacts = contacts.filter((contact) => isOwnerIn(contact, EXECUTION_PART_NAMES));
+      const execSales = sales.filter((row) => salesOwnerIn(row, EXECUTION_PART_NAMES));
+      const opsSales = sales.filter((row) => salesOwnerIn(row, OPERATION_PART_NAMES));
+      const execContracts = contractedMembers(execContacts);
+      const execMembershipSales = salesAmount(execSales, "membership");
+      const opsAdOperationSales = salesAmount(opsSales, "lms") + salesAmount(opsSales, "hogang");
+
+      return [
+        { label: "실행파트 분양회 모집", value: execContracts.length, goal: Number(teamTarget?.recruit_count || 0), unit: "명", tone: "success" as ToneName, money: false },
+        { label: "실행파트 분양회 매출(회비)", value: execMembershipSales, goal: Number(teamTarget?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
+        { label: "운영파트 광고특전운영매출", value: opsAdOperationSales, goal: Number(teamTarget?.ad_operation_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
+      ];
     }
-    return kpis.find((row) =>
+
+    if (isOperationUser(me)) {
+      const target = kpis.find((row) =>
+        row.scope === "operation" && normalizePersonName(row.target_name) === normalizePersonName(me?.name)
+      ) || null;
+      const adOperationSales = stats.lmsSales + stats.hogangSales;
+      return [
+        { label: "광고특전운영매출", value: adOperationSales, goal: Number(target?.ad_operation_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
+      ];
+    }
+
+    const target = kpis.find((row) =>
       row.scope === "execution" && normalizePersonName(row.target_name) === normalizePersonName(activeOwner)
     ) || null;
-  }, [activeOwner, kpis]);
+    const periodContracts = contractedMembers(visibleContacts);
+    const masterContracts = periodContracts.filter((contact) => isGradeContact(contact, "마스터")).length;
+    const challengerContracts = periodContracts.filter((contact) => isGradeContact(contact, "챌린저")).length;
+    const bronzeContracts = periodContracts.filter((contact) => isGradeContact(contact, "브론즈")).length;
 
-  /* KPI: 분양회 모집 · 분양회 회비 2종만 */
-  const kpiRows = useMemo(() => {
     return [
-      { label: "분양회 모집", value: stats.contracts, goal: Number(kpiTarget?.recruit_count || 0), unit: "명", tone: "success" as ToneName, money: false },
-      { label: "분양회 회비", value: stats.membershipSales, goal: Number(kpiTarget?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
+      { label: "마스터 모집", value: masterContracts, goal: Number(target?.master_count || 0), unit: "명", tone: "warning" as ToneName, money: false },
+      { label: "챌린저 모집", value: challengerContracts, goal: Number(target?.challenger_count || 0), unit: "명", tone: "purple" as ToneName, money: false },
+      { label: "브론즈 모집", value: bronzeContracts, goal: Number(target?.bronze_count || 0), unit: "명", tone: "success" as ToneName, money: false },
+      { label: "분양회 매출(회비)", value: stats.membershipSales, goal: Number(target?.bunyanghoe_revenue || 0), unit: "원", tone: "info" as ToneName, money: true },
     ];
-  }, [kpiTarget, stats.contracts, stats.membershipSales]);
+  }, [activeOwner, contacts, kpis, me, rangeEnd, rangeStart, sales, stats.hogangSales, stats.lmsSales, stats.membershipSales, visibleContacts]);
 
   /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 3종만 */
   const salesBreakdown = useMemo(() => ([
@@ -1589,6 +1631,7 @@ export default function HomePage() {
             >
               <option value="전체">전체 담당자</option>
               {EXECUTION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+              {OPERATION_PART_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
 
             <button type="button" onClick={handlePdfSave} className="btn-premium btn-primary">
@@ -1776,7 +1819,7 @@ export default function HomePage() {
                 {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={Target} tone="warning" title="당월 KPI 목표 대비 달성률" desc="분양회 모집 · 분양회 회비" right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
+                    <PanelTitle icon={Target} tone="warning" title="당월 KPI 목표 대비 달성률" desc={kpiPanelDesc} right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
                     <div className="flex flex-1 flex-col justify-center gap-2.5 p-4">
                       {kpiRows.map((row) => {
                         const hasGoal = row.goal > 0;
