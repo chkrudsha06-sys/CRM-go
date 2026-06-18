@@ -433,6 +433,28 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
   return "other";
 }
 
+function normalizePaymentItem(value?: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw || normalizeText(raw) === normalizeText("분양회")) return "분양회 회비";
+  return raw;
+}
+
+function isMembershipFeeSales(row: SalesRow) {
+  const route = normalizeText(normalizePaymentItem(row.contract_route));
+  const item = normalizeText(normalizePaymentItem(row.payment_item || row.payment_type || row.item_name || row.memo));
+  const target = normalizeText("분양회 회비");
+
+  // 통합매출관리의 결제항목이 '분양회 회비'인 데이터만 담당자별 파이프라인 매출에 반영합니다.
+  // 기존 데이터가 '분양회'로 저장된 경우도 통합매출관리 화면과 동일하게 '분양회 회비'로 간주합니다.
+  return route === target || item === target;
+}
+
+function pipelineMembershipSalesAmount(row: SalesRow) {
+  // 당월 담당자별 파이프라인 현황의 매출은 통합매출관리 기준:
+  // 담당자 + 결제일 + 결제항목(분양회 회비) + 집행금액 합산입니다.
+  return Number(row.execution_amount || 0);
+}
+
 const VIP_DB_SOURCE = "vip_activity";
 const CUSTOMER_DB_SOURCE = "customer_db";
 
@@ -1025,7 +1047,9 @@ export default function HomePage() {
     const masterThisMonth = master;
     const challengerThisMonth = challenger;
     const bronzeThisMonth = bronze;
-    const contracts = periodVipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd)).length;
+    // 계약·리텐션은 VIP 이관일이 아니라 파이프라인 리텐션 구간 + 계약완료일 기준으로 집계합니다.
+    const periodContractedRetention = vipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd));
+    const contracts = periodContractedRetention.length;
 
     /* 매출 (기간 내) */
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -1040,8 +1064,8 @@ export default function HomePage() {
       return acc;
     }, {} as Record<string, number>);
 
-    // 계약·리텐션 — 기간 내 계약전환 기준 (contract_date 또는 updated_at)
-    const retention = periodVipContacts.filter((contact) => isContracted(contact)).length;
+    // 계약·리텐션 — 파이프라인 리텐션 구간 + 고객 상세패널 계약완료일 기준
+    const retention = periodContractedRetention.length;
     const churnCount = periodVipContacts.filter((contact) =>
       normalizeText(contact.management_stage).includes("이탈") ||
       normalizeText(contact.management_stage).includes("탈퇴")
@@ -1231,7 +1255,11 @@ export default function HomePage() {
       // 기간 내 이관된 VIP (vip_transferred_at 기준)
       const ownerPeriodVip = ownerVip.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd));
       const ownerMonthDb = ownerCustomerDb.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
-      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner, salesOwnerLookup) && isInRange(row.payment_date, rangeStart, rangeEnd));
+      const ownerMembershipSales = sales.filter((row) =>
+        salesMatchesOwner(row, owner, salesOwnerLookup) &&
+        isInRange(row.payment_date, rangeStart, rangeEnd) &&
+        isMembershipFeeSales(row)
+      );
       const ownerContracts = ownerVip.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd));
       // 파이프라인 단계별: 기간 내 이관 VIP 기준
       const ownerStage = (stage: string) => ownerPeriodVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
@@ -1245,7 +1273,7 @@ export default function HomePage() {
         closing: ownerStage("딜클로징"),
         contracts: ownerContracts.length,
         churn: ownerStage("이탈/탈퇴"),
-        sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
+        sales: ownerMembershipSales.reduce((sum, row) => sum + pipelineMembershipSalesAmount(row), 0),
       };
     });
   }, [contacts, sales, salesOwnerLookup, rangeStart, rangeEnd]);
