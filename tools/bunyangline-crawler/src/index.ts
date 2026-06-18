@@ -85,6 +85,11 @@ function normalizeDate(value: string | null) {
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }
 
+function isDateOnOrAfter(value: string | null, minDate: string) {
+  if (!value) return false;
+  return value >= minDate;
+}
+
 function linesOf(text: string) {
   return text
     .split('\n')
@@ -299,6 +304,7 @@ async function main() {
   const regionArg = env('BUNYANGLINE_REGION_IDS', 'all');
   const maxPages = Number(env('BUNYANGLINE_MAX_PAGES', '1'));
   const maxDetailsPerRegion = Number(env('BUNYANGLINE_MAX_DETAILS_PER_REGION', '30'));
+  const minPostedAt = normalizeDate(env('BUNYANGLINE_MIN_POSTED_AT', '2026-05-01')) || '2026-05-01';
   const headless = env('HEADLESS', 'true') !== 'false';
 
   const targetRegions = regionArg === 'all'
@@ -308,6 +314,8 @@ async function main() {
   if (targetRegions.length === 0) {
     throw new Error(`수집할 지역이 없습니다. BUNYANGLINE_REGION_IDS=${regionArg}`);
   }
+
+  console.log(`등록일 필터: ${minPostedAt} 이후 공고만 저장합니다.`);
 
   const browser = await chromium.launch({ headless });
   const page = await browser.newPage({
@@ -340,8 +348,16 @@ async function main() {
       for (const url of selectedUrls) {
         try {
           const row = await parseDetailPage(page, url, region);
+
+          if (!isDateOnOrAfter(row.posted_at, minPostedAt)) {
+            console.log(
+              `등록일 필터 제외: ${region.name} / ${row.site_name || '-'} / 등록일 ${row.posted_at || '없음'} / ${url}`,
+            );
+            continue;
+          }
+
           allRows.push(row);
-          console.log(`수집 완료: ${region.name} / ${row.site_name || '-'} / ${url}`);
+          console.log(`수집 완료: ${region.name} / ${row.site_name || '-'} / 등록일 ${row.posted_at} / ${url}`);
         } catch (error) {
           errors.push({ url, message: error instanceof Error ? error.message : String(error) });
           console.error(`수집 실패: ${url}`, error);
@@ -352,7 +368,7 @@ async function main() {
     }
 
     if (allRows.length === 0) {
-      throw new Error('수집된 데이터가 없습니다. 상세 URL 추출 패턴 보완이 필요합니다.');
+      throw new Error(`${minPostedAt} 이후 등록된 수집 대상 데이터가 없습니다. 등록일 파싱 또는 상세 URL 추출 패턴 보완이 필요합니다.`);
     }
 
     console.log(`CRM 저장 요청: ${allRows.length}건`);
