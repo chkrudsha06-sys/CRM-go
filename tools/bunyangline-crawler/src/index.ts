@@ -174,71 +174,65 @@ function extractPageTitle(text: string) {
 }
 
 async function extractDetailUrls(page: Page) {
-  const urls = await page.evaluate((baseUrl) => {
-    const out = new Set<string>();
-    const ignored = [
-      '/recruit/regional',
-      '/recruit/custom',
-      '/recruit/map',
-      '/recruit/favorite',
-      '/recruit/supporters',
-      '/login',
-      '/register',
-    ];
+  const out = new Set<string>();
+  const ignored = [
+    '/recruit/regional',
+    '/recruit/custom',
+    '/recruit/map',
+    '/recruit/favorite',
+    '/recruit/supporters',
+    '/login',
+    '/register',
+  ];
 
-    function add(raw: string | null) {
-      if (!raw) return;
-      if (raw.startsWith('javascript:') || raw.startsWith('#')) return;
+  function add(raw: string | null) {
+    if (!raw) return;
+    const value = raw.trim();
+    if (!value || value.startsWith('javascript:') || value.startsWith('#')) return;
 
-      let url: URL;
-      try {
-        url = new URL(raw, baseUrl);
-      } catch {
-        return;
-      }
-
-      const path = url.pathname;
-      if (!path.includes('/recruit')) return;
-      if (ignored.some((item) => path.includes(item))) return;
-      if (!/\d/.test(path + url.search)) return;
-
-      url.hash = '';
-      out.add(url.toString());
+    let url: URL;
+    try {
+      url = new URL(value, BASE_URL);
+    } catch {
+      return;
     }
 
-    document.querySelectorAll('a[href]').forEach((anchor) => {
-      add(anchor.getAttribute('href'));
-    });
+    const path = url.pathname;
+    if (!path.includes('/recruit')) return;
+    if (ignored.some((item) => path.includes(item))) return;
+    if (!/\d/.test(path + url.search)) return;
 
-    document.querySelectorAll('[onclick]').forEach((node) => {
-      const onclick = node.getAttribute('onclick') || '';
-      const matches = onclick.match(/['"]([^'"]*recruit[^'"]*)['"]/g) || [];
-      matches.forEach((match) => add(match.slice(1, -1)));
+    url.hash = '';
+    out.add(url.toString());
+  }
 
-      const numberMatch = onclick.match(/(?:idx|id|seq|no)[^0-9]{0,8}(\d{2,})/i) || onclick.match(/\((\d{2,})\)/);
-      if (numberMatch?.[1]) {
-        add(`/recruit/view/${numberMatch[1]}`);
-        add(`/recruit/detail/${numberMatch[1]}`);
-        add(`/recruit/${numberMatch[1]}`);
-      }
-    });
+  // page.evaluate를 사용하면 tsx/esbuild가 __name helper를 브라우저 컨텍스트에 섞어 넣어
+  // GitHub Actions에서 "ReferenceError: __name is not defined"가 발생할 수 있습니다.
+  // 그래서 모든 DOM 속성 읽기는 Playwright Locator API로만 처리합니다.
+  const anchors = await page.locator('a[href]').all();
+  for (const anchor of anchors) {
+    add(await anchor.getAttribute('href').catch(() => null));
+  }
 
-    document.querySelectorAll('*').forEach((node) => {
-      for (const attr of Array.from(node.attributes)) {
-        if (!/^data-/i.test(attr.name)) continue;
-        if (/recruit/i.test(attr.value)) add(attr.value);
-        if (/^\d{2,}$/.test(attr.value)) {
-          add(`/recruit/view/${attr.value}`);
-          add(`/recruit/detail/${attr.value}`);
-          add(`/recruit/${attr.value}`);
-        }
-      }
-    });
+  const clickableNodes = await page.locator('[onclick]').all();
+  for (const node of clickableNodes) {
+    const onclick = await node.getAttribute('onclick').catch(() => null);
+    if (!onclick) continue;
 
-    return Array.from(out);
-  }, BASE_URL);
+    const quotedMatches = onclick.match(/["']([^"']*recruit[^"']*)["']/g) || [];
+    quotedMatches.forEach((match) => add(match.slice(1, -1)));
 
-  return urls;
+    const numberMatch =
+      onclick.match(/(?:idx|id|seq|no)[^0-9]{0,8}(\d{2,})/i) || onclick.match(/\((\d{2,})\)/);
+
+    if (numberMatch?.[1]) {
+      add(`/recruit/view/${numberMatch[1]}`);
+      add(`/recruit/detail/${numberMatch[1]}`);
+      add(`/recruit/${numberMatch[1]}`);
+    }
+  }
+
+  return Array.from(out);
 }
 
 async function parseDetailPage(page: Page, url: string, region: { id: string; name: string }): Promise<CrawledRow> {
