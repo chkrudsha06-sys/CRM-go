@@ -1210,10 +1210,12 @@ export default function SalesPage() {
 
     setMemberOptions((data || []) as MemberOption[]);
 
-    // 직급 매칭용 — 담당자 필터 없이 전체 분양회 입회자 조회
+    // 직급/담당자 매칭용 — 담당자 필터 없이 전체 분양회 입회자 조회
+    // 효성CMS는 담당자가 "주식회사광고인"으로 들어오는 경우가 있어,
+    // 분양회 입회자 contacts의 고객명/회원번호 기준으로 assigned_to를 다시 매칭합니다.
     const { data: allMembers } = await supabase
       .from("contacts")
-      .select("name,title")
+      .select("id,name,title,bunyanghoe_number,phone,assigned_to,consultant,meeting_result")
       .in("meeting_result", ["예약완료", "계약완료"])
       .not("name", "is", null)
       .limit(5000);
@@ -1250,10 +1252,17 @@ export default function SalesPage() {
     };
   }, [rows]);
 
+  const normalizeMemberKey = useCallback((value?: string | null) => {
+    return String(value || "")
+      .replace(/\s+/g, "")
+      .replace(/[()\[\]{}\-_.·•]/g, "")
+      .toLowerCase();
+  }, []);
+
   const memberTitleMap = useMemo(() => {
     const map = new Map<string, string>();
     // 이름 정규화: 모든 공백·특수문자 제거하고 소문자화
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalize = normalizeMemberKey;
     // 전체 분양회 입회자 기준 (담당자 필터 무관)
     allMembersForTitle.forEach((member) => {
       const rawName = (member.name || "").trim();
@@ -1267,51 +1276,64 @@ export default function SalesPage() {
       if (key && member.title && !map.has(key)) map.set(key, member.title);
     });
     return map;
-  }, [allMembersForTitle, memberOptions]);
+  }, [allMembersForTitle, memberOptions, normalizeMemberKey]);
 
   // 정규화된 이름으로 직급 조회 헬퍼
   const getTitleByName = (name: string | null | undefined): string => {
     if (!name) return "-";
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-    return memberTitleMap.get(normalize(name)) || "-";
+    return memberTitleMap.get(normalizeMemberKey(name)) || "-";
   };
 
   const memberManagerByNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    memberOptions.forEach((member) => {
-      const name = (member.name || "").trim();
+    [...allMembersForTitle, ...memberOptions].forEach((member) => {
+      const nameKey = normalizeMemberKey(member.name);
       const manager = (member.assigned_to || "").trim();
-      if (name && manager) map.set(name, manager);
+      if (nameKey && manager && !map.has(nameKey)) map.set(nameKey, manager);
     });
     return map;
-  }, [memberOptions]);
+  }, [allMembersForTitle, memberOptions, normalizeMemberKey]);
 
   const memberManagerByNumberMap = useMemo(() => {
     const map = new Map<string, string>();
-    memberOptions.forEach((member) => {
-      const number = (member.bunyanghoe_number || "").trim();
+    [...allMembersForTitle, ...memberOptions].forEach((member) => {
+      const numberKey = normalizeMemberKey(member.bunyanghoe_number);
       const manager = (member.assigned_to || "").trim();
-      if (number && manager) map.set(number, manager);
+      if (numberKey && manager && !map.has(numberKey)) map.set(numberKey, manager);
     });
     return map;
-  }, [memberOptions]);
+  }, [allMembersForTitle, memberOptions, normalizeMemberKey]);
+
+  const getMatchedMemberManager = useCallback(
+    (memberName?: string | null, bunyanghoeNumber?: string | null) => {
+      return (
+        memberManagerByNumberMap.get(normalizeMemberKey(bunyanghoeNumber)) ||
+        memberManagerByNameMap.get(normalizeMemberKey(memberName)) ||
+        ""
+      );
+    },
+    [memberManagerByNameMap, memberManagerByNumberMap, normalizeMemberKey],
+  );
+
+  const shouldReplaceCompanyManager = useCallback((manager?: string | null) => {
+    const value = normalizeMemberKey(manager);
+    return !value || value === normalizeMemberKey("주식회사광고인") || value === normalizeMemberKey("주식회사 광고인");
+  }, [normalizeMemberKey]);
 
   const displayRows = useMemo(() => {
     return rows.map((row) => {
       const currentManager = (row.team_member || "").trim();
-      const isCompanyManager = currentManager === "주식회사광고인" || currentManager === "주식회사 광고인";
-      const matchedManager =
-        memberManagerByNumberMap.get((row.bunyanghoe_number || "").trim()) ||
-        memberManagerByNameMap.get((row.member_name || "").trim()) ||
-        "";
+      const matchedManager = getMatchedMemberManager(row.member_name, row.bunyanghoe_number);
 
-      if (matchedManager && (!currentManager || isCompanyManager)) {
+      // 효성CMS 자동반영 또는 담당자가 회사명으로 들어온 매출은
+      // 분양회 입회자 contacts 기준 담당자로 화면 출력값을 보정합니다.
+      if ((row.channel === "효성CMS" || shouldReplaceCompanyManager(currentManager)) && matchedManager) {
         return { ...row, team_member: matchedManager };
       }
 
       return row;
     });
-  }, [rows, memberManagerByNameMap, memberManagerByNumberMap]);
+  }, [rows, getMatchedMemberManager, shouldReplaceCompanyManager]);
 
 
   const filteredRows = useMemo(() => {
@@ -1713,6 +1735,7 @@ export default function SalesPage() {
           }
         }
 
+        const matchedManager = getMatchedMemberManager(row.memberName, row.memberNumber);
         const salesPayload = {
           member_name: row.memberName || null,
           bunyanghoe_number: row.memberNumber || null,
@@ -1722,7 +1745,7 @@ export default function SalesPage() {
           channel: "효성CMS",
           contract_route: "분양회",
           payment_date: row.paidAt || new Date().toISOString().slice(0, 10),
-          team_member: row.managerName || null,
+          team_member: matchedManager || row.managerName || null,
           consultant: row.memberPhone || null,
           memo: buildSalesMemoFromHyosung(row),
         };
