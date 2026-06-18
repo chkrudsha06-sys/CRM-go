@@ -792,10 +792,11 @@ export default function HomePage() {
       let salesQuery = supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000);
 
       if (personalName) {
-        customerDbQuery = customerDbQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
-        vipQuery = vipQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
-        // 매출은 통합매출관리의 담당자 표시 로직과 동일하게 고객명/회원번호 매칭이 필요하므로
-        // Supabase 쿼리에서 담당자로 선필터하지 않고 전체 로드 후 클라이언트에서 결제일+담당자 기준으로 필터합니다.
+        // 실행파트/운영파트 본인 계정에서도 「당월 담당자별 파이프라인 현황」은
+        // 관리자 뷰처럼 전체 실행파트 데이터를 보여줘야 합니다.
+        // 그래서 contacts/ad_executions는 Supabase에서 전체 로드하고,
+        // 개인 대시보드용 카드/퍼널/알림은 아래 visibleContacts/visibleSales에서
+        // activeOwner 기준으로 다시 필터링합니다.
       }
 
       const [customerDbRes, vipRes, noteRes, salesRes, kpiRes] = await Promise.all([
