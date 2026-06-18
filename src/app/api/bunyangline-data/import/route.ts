@@ -12,6 +12,7 @@ type IncomingBunyanglineRow = {
   site_name?: string | null;
   site_address?: string | null;
   posted_at?: string | null;
+  posted_datetime?: string | null;
   manager_name?: string | null;
   manager_phone?: string | null;
   agency_company?: string | null;
@@ -30,6 +31,7 @@ type CleanBunyanglineRow = {
   site_name: string | null;
   site_address: string | null;
   posted_at: string | null;
+  posted_datetime: string | null;
   manager_name: string | null;
   manager_phone: string | null;
   agency_company: string | null;
@@ -50,6 +52,44 @@ type BunyanglineRowWithNewFlag = CleanBunyanglineRow & {
   is_new: boolean;
 };
 
+type SupabaseErrorLike = {
+  message?: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+  name?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toErrorPayload(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  if (isRecord(error)) {
+    const supabaseError = error as SupabaseErrorLike;
+    return {
+      name: supabaseError.name ?? 'SupabaseError',
+      message: supabaseError.message ?? '알 수 없는 Supabase 오류입니다.',
+      details: supabaseError.details ?? null,
+      hint: supabaseError.hint ?? null,
+      code: supabaseError.code ?? null,
+      raw: error,
+    };
+  }
+
+  return {
+    name: 'UnknownError',
+    message: String(error),
+  };
+}
+
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -68,8 +108,15 @@ function getSupabaseAdmin() {
 
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
@@ -79,7 +126,7 @@ function normalizeText(value: unknown): string | null {
 function normalizePhone(value: unknown): string | null {
   const digits = String(value ?? '').replace(/\D/g, '');
   if (!digits) return null;
-  if (digits.length < 9 || digits.length > 11) return digits;
+  if (digits.length < 8 || digits.length > 11) return digits;
   return digits;
 }
 
@@ -94,6 +141,27 @@ function normalizeDate(value: unknown): string | null {
   const m = match[2].padStart(2, '0');
   const d = match[3].padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function normalizeDateTime(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  if (/^20\d{2}-\d{2}-\d{2}T/.test(text)) {
+    return text;
+  }
+
+  const match = text.match(/(20\d{2})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})(?:[일\sT]+(\d{1,2})[:시\s]+(\d{1,2})(?:[:분\s]+(\d{1,2}))?)?/);
+  if (!match) return null;
+
+  const y = match[1];
+  const m = match[2].padStart(2, '0');
+  const d = match[3].padStart(2, '0');
+  const hh = (match[4] || '00').padStart(2, '0');
+  const mm = (match[5] || '00').padStart(2, '0');
+  const ss = (match[6] || '00').padStart(2, '0');
+
+  return `${y}-${m}-${d}T${hh}:${mm}:${ss}+09:00`;
 }
 
 function hashSourceUrl(url: string): string {
@@ -122,6 +190,7 @@ function requireImportSecret(request: NextRequest): boolean {
 function toCleanRow(row: IncomingBunyanglineRow): CleanBunyanglineRow {
   const sourceUrl = normalizeText(row.source_url);
   const regionName = normalizeText(row.region_name);
+  const postedDateTime = normalizeDateTime(row.posted_datetime) || normalizeDateTime(row.posted_at);
 
   if (!sourceUrl) throw new Error('source_url이 비어있는 데이터가 있습니다.');
   if (!regionName) throw new Error('region_name이 비어있는 데이터가 있습니다.');
@@ -134,7 +203,8 @@ function toCleanRow(row: IncomingBunyanglineRow): CleanBunyanglineRow {
     region_name: regionName,
     site_name: normalizeText(row.site_name),
     site_address: normalizeText(row.site_address),
-    posted_at: normalizeDate(row.posted_at),
+    posted_at: normalizeDate(row.posted_at) || normalizeDate(postedDateTime),
+    posted_datetime: postedDateTime,
     manager_name: normalizeText(row.manager_name),
     manager_phone: normalizePhone(row.manager_phone),
     agency_company: normalizeText(row.agency_company),
@@ -206,7 +276,7 @@ export async function POST(request: NextRequest) {
         onConflict: 'source_url',
         ignoreDuplicates: false,
       })
-      .select('id, region_name, site_name, posted_at, manager_name, manager_phone, agency_company, apartment_fee, is_new, source_url');
+      .select('id, region_name, site_name, posted_at, posted_datetime, manager_name, manager_phone, agency_company, apartment_fee, is_new, source_url');
 
     if (error) throw error;
 
@@ -218,11 +288,15 @@ export async function POST(request: NextRequest) {
       data,
     });
   } catch (error) {
+    const errorPayload = toErrorPayload(error);
+    console.error('[bunyangline-data/import] 저장 오류:', errorPayload);
+
     return NextResponse.json(
       {
         ok: false,
         message: '분양라인데이터 저장 중 오류가 발생했습니다.',
-        error: error instanceof Error ? error.message : String(error),
+        error: errorPayload.message,
+        errorDetails: errorPayload,
       },
       { status: 500 }
     );
