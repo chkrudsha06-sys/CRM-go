@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('bunyangline_data')
       .select('*')
+      .order('posted_datetime', { ascending: false, nullsFirst: false })
       .order('posted_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(limit);
