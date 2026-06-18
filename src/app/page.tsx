@@ -136,6 +136,10 @@ type FunnelRow = {
 
 const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
 const OPERATION_PART_NAMES = ["김재영", "최은정"];
+const OPERATION_EXECUTION_OWNER_MAP: Record<string, string[]> = {
+  김재영: ["이세호", "기여운"],
+  최은정: ["조계현", "최연전"],
+};
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
 const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
@@ -154,6 +158,18 @@ function normalizePersonName(value?: string | null) {
 
 function normalizeText(value?: string | null) {
   return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function getOperationManagedExecutionOwners(operationOwner?: string | null) {
+  const target = normalizePersonName(operationOwner);
+  const entry = Object.entries(OPERATION_EXECUTION_OWNER_MAP).find(
+    ([name]) => normalizePersonName(name) === target
+  );
+  return entry?.[1] || [];
+}
+
+function getAllOperationManagedExecutionOwners() {
+  return Array.from(new Set(Object.values(OPERATION_EXECUTION_OWNER_MAP).flat()));
 }
 
 function readUserFromStorage(): CRMUserLite | null {
@@ -1389,13 +1405,18 @@ export default function HomePage() {
     const adminMembershipGoal = Number(teamTarget?.bunyanghoe_revenue || 0) || execMembershipRevenueTarget;
     const adminAdOperationGoal = Number(teamTarget?.ad_operation_revenue || 0) || opsAdOperationRevenueTarget;
 
+    const operationAdOperationSalesByExecutionOwners = (owners: string[]) => {
+      const targetSales = sales.filter((row) => salesOwnerIn(row, owners));
+      return salesAmount(targetSales, "lms") + salesAmount(targetSales, "hogang");
+    };
+
     if (isAdminUser(me)) {
       const execContacts = contacts.filter((contact) => isOwnerIn(contact, EXECUTION_PART_NAMES));
       const execSales = sales.filter((row) => salesOwnerIn(row, EXECUTION_PART_NAMES));
-      const opsSales = sales.filter((row) => salesOwnerIn(row, OPERATION_PART_NAMES));
+      const operationManagedExecutionOwners = getAllOperationManagedExecutionOwners();
       const execContracts = contractedMembers(execContacts);
       const execMembershipSales = salesAmount(execSales, "membership");
-      const opsAdOperationSales = salesAmount(opsSales, "lms") + salesAmount(opsSales, "hogang");
+      const opsAdOperationSales = operationAdOperationSalesByExecutionOwners(operationManagedExecutionOwners);
 
       return [
         { label: "실행파트 분양회 모집", value: execContracts.length, goal: adminRecruitGoal, unit: "명", tone: "success" as ToneName, money: false },
@@ -1408,9 +1429,11 @@ export default function HomePage() {
       const target = kpis.find((row) =>
         row.scope === "operation" && normalizePersonName(row.target_name) === normalizePersonName(me?.name)
       ) || null;
-      const adOperationSales = stats.lmsSales + stats.hogangSales;
+      const managedExecutionOwners = getOperationManagedExecutionOwners(me?.name);
+      const adOperationSales = operationAdOperationSalesByExecutionOwners(managedExecutionOwners);
+      const managedLabel = managedExecutionOwners.length ? ` · ${managedExecutionOwners.join(", ")} 담당 매출` : "";
       return [
-        { label: "광고특전운영매출", value: adOperationSales, goal: Number(target?.ad_operation_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
+        { label: `광고특전운영매출${managedLabel}`, value: adOperationSales, goal: Number(target?.ad_operation_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
       ];
     }
 
