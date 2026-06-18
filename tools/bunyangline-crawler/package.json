@@ -1,0 +1,15 @@
+{
+  "name": "bunyangline-crawler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "install:browser": "playwright install chromium"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.48.2",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {}
+}
