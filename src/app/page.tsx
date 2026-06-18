@@ -1345,6 +1345,21 @@ export default function HomePage() {
         .reduce((sum, row) => sum + effectiveSales(row), 0);
 
     const teamTarget = kpis.find((row) => row.scope === "team" && row.target_name === "team") || null;
+    const execTargets = kpis.filter((row) => row.scope === "execution");
+    const opsTargets = kpis.filter((row) => row.scope === "operation");
+    const execRecruitTarget = execTargets.reduce(
+      (sum, row) => sum + Number(row.master_count || 0) + Number(row.challenger_count || 0) + Number(row.bronze_count || 0),
+      0
+    );
+    const execMembershipRevenueTarget = execTargets.reduce((sum, row) => sum + Number(row.bunyanghoe_revenue || 0), 0);
+    const opsAdOperationRevenueTarget = opsTargets.reduce((sum, row) => sum + Number(row.ad_operation_revenue || 0), 0);
+
+    // 관리자 화면은 대협팀 전체 목표를 우선 사용하되,
+    // 전체 목표 금액이 비어 있으면 개인별 목표 합계를 자동으로 대체합니다.
+    // KPI 설정에서 전체 목표와 개인별 목표 중 어느 쪽에 입력해도 대시보드 목표가 비어 보이지 않게 하기 위한 보정입니다.
+    const adminRecruitGoal = Number(teamTarget?.recruit_count || 0) || execRecruitTarget;
+    const adminMembershipGoal = Number(teamTarget?.bunyanghoe_revenue || 0) || execMembershipRevenueTarget;
+    const adminAdOperationGoal = Number(teamTarget?.ad_operation_revenue || 0) || opsAdOperationRevenueTarget;
 
     if (isAdminUser(me)) {
       const execContacts = contacts.filter((contact) => isOwnerIn(contact, EXECUTION_PART_NAMES));
@@ -1355,9 +1370,9 @@ export default function HomePage() {
       const opsAdOperationSales = salesAmount(opsSales, "lms") + salesAmount(opsSales, "hogang");
 
       return [
-        { label: "실행파트 분양회 모집", value: execContracts.length, goal: Number(teamTarget?.recruit_count || 0), unit: "명", tone: "success" as ToneName, money: false },
-        { label: "실행파트 분양회 매출(회비)", value: execMembershipSales, goal: Number(teamTarget?.bunyanghoe_revenue || 0), unit: "원", tone: "warning" as ToneName, money: true },
-        { label: "운영파트 광고특전운영매출", value: opsAdOperationSales, goal: Number(teamTarget?.ad_operation_revenue || 0), unit: "원", tone: "purple" as ToneName, money: true },
+        { label: "실행파트 분양회 모집", value: execContracts.length, goal: adminRecruitGoal, unit: "명", tone: "success" as ToneName, money: false },
+        { label: "실행파트 분양회 매출(회비)", value: execMembershipSales, goal: adminMembershipGoal, unit: "원", tone: "warning" as ToneName, money: true },
+        { label: "운영파트 광고특전운영매출", value: opsAdOperationSales, goal: adminAdOperationGoal, unit: "원", tone: "purple" as ToneName, money: true },
       ];
     }
 
