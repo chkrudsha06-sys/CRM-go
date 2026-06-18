@@ -20,6 +20,14 @@ const REGIONS = [
   { id: '15', name: '제주도' },
 ];
 
+const DEFAULT_IMPORT_BATCH_SIZE = Number(process.env.BUNYANGLINE_IMPORT_BATCH_SIZE || '3');
+const IMPORT_BATCH_SIZE = Number.isFinite(DEFAULT_IMPORT_BATCH_SIZE) && DEFAULT_IMPORT_BATCH_SIZE > 0
+  ? Math.min(DEFAULT_IMPORT_BATCH_SIZE, 5)
+  : 3;
+const MAX_DETAIL_TEXT_LENGTH = Number(process.env.BUNYANGLINE_MAX_DETAIL_TEXT_LENGTH || '2500');
+const MAX_RAW_TEXT_LENGTH = Number(process.env.BUNYANGLINE_MAX_RAW_TEXT_LENGTH || '0');
+
+
 type Region = (typeof REGIONS)[number];
 
 type CrawledRow = {
@@ -59,6 +67,13 @@ function normalizeSpace(value: unknown) {
 function compact(value: unknown) {
   const text = normalizeSpace(value);
   return text || null;
+}
+
+function limitText(value: unknown, maxLength: number) {
+  const text = compact(value);
+  if (!text) return null;
+  if (!maxLength || maxLength <= 0) return null;
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
 function sleep(ms: number) {
@@ -417,8 +432,8 @@ function rowFromJsonCandidate(candidate: JsonCandidate, region: Region): Crawled
     manager_phone: compact(managerPhone),
     agency_company: compact(agencyCompany),
     apartment_fee: compact(apartmentFee),
-    detail_text: compact(detailText),
-    raw_text: compact(rawText),
+    detail_text: limitText(detailText, MAX_DETAIL_TEXT_LENGTH),
+    raw_text: limitText(rawText, MAX_RAW_TEXT_LENGTH),
     crawled_at: new Date().toISOString(),
   };
 }
@@ -460,8 +475,8 @@ async function parseListFallback(page: Page, listUrl: string, region: Region): P
       manager_phone: null,
       agency_company: compact(company),
       apartment_fee: extractApartmentFee([line, title, summary, ...lines.slice(i + 3, i + 10)].filter(Boolean).join('\n')),
-      detail_text: compact(summary),
-      raw_text: compact(lines.slice(i, i + 10).join('\n')),
+      detail_text: limitText(summary, MAX_DETAIL_TEXT_LENGTH),
+      raw_text: limitText(lines.slice(i, i + 10).join('\n'), MAX_RAW_TEXT_LENGTH),
       crawled_at: new Date().toISOString(),
     });
   }
@@ -470,12 +485,16 @@ async function parseListFallback(page: Page, listUrl: string, region: Region): P
   return rows;
 }
 
-async function sendToCrm(rows: CrawledRow[]) {
+async function postRowsToCrm(rows: CrawledRow[]) {
   const url = env('CRM_BUNYANGLINE_IMPORT_URL');
   const secret = env('BUNYANGLINE_IMPORT_SECRET');
 
   if (!url) throw new Error('CRM_BUNYANGLINE_IMPORT_URL 환경변수가 없습니다.');
   if (!secret) throw new Error('BUNYANGLINE_IMPORT_SECRET 환경변수가 없습니다.');
+
+  const body = JSON.stringify({ rows });
+  const bodySizeKb = Math.ceil(Buffer.byteLength(body, 'utf8') / 1024);
+  console.log(`CRM 저장 배치 전송: ${rows.length}건 / 약 ${bodySizeKb}KB`);
 
   const response = await fetch(url, {
     method: 'POST',
@@ -483,16 +502,44 @@ async function sendToCrm(rows: CrawledRow[]) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${secret}`,
     },
-    body: JSON.stringify({ rows }),
+    body,
   });
 
-  const result = await response.json().catch(() => null);
+  const responseText = await response.text();
+  let result: any = null;
+
+  try {
+    result = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    result = null;
+  }
 
   if (!response.ok || !result?.ok) {
-    throw new Error(`CRM 저장 실패: ${response.status} ${JSON.stringify(result)}`);
+    throw new Error(`CRM 저장 실패: ${response.status} ${responseText || '응답 본문 없음'}`);
   }
 
   return result;
+}
+
+async function sendToCrm(rows: CrawledRow[]) {
+  const results: unknown[] = [];
+
+  for (let startIndex = 0; startIndex < rows.length; startIndex += IMPORT_BATCH_SIZE) {
+    const batch = rows.slice(startIndex, startIndex + IMPORT_BATCH_SIZE);
+    const batchNo = Math.floor(startIndex / IMPORT_BATCH_SIZE) + 1;
+    const totalBatchCount = Math.ceil(rows.length / IMPORT_BATCH_SIZE);
+    console.log(`CRM 저장 배치 ${batchNo}/${totalBatchCount} 시작`);
+    const result = await postRowsToCrm(batch);
+    results.push(result);
+    await sleep(700);
+  }
+
+  return {
+    ok: true,
+    batchCount: results.length,
+    savedCount: rows.length,
+    results,
+  };
 }
 
 async function main() {
@@ -512,6 +559,8 @@ async function main() {
 
   console.log(`등록일 필터: ${minPostedAt} 이후 공고만 저장합니다.`);
   console.log('수집 방식: 상세 URL 추출이 아니라 네트워크 JSON 응답 우선 수집 방식으로 실행합니다.');
+  console.log(`CRM 저장 배치 크기: ${IMPORT_BATCH_SIZE}건`);
+  console.log(`상세정보 최대 길이: ${MAX_DETAIL_TEXT_LENGTH}자 / raw_text 최대 길이: ${MAX_RAW_TEXT_LENGTH}자`);
 
   const browser = await chromium.launch({ headless });
   const page = await browser.newPage({
