@@ -1,261 +1,404 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
+import type { LucideIcon } from "lucide-react";
 import {
-  Target, Save, Users, UserCircle, Lock, Calendar,
-  RefreshCw, Loader2, CheckCircle2,
+  BadgeCheck,
+  Calendar,
+  CheckCircle2,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Target,
+  UserCircle,
+  Users,
+  WalletCards,
 } from "lucide-react";
 
 interface KpiRow {
-  year: number; month: number; week: number;
+  id?: number;
+  year: number;
+  month: number;
+  week: number;
   scope: "team" | "execution" | "operation";
   target_name: string;
-  recruit_count: number; bunyanghoe_revenue: number; linked_revenue: number;
-  special_revenue: number; wanpan_truck_count: number; ad_operation_revenue: number;
+  recruit_count: number;
+  master_count: number;
+  challenger_count: number;
+  bronze_count: number;
+  bunyanghoe_revenue: number;
+  linked_revenue: number;
+  special_revenue: number;
+  wanpan_truck_count: number;
+  ad_operation_revenue: number;
 }
+
+type SectionTone = "warning" | "info" | "success" | "purple";
 
 const EXEC_MEMBERS = ["조계현", "이세호", "기여운", "최연전"];
 const OPS_MEMBERS = ["김재영", "최은정"];
 
 const makeEmpty = (
-  y: number, m: number, w: number,
-  scope: KpiRow["scope"], name: string
+  year: number,
+  month: number,
+  scope: KpiRow["scope"],
+  targetName: string,
 ): KpiRow => ({
-  year: y, month: m, week: w, scope, target_name: name,
-  recruit_count: 0, bunyanghoe_revenue: 0, linked_revenue: 0,
-  special_revenue: 0, wanpan_truck_count: 0, ad_operation_revenue: 0,
+  year,
+  month,
+  week: 0,
+  scope,
+  target_name: targetName,
+  recruit_count: 0,
+  master_count: 0,
+  challenger_count: 0,
+  bronze_count: 0,
+  bunyanghoe_revenue: 0,
+  linked_revenue: 0,
+  special_revenue: 0,
+  wanpan_truck_count: 0,
+  ad_operation_revenue: 0,
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 공통 input
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="relative">
-      <input
-        type="text" inputMode="numeric"
-        value={value ? value.toLocaleString("ko-KR") : ""}
-        onChange={(e) => {
-          const r = e.target.value.replace(/[^0-9]/g, "");
-          onChange(r ? parseInt(r) : 0);
-        }}
-        placeholder="0"
-        className="crm-search h-11 w-full px-3 pr-8 text-right font-normal tabular-nums"
-      />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium"
-        style={{ color: "var(--text-faint)" }}>원</span>
-    </div>
-  );
+function toNumber(value: unknown) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function CountInput({ value, onChange, unit }: { value: number; onChange: (v: number) => void; unit: string }) {
-  return (
-    <div className="relative">
-      <input
-        type="number" min={0}
-        value={value || ""}
-        onChange={(e) => onChange(parseInt(e.target.value) || 0)}
-        placeholder="0"
-        className="crm-search h-11 w-full px-3 pr-10 text-right font-normal tabular-nums"
-      />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium"
-        style={{ color: "var(--text-faint)" }}>{unit}</span>
-    </div>
-  );
+function normalizeRow(row: Partial<KpiRow> | null | undefined, year: number, month: number, scope: KpiRow["scope"], targetName: string): KpiRow {
+  const base = makeEmpty(year, month, scope, targetName);
+  const merged = { ...base, ...(row || {}) } as KpiRow;
+  return {
+    ...merged,
+    year,
+    month,
+    week: 0,
+    scope,
+    target_name: targetName,
+    recruit_count: toNumber(merged.recruit_count),
+    master_count: toNumber(merged.master_count),
+    challenger_count: toNumber(merged.challenger_count),
+    bronze_count: toNumber(merged.bronze_count),
+    bunyanghoe_revenue: toNumber(merged.bunyanghoe_revenue),
+    linked_revenue: toNumber(merged.linked_revenue),
+    special_revenue: toNumber(merged.special_revenue),
+    wanpan_truck_count: toNumber(merged.wanpan_truck_count),
+    ad_operation_revenue: toNumber(merged.ad_operation_revenue),
+  };
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// GoalSection — 통일 양식
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-type SectionTone = "warning" | "info" | "success";
-
-function GoalSection({
-  title, tone, rows, members, scope, onUpdate,
-}: {
-  title: string;
-  tone: SectionTone;
-  rows: Record<string, KpiRow>;
-  members: string[];
-  scope: string;
-  onUpdate: (name: string, patch: Partial<KpiRow>) => void;
-}) {
-  const isTeam = scope === "team";
-  const isOps = scope === "operation";
-
-  const toneCfg = {
+function toneCfg(tone: SectionTone) {
+  const map: Record<SectionTone, { bg: string; text: string; border: string }> = {
     warning: { bg: "var(--warning-bg)", text: "var(--warning-text)", border: "var(--warning-border)" },
     info: { bg: "var(--info-bg)", text: "var(--info-text)", border: "var(--info-border)" },
     success: { bg: "var(--success-bg)", text: "var(--success-text)", border: "var(--success-border)" },
-  }[tone];
+    purple: { bg: "var(--purple-bg)", text: "var(--purple-text)", border: "var(--purple-border)" },
+  };
+  return map[tone];
+}
 
+function MoneyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   return (
-    <div className="premium-card overflow-hidden">
-      <div
-        className="flex items-center gap-2 border-b px-4 py-3"
-        style={{ borderColor: "var(--border-subtle)", background: toneCfg.bg }}
-      >
-        {isTeam ? (
-          <Users size={14} style={{ color: toneCfg.text }} />
-        ) : (
-          <UserCircle size={14} style={{ color: toneCfg.text }} />
-        )}
-        <p className="text-[13px] font-bold tracking-[-0.01em]" style={{ color: toneCfg.text }}>
-          {title}
-        </p>
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value ? value.toLocaleString("ko-KR") : ""}
+        onChange={(event) => {
+          const raw = event.target.value.replace(/[^0-9]/g, "");
+          onChange(raw ? Number(raw) : 0);
+        }}
+        placeholder="0"
+        className="crm-search h-11 w-full px-3 pr-9 text-right font-normal tabular-nums"
+      />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>
+        원
+      </span>
+    </div>
+  );
+}
+
+function CountInput({ value, onChange, unit = "명" }: { value: number; onChange: (value: number) => void; unit?: string }) {
+  return (
+    <div className="relative">
+      <input
+        type="number"
+        min={0}
+        value={value || ""}
+        onChange={(event) => onChange(Number(event.target.value || 0))}
+        placeholder="0"
+        className="crm-search h-11 w-full px-3 pr-10 text-right font-normal tabular-nums"
+      />
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>
+        {unit}
+      </span>
+    </div>
+  );
+}
+
+function SectionHeader({ title, desc, tone, icon: Icon }: { title: string; desc: string; tone: SectionTone; icon: LucideIcon }) {
+  const c = toneCfg(tone);
+  return (
+    <div className="flex items-start gap-3 border-b px-4 py-3" style={{ borderColor: "var(--border-subtle)", background: c.bg }}>
+      <div className="flex h-9 w-9 items-center justify-center rounded-[11px] border" style={{ borderColor: c.border, color: c.text, background: "var(--surface)" }}>
+        <Icon size={16} />
       </div>
-      <div className="space-y-3 p-4">
-        {members.map((name) => {
-          const row = rows[name] || ({} as KpiRow);
-          return (
-            <div
-              key={name}
-              className={isTeam ? "" : "rounded-[12px] border p-3"}
-              style={isTeam ? {} : { background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}
-            >
-              {!isTeam && (
-                <div className="mb-3 flex items-center gap-2">
-                  <div
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold"
-                    style={{ background: toneCfg.bg, color: toneCfg.text, border: `1px solid ${toneCfg.border}` }}
-                  >
-                    {name[0]}
-                  </div>
-                  <span className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{name}</span>
-                </div>
-              )}
-              <div className={`grid ${isOps ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"} gap-3`}>
-                {!isOps && (
-                  <>
-                    <div>
-                      <label className="crm-meta mb-1.5 block pl-1 font-normal">분양회 모집</label>
-                      <CountInput value={row.recruit_count || 0} onChange={(v) => onUpdate(name, { recruit_count: v })} unit="명" />
-                    </div>
-                    <div>
-                      <label className="crm-meta mb-1.5 block pl-1 font-normal">분양회 매출(회비)</label>
-                      <MoneyInput value={row.bunyanghoe_revenue || 0} onChange={(v) => onUpdate(name, { bunyanghoe_revenue: v })} />
-                    </div>
-                    <div>
-                      <label className="crm-meta mb-1.5 block pl-1 font-normal">
-                        {isTeam ? "연계매출(하이타겟)" : "연계매출"}
-                      </label>
-                      <MoneyInput value={row.linked_revenue || 0} onChange={(v) => onUpdate(name, { linked_revenue: v })} />
-                    </div>
-                    {isTeam && (
-                      <>
-                        <div>
-                          <label className="crm-meta mb-1.5 block pl-1 font-normal">특전매출목표</label>
-                          <MoneyInput value={row.special_revenue || 0} onChange={(v) => onUpdate(name, { special_revenue: v })} />
-                        </div>
-                        <div>
-                          <label className="crm-meta mb-1.5 block pl-1 font-normal">완판트럭</label>
-                          <CountInput value={row.wanpan_truck_count || 0} onChange={(v) => onUpdate(name, { wanpan_truck_count: v })} unit="건" />
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-                {isOps && (
-                  <div>
-                    <label className="crm-meta mb-1.5 block pl-1 font-normal">광고특전운영매출</label>
-                    <MoneyInput value={row.ad_operation_revenue || 0} onChange={(v) => onUpdate(name, { ad_operation_revenue: v })} />
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      <div>
+        <p className="text-[15px] font-semibold tracking-[-0.02em]" style={{ color: c.text }}>{title}</p>
+        <p className="mt-0.5 text-[12px] font-medium leading-relaxed" style={{ color: "var(--text-subtle)" }}>{desc}</p>
       </div>
     </div>
   );
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 메인 페이지
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function TeamGoalSection({ row, onUpdate }: { row: KpiRow; onUpdate: (patch: Partial<KpiRow>) => void }) {
+  return (
+    <section className="premium-card overflow-hidden">
+      <SectionHeader title="대협팀 전체" desc="월간 전체 목표만 설정합니다. 주간 목표는 사용하지 않습니다." tone="warning" icon={Users} />
+      <div className="grid gap-3 p-4 md:grid-cols-3">
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">분양회 모집</label>
+          <CountInput value={row.recruit_count || 0} onChange={(value) => onUpdate({ recruit_count: value })} />
+        </div>
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">분양회 매출(회비)</label>
+          <MoneyInput value={row.bunyanghoe_revenue || 0} onChange={(value) => onUpdate({ bunyanghoe_revenue: value })} />
+        </div>
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">광고특전운영매출</label>
+          <MoneyInput value={row.ad_operation_revenue || 0} onChange={(value) => onUpdate({ ad_operation_revenue: value })} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ExecGoalCard({ name, row, onUpdate }: { name: string; row: KpiRow; onUpdate: (patch: Partial<KpiRow>) => void }) {
+  const gradeTotal = (row.master_count || 0) + (row.challenger_count || 0) + (row.bronze_count || 0);
+  return (
+    <div className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold" style={{ background: "var(--info-bg)", color: "var(--info-text)", border: "1px solid var(--info-border)" }}>
+            {name[0]}
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{name}</p>
+            <p className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>분양회 모집 합계 {gradeTotal.toLocaleString()}명</p>
+          </div>
+        </div>
+        <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--surface)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}>
+          실행파트
+        </span>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">챌린저</label>
+          <CountInput value={row.challenger_count || 0} onChange={(value) => onUpdate({ challenger_count: value })} />
+        </div>
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">마스터</label>
+          <CountInput value={row.master_count || 0} onChange={(value) => onUpdate({ master_count: value })} />
+        </div>
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">브론즈</label>
+          <CountInput value={row.bronze_count || 0} onChange={(value) => onUpdate({ bronze_count: value })} />
+        </div>
+        <div>
+          <label className="crm-meta mb-1.5 block pl-1 font-normal">분양회매출(월회비)</label>
+          <MoneyInput value={row.bunyanghoe_revenue || 0} onChange={(value) => onUpdate({ bunyanghoe_revenue: value })} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExecGoalSection({ rows, onUpdate }: { rows: Record<string, KpiRow>; onUpdate: (name: string, patch: Partial<KpiRow>) => void }) {
+  return (
+    <section className="premium-card overflow-hidden">
+      <SectionHeader title="실행파트 개인별" desc="개인별 분양회 모집 등급 목표와 월회비 매출 목표를 설정합니다." tone="info" icon={UserCircle} />
+      <div className="space-y-3 p-4">
+        {EXEC_MEMBERS.map((name) => (
+          <ExecGoalCard key={name} name={name} row={rows[name]} onUpdate={(patch) => onUpdate(name, patch)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function OpsGoalCard({ name, row, onUpdate }: { name: string; row: KpiRow; onUpdate: (patch: Partial<KpiRow>) => void }) {
+  return (
+    <div className="rounded-[14px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold" style={{ background: "var(--success-bg)", color: "var(--success-text)", border: "1px solid var(--success-border)" }}>
+            {name[0]}
+          </div>
+          <p className="text-[14px] font-semibold" style={{ color: "var(--text-strong)" }}>{name}</p>
+        </div>
+        <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--surface)", color: "var(--text-subtle)", border: "1px solid var(--border)" }}>
+          운영파트
+        </span>
+      </div>
+      <div>
+        <label className="crm-meta mb-1.5 block pl-1 font-normal">광고특전운영매출</label>
+        <MoneyInput value={row.ad_operation_revenue || 0} onChange={(value) => onUpdate({ ad_operation_revenue: value })} />
+      </div>
+    </div>
+  );
+}
+
+function OpsGoalSection({ rows, onUpdate }: { rows: Record<string, KpiRow>; onUpdate: (name: string, patch: Partial<KpiRow>) => void }) {
+  return (
+    <section className="premium-card overflow-hidden">
+      <SectionHeader title="운영파트 개인별" desc="광고특전 운영매출 목표를 개인별로 설정합니다." tone="success" icon={WalletCards} />
+      <div className="grid gap-3 p-4 lg:grid-cols-2">
+        {OPS_MEMBERS.map((name) => (
+          <OpsGoalCard key={name} name={name} row={rows[name]} onUpdate={(patch) => onUpdate(name, patch)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function KpiSettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [selWeek, setSelWeek] = useState(1);
-
-  const [mTeam, setMTeam] = useState<Record<string, KpiRow>>({});
-  const [mExec, setMExec] = useState<Record<string, KpiRow>>({});
-  const [mOps, setMOps] = useState<Record<string, KpiRow>>({});
-  const [wTeam, setWTeam] = useState<Record<string, KpiRow>>({});
-  const [wExec, setWExec] = useState<Record<string, KpiRow>>({});
-  const [wOps, setWOps] = useState<Record<string, KpiRow>>({});
-
+  const [teamRow, setTeamRow] = useState<KpiRow>(makeEmpty(now.getFullYear(), now.getMonth() + 1, "team", "team"));
+  const [execRows, setExecRows] = useState<Record<string, KpiRow>>({});
+  const [opsRows, setOpsRows] = useState<Record<string, KpiRow>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState("");
 
   useEffect(() => {
-    const u = getCurrentUser();
-    setUser(u);
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
     setAuthChecked(true);
-    if (!u || u.role !== "admin") setTimeout(() => router.push("/"), 1500);
+    if (!currentUser || currentUser.role !== "admin") {
+      setTimeout(() => router.push("/"), 1500);
+    }
   }, [router]);
+
+  const buildEmptyMaps = useCallback((targetYear: number, targetMonth: number) => {
+    const exec: Record<string, KpiRow> = {};
+    EXEC_MEMBERS.forEach((name) => {
+      exec[name] = makeEmpty(targetYear, targetMonth, "execution", name);
+    });
+    const ops: Record<string, KpiRow> = {};
+    OPS_MEMBERS.forEach((name) => {
+      ops[name] = makeEmpty(targetYear, targetMonth, "operation", name);
+    });
+    return { exec, ops };
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const { data: mData } = await supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", 0);
-    const mRows = (mData || []) as KpiRow[];
-    const mt: Record<string, KpiRow> = {};
-    mt["team"] = mRows.find((r) => r.scope === "team") || makeEmpty(year, month, 0, "team", "team");
-    setMTeam(mt);
-    const me: Record<string, KpiRow> = {};
-    EXEC_MEMBERS.forEach((n) => { me[n] = mRows.find((r) => r.scope === "execution" && r.target_name === n) || makeEmpty(year, month, 0, "execution", n); });
-    setMExec(me);
-    const mo: Record<string, KpiRow> = {};
-    OPS_MEMBERS.forEach((n) => { mo[n] = mRows.find((r) => r.scope === "operation" && r.target_name === n) || makeEmpty(year, month, 0, "operation", n); });
-    setMOps(mo);
+    const empty = buildEmptyMaps(year, month);
+    try {
+      const { data, error } = await supabase
+        .from("kpi_settings")
+        .select("*")
+        .eq("year", year)
+        .eq("month", month)
+        .eq("week", 0);
 
-    const { data: wData } = await supabase.from("kpi_settings").select("*").eq("year", year).eq("month", month).eq("week", selWeek);
-    const wRows = (wData || []) as KpiRow[];
-    const wt: Record<string, KpiRow> = {};
-    wt["team"] = wRows.find((r) => r.scope === "team") || makeEmpty(year, month, selWeek, "team", "team");
-    setWTeam(wt);
-    const we: Record<string, KpiRow> = {};
-    EXEC_MEMBERS.forEach((n) => { we[n] = wRows.find((r) => r.scope === "execution" && r.target_name === n) || makeEmpty(year, month, selWeek, "execution", n); });
-    setWExec(we);
-    const wo: Record<string, KpiRow> = {};
-    OPS_MEMBERS.forEach((n) => { wo[n] = wRows.find((r) => r.scope === "operation" && r.target_name === n) || makeEmpty(year, month, selWeek, "operation", n); });
-    setWOps(wo);
+      if (error) throw error;
 
-    setLoading(false);
-  }, [year, month, selWeek]);
+      const rows = (data || []) as Partial<KpiRow>[];
+      const team = rows.find((row) => row.scope === "team" && row.target_name === "team");
+      setTeamRow(normalizeRow(team, year, month, "team", "team"));
+
+      const exec: Record<string, KpiRow> = { ...empty.exec };
+      EXEC_MEMBERS.forEach((name) => {
+        const found = rows.find((row) => row.scope === "execution" && row.target_name === name);
+        exec[name] = normalizeRow(found, year, month, "execution", name);
+      });
+      setExecRows(exec);
+
+      const ops: Record<string, KpiRow> = { ...empty.ops };
+      OPS_MEMBERS.forEach((name) => {
+        const found = rows.find((row) => row.scope === "operation" && row.target_name === name);
+        ops[name] = normalizeRow(found, year, month, "operation", name);
+      });
+      setOpsRows(ops);
+    } catch (error: any) {
+      console.error("KPI 설정 조회 실패:", error);
+      setTeamRow(makeEmpty(year, month, "team", "team"));
+      setExecRows(empty.exec);
+      setOpsRows(empty.ops);
+      alert(`KPI 설정을 불러오지 못했습니다.\n${error?.message || "알 수 없는 오류"}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildEmptyMaps, month, year]);
 
   useEffect(() => {
-    if (user?.role === "admin") loadData();
+    if (user?.role === "admin") void loadData();
   }, [user, loadData]);
+
+  const resetMonthly = () => {
+    const empty = buildEmptyMaps(year, month);
+    setTeamRow(makeEmpty(year, month, "team", "team"));
+    setExecRows(empty.exec);
+    setOpsRows(empty.ops);
+  };
+
+  const savePayloadRow = (row: KpiRow): Record<string, any> => {
+    const { id, ...rest } = row;
+    const recruitCount = row.scope === "execution"
+      ? toNumber(row.master_count) + toNumber(row.challenger_count) + toNumber(row.bronze_count)
+      : toNumber(row.recruit_count);
+
+    return {
+      ...rest,
+      year,
+      month,
+      week: 0,
+      recruit_count: recruitCount,
+      master_count: toNumber(row.master_count),
+      challenger_count: toNumber(row.challenger_count),
+      bronze_count: toNumber(row.bronze_count),
+      bunyanghoe_revenue: toNumber(row.bunyanghoe_revenue),
+      linked_revenue: 0,
+      special_revenue: 0,
+      wanpan_truck_count: 0,
+      ad_operation_revenue: toNumber(row.ad_operation_revenue),
+    };
+  };
 
   const handleSave = async () => {
     setSaving(true);
-    const strip = (row: any, y: number, m: number, w: number, s: string, tn: string) => {
-      const { id, ...rest } = row;
-      return { ...rest, year: y, month: m, week: w, scope: s, target_name: tn };
-    };
-    const allRows: any[] = [
-      strip(mTeam["team"], year, month, 0, "team", "team"),
-      ...EXEC_MEMBERS.map((n) => strip(mExec[n], year, month, 0, "execution", n)),
-      ...OPS_MEMBERS.map((n) => strip(mOps[n], year, month, 0, "operation", n)),
-      strip(wTeam["team"], year, month, selWeek, "team", "team"),
-      ...EXEC_MEMBERS.map((n) => strip(wExec[n], year, month, selWeek, "execution", n)),
-      ...OPS_MEMBERS.map((n) => strip(wOps[n], year, month, selWeek, "operation", n)),
-    ];
-    const { error } = await supabase.from("kpi_settings").upsert(allRows, { onConflict: "year,month,week,scope,target_name" });
-    setSaving(false);
-    if (error) {
-      alert("저장 실패: " + error.message);
-    } else {
+    try {
+      const rows = [
+        savePayloadRow({ ...teamRow, scope: "team", target_name: "team" }),
+        ...EXEC_MEMBERS.map((name) => savePayloadRow({ ...execRows[name], scope: "execution", target_name: name })),
+        ...OPS_MEMBERS.map((name) => savePayloadRow({ ...opsRows[name], scope: "operation", target_name: name })),
+      ];
+
+      const { error } = await supabase
+        .from("kpi_settings")
+        .upsert(rows, { onConflict: "year,month,week,scope,target_name" });
+
+      if (error) throw error;
       setSavedAt(new Date().toLocaleTimeString("ko-KR"));
       setTimeout(() => setSavedAt(""), 3000);
+      await loadData();
+    } catch (error: any) {
+      console.error("KPI 저장 실패:", error);
+      alert(`저장 실패: ${error?.message || "알 수 없는 오류"}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -276,48 +419,72 @@ export default function KpiSettingsPage() {
     );
   }
 
-  const weekRangeText = (() => {
-    const ld = new Date(year, month, 0).getDate();
-    const s = (selWeek - 1) * 7 + 1;
-    const e = Math.min(selWeek * 7, ld);
-    return `${month}/${s}일 ~ ${month}/${e}일`;
-  })();
+  const teamRecruitTotal = teamRow.recruit_count || 0;
+  const execRecruitTotal = EXEC_MEMBERS.reduce((sum, name) => {
+    const row = execRows[name];
+    return sum + toNumber(row?.master_count) + toNumber(row?.challenger_count) + toNumber(row?.bronze_count);
+  }, 0);
+  const opsRevenueTotal = OPS_MEMBERS.reduce((sum, name) => sum + toNumber(opsRows[name]?.ad_operation_revenue), 0);
 
   return (
     <div className="premium-page mx-auto w-full max-w-[1920px] px-4 pb-12 pt-6 md:px-6 2xl:px-8">
-
-      {/* ─── 헤더 ─── */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-[11px] border"
-            style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)", color: "var(--warning-text)" }}>
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-[11px] border"
+            style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)", color: "var(--warning-text)" }}
+          >
             <Target size={16} />
           </div>
           <div>
             <h1 className="crm-title">KPI 설정</h1>
-            <p className="crm-subtitle mt-0.5">{year}년 {month}월 · 월간 및 주간 목표 관리 · 관리자 전용</p>
+            <p className="crm-subtitle mt-0.5">{year}년 {month}월 · 월간 전체 목표 관리 · 관리자 전용</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={year} onChange={(e) => setYear(parseInt(e.target.value))}
-            className="crm-search h-10 w-[90px] px-3 font-normal">
-            {[2025, 2026, 2027, 2028].map((y) => <option key={y} value={y}>{y}년</option>)}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="crm-search h-10 w-[90px] px-3 font-normal">
+            {[2025, 2026, 2027, 2028].map((item) => <option key={item} value={item}>{item}년</option>)}
           </select>
-          <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))}
-            className="crm-search h-10 w-[90px] px-3 font-normal">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}
+          <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="crm-search h-10 w-[90px] px-3 font-normal">
+            {Array.from({ length: 12 }, (_, index) => index + 1).map((item) => <option key={item} value={item}>{item}월</option>)}
           </select>
           {savedAt && (
-            <span className="inline-flex items-center gap-1 rounded-[10px] px-2.5 py-1 text-[11px] font-semibold"
-              style={{ background: "var(--success-bg)", color: "var(--success-text)", border: "1px solid var(--success-border)" }}>
+            <span className="inline-flex items-center gap-1 rounded-[10px] px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--success-bg)", color: "var(--success-text)", border: "1px solid var(--success-border)" }}>
               <CheckCircle2 size={12} /> {savedAt} 저장됨
             </span>
           )}
-          <button onClick={handleSave} disabled={saving || loading}
-            className="btn-premium btn-primary h-10">
-            <Save size={14} />
+          <button type="button" onClick={loadData} disabled={loading || saving} className="btn-premium btn-secondary h-10">
+            <RefreshCw size={14} /> 다시 불러오기
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving || loading} className="btn-premium btn-primary h-10">
+            {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
             {saving ? "저장 중..." : "전체 저장"}
           </button>
+        </div>
+      </div>
+
+      <div className="mb-5 grid gap-3 lg:grid-cols-3">
+        <div className="premium-card p-4">
+          <div className="flex items-center gap-2">
+            <BadgeCheck size={15} style={{ color: "var(--warning-text)" }} />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>대협팀 전체 모집 목표</p>
+          </div>
+          <p className="mt-2 text-[24px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{teamRecruitTotal.toLocaleString()}명</p>
+        </div>
+        <div className="premium-card p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={15} style={{ color: "var(--info-text)" }} />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>실행파트 개인 목표 합계</p>
+          </div>
+          <p className="mt-2 text-[24px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{execRecruitTotal.toLocaleString()}명</p>
+        </div>
+        <div className="premium-card p-4">
+          <div className="flex items-center gap-2">
+            <WalletCards size={15} style={{ color: "var(--success-text)" }} />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>운영파트 광고특전 목표 합계</p>
+          </div>
+          <p className="mt-2 text-[24px] font-semibold tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>{opsRevenueTotal.toLocaleString()}원</p>
         </div>
       </div>
 
@@ -326,99 +493,26 @@ export default function KpiSettingsPage() {
           <Loader2 className="animate-spin" size={28} style={{ color: "var(--accent-text)" }} />
         </div>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-2">
-
-          {/* ═══ 좌측: 월간 목표 ═══ */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <div className="flex items-center gap-2">
-                <Calendar size={15} style={{ color: "var(--warning-text)" }} />
-                <h2 className="text-[15px] font-bold" style={{ color: "var(--text-strong)" }}>월간 목표</h2>
-                <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>{year}년 {month}월</span>
-              </div>
-              <button
-                onClick={() => {
-                  setMTeam({ "team": makeEmpty(year, month, 0, "team", "team") });
-                  const me: Record<string, KpiRow> = {};
-                  EXEC_MEMBERS.forEach((n) => { me[n] = makeEmpty(year, month, 0, "execution", n); });
-                  setMExec(me);
-                  const mo: Record<string, KpiRow> = {};
-                  OPS_MEMBERS.forEach((n) => { mo[n] = makeEmpty(year, month, 0, "operation", n); });
-                  setMOps(mo);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11px] font-normal transition-all"
-                style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-subtle)" }}
-              >
-                <RefreshCw size={11} /> 초기화
-              </button>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
+            <div className="flex items-center gap-2">
+              <Calendar size={15} style={{ color: "var(--warning-text)" }} />
+              <h2 className="text-[15px] font-semibold" style={{ color: "var(--text-strong)" }}>월간 전체 목표 설정</h2>
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>{year}년 {month}월</span>
             </div>
-
-            <GoalSection title="대협팀 전체" tone="warning"
-              rows={mTeam} members={["team"]} scope="team"
-              onUpdate={(_, p) => setMTeam({ ...mTeam, team: { ...mTeam["team"], ...p } })} />
-
-            <GoalSection title="실행파트 개인별" tone="info"
-              rows={mExec} members={EXEC_MEMBERS} scope="execution"
-              onUpdate={(n, p) => setMExec({ ...mExec, [n]: { ...mExec[n], ...p } })} />
-
-            <GoalSection title="운영파트 개인별" tone="success"
-              rows={mOps} members={OPS_MEMBERS} scope="operation"
-              onUpdate={(n, p) => setMOps({ ...mOps, [n]: { ...mOps[n], ...p } })} />
+            <button
+              type="button"
+              onClick={resetMonthly}
+              className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11px] font-normal transition-all"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-subtle)" }}
+            >
+              <RefreshCw size={11} /> 초기화
+            </button>
           </div>
 
-          {/* ═══ 우측: 주간 목표 ═══ */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
-              <div className="flex flex-wrap items-center gap-2">
-                <Calendar size={15} style={{ color: "var(--info-text)" }} />
-                <h2 className="text-[15px] font-bold" style={{ color: "var(--text-strong)" }}>주간 목표</h2>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((w) => {
-                    const active = selWeek === w;
-                    return (
-                      <button key={w} onClick={() => setSelWeek(w)}
-                        className="rounded-[8px] border px-2.5 py-1 text-[11px] font-semibold transition-colors"
-                        style={{
-                          background: active ? "var(--accent-subtle)" : "var(--surface-2)",
-                          borderColor: active ? "var(--accent-border)" : "var(--border)",
-                          color: active ? "var(--accent-text)" : "var(--text-subtle)",
-                        }}>
-                        {w}주차
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="text-[11px] font-semibold" style={{ color: "var(--info-text)" }}>{weekRangeText}</span>
-              </div>
-              <button
-                onClick={() => {
-                  setWTeam({ "team": makeEmpty(year, month, selWeek, "team", "team") });
-                  const we: Record<string, KpiRow> = {};
-                  EXEC_MEMBERS.forEach((n) => { we[n] = makeEmpty(year, month, selWeek, "execution", n); });
-                  setWExec(we);
-                  const wo: Record<string, KpiRow> = {};
-                  OPS_MEMBERS.forEach((n) => { wo[n] = makeEmpty(year, month, selWeek, "operation", n); });
-                  setWOps(wo);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11px] font-normal transition-all"
-                style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-subtle)" }}
-              >
-                <RefreshCw size={11} /> 초기화
-              </button>
-            </div>
-
-            <GoalSection title={`대협팀 전체 (${selWeek}주차)`} tone="warning"
-              rows={wTeam} members={["team"]} scope="team"
-              onUpdate={(_, p) => setWTeam({ ...wTeam, team: { ...wTeam["team"], ...p } })} />
-
-            <GoalSection title={`실행파트 (${selWeek}주차)`} tone="info"
-              rows={wExec} members={EXEC_MEMBERS} scope="execution"
-              onUpdate={(n, p) => setWExec({ ...wExec, [n]: { ...wExec[n], ...p } })} />
-
-            <GoalSection title={`운영파트 (${selWeek}주차)`} tone="success"
-              rows={wOps} members={OPS_MEMBERS} scope="operation"
-              onUpdate={(n, p) => setWOps({ ...wOps, [n]: { ...wOps[n], ...p } })} />
-          </div>
+          <TeamGoalSection row={teamRow} onUpdate={(patch) => setTeamRow((prev) => ({ ...prev, ...patch }))} />
+          <ExecGoalSection rows={execRows} onUpdate={(name, patch) => setExecRows((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))} />
+          <OpsGoalSection rows={opsRows} onUpdate={(name, patch) => setOpsRows((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))} />
         </div>
       )}
     </div>
