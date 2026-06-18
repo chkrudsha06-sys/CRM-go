@@ -51,6 +51,42 @@ function emptyText(value: string | null | undefined) {
   return value?.trim() || '-';
 }
 
+function formatPhone(value: string | null | undefined) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+
+  if (!digits) return '-';
+
+  if (digits.length === 11 && digits.startsWith('010')) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 11 && /^01[016789]/.test(digits)) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10 && /^01[016789]/.test(digits)) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 10 && digits.startsWith('02')) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 9 && digits.startsWith('02')) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+  }
+
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+
+  return value?.trim() || '-';
+}
+
 export default function BunyanglineDataPage() {
   const [selectedRegion, setSelectedRegion] = useState('모든지역');
   const [keyword, setKeyword] = useState('');
@@ -272,10 +308,10 @@ function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: b
     <>
       <tr style={{ borderBottom: opened ? '0' : '1px solid #f3f4f6' }}>
         <td style={tdCenter}>{emptyText(row.region_name)}</td>
-        <td style={{ ...tdLeft, maxWidth: '280px', fontWeight: 800 }}>{emptyText(row.site_name)}</td>
+        <td style={{ ...tdCenter, maxWidth: '280px', fontWeight: 800, whiteSpace: 'normal', wordBreak: 'keep-all', lineHeight: 1.45 }}>{emptyText(row.site_name)}</td>
         <td style={tdCenter}>{formatDate(row.posted_at)}</td>
         <td style={tdCenter}>{emptyText(row.manager_name)}</td>
-        <td style={tdCenter}>{emptyText(row.manager_phone)}</td>
+        <td style={tdCenter}>{formatPhone(row.manager_phone)}</td>
         <td style={tdCenter}>{emptyText(row.agency_company)}</td>
         <td style={{ ...tdCenter, maxWidth: '170px' }}>{emptyText(row.apartment_fee)}</td>
         <td style={tdCenter}>
@@ -345,12 +381,4 @@ const tdCenter: React.CSSProperties = {
   fontSize: '14px',
   color: '#111827',
   whiteSpace: 'nowrap',
-};
-
-const tdLeft: React.CSSProperties = {
-  padding: '13px 12px',
-  textAlign: 'left',
-  verticalAlign: 'middle',
-  fontSize: '14px',
-  color: '#111827',
 };
