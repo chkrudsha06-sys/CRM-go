@@ -78,6 +78,7 @@ const WORKSPACE_MENUS: MenuItem[] = [
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
   { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
   { href: "/member-timeline", label: "회원 타임라인", icon: TimelineIcon },
+  { href: "/bunyangline-data", label: "분양라인데이터", icon: Database },
 ];
 
 const SALES_MENUS: MenuItem[] = [
