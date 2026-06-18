@@ -51,6 +51,7 @@ type ContactRow = Record<string, any> & {
   name?: string | null;
   title?: string | null;
   phone?: string | null;
+  bunyanghoe_number?: string | null;
   intake_route?: string | null;
   activity_type?: string | null;
   has_tm?: boolean | null;
@@ -92,6 +93,7 @@ type SalesRow = Record<string, any> & {
   payment_date?: string | null;
   team_member?: string | null;
   consultant?: string | null;
+  bunyanghoe_number?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -194,10 +196,58 @@ function rowMatchesOwner(row: Pick<ContactRow, "assigned_to" | "consultant">, ow
   return normalizePersonName(row.assigned_to) === target || normalizePersonName(row.consultant) === target;
 }
 
-function salesMatchesOwner(row: SalesRow, owner: string) {
+type SalesOwnerLookup = {
+  byName: Map<string, string>;
+  byNumber: Map<string, string>;
+};
+
+function isCompanyManagerName(value?: string | null) {
+  const text = normalizeText(value);
+  return text === "주식회사광고인" || text === "광고인" || text.includes("주식회사광고인");
+}
+
+function buildSalesOwnerLookup(contacts: ContactRow[]): SalesOwnerLookup {
+  const byName = new Map<string, string>();
+  const byNumber = new Map<string, string>();
+
+  contacts.forEach((contact) => {
+    const owner = (contact.assigned_to || contact.consultant || "").trim();
+    if (!owner) return;
+
+    const nameKey = normalizeText(contact.name);
+    const numberKey = normalizeText(contact.bunyanghoe_number);
+
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, owner);
+    if (numberKey && !byNumber.has(numberKey)) byNumber.set(numberKey, owner);
+  });
+
+  return { byName, byNumber };
+}
+
+function resolveSalesOwner(row: SalesRow, lookup?: SalesOwnerLookup) {
+  const directOwner = String(row.team_member || "").trim();
+
+  // 통합매출관리와 동일하게, 담당자가 실제 담당자명으로 들어온 경우에는 그 값을 우선 사용합니다.
+  if (directOwner && !isCompanyManagerName(directOwner)) return directOwner;
+
+  // 사이다페이/효성CMS에서 담당자가 "주식회사 광고인"으로 들어온 경우,
+  // 분양회 입회자/contacts의 회원번호 또는 고객명으로 실제 assigned_to 담당자를 매칭합니다.
+  const numberOwner = lookup?.byNumber.get(normalizeText(row.bunyanghoe_number));
+  if (numberOwner) return numberOwner;
+
+  const nameOwner = lookup?.byName.get(normalizeText(row.member_name));
+  if (nameOwner) return nameOwner;
+
+  const fallbackOwner = String(row.consultant || "").trim();
+  if (fallbackOwner && !/^\d{7,}$/.test(normalizeText(fallbackOwner))) return fallbackOwner;
+
+  return directOwner || fallbackOwner || "미지정";
+}
+
+function salesMatchesOwner(row: SalesRow, owner: string, lookup?: SalesOwnerLookup) {
   if (!owner || owner === "전체") return true;
   const target = normalizePersonName(owner);
-  return normalizePersonName(row.team_member) === target || normalizePersonName(row.consultant) === target;
+  return normalizePersonName(resolveSalesOwner(row, lookup)) === target;
 }
 
 function parseDate(value?: string | null) {
@@ -405,7 +455,9 @@ function isGradeContact(contact: ContactRow, gradeName: string) {
 }
 
 function isContractedInMonth(contact: ContactRow, start: Date, end: Date) {
-  return isContracted(contact) && (isInRange(contact.contract_date, start, end) || isInRange(contact.updated_at, start, end) || isInRange(contact.created_at, start, end));
+  // 대시보드 계약 건수는 파이프라인 리텐션 구간 + 고객 상세패널의 계약완료일 기준으로만 집계합니다.
+  // vip_transferred_at, updated_at, created_at 기준으로 대체 집계하지 않습니다.
+  return normalizeText(contact.management_stage) === normalizeText("리텐션") && isInRange(contact.contract_date, start, end);
 }
 
 function touchedInMonth(contact: ContactRow, start: Date, end: Date) {
@@ -702,7 +754,8 @@ export default function HomePage() {
       if (personalName) {
         customerDbQuery = customerDbQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
         vipQuery = vipQuery.or(`assigned_to.eq.${personalName},consultant.eq.${personalName}`);
-        salesQuery = salesQuery.or(`team_member.eq.${personalName},consultant.eq.${personalName}`);
+        // 매출은 통합매출관리의 담당자 표시 로직과 동일하게 고객명/회원번호 매칭이 필요하므로
+        // Supabase 쿼리에서 담당자로 선필터하지 않고 전체 로드 후 클라이언트에서 결제일+담당자 기준으로 필터합니다.
       }
 
       const [customerDbRes, vipRes, noteRes, salesRes, kpiRes] = await Promise.all([
@@ -918,6 +971,8 @@ export default function HomePage() {
     return contacts.filter((contact) => rowMatchesOwner(contact, activeOwner));
   }, [contacts, activeOwner]);
 
+  const salesOwnerLookup = useMemo(() => buildSalesOwnerLookup(contacts), [contacts]);
+
   const customerDbContacts = useMemo(() => {
     return visibleContacts.filter((contact) => normalizeText(contact.crm_db_source) === "customer_db");
   }, [visibleContacts]);
@@ -927,15 +982,16 @@ export default function HomePage() {
   }, [customerDbContacts, rangeStart, rangeEnd]);
 
   const visibleSales = useMemo(() => {
-    return sales.filter((row) => salesMatchesOwner(row, activeOwner));
-  }, [sales, activeOwner]);
+    return sales.filter((row) => salesMatchesOwner(row, activeOwner, salesOwnerLookup));
+  }, [sales, activeOwner, salesOwnerLookup]);
 
   const monthContacts = useMemo(() => {
     return visibleContacts.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
   }, [visibleContacts, rangeStart, rangeEnd]);
 
   const monthSales = useMemo(() => {
-    return visibleSales.filter((row) => isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
+    // 통합매출관리 기준과 동일하게 결제일(payment_date)만으로 기간 매칭합니다.
+    return visibleSales.filter((row) => isInRange(row.payment_date, rangeStart, rangeEnd));
   }, [visibleSales, rangeStart, rangeEnd]);
 
   const monthNotes = useMemo(() => {
@@ -1175,7 +1231,8 @@ export default function HomePage() {
       // 기간 내 이관된 VIP (vip_transferred_at 기준)
       const ownerPeriodVip = ownerVip.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd));
       const ownerMonthDb = ownerCustomerDb.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
-      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner) && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd));
+      const ownerSales = sales.filter((row) => salesMatchesOwner(row, owner, salesOwnerLookup) && isInRange(row.payment_date, rangeStart, rangeEnd));
+      const ownerContracts = ownerVip.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd));
       // 파이프라인 단계별: 기간 내 이관 VIP 기준
       const ownerStage = (stage: string) => ownerPeriodVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       return {
@@ -1186,12 +1243,12 @@ export default function HomePage() {
         lead: ownerStage("리드"),
         prospect: ownerStage("프로스펙팅"),
         closing: ownerStage("딜클로징"),
-        contracts: ownerPeriodVip.filter((contact) => isContracted(contact)).length,
+        contracts: ownerContracts.length,
         churn: ownerStage("이탈/탈퇴"),
         sales: ownerSales.reduce((sum, row) => sum + effectiveSales(row), 0),
       };
     });
-  }, [contacts, sales, rangeStart, rangeEnd]);
+  }, [contacts, sales, salesOwnerLookup, rangeStart, rangeEnd]);
 
   /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
   const intakeRows = useMemo(() => {
@@ -1273,7 +1330,7 @@ export default function HomePage() {
     const isOwnerIn = (row: Pick<ContactRow, "assigned_to" | "consultant">, owners: string[]) =>
       owners.some((owner) => rowMatchesOwner(row, owner));
     const salesOwnerIn = (row: SalesRow, owners: string[]) =>
-      owners.some((owner) => salesMatchesOwner(row, owner));
+      owners.some((owner) => salesMatchesOwner(row, owner, salesOwnerLookup));
 
     const contractedMembers = (sourceContacts: ContactRow[]) =>
       sourceContacts.filter((contact) =>
@@ -1284,7 +1341,7 @@ export default function HomePage() {
 
     const salesAmount = (sourceSales: SalesRow[], category: "membership" | "lms" | "hogang") =>
       sourceSales
-        .filter((row) => salesCategory(row) === category && isInRange(row.payment_date || row.created_at, rangeStart, rangeEnd))
+        .filter((row) => salesCategory(row) === category && isInRange(row.payment_date, rangeStart, rangeEnd))
         .reduce((sum, row) => sum + effectiveSales(row), 0);
 
     const teamTarget = kpis.find((row) => row.scope === "team" && row.target_name === "team") || null;
@@ -1328,7 +1385,7 @@ export default function HomePage() {
       { label: "브론즈 모집", value: bronzeContracts, goal: Number(target?.bronze_count || 0), unit: "명", tone: "success" as ToneName, money: false },
       { label: "분양회 매출(회비)", value: stats.membershipSales, goal: Number(target?.bunyanghoe_revenue || 0), unit: "원", tone: "info" as ToneName, money: true },
     ];
-  }, [activeOwner, contacts, kpis, me, rangeEnd, rangeStart, sales, stats.hogangSales, stats.lmsSales, stats.membershipSales, visibleContacts]);
+  }, [activeOwner, contacts, kpis, me, rangeEnd, rangeStart, sales, salesOwnerLookup, stats.hogangSales, stats.lmsSales, stats.membershipSales, visibleContacts]);
 
   /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 3종만 */
   const salesBreakdown = useMemo(() => ([
