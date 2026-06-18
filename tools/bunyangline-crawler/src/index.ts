@@ -24,9 +24,8 @@ const DEFAULT_IMPORT_BATCH_SIZE = Number(process.env.BUNYANGLINE_IMPORT_BATCH_SI
 const IMPORT_BATCH_SIZE = Number.isFinite(DEFAULT_IMPORT_BATCH_SIZE) && DEFAULT_IMPORT_BATCH_SIZE > 0
   ? Math.min(DEFAULT_IMPORT_BATCH_SIZE, 5)
   : 3;
-const MAX_DETAIL_TEXT_LENGTH = Number(process.env.BUNYANGLINE_MAX_DETAIL_TEXT_LENGTH || '2500');
+const MAX_DETAIL_TEXT_LENGTH = Number(process.env.BUNYANGLINE_MAX_DETAIL_TEXT_LENGTH || '2200');
 const MAX_RAW_TEXT_LENGTH = Number(process.env.BUNYANGLINE_MAX_RAW_TEXT_LENGTH || '0');
-
 
 type Region = (typeof REGIONS)[number];
 
@@ -52,12 +51,28 @@ type JsonCandidate = {
   responseUrl: string;
 };
 
+const STOP_SITE_NAMES = new Set([
+  '분양라인', '지역현장', '맞춤현장', '지도현장', '관심현장', '서포터즈',
+  '본부/팀장', '팀장/팀원', '본부장', '팀장', '팀원', '직원', '분양대행',
+  '계약 수수료', '기본급 +인센', '기본급+인센', '경력무관', '일비', '숙소비',
+  'HOT', '신규', '대박', '프리미엄', '전국 Top', '지역 Top', '일반 구인글',
+]);
+
 function env(name: string, fallback = '') {
   return process.env[name] || fallback;
 }
 
+function decodeEscapedLineBreaks(value: string) {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+}
+
 function normalizeSpace(value: unknown) {
-  return String(value ?? '')
+  return decodeEscapedLineBreaks(String(value ?? ''))
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
@@ -92,13 +107,19 @@ function sourceKey(url: string) {
 function normalizePhone(value: unknown) {
   const digits = String(value ?? '').replace(/\D/g, '');
   if (!digits) return null;
-  if (digits.length < 9 || digits.length > 11) return digits;
-  return digits;
+
+  // 담당자 연락처는 임의 숫자/금액과 섞이지 않도록 휴대폰 또는 국내 전화 형식만 허용합니다.
+  if (/^01[016789]\d{7,8}$/.test(digits)) return digits;
+  if (/^02\d{7,8}$/.test(digits)) return digits;
+  if (/^0[3-6][1-4]\d{7,8}$/.test(digits)) return digits;
+  return null;
 }
 
 function extractPhone(text: string) {
-  const match = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-  return normalizePhone(match?.[0] ?? null);
+  const mobile = text.match(/01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  if (mobile) return normalizePhone(mobile[0]);
+  const tel = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  return normalizePhone(tel?.[0] ?? null);
 }
 
 function normalizeDate(value: unknown) {
@@ -108,14 +129,11 @@ function normalizeDate(value: unknown) {
   const iso = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
 
-  const kr = text.match(/(20\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})/);
-  if (kr) return `${kr[1]}-${kr[2].padStart(2, '0')}-${kr[3].padStart(2, '0')}`;
+  const dot = text.match(/(20\d{2})\.(\d{1,2})\.(\d{1,2})/);
+  if (dot) return `${dot[1]}-${dot[2].padStart(2, '0')}-${dot[3].padStart(2, '0')}`;
 
-  const yy = text.match(/(^|\D)(\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})(\D|$)/);
-  if (yy) {
-    const year = Number(yy[2]) >= 70 ? `19${yy[2]}` : `20${yy[2]}`;
-    return `${year}-${yy[3].padStart(2, '0')}-${yy[4].padStart(2, '0')}`;
-  }
+  const kr = text.match(/(20\d{2})[\/년\s-]+(\d{1,2})[\/월\s-]+(\d{1,2})/);
+  if (kr) return `${kr[1]}-${kr[2].padStart(2, '0')}-${kr[3].padStart(2, '0')}`;
 
   return null;
 }
@@ -126,17 +144,76 @@ function isDateOnOrAfter(value: string | null, minDate: string) {
 }
 
 function linesOf(text: string) {
-  return text
+  return normalizeSpace(text)
     .split('\n')
     .map((line) => normalizeSpace(line))
     .filter(Boolean);
+}
+
+function objectText(obj: Record<string, unknown>) {
+  try {
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return String(obj);
+  }
+}
+
+function getValueByExactOrNormalizedKey(obj: Record<string, unknown>, keys: string[]) {
+  const exactMap = new Map(Object.entries(obj).map(([key, value]) => [key, value]));
+  for (const key of keys) {
+    if (exactMap.has(key)) return exactMap.get(key);
+  }
+
+  const normalizedTargets = keys.map((key) => key.toLowerCase().replace(/[_\s-]/g, ''));
+  for (const [key, value] of Object.entries(obj)) {
+    const normalizedKey = key.toLowerCase().replace(/[_\s-]/g, '');
+    if (normalizedTargets.includes(normalizedKey)) return value;
+  }
+
+  return null;
+}
+
+function getStringByKey(obj: Record<string, unknown>, keys: string[]) {
+  const value = getValueByExactOrNormalizedKey(obj, keys);
+  if (value == null) return null;
+  if (Array.isArray(value) || typeof value === 'object') return null;
+  return compact(value);
+}
+
+function getNestedArray(obj: Record<string, unknown>, keys: string[]) {
+  const value = getValueByExactOrNormalizedKey(obj, keys);
+  return Array.isArray(value) ? value : null;
+}
+
+function getId(obj: Record<string, unknown>) {
+  const value = getStringByKey(obj, [
+    'idx', 'id', 'seq', 'no', 'uid', 'wr_id', 'recruit_id', 'recruitId', 'post_id', 'postId', 'site_idx', 'siteIdx',
+  ]);
+  return value || null;
+}
+
+function isProbablyDateText(text: string | null) {
+  if (!text) return false;
+  return Boolean(normalizeDate(text)) && text.replace(/[^0-9]/g, '').length >= 6;
+}
+
+function isValidSiteName(value: unknown) {
+  const text = compact(value);
+  if (!text) return false;
+  if (text.length < 4 || text.length > 160) return false;
+  if (STOP_SITE_NAMES.has(text)) return false;
+  if (isProbablyDateText(text)) return false;
+  if (/^\d+[,.]?\d*\s*(원|만원|%)?$/.test(text)) return false;
+  if (/^(AD|HOME|검색|확인|목록을 로딩중입니다)/i.test(text)) return false;
+  return true;
 }
 
 function pickAfterLabel(text: string, labels: string[], maxLength = 160) {
   const lines = linesOf(text);
 
   for (const label of labels) {
-    const inline = text.match(new RegExp(`${escapeRegExp(label)}\\s*[:：]?\\s*([^\\n]{1,${maxLength}})`, 'i'));
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const inline = text.match(new RegExp(`${escaped}\\s*[:：]?\\s*([^\\n]{1,${maxLength}})`, 'i'));
     if (inline?.[1]) {
       const value = normalizeSpace(inline[1].replace(label, '').replace(/^[:：]/, ''));
       if (value && value !== label) return value;
@@ -159,172 +236,119 @@ function pickAfterLabel(text: string, labels: string[], maxLength = 160) {
   return null;
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+function extractDateFromObject(obj: Record<string, unknown>) {
+  const direct = getStringByKey(obj, [
+    'posted_at', 'postedAt', 'post_date', 'postDate', 'reg_date', 'regDate', 'registered_at', 'registeredAt',
+    'write_date', 'writeDate', 'wdate', 'created_at', 'createdAt', 'insert_dt', 'insertDate', 'start_date', 'startDate',
+  ]);
+  if (direct) return normalizeDate(direct);
 
-function extractSection(text: string, labels: string[], maxLines = 120) {
-  const lines = linesOf(text);
-
-  for (const label of labels) {
-    const idx = lines.findIndex((line) => line.includes(label));
-    if (idx >= 0) {
-      return lines.slice(idx, idx + maxLines).join('\n');
-    }
-  }
-
-  return lines.slice(0, maxLines).join('\n');
+  const raw = objectText(obj);
+  const byLabel = pickAfterLabel(raw, ['등록일', '작성일', '게시일'], 80);
+  return normalizeDate(byLabel);
 }
 
 function extractApartmentFee(text: string) {
-  const lines = linesOf(text);
+  const normalized = normalizeSpace(text);
+  const lines = linesOf(normalized);
   const apartmentIndex = lines.findIndex((line) => line.includes('아파트') && line.includes('분양'));
 
   if (apartmentIndex >= 0) {
-    const chunk = lines.slice(apartmentIndex, apartmentIndex + 12).join(' ');
-    const fee = chunk.match(/(?:팀|본부|직원|수수료)?\s*[0-9,]{2,}\s*(?:만\s*)?원|[0-9,]{2,}\s*만원|[0-9,]{2,}\s*%/);
+    const chunk = lines.slice(apartmentIndex, apartmentIndex + 10).join(' ');
+    const fee = chunk.match(/(?:팀|본부|직원|각개|수수료)?\s*[0-9,]{2,}\s*(?:만\s*)?원|[0-9,]{2,}\s*만원|[0-9,]{1,3}\s*%/);
     return fee?.[0] ? normalizeSpace(fee[0]) : normalizeSpace(chunk);
   }
 
-  const fallback = text.match(/(?:수수료|팀수수료|본부수수료)[^\n]{0,50}/);
+  const fallback = normalized.match(/(?:수수료|팀수수료|본부수수료|페이백)[^\n]{0,80}/);
   return fallback?.[0] ? normalizeSpace(fallback[0]) : null;
-}
-
-function extractProjectName(text: string, pageTitle: string | null) {
-  const byLabel = pickAfterLabel(text, ['현장명', '사업지명', '사업지 정보', '사업지정보', '프로젝트명'], 180);
-  if (byLabel) return byLabel;
-
-  if (pageTitle) {
-    return pageTitle
-      .replace(/분양라인/g, '')
-      .replace(/지역현장/g, '')
-      .replace(/구인\/구직/g, '')
-      .replace(/[|｜]/g, '')
-      .trim();
-  }
-
-  const lines = linesOf(text);
-  return lines.find((line) => line.length >= 4 && line.length <= 80) ?? null;
-}
-
-function extractPageTitle(text: string) {
-  const lines = linesOf(text);
-  const skip = new Set(['HOME', '지역현장', '맞춤현장', '지도현장', '관심현장', '서포터즈', '로그인', '회원가입']);
-  return lines.find((line) => !skip.has(line) && line.length >= 5 && line.length <= 100) ?? null;
-}
-
-function getByKey(obj: Record<string, unknown>, keys: string[]) {
-  const entries = Object.entries(obj);
-  const normalized = keys.map((key) => key.toLowerCase());
-
-  for (const [key, value] of entries) {
-    const lower = key.toLowerCase();
-    if (normalized.includes(lower)) return value;
-  }
-
-  for (const [key, value] of entries) {
-    const lower = key.toLowerCase();
-    if (normalized.some((item) => lower.includes(item))) return value;
-  }
-
-  return null;
-}
-
-function getStringByKey(obj: Record<string, unknown>, keys: string[]) {
-  const value = getByKey(obj, keys);
-  if (value == null) return null;
-  if (Array.isArray(value) || typeof value === 'object') return null;
-  return compact(value);
-}
-
-function getId(obj: Record<string, unknown>) {
-  const value = getByKey(obj, ['id', 'idx', 'seq', 'no', 'uid', 'wr_id', 'recruit_id', 'post_id', 'site_idx', 'recruitIdx']);
-  const text = normalizeSpace(value);
-  return text || null;
-}
-
-function getUrlFromObj(obj: Record<string, unknown>, region: Region) {
-  const raw = getStringByKey(obj, ['url', 'href', 'link', 'source_url', 'view_url', 'detail_url', 'recruit_url']);
-  if (raw) {
-    try {
-      return new URL(raw, BASE_URL).toString();
-    } catch {
-      // 아래 id 기반 URL로 대체합니다.
-    }
-  }
-
-  const id = getId(obj);
-  if (id) return `${BASE_URL}/recruit/regional/${region.id}?idx=${encodeURIComponent(id)}`;
-
-  const title = getStringByKey(obj, ['title', 'subject', 'site_name', 'siteName', 'field_name', 'name']) || 'unknown';
-  return `${BASE_URL}/recruit/regional/${region.id}?virtual=${encodeURIComponent(title)}`;
-}
-
-function objectText(obj: Record<string, unknown>) {
-  try {
-    return JSON.stringify(obj, null, 2);
-  } catch {
-    return String(obj);
-  }
-}
-
-function extractDateFromObject(obj: Record<string, unknown>) {
-  const raw = getStringByKey(obj, [
-    'posted_at',
-    'post_date',
-    'created_at',
-    'createdAt',
-    'reg_date',
-    'regDate',
-    'registered_at',
-    'registeredAt',
-    'write_date',
-    'writeDate',
-    'wdate',
-    'date',
-    'insert_dt',
-    'insertDate',
-    'updated_at',
-  ]);
-
-  return normalizeDate(raw || objectText(obj));
 }
 
 function extractApartmentFeeFromObject(obj: Record<string, unknown>) {
   const direct = getStringByKey(obj, [
-    'apartment_fee',
-    'apartmentFee',
-    'apt_fee',
-    'fee',
-    'pay',
-    'payroll',
-    'payroll_text',
-    'salary',
-    'salary_detail',
-    'commission',
-    '수수료',
+    'apartment_fee', 'apartmentFee', 'apt_fee', 'aptFee', 'payroll_amount', 'payrollAmount', 'payroll_value', 'payrollValue',
+    'salary_detail', 'salaryDetail', 'commission', 'commission_text', 'commissionText', 'fee_text', 'feeText',
   ]);
-
   if (direct) return direct;
+
+  const payrollList = getNestedArray(obj, ['payrolls', 'payroll_list', 'payrollList', 'pays', 'pay_list', 'salary_list', 'list']);
+  if (payrollList) {
+    for (const item of payrollList) {
+      if (!item || typeof item !== 'object') continue;
+      const itemObj = item as Record<string, unknown>;
+      const upjong = getStringByKey(itemObj, ['upjong_name', 'upjongName', 'name', 'type', 'category']);
+      const text = objectText(itemObj);
+      if (upjong?.includes('아파트') || text.includes('아파트')) {
+        const fee = extractApartmentFee(text);
+        if (fee) return fee;
+      }
+    }
+  }
+
   return extractApartmentFee(objectText(obj));
 }
 
+function buildDetailText(obj: Record<string, unknown>) {
+  const direct = getStringByKey(obj, [
+    'detail_text', 'detailText', 'detail', 'content', 'contents', 'description', 'desc', 'body', 'memo', 'word_from_supporters', 'wordFromSupporters', 'summary',
+  ]);
+
+  const lines: string[] = [];
+  const title = getStringByKey(obj, ['title', 'subject', 'site_name', 'siteName', 'field_name', 'fieldName']);
+  const summary = getStringByKey(obj, ['word_from_supporters', 'wordFromSupporters', 'summary', 'description', 'desc']);
+  const recruitPosition = getStringByKey(obj, ['jikjong_name', 'jikjongName', 'job_type_name', 'jobTypeName', 'recruit_position', 'recruitPosition']);
+  const payrollType = getStringByKey(obj, ['payroll_type_name', 'payrollTypeName', 'salary_type', 'salaryType', 'pay_type', 'payType']);
+  const benefits = getStringByKey(obj, ['services', 'service_names', 'serviceNames', 'benefits', 'support', 'support_text', 'supportText']);
+  const company = getStringByKey(obj, ['company_name', 'companyName', 'agency_company', 'agencyCompany', 'company']);
+
+  if (title) lines.push(`현장명: ${title}`);
+  if (summary) lines.push(`요약: ${summary}`);
+  if (recruitPosition) lines.push(`모집직급: ${recruitPosition}`);
+  if (payrollType) lines.push(`급여형태: ${payrollType}`);
+  if (benefits) lines.push(`지원조건: ${benefits}`);
+  if (company) lines.push(`대행사/업체명: ${company}`);
+  if (direct && !lines.includes(direct)) lines.push(`상세정보: ${direct}`);
+
+  return lines.join('\n') || direct || null;
+}
+
+function hasContainerArray(obj: Record<string, unknown>) {
+  return Object.values(obj).some((value) => Array.isArray(value));
+}
+
+function getDirectTitle(obj: Record<string, unknown>) {
+  const title = getStringByKey(obj, [
+    'title', 'subject', 'site_name', 'siteName', 'field_name', 'fieldName', 'project_name', 'projectName', 'recruit_title', 'recruitTitle',
+  ]);
+  if (isValidSiteName(title)) return title;
+  return null;
+}
+
 function looksLikeRecruitObject(obj: Record<string, unknown>) {
-  const text = objectText(obj);
-  const title = getStringByKey(obj, ['title', 'subject', 'site_name', 'siteName', 'field_name', 'fieldName', 'name']);
-  const company = getStringByKey(obj, ['company_name', 'companyName', 'agency_company', 'agencyCompany', 'company', '대행사']);
+  // name/count/result 같은 컨테이너 객체는 후보로 저장하지 않고 내부 배열만 순회합니다.
+  if (hasContainerArray(obj)) return false;
+
+  const keys = Object.keys(obj);
+  const keySet = new Set(keys.map((key) => key.toLowerCase().replace(/[_\s-]/g, '')));
+
+  if (keySet.has('color') && keySet.has('name') && keys.length <= 3) return false;
+  if (keySet.has('count') && (keySet.has('result') || keySet.has('list') || keySet.has('data'))) return false;
+
+  const title = getDirectTitle(obj);
   const id = getId(obj);
-  const hasRecruitWords = /계약 수수료|아파트|오피스텔|본부|팀장|팀원|경력무관|수수료|분양/.test(text);
-  const hasNoiseWords = /이용약관|개인정보|공지사항|로그인|회원가입/.test(text);
+  const company = getStringByKey(obj, ['company_name', 'companyName', 'agency_company', 'agencyCompany', 'company']);
+  const date = extractDateFromObject(obj);
+  const text = objectText(obj);
+  const hasRecruitWords = /계약 수수료|아파트|오피스텔|본부|팀장|팀원|경력무관|수수료|분양|일비|숙소비/.test(text);
+  const hasNoiseWords = /이용약관|개인정보|공지사항|로그인|회원가입|회사소개/.test(text);
 
   if (hasNoiseWords && !title) return false;
-  if (title && title.length >= 4 && hasRecruitWords) return true;
-  if (id && company && hasRecruitWords) return true;
-  return false;
+  if (!title) return false;
+  if (!id && !company && !date && !hasRecruitWords) return false;
+  return true;
 }
 
 function collectObjects(value: unknown, responseUrl: string, out: JsonCandidate[], depth = 0) {
-  if (depth > 8 || value == null) return;
+  if (depth > 10 || value == null) return;
 
   if (Array.isArray(value)) {
     for (const item of value) collectObjects(item, responseUrl, out, depth + 1);
@@ -334,7 +358,11 @@ function collectObjects(value: unknown, responseUrl: string, out: JsonCandidate[
   if (typeof value !== 'object') return;
 
   const obj = value as Record<string, unknown>;
-  if (looksLikeRecruitObject(obj)) out.push({ value: obj, responseUrl });
+
+  if (looksLikeRecruitObject(obj)) {
+    out.push({ value: obj, responseUrl });
+    return;
+  }
 
   for (const child of Object.values(obj)) {
     if (child && typeof child === 'object') collectObjects(child, responseUrl, out, depth + 1);
@@ -358,10 +386,16 @@ async function handleJsonResponse(response: Response, out: JsonCandidate[]) {
     if (added > 0) {
       console.log(`JSON 후보 감지: ${added}건 / ${url}`);
       const sample = out[out.length - 1]?.value;
-      if (sample) console.log(`JSON 후보 샘플 키: ${Object.keys(sample).slice(0, 30).join(', ')}`);
+      if (sample) {
+        console.log(`JSON 후보 샘플 키: ${Object.keys(sample).slice(0, 40).join(', ')}`);
+        const sampleTitle = getDirectTitle(sample);
+        const sampleDate = extractDateFromObject(sample);
+        const sampleCompany = getStringByKey(sample, ['company_name', 'companyName', 'agency_company', 'agencyCompany', 'company']);
+        console.log(`JSON 후보 샘플 값: title=${sampleTitle || '-'} / date=${sampleDate || '-'} / company=${sampleCompany || '-'}`);
+      }
     }
   } catch {
-    // JSON이 아니거나 CORS/본문 재사용 문제면 무시합니다.
+    // JSON이 아니거나 본문 재사용 문제면 무시합니다.
   }
 }
 
@@ -387,38 +421,48 @@ async function collectNetworkCandidatesForList(page: Page, listUrl: string) {
   return candidates;
 }
 
-function rowFromJsonCandidate(candidate: JsonCandidate, region: Region): CrawledRow {
-  const obj = candidate.value;
-  const rawText = objectText(obj);
-  const sourceUrl = getUrlFromObj(obj, region);
+function getUrlFromObj(obj: Record<string, unknown>, region: Region, responseUrl: string) {
+  const raw = getStringByKey(obj, ['url', 'href', 'link', 'source_url', 'sourceUrl', 'view_url', 'viewUrl', 'detail_url', 'detailUrl', 'recruit_url', 'recruitUrl']);
+  if (raw) {
+    try {
+      return new URL(raw, BASE_URL).toString();
+    } catch {
+      // id 기반 URL로 대체합니다.
+    }
+  }
 
-  const siteName =
-    getStringByKey(obj, ['site_name', 'siteName', 'field_name', 'fieldName', 'project_name', 'projectName', 'title', 'subject', 'name']) ||
-    extractProjectName(rawText, null);
+  const id = getId(obj);
+  if (id) return `${BASE_URL}/recruit/list/${region.id}#idx=${encodeURIComponent(id)}`;
+
+  const title = getDirectTitle(obj) || 'unknown';
+  return `${responseUrl}#${encodeURIComponent(title)}`;
+}
+
+function rowFromJsonCandidate(candidate: JsonCandidate, region: Region): CrawledRow | null {
+  const obj = candidate.value;
+  const sourceUrl = getUrlFromObj(obj, region, candidate.responseUrl);
+
+  const siteName = getDirectTitle(obj);
+  if (!isValidSiteName(siteName)) return null;
 
   const siteAddress =
-    getStringByKey(obj, ['site_address', 'siteAddress', 'address', 'addr', 'field_address', 'work_address', 'location_address']) ||
-    pickAfterLabel(rawText, ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '주소', '근무지 주소'], 220);
+    getStringByKey(obj, ['site_address', 'siteAddress', 'address', 'addr', 'field_address', 'fieldAddress', 'work_address', 'workAddress', 'location_address', 'locationAddress']) ||
+    pickAfterLabel(objectText(obj), ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '주소', '근무지 주소'], 220);
 
   const postedAt = extractDateFromObject(obj);
 
   const managerName =
-    getStringByKey(obj, ['manager_name', 'managerName', 'manager', 'contact_name', 'contactName', 'person_name', 'personName', '담당자']) ||
-    pickAfterLabel(rawText, ['담당자 이름', '담당자이름', '담당자명', '담당자'], 80);
+    getStringByKey(obj, ['manager_name', 'managerName', 'manager_nm', 'managerNm', 'contact_name', 'contactName', 'person_name', 'personName', 'charge_name', 'chargeName']);
 
-  const managerPhone =
-    normalizePhone(getStringByKey(obj, ['manager_phone', 'managerPhone', 'phone', 'tel', 'mobile', 'contact_phone', 'contactPhone', '담당자연락처'])) ||
-    extractPhone(rawText);
+  const directPhone = getStringByKey(obj, ['manager_phone', 'managerPhone', 'manager_tel', 'managerTel', 'contact_phone', 'contactPhone', 'phone', 'mobile', 'tel', 'hp']);
+  const managerPhone = normalizePhone(directPhone) || null;
 
   const agencyCompany =
-    getStringByKey(obj, ['agency_company', 'agencyCompany', 'company_name', 'companyName', 'company', '대행사', 'corp_name']) ||
-    pickAfterLabel(rawText, ['대행사', '분양대행사', '분양 대행사', '업체명', '회사명'], 120);
+    getStringByKey(obj, ['agency_company', 'agencyCompany', 'company_name', 'companyName', 'company', 'corp_name', 'corpName', 'office_name', 'officeName']);
 
   const apartmentFee = extractApartmentFeeFromObject(obj);
-
-  const detailText =
-    getStringByKey(obj, ['detail_text', 'detailText', 'content', 'contents', 'description', 'desc', 'memo', 'body']) ||
-    extractSection(rawText, ['상세정보', '상세 정보', '상세요강', '모집내용', '급여정보'], 180);
+  const detailText = buildDetailText(obj);
+  const rawText = objectText(obj);
 
   return {
     source_url: sourceUrl,
@@ -442,10 +486,9 @@ async function parseListFallback(page: Page, listUrl: string, region: Region): P
   const text = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }).catch(() => ''));
   if (!text) return [];
 
-  // 상세 URL/JSON 후보가 없는 경우, 화면에 보이는 리스트값이라도 임시 저장할 수 있도록 하는 보조 파서입니다.
-  // 등록일이 없는 행은 날짜 필터 때문에 최종 저장에서 제외됩니다.
   const lines = linesOf(text);
   const productTypes = new Set(['아파트', '오피스텔', '상가', '쇼핑몰', '오피스', '아파트/오피스텔', '오피스텔/상가/쇼핑몰/오피스']);
+  const badgeWords = new Set(['신규', 'HOT', '대박', '프리미엄', '전국 Top', '지역 Top', '급구', '대박환영', '슈페리어']);
   const rows: CrawledRow[] = [];
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -453,16 +496,45 @@ async function parseListFallback(page: Page, listUrl: string, region: Region): P
     if (!productTypes.has(line)) continue;
 
     const title = lines[i + 1] || null;
-    const summary = lines[i + 2] || null;
-    const company = lines.slice(i + 3, i + 10).find((item) => {
-      if (/팀장|팀원|본부|계약 수수료|기본급|일비|숙소비|경력/.test(item)) return false;
-      if (productTypes.has(item)) return false;
-      return item.length >= 2 && item.length <= 40;
-    }) || null;
+    if (!isValidSiteName(title)) continue;
 
-    if (!title || title.length < 4) continue;
+    const summary = lines[i + 2] || null;
+    const recruitPosition = lines[i + 3] || null;
+    const salaryType = lines[i + 4] || null;
+    let cursor = i + 5;
+    const optionValues: string[] = [];
+
+    while (cursor < Math.min(lines.length, i + 10)) {
+      const candidate = lines[cursor];
+      if (!candidate) break;
+      if (productTypes.has(candidate)) break;
+      if (badgeWords.has(candidate)) {
+        cursor += 1;
+        continue;
+      }
+      if (/경력무관|개월이상|년이상|일비|숙소비/.test(candidate)) {
+        optionValues.push(candidate);
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+
+    const company = lines[cursor] && !productTypes.has(lines[cursor]) && !badgeWords.has(lines[cursor])
+      ? lines[cursor]
+      : null;
 
     const sourceUrl = `${listUrl}#${encodeURIComponent(title)}`;
+    const detail = [
+      `현장유형: ${line}`,
+      `현장명: ${title}`,
+      summary ? `요약: ${summary}` : null,
+      recruitPosition ? `모집직급: ${recruitPosition}` : null,
+      salaryType ? `급여형태: ${salaryType}` : null,
+      optionValues.length ? `지원조건: ${optionValues.join(' / ')}` : null,
+      company ? `대행사/업체명: ${company}` : null,
+    ].filter(Boolean).join('\n');
+
     rows.push({
       source_url: sourceUrl,
       source_post_key: sourceKey(sourceUrl),
@@ -474,9 +546,9 @@ async function parseListFallback(page: Page, listUrl: string, region: Region): P
       manager_name: null,
       manager_phone: null,
       agency_company: compact(company),
-      apartment_fee: extractApartmentFee([line, title, summary, ...lines.slice(i + 3, i + 10)].filter(Boolean).join('\n')),
-      detail_text: limitText(summary, MAX_DETAIL_TEXT_LENGTH),
-      raw_text: limitText(lines.slice(i, i + 10).join('\n'), MAX_RAW_TEXT_LENGTH),
+      apartment_fee: extractApartmentFee([line, title, summary, recruitPosition, salaryType, ...optionValues].filter(Boolean).join('\n')),
+      detail_text: limitText(detail, MAX_DETAIL_TEXT_LENGTH),
+      raw_text: limitText(lines.slice(i, cursor + 1).join('\n'), MAX_RAW_TEXT_LENGTH),
       crawled_at: new Date().toISOString(),
     });
   }
@@ -558,7 +630,8 @@ async function main() {
   }
 
   console.log(`등록일 필터: ${minPostedAt} 이후 공고만 저장합니다.`);
-  console.log('수집 방식: 상세 URL 추출이 아니라 네트워크 JSON 응답 우선 수집 방식으로 실행합니다.');
+  console.log('수집 방식: 네트워크 JSON 응답 우선 + 화면 리스트 보조 파싱 방식으로 실행합니다.');
+  console.log('안전 매핑 모드: 키가 불명확한 값은 임의 매칭하지 않고 빈값으로 저장합니다.');
   console.log(`CRM 저장 배치 크기: ${IMPORT_BATCH_SIZE}건`);
   console.log(`상세정보 최대 길이: ${MAX_DETAIL_TEXT_LENGTH}자 / raw_text 최대 길이: ${MAX_RAW_TEXT_LENGTH}자`);
 
@@ -582,7 +655,9 @@ async function main() {
         const candidates = await collectNetworkCandidatesForList(page, listUrl);
         console.log(`[${region.name}] 네트워크 JSON 후보: ${candidates.length}건`);
 
-        const jsonRows = candidates.map((candidate) => rowFromJsonCandidate(candidate, region));
+        const jsonRows = candidates
+          .map((candidate) => rowFromJsonCandidate(candidate, region))
+          .filter((row): row is CrawledRow => Boolean(row));
         regionRows.push(...jsonRows);
 
         if (jsonRows.length === 0) {
@@ -592,8 +667,10 @@ async function main() {
       }
 
       const deduped = regionRows.filter((row) => {
-        if (seen.has(row.source_url)) return false;
-        seen.add(row.source_url);
+        if (!row.site_name || !isValidSiteName(row.site_name)) return false;
+        const dedupeKey = row.source_url || `${row.region_id}:${row.site_name}:${row.posted_at || ''}`;
+        if (seen.has(dedupeKey)) return false;
+        seen.add(dedupeKey);
         return true;
       });
 
@@ -612,9 +689,7 @@ async function main() {
     }
 
     if (allRows.length === 0) {
-      throw new Error(
-        `${minPostedAt} 이후 저장 대상이 0건입니다. 네트워크 JSON 후보가 없거나 등록일 필드명이 다를 수 있습니다. 로그의 'JSON 후보 샘플 키'를 확인해야 합니다.`,
-      );
+      throw new Error(`${minPostedAt} 이후 저장 대상이 0건입니다. JSON 후보 샘플 키/값 로그를 확인해야 합니다.`);
     }
 
     console.log(`CRM 저장 요청: ${allRows.length}건`);
