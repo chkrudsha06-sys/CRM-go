@@ -466,9 +466,10 @@ function isMembershipFeeSales(row: SalesRow) {
 }
 
 function pipelineMembershipSalesAmount(row: SalesRow) {
-  // 당월 담당자별 파이프라인 현황의 매출은 통합매출관리 기준:
-  // 담당자 + 결제일 + 결제항목(분양회 회비) + 집행금액 합산입니다.
-  return Number(row.execution_amount || 0);
+  // 당월 담당자별 파이프라인 현황의 매출은 통합매출관리 화면 기준으로 맞춥니다.
+  // 담당자 + 결제일 + 결제항목(분양회 회비) + 집행금액 - 환불금액입니다.
+  // 환불 행은 execution_amount=0, refund_amount=금액 형태로 들어올 수 있으므로 마이너스 차감해야 합니다.
+  return Number(row.execution_amount || 0) - Number(row.refund_amount || 0);
 }
 
 const VIP_DB_SOURCE = "vip_activity";
