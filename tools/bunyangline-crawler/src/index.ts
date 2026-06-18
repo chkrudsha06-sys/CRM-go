@@ -178,10 +178,13 @@ function extractPageTitle(text: string) {
   return lines.find((line) => !skip.has(line) && line.length >= 5 && line.length <= 100) ?? null;
 }
 
-async function extractDetailUrls(page: Page) {
-  const out = new Set<string>();
-  const ignored = [
-    '/recruit/regional',
+function isBunyanglineRecruitDetailUrl(url: URL) {
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+
+  if (url.hostname !== 'www.bunyangline.com' && url.hostname !== 'bunyangline.com') return false;
+  if (!path.includes('/recruit')) return false;
+
+  const blockedPrefixes = [
     '/recruit/custom',
     '/recruit/map',
     '/recruit/favorite',
@@ -190,10 +193,41 @@ async function extractDetailUrls(page: Page) {
     '/register',
   ];
 
+  if (blockedPrefixes.some((prefix) => path.startsWith(prefix))) return false;
+
+  // 지역현장 목록 페이지 자체는 제외합니다.
+  // 단, 상세 URL이 /recruit/regional/2/123 처럼 regional 하위에 있을 수 있으므로
+  // /recruit/regional 전체를 무조건 제외하면 안 됩니다.
+  const regionalListOnly = /^\/recruit\/regional\/\d+$/.test(path);
+  const rootListOnly = path === '/recruit' || path === '/recruit/regional';
+  const searchKeys = Array.from(url.searchParams.keys());
+  const hasOnlyListParams = searchKeys.every((key) => ['keyword', 'page'].includes(key));
+
+  if ((regionalListOnly || rootListOnly) && hasOnlyListParams) return false;
+
+  const detailSearchKeys = ['id', 'idx', 'seq', 'no', 'post_id', 'recruit_id', 'wr_id', 'uid'];
+  if (detailSearchKeys.some((key) => url.searchParams.has(key))) return true;
+
+  if (/\/recruit\/(view|detail|read|show|info)\//i.test(path)) return true;
+  if (/\/recruit\/regional\/\d+\/\d+/i.test(path)) return true;
+  if (/\/recruit\/\d{2,}/i.test(path)) return true;
+
+  // 숫자가 포함된 recruit 하위 경로는 상세 후보로 둡니다.
+  // 예: /recruit/area/123, /recruit/regional/view/123 등
+  if (/\/recruit\//i.test(path) && /\d{2,}/.test(path)) return true;
+
+  return false;
+}
+
+async function extractDetailUrls(page: Page, regionId: string) {
+  const out = new Set<string>();
+  let rawHrefCount = 0;
+  let rawOnclickCount = 0;
+
   function add(raw: string | null) {
     if (!raw) return;
     const value = raw.trim();
-    if (!value || value.startsWith('javascript:') || value.startsWith('#')) return;
+    if (!value || value.startsWith('javascript:void') || value === 'javascript:;' || value === '#') return;
 
     let url: URL;
     try {
@@ -202,40 +236,44 @@ async function extractDetailUrls(page: Page) {
       return;
     }
 
-    const path = url.pathname;
-    if (!path.includes('/recruit')) return;
-    if (ignored.some((item) => path.includes(item))) return;
-    if (!/\d/.test(path + url.search)) return;
+    if (!isBunyanglineRecruitDetailUrl(url)) return;
 
     url.hash = '';
     out.add(url.toString());
   }
 
-  // page.evaluate를 사용하면 tsx/esbuild가 __name helper를 브라우저 컨텍스트에 섞어 넣어
-  // GitHub Actions에서 "ReferenceError: __name is not defined"가 발생할 수 있습니다.
-  // 그래서 모든 DOM 속성 읽기는 Playwright Locator API로만 처리합니다.
+  // 1) a[href]에서 상세 URL 수집
   const anchors = await page.locator('a[href]').all();
+  rawHrefCount = anchors.length;
+
   for (const anchor of anchors) {
     add(await anchor.getAttribute('href').catch(() => null));
   }
 
+  // 2) onclick 속성에서 상세 URL 또는 공고번호 수집
   const clickableNodes = await page.locator('[onclick]').all();
+  rawOnclickCount = clickableNodes.length;
+
   for (const node of clickableNodes) {
     const onclick = await node.getAttribute('onclick').catch(() => null);
     if (!onclick) continue;
 
-    const quotedMatches = onclick.match(/["']([^"']*recruit[^"']*)["']/g) || [];
+    // location.href='/recruit/...', go('/recruit/...') 같은 패턴
+    const quotedMatches = onclick.match(/["']([^"']+)["']/g) || [];
     quotedMatches.forEach((match) => add(match.slice(1, -1)));
 
-    const numberMatch =
-      onclick.match(/(?:idx|id|seq|no)[^0-9]{0,8}(\d{2,})/i) || onclick.match(/\((\d{2,})\)/);
-
-    if (numberMatch?.[1]) {
-      add(`/recruit/view/${numberMatch[1]}`);
-      add(`/recruit/detail/${numberMatch[1]}`);
-      add(`/recruit/${numberMatch[1]}`);
+    // view(123), detail(123), idx=123 같은 패턴
+    const numberMatches = Array.from(onclick.matchAll(/(?:idx|id|seq|no|uid|wr_id)?[^0-9]{0,8}(\d{2,})/gi));
+    for (const match of numberMatches) {
+      const id = match[1];
+      add(`/recruit/regional/${regionId}/${id}`);
+      add(`/recruit/detail/${id}`);
+      add(`/recruit/view/${id}`);
+      add(`/recruit/${id}`);
     }
   }
+
+  console.log(`상세 URL 추출 진단: a[href] ${rawHrefCount}개, onclick ${rawOnclickCount}개, 통과 ${out.size}개`);
 
   return Array.from(out);
 }
@@ -337,7 +375,7 @@ async function main() {
         await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
         await sleep(1000);
 
-        const urls = await extractDetailUrls(page);
+        const urls = await extractDetailUrls(page, region.id);
         urls.forEach((url) => detailUrls.add(url));
         console.log(`[${region.name}] ${pageNo}페이지 상세 URL 후보: ${urls.length}개`);
       }
