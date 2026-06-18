@@ -341,11 +341,12 @@ function timeAgo(value?: string | null) {
 }
 
 function effectiveSales(row: SalesRow) {
+  // 통합매출관리 기준과 동일하게 집행금액에서 환불금액을 그대로 차감합니다.
+  // 사이다페이 환불 데이터는 execution_amount=0, refund_amount=금액 형태로 들어오기 때문에
+  // Math.max(..., 0)으로 막으면 환불 행이 대시보드 매출에서 차감되지 않습니다.
   const execution = Number(row.execution_amount || 0);
-  const vat = Number(row.vat_amount || 0);
   const refund = Number(row.refund_amount || 0);
-  const base = vat && vat !== execution ? vat : execution;
-  return Math.max(base - refund, 0);
+  return execution - refund;
 }
 
 function refundSales(row: SalesRow) {
@@ -358,8 +359,8 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
   const item = normalizeText(row.payment_item || row.payment_type || row.item_name || row.memo);
 
   if (route.includes("연계매출") || route.includes("하이타겟")) return "linked";
-  if (channel.includes("LMS") || item.includes("LMS")) return "lms";
-  if (channel.includes("호갱노노") || item.includes("호갱노노")) return "hogang";
+  if (route.includes("LMS") || channel.includes("LMS") || item.includes("LMS")) return "lms";
+  if (route.includes("호갱노노") || channel.includes("호갱노노") || item.includes("호갱노노")) return "hogang";
   if (
     route.includes("분양회") ||
     channel.includes("효성CMS") ||
