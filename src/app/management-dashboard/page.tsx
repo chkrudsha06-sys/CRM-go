@@ -353,14 +353,14 @@ function ProgressLine({ label, value, total, tone = "info" }: { label: string; v
 
 function FlowGroupBox({ group }: { group: FlowGroup }) {
   return (
-    <div className="rounded-[13px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="w-full rounded-[13px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+      <div className="mb-2 flex items-center justify-start gap-2">
         <p className="text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{group.rank}</p>
         <Badge tone={group.rank === "본부장" ? "purple" : group.rank === "팀장" ? "info" : "cyan"}>전환율 {group.rate}%</Badge>
       </div>
       <div className="space-y-1.5">
         {group.rows.map((row) => (
-          <div key={`${group.rank}-${row.grade}`} className="flex items-center justify-between gap-2 text-[12px]">
+          <div key={`${group.rank}-${row.grade}`} className="grid grid-cols-[54px_minmax(0,1fr)] items-center gap-2 text-[12px]">
             <span style={{ color: "var(--text-subtle)" }}>{row.grade}</span>
             <span className="font-semibold tabular-nums" style={{ color: "var(--text)" }}>
               {row.total.toLocaleString()}건 <span style={{ color: "var(--text-faint)" }}>→</span> 계약전환 {row.converted.toLocaleString()}건
@@ -368,7 +368,7 @@ function FlowGroupBox({ group }: { group: FlowGroup }) {
           </div>
         ))}
       </div>
-      <div className="mt-2 flex items-center justify-between border-t pt-2 text-[12px]" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="mt-2 grid grid-cols-[54px_minmax(0,1fr)] items-center gap-2 border-t pt-2 text-[12px]" style={{ borderColor: "var(--border-subtle)" }}>
         <span style={{ color: "var(--text-muted)" }}>합계</span>
         <span className="font-semibold tabular-nums" style={{ color: "var(--text-strong)" }}>
           {group.total.toLocaleString()}건 / 계약전환 {group.converted.toLocaleString()}건
@@ -390,7 +390,7 @@ function FlowRoutePanel({ item }: { item: FlowRoute }) {
         </div>
         <Badge tone="success">합계 {routeTotal.toLocaleString()}건 · 전환 {routeConverted.toLocaleString()}건</Badge>
       </div>
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid max-w-[590px] grid-cols-1 gap-3 md:grid-cols-[minmax(250px,285px)_minmax(250px,285px)]">
         {item.groups.map((group) => <FlowGroupBox key={`${item.route}-${group.rank}`} group={group} />)}
       </div>
     </div>
@@ -578,7 +578,7 @@ export default function ManagementDashboardPage() {
             <Loader2 className="animate-spin" size={34} style={{ color: "var(--accent)" }} />
           </div>
         ) : (
-          <div className="grid gap-4 2xl:grid-cols-[300px_minmax(560px,1fr)_440px]">
+          <div className="grid gap-4 2xl:grid-cols-[280px_minmax(560px,760px)_minmax(620px,1fr)]">
             <aside className="space-y-4">
               <Panel>
                 <PanelTitle icon={Users} tone="purple" title="분양회 현황" desc="리텐션 고객 · 계약완료일 · 심사결과 기준" />
