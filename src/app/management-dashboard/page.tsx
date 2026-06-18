@@ -493,7 +493,12 @@ export default function ManagementDashboardPage() {
     const vipRouteGrades = INTAKE_ROUTES.map((route) => {
       const routeRows = vipMonthly.filter((contact) => routeMatches(contact, route));
       const counts = countByGrade(routeRows);
-      return { route, counts, total: GRADES.reduce((sum, grade) => sum + counts[grade], 0) };
+      const noGradeCount = routeRows.filter((contact) => !gradeOf(contact)).length;
+      return {
+        route,
+        counts: { ...counts, 등급없음: noGradeCount },
+        total: routeRows.length,
+      };
     });
 
     const prevSalesRows = sales.filter((row) => {
@@ -578,7 +583,7 @@ export default function ManagementDashboardPage() {
             <Loader2 className="animate-spin" size={34} style={{ color: "var(--accent)" }} />
           </div>
         ) : (
-          <div className="grid gap-4 2xl:grid-cols-[280px_minmax(560px,760px)_minmax(620px,1fr)]">
+          <div className="grid gap-4 xl:grid-cols-3">
             <aside className="space-y-4">
               <Panel>
                 <PanelTitle icon={Users} tone="purple" title="분양회 현황" desc="리텐션 고객 · 계약완료일 · 심사결과 기준" />
@@ -671,10 +676,11 @@ export default function ManagementDashboardPage() {
                             <p className="truncate text-[12px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.route}</p>
                             <span className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--text-faint)" }}>{row.total.toLocaleString()}건</span>
                           </div>
-                          <div className="grid grid-cols-3 gap-1.5 text-center text-[11px]">
-                            <div className="rounded-[8px] px-1.5 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>마스터<br /><b style={{ color: "var(--text)" }}>{row.counts.마스터}</b></div>
-                            <div className="rounded-[8px] px-1.5 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>챌린저<br /><b style={{ color: "var(--text)" }}>{row.counts.챌린저}</b></div>
-                            <div className="rounded-[8px] px-1.5 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>브론즈<br /><b style={{ color: "var(--text)" }}>{row.counts.브론즈}</b></div>
+                          <div className="grid grid-cols-4 gap-1.5 text-center text-[11px]">
+                            <div className="rounded-[8px] px-1 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>등급없음<br /><b style={{ color: "var(--text)" }}>{row.counts.등급없음}</b></div>
+                            <div className="rounded-[8px] px-1 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>마스터<br /><b style={{ color: "var(--text)" }}>{row.counts.마스터}</b></div>
+                            <div className="rounded-[8px] px-1 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>챌린저<br /><b style={{ color: "var(--text)" }}>{row.counts.챌린저}</b></div>
+                            <div className="rounded-[8px] px-1 py-1.5" style={{ background: "var(--surface-3)", color: "var(--text-subtle)" }}>브론즈<br /><b style={{ color: "var(--text)" }}>{row.counts.브론즈}</b></div>
                           </div>
                         </div>
                       ))}
