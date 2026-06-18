@@ -21,10 +21,32 @@ type IncomingBunyanglineRow = {
   crawled_at?: string | null;
 };
 
+type CleanBunyanglineRow = {
+  source: 'bunyangline';
+  source_url: string;
+  source_post_key: string;
+  region_id: string | null;
+  region_name: string;
+  site_name: string | null;
+  site_address: string | null;
+  posted_at: string | null;
+  manager_name: string | null;
+  manager_phone: string | null;
+  agency_company: string | null;
+  apartment_fee: string | null;
+  detail_text: string | null;
+  raw_text: string | null;
+  crawled_at: string;
+};
+
 type ExistingBunyanglineRow = {
   source_url: string;
   site_name: string | null;
   site_address: string | null;
+  is_new: boolean;
+};
+
+type BunyanglineRowWithNewFlag = CleanBunyanglineRow & {
   is_new: boolean;
 };
 
@@ -44,7 +66,7 @@ function getSupabaseAdmin() {
   });
 }
 
-function normalizeText(value: unknown) {
+function normalizeText(value: unknown): string | null {
   const text = String(value ?? '')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
@@ -54,14 +76,14 @@ function normalizeText(value: unknown) {
   return text || null;
 }
 
-function normalizePhone(value: unknown) {
+function normalizePhone(value: unknown): string | null {
   const digits = String(value ?? '').replace(/\D/g, '');
   if (!digits) return null;
   if (digits.length < 9 || digits.length > 11) return digits;
   return digits;
 }
 
-function normalizeDate(value: unknown) {
+function normalizeDate(value: unknown): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
 
@@ -74,16 +96,18 @@ function normalizeDate(value: unknown) {
   return `${y}-${m}-${d}`;
 }
 
-function hashSourceUrl(url: string) {
+function hashSourceUrl(url: string): string {
   let hash = 0;
+
   for (let i = 0; i < url.length; i += 1) {
     hash = (hash << 5) - hash + url.charCodeAt(i);
     hash |= 0;
   }
+
   return `bunyangline_${Math.abs(hash)}`;
 }
 
-function requireImportSecret(request: NextRequest) {
+function requireImportSecret(request: NextRequest): boolean {
   const expected = process.env.BUNYANGLINE_IMPORT_SECRET;
   const auth = request.headers.get('authorization') ?? '';
   const provided = auth.replace(/^Bearer\s+/i, '').trim() || request.headers.get('x-import-secret') || '';
@@ -95,7 +119,7 @@ function requireImportSecret(request: NextRequest) {
   return provided === expected;
 }
 
-function toCleanRow(row: IncomingBunyanglineRow) {
+function toCleanRow(row: IncomingBunyanglineRow): CleanBunyanglineRow {
   const sourceUrl = normalizeText(row.source_url);
   const regionName = normalizeText(row.region_name);
 
@@ -121,7 +145,7 @@ function toCleanRow(row: IncomingBunyanglineRow) {
   };
 }
 
-function sameValue(a: string | null | undefined, b: string | null | undefined) {
+function sameValue(a: string | null | undefined, b: string | null | undefined): boolean {
   const left = normalizeText(a)?.replace(/\s/g, '') ?? '';
   const right = normalizeText(b)?.replace(/\s/g, '') ?? '';
   return Boolean(left && right && left === right);
@@ -134,13 +158,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const incomingRows = Array.isArray(body?.rows) ? body.rows : [];
+    const incomingRows: IncomingBunyanglineRow[] = Array.isArray(body?.rows) ? body.rows : [];
 
     if (incomingRows.length === 0) {
       return NextResponse.json({ ok: false, message: '저장할 rows가 없습니다.' }, { status: 400 });
     }
 
-    const rows = incomingRows.map(toCleanRow);
+    const rows: CleanBunyanglineRow[] = incomingRows.map((row: IncomingBunyanglineRow) => toCleanRow(row));
     const supabase = getSupabaseAdmin();
 
     const { data: existingRows, error: existingError } = await supabase
@@ -149,10 +173,12 @@ export async function POST(request: NextRequest) {
 
     if (existingError) throw existingError;
 
-    const existing = (existingRows ?? []) as ExistingBunyanglineRow[];
-    const existingByUrl = new Map(existing.map((row) => [row.source_url, row]));
+    const existing: ExistingBunyanglineRow[] = (existingRows ?? []) as ExistingBunyanglineRow[];
+    const existingByUrl = new Map<string, ExistingBunyanglineRow>(
+      existing.map((row: ExistingBunyanglineRow) => [row.source_url, row])
+    );
 
-    const rowsWithNewFlag = rows.map((row) => {
+    const rowsWithNewFlag: BunyanglineRowWithNewFlag[] = rows.map((row: CleanBunyanglineRow) => {
       const existingSameUrl = existingByUrl.get(row.source_url);
 
       if (existingSameUrl) {
@@ -162,7 +188,7 @@ export async function POST(request: NextRequest) {
         };
       }
 
-      const duplicatedProject = existing.some((oldRow) => {
+      const duplicatedProject = existing.some((oldRow: ExistingBunyanglineRow) => {
         const siteDuplicated = sameValue(oldRow.site_name, row.site_name);
         const addressDuplicated = sameValue(oldRow.site_address, row.site_address);
         return siteDuplicated || addressDuplicated;
