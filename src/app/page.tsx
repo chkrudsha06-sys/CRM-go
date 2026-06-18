@@ -754,6 +754,7 @@ export default function HomePage() {
     goal_consultant_db: number; result_consultant_db: number;
     goal_second_touch: number; result_second_touch: number;
     goal_work_items: { id: string; text: string; done: boolean }[] | null;
+    is_outside_meeting?: boolean | null;
   };
   const [dailyGoal, setDailyGoal] = useState<DailyGoalRow | null>(null);
   const [allDailyGoals, setAllDailyGoals] = useState<(DailyGoalRow & { owner_name: string })[]>([]);
@@ -2000,8 +2001,9 @@ export default function HomePage() {
                           {EXECUTION_PART_NAMES.map((memberName) => {
                             const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
                             const isExpanded = expandedDailyMember === memberName;
-                            const totalGoal = memberGoal ? (memberGoal.goal_new_tm + memberGoal.goal_coldtalk + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
-                            const totalResult = memberGoal ? (memberGoal.result_new_tm + memberGoal.result_coldtalk + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
+                            const isOutsideMeeting = Boolean(memberGoal?.is_outside_meeting);
+                            const totalGoal = memberGoal && !isOutsideMeeting ? (memberGoal.goal_new_tm + memberGoal.goal_coldtalk + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
+                            const totalResult = memberGoal && !isOutsideMeeting ? (memberGoal.result_new_tm + memberGoal.result_coldtalk + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
                             const totalRate = totalGoal > 0 ? percent(totalResult, totalGoal) : 0;
                             return (
                               <button
@@ -2030,13 +2032,16 @@ export default function HomePage() {
                                   <>
                                     <div className="flex items-center justify-between gap-1 mb-1">
                                       <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>전체 달성률</p>
-                                      <span className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: totalRate >= 100 ? "var(--success-bg)" : totalRate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: totalRate >= 100 ? "var(--success-text)" : totalRate >= 50 ? "var(--warning-text)" : "var(--text-subtle)" }}>
-                                        {totalRate}%
+                                      <span className="rounded-full px-1.5 py-0.5 text-[11px] font-semibold" style={{ background: isOutsideMeeting ? "var(--warning-bg)" : totalRate >= 100 ? "var(--success-bg)" : totalRate >= 50 ? "var(--warning-bg)" : "var(--surface-3)", color: isOutsideMeeting ? "var(--warning-text)" : totalRate >= 100 ? "var(--success-text)" : totalRate >= 50 ? "var(--warning-text)" : "var(--text-subtle)", border: isOutsideMeeting ? "1px solid var(--warning-border)" : "1px solid transparent" }}>
+                                        {isOutsideMeeting ? "외근" : `${totalRate}%`}
                                       </span>
                                     </div>
                                     <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, totalRate)}%`, background: totalRate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
+                                      <div className="h-full rounded-full transition-all" style={{ width: isOutsideMeeting ? "100%" : `${Math.min(100, totalRate)}%`, background: isOutsideMeeting ? "var(--warning-border)" : totalRate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
                                     </div>
+                                    {isOutsideMeeting && (
+                                      <p className="mt-1.5 text-[11px] font-medium" style={{ color: "var(--warning-text)" }}>외근(미팅) 체크 · 당일 목표 집계 제외</p>
+                                    )}
                                   </>
                                 )}
                               </button>
@@ -2057,6 +2062,11 @@ export default function HomePage() {
                               <p className="text-[13px] font-semibold mb-3" style={{ color: "var(--accent-text)" }}>{expandedDailyMember} 세부내역</p>
                               {!memberGoal ? (
                                 <p className="text-[13px]" style={{ color: "var(--text-faint)" }}>오늘 활동목표 미입력</p>
+                              ) : memberGoal.is_outside_meeting ? (
+                                <div className="rounded-[12px] border p-4" style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)", color: "var(--warning-text)" }}>
+                                  <p className="text-[13px] font-semibold">외근(미팅) 체크</p>
+                                  <p className="mt-1 text-[12px] font-medium">해당 담당자는 오늘 활동목표 집계 대상에서 제외됩니다.</p>
+                                </div>
                               ) : (
                                 <>
                                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -2114,6 +2124,13 @@ export default function HomePage() {
                   ) : (
                     !dailyGoal ? (
                       <EmptyBlock title="오늘 등록된 활동목표가 없습니다" desc="일별활동기록에서 당일 목표를 입력하면 여기에 실시간 반영됩니다." />
+                    ) : dailyGoal.is_outside_meeting ? (
+                      <div className="p-4">
+                        <div className="rounded-[14px] border p-4" style={{ background: "var(--warning-bg)", borderColor: "var(--warning-border)", color: "var(--warning-text)" }}>
+                          <p className="text-[15px] font-semibold">오늘은 외근(미팅)으로 체크되어 있습니다.</p>
+                          <p className="mt-1 text-[13px] font-medium">당일 활동목표 달성률은 외근으로 표시되며 목표 집계에서 제외됩니다.</p>
+                        </div>
+                      </div>
                     ) : (
                       <div className="p-4">
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
