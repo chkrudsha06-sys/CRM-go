@@ -19,6 +19,7 @@ const MOBILE_TITLES: Record<string, string> = {
   "/vip-members": "분양회 입회자",
   "/wanpan-truck": "완판트럭",
   "/calendar": "운영캘린더",
+  "/bunyangline-data": "분양라인데이터",
   "/member-manage": "분양회 회원관리",
   "/sales": "통합매출관리",
   "/rewards": "리워드 관리",
