@@ -15,6 +15,14 @@ type DriveFile = {
   size?: string;
 };
 
+type RecordingFileMeta = {
+  phone: string | null;
+  customerName: string | null;
+  recordDate: string | null;
+  recordTime: string | null;
+  recordedAt: string | null;
+};
+
 type ManagerFolder = {
   manager: string;
   envKey: string;
@@ -86,10 +94,30 @@ function normalizeGeminiMimeType(mimeType: string) {
 }
 
 
+
+function getKstTodayStart() {
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return new Date(
+    Date.UTC(
+      kstNow.getUTCFullYear(),
+      kstNow.getUTCMonth(),
+      kstNow.getUTCDate(),
+      -9,
+      0,
+      0,
+      0
+    )
+  );
+}
+
 function getSyncStartAt() {
   const raw = process.env.CALL_RECORDING_SYNC_START_AT;
 
-  if (!raw) return null;
+  if (!raw) {
+    // 기본값: 오늘 00:00 KST 이후 구글드라이브에 업로드된 녹취만 처리
+    // 기존 구글드라이브에 오래전부터 쌓여 있던 녹취가 한 번에 전부 처리되는 것을 방지합니다.
+    return getKstTodayStart();
+  }
 
   const parsed = new Date(raw);
 
@@ -105,6 +133,8 @@ function getSyncStartAt() {
 function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
   if (!syncStartAt) return true;
 
+  // "녹음 기록일"이 아니라 "구글드라이브 업로드일" 기준입니다.
+  // 파일명은 260211처럼 과거 통화일이어도, 오늘 드라이브에 업로드되면 처리 대상입니다.
   const baseTime = file.createdTime || file.modifiedTime;
   if (!baseTime) return false;
 
@@ -114,12 +144,135 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
   return fileTime.getTime() >= syncStartAt.getTime();
 }
 
+function parseRecordingMetaFromFileName(fileName: string): RecordingFileMeta {
+  const nameOnly = fileName.replace(/\.[^/.]+$/, "");
+  const parts = nameOnly
+    .split("_")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const firstPartDigits = normalizePhone(parts[0] || "");
+  const phone =
+    firstPartDigits.length >= 8 && firstPartDigits.length <= 11
+      ? firstPartDigits
+      : null;
+
+  const customerName = parts[1] || null;
+
+  let rawDate: string | null = null;
+  let rawTime: string | null = null;
+
+  // 파일명 규칙:
+  // 01055555555_강연우실장님_260211_145901
+  // 연락처_고객명_YYMMDD_HHMMSS
+  for (let index = 2; index < parts.length; index += 1) {
+    const value = parts[index];
+
+    if (!rawDate && (/^\d{6}$/.test(value) || /^20\d{6}$/.test(value))) {
+      rawDate = value;
+      const next = parts[index + 1];
+
+      if (next && /^\d{4,6}$/.test(next)) {
+        rawTime = next.padEnd(6, "0").slice(0, 6);
+      }
+      break;
+    }
+  }
+
+  if (!rawDate) {
+    const fallback = nameOnly.match(/(?:^|_)(20\d{6}|\d{6})(?:_|$)/);
+    if (fallback) rawDate = fallback[1];
+  }
+
+  if (!rawTime) {
+    const fallbackTime = nameOnly.match(/(?:^|_)(\d{6})(?:_|$)/g);
+    const candidates = (fallbackTime || [])
+      .map((value) => value.replace(/_/g, ""))
+      .filter((value) => value !== rawDate);
+
+    rawTime = candidates.find((value) => {
+      const hour = Number(value.slice(0, 2));
+      const minute = Number(value.slice(2, 4));
+      const second = Number(value.slice(4, 6));
+      return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
+    }) || null;
+  }
+
+  let recordDate: string | null = null;
+  if (rawDate) {
+    const normalizedDate =
+      rawDate.length === 6
+        ? `20${rawDate}`
+        : rawDate;
+
+    const year = Number(normalizedDate.slice(0, 4));
+    const month = Number(normalizedDate.slice(4, 6));
+    const day = Number(normalizedDate.slice(6, 8));
+
+    if (
+      year >= 2020 &&
+      year <= 2099 &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31
+    ) {
+      recordDate = `${normalizedDate.slice(0, 4)}-${normalizedDate.slice(4, 6)}-${normalizedDate.slice(6, 8)}`;
+    }
+  }
+
+  let recordTime: string | null = null;
+  if (rawTime && /^\d{6}$/.test(rawTime)) {
+    const hour = Number(rawTime.slice(0, 2));
+    const minute = Number(rawTime.slice(2, 4));
+    const second = Number(rawTime.slice(4, 6));
+
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
+      recordTime = `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}:${rawTime.slice(4, 6)}`;
+    }
+  }
+
+  const recordedAt =
+    recordDate && recordTime
+      ? `${recordDate}T${recordTime}+09:00`
+      : recordDate
+        ? `${recordDate}T00:00:00+09:00`
+        : null;
+
+  return {
+    phone,
+    customerName,
+    recordDate,
+    recordTime,
+    recordedAt,
+  };
+}
+
+function getRecordingSortTime(file: DriveFile & { recordingMeta?: RecordingFileMeta }) {
+  const candidates = [
+    file.recordingMeta?.recordedAt,
+    file.createdTime,
+    file.modifiedTime,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+
+  return 0;
+}
+
 function extractPhoneFromFileName(fileName: string) {
+  const meta = parseRecordingMetaFromFileName(fileName);
+  if (meta.phone) return meta.phone;
+
   const nameOnly = fileName.replace(/\.[^/.]+$/, "");
   const candidates: string[] = [];
 
   // 1순위: 파일명 맨 앞 구간을 연락처로 인식
-  // 예: 32563576458_주해랑팀장님_20260604.m4a
+  // 예: 01055555555_강연우실장님_260211_145901.m4a
   // 예: 53252347456_김중석본부장_260605.m4a
   const firstPart = nameOnly.split("_")[0] || "";
   const firstPartDigits = normalizePhone(firstPart);
@@ -164,6 +317,9 @@ function extractPhoneFromFileName(fileName: string) {
 }
 
 function extractDateFromFileName(fileName: string) {
+  const meta = parseRecordingMetaFromFileName(fileName);
+  if (meta.recordDate) return meta.recordDate;
+
   const match = fileName.match(/20\d{6}/);
 
   if (!match) {
@@ -242,35 +398,47 @@ async function getGoogleAccessToken() {
 }
 
 async function listDriveFiles(accessToken: string, folderId: string) {
-  const params = new URLSearchParams({
-    q: `'${folderId}' in parents and trashed = false`,
-    pageSize: "20",
-    orderBy: "createdTime desc",
-    fields:
-      "files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",
-    includeItemsFromAllDrives: "true",
-    supportsAllDrives: "true",
-  });
+  const allFiles: DriveFile[] = [];
+  let pageToken: string | undefined;
 
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
+  do {
+    const params = new URLSearchParams({
+      q: `'${folderId}' in parents and trashed = false`,
+      pageSize: "1000",
+      orderBy: "createdTime asc",
+      fields:
+        "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",
+      includeItemsFromAllDrives: "true",
+      supportsAllDrives: "true",
+    });
+
+    if (pageToken) {
+      params.set("pageToken", pageToken);
     }
-  );
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(
-      `Google Drive files.list failed: ${JSON.stringify(data, null, 2)}`
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      }
     );
-  }
 
-  return (data.files || []) as DriveFile[];
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        `Google Drive files.list failed: ${JSON.stringify(data, null, 2)}`
+      );
+    }
+
+    allFiles.push(...((data.files || []) as DriveFile[]));
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+
+  return allFiles;
 }
 
 async function downloadDriveFileAsBase64(accessToken: string, fileId: string) {
@@ -920,6 +1088,7 @@ async function saveAiSummaryToContactNote(params: {
   driveFileUrl?: string;
   managerName: string;
   extractedPhone: string | null;
+  recordingMeta?: RecordingFileMeta | null;
 }) {
   if (!params.contactId) {
     return {
@@ -967,6 +1136,9 @@ ${params.summary}
 [AI 처리 정보]
 담당자: ${params.managerName}
 추출 연락처: ${params.extractedPhone || "없음"}
+파일명 기준 고객명: ${params.recordingMeta?.customerName || "없음"}
+기록일자: ${params.recordingMeta?.recordDate || params.noteDate}
+통화시간: ${params.recordingMeta?.recordTime || "파일명에서 추출 실패"}
 녹음파일명: ${params.driveFileName}
 녹음파일 링크: ${params.driveFileUrl || "없음"}
 ${duplicateMarker}`;
@@ -999,7 +1171,11 @@ ${duplicateMarker}`;
 
 async function processAudioFile(params: {
   accessToken: string;
-  file: DriveFile & { manager: string; extractedPhone: string | null };
+  file: DriveFile & {
+    manager: string;
+    extractedPhone: string | null;
+    recordingMeta?: RecordingFileMeta;
+  };
 }) {
   const { accessToken, file } = params;
   const existingLog = await getExistingLog(file.id);
@@ -1088,6 +1264,7 @@ async function processAudioFile(params: {
     driveFileUrl: file.webViewLink,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
+    recordingMeta: file.recordingMeta || parseRecordingMetaFromFileName(file.name),
   });
 
   const finalStatus =
@@ -1188,11 +1365,16 @@ export async function GET(request: NextRequest) {
           envKey: folder.envKey,
           ok: true,
           fileCount: files.length,
-          files: files.map((file) => ({
-            ...file,
-            manager: folder.manager,
-            extractedPhone: extractPhoneFromFileName(file.name),
-          })),
+          files: files.map((file) => {
+            const recordingMeta = parseRecordingMetaFromFileName(file.name);
+
+            return {
+              ...file,
+              manager: folder.manager,
+              extractedPhone: recordingMeta.phone || extractPhoneFromFileName(file.name),
+              recordingMeta,
+            };
+          }),
         };
       })
     );
@@ -1202,7 +1384,15 @@ export async function GET(request: NextRequest) {
     const audioFiles = folderResults
       .flatMap((result) => result.files)
       .filter((file) => file.mimeType?.startsWith("audio/"))
-      .filter((file) => isFileAfterSyncStart(file, syncStartAt));
+      .filter((file) => isFileAfterSyncStart(file, syncStartAt))
+      .sort((a, b) => {
+        const recordSort = getRecordingSortTime(a) - getRecordingSortTime(b);
+        if (recordSort !== 0) return recordSort;
+
+        const createdA = new Date(a.createdTime || a.modifiedTime || 0).getTime();
+        const createdB = new Date(b.createdTime || b.modifiedTime || 0).getTime();
+        return createdA - createdB;
+      });
 
     const skippedOldFileCount = folderResults
       .flatMap((result) => result.files)
@@ -1280,7 +1470,11 @@ export async function GET(request: NextRequest) {
           id: file.id,
           name: file.name,
           mimeType: file.mimeType,
+          createdTime: file.createdTime,
           extractedPhone: file.extractedPhone,
+          recordDate: file.recordingMeta?.recordDate || null,
+          recordTime: file.recordingMeta?.recordTime || null,
+          recordedAt: file.recordingMeta?.recordedAt || null,
         })),
       })),
     });
