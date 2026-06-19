@@ -16,7 +16,6 @@ const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
 
 type AutoResult = {
   new_tm: number;
-  coldtalk: number;
   consultant_db: number;
   second_touch: number;
   meeting_confirmed: number;
@@ -24,7 +23,6 @@ type AutoResult = {
 
 const EMPTY_AUTO_RESULT: AutoResult = {
   new_tm: 0,
-  coldtalk: 0,
   consultant_db: 0,
   second_touch: 0,
   meeting_confirmed: 0,
@@ -133,11 +131,11 @@ function parseWorkItems(value: any): { total: number; done: number } {
 function hasAnyAutoResult(result: AutoResult): boolean {
   return (
     result.new_tm > 0 ||
-    result.coldtalk > 0 ||
     result.consultant_db > 0 ||
     result.second_touch > 0 ||
     result.meeting_confirmed > 0
   );
+  
 }
 
 function isGoalAchieved(row: any, live: AutoResult): boolean {
@@ -145,7 +143,6 @@ function isGoalAchieved(row: any, live: AutoResult): boolean {
 
   const checks = [
     { goal: Number(row.goal_new_tm || 0), result: live.new_tm },
-    { goal: Number(row.goal_coldtalk || 0), result: live.coldtalk },
     { goal: Number(row.goal_consultant_db || 0), result: live.consultant_db },
     { goal: Number(row.goal_second_touch || 0), result: live.second_touch },
   ];
@@ -168,7 +165,7 @@ function buildMemberLines(
 
     return [
       `■ ${member.name} ${member.title} — ⚠️ 목표 미등록`,
-      `  실시간 자동집계 TM ${live.new_tm}건 · 콜드톡 ${live.coldtalk}건 · 브론즈DB ${live.consultant_db}개 · 1%DB ${live.second_touch}개`,
+      `  실시간 자동집계 TM ${live.new_tm}건 · 브론즈DB ${live.consultant_db}개 · 1%DB ${live.second_touch}개`,
     ].join("\n");
   }
 
@@ -180,7 +177,6 @@ function buildMemberLines(
   const lines = [
     `■ ${member.name} ${member.title}`,
     `  TM : ${Number(row.goal_new_tm || 0)}/${live.new_tm}건 (${pct(live.new_tm, Number(row.goal_new_tm || 0))})`,
-    `  콜드톡 : ${Number(row.goal_coldtalk || 0)}/${live.coldtalk}건 (${pct(live.coldtalk, Number(row.goal_coldtalk || 0))})`,
     `  브론즈DB수취 : ${Number(row.goal_consultant_db || 0)}/${live.consultant_db}개 (${pct(live.consultant_db, Number(row.goal_consultant_db || 0))})`,
     `  1%DB수취 : ${Number(row.goal_second_touch || 0)}/${live.second_touch}개 (${pct(live.second_touch, Number(row.goal_second_touch || 0))})`,
   ];
@@ -227,10 +223,6 @@ async function loadRealtimeAutoResults(
 
     if (activityType === "TM") {
       resultMap[owner].new_tm += 1;
-    }
-
-    if (activityType === "콜드톡") {
-      resultMap[owner].coldtalk += 1;
     }
 
     if (source === "vip_activity" && grade === "브론즈") {
