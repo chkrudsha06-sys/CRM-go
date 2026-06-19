@@ -1306,35 +1306,46 @@ export default function DailyActivityPage() {
     isResultEntered(row),
   ).length;
 
-  // 상단 카드: 관리자는 4명 합산, 실행파트는 본인(myRow)만 표시
+  // 상단 카드: 관리자는 4명 합산, 실행파트는 본인 현재 화면의 자동집계 결과를 실시간 반영
   const isAdminView = access.canViewAll && !currentMember;
   const cardRows: Array<{ row?: DailyActivityRow }> = isAdminView
     ? dailyMemberRows
     : [{ row: myRow }];
 
+  const personalLiveGoal = isOutsideMeeting ? { ...EMPTY_VALUES } : goal;
+  const personalLiveResult = isOutsideMeeting ? { ...EMPTY_VALUES } : result;
+  const personalLiveWorkItems = isOutsideMeeting ? [] : activeWorkItems(workItems);
+
   const totalGoalTm = isAdminView
     ? dailyMemberRows.reduce((sum, item) => sum + totalTmGoal(item.row), 0)
-    : totalTmGoal(myRow);
+    : personalLiveGoal.new_tm;
   const totalResultTm = isAdminView
     ? dailyMemberRows.reduce((sum, item) => sum + totalTmResult(item.row), 0)
-    : totalTmResult(myRow);
+    : personalLiveResult.new_tm;
   const totalGoalMeeting = cardRows.reduce(
     (sum, item) => sum + goalValue(item.row, "meeting_confirmed"), 0,
   );
   const totalResultMeeting = cardRows.reduce(
     (sum, item) => sum + resultValue(item.row, "meeting_confirmed"), 0,
   );
-  const totalGoalBronzeDb = totalFieldGoal(cardRows, "consultant_db");
-  const totalResultBronzeDb = totalFieldResult(cardRows, "consultant_db");
-  const totalGoalOnePercentDb = totalFieldGoal(cardRows, "second_touch");
-  const totalResultOnePercentDb = totalFieldResult(cardRows, "second_touch");
-  // 특발성 목표: 본인 workItems 텍스트 입력 수 기준
+  const totalGoalBronzeDb = isAdminView
+    ? totalFieldGoal(cardRows, "consultant_db")
+    : personalLiveGoal.consultant_db;
+  const totalResultBronzeDb = isAdminView
+    ? totalFieldResult(cardRows, "consultant_db")
+    : personalLiveResult.consultant_db;
+  const totalGoalOnePercentDb = isAdminView
+    ? totalFieldGoal(cardRows, "second_touch")
+    : personalLiveGoal.second_touch;
+  const totalResultOnePercentDb = isAdminView
+    ? totalFieldResult(cardRows, "second_touch")
+    : personalLiveResult.second_touch;
   const totalGoalSpecial = isAdminView
     ? totalSpecialGoal(dailyMemberRows)
-    : (myRow?.goal_work_items || []).filter((item: any) => String(item.text || "").trim().length > 0).length;
+    : personalLiveWorkItems.length;
   const totalResultSpecial = isAdminView
     ? totalSpecialResult(dailyMemberRows)
-    : (myRow?.goal_work_items || []).filter((item: any) => item.done).length;
+    : personalLiveWorkItems.filter((item) => item.done).length;
 
   return (
     <div className="premium-page h-full overflow-y-auto">
