@@ -44,7 +44,6 @@ const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 
 const ACTIVITY_FIELDS = [
   { key: "new_tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
-  { key: "coldtalk", label: "당일 콜드톡", goalLabel: "당일 콜드톡 목표", resultLabel: "당일 콜드톡 달성", unit: "건" },
   { key: "consultant_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
   { key: "second_touch", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
 ] as const;
@@ -116,7 +115,6 @@ type DailyActivityRow = {
 
 const EMPTY_VALUES: FormValues = {
   new_tm: 0,
-  coldtalk: 0,
   consultant_db: 0,
   second_touch: 0,
   meeting_confirmed: 0,
@@ -186,7 +184,6 @@ async function loadAutoResultCounts(workDate: string, ownerName?: string): Promi
 
   return {
     new_tm: rows.filter((row) => String(row.activity_type || "").trim() === "TM").length,
-    coldtalk: rows.filter((row) => String(row.activity_type || "").trim() === "콜드톡").length,
     consultant_db: rows.filter(
       (row) =>
         String(row.crm_db_source || "").trim() === "vip_activity" &&
@@ -325,9 +322,8 @@ function buildGoalReport(dateText: string, rows: DailyActivityRow[]) {
     const row = rowForMember(rows, member.name);
     lines.push(`@${member.name}`);
     lines.push(`1. 당일 TM 목표 : ${goalValue(row, "new_tm")}건`);
-    lines.push(`2. 당일 콜드톡 목표 : ${goalValue(row, "coldtalk")}건`);
-    lines.push(`3. 브론즈 DB 확보 목표 : ${goalValue(row, "consultant_db")}개`);
-    lines.push(`4. 1% DB 확보 목표 : ${goalValue(row, "second_touch")}개`);
+    lines.push(`2. 브론즈 DB 확보 목표 : ${goalValue(row, "consultant_db")}개`);
+    lines.push(`3. 1% DB 확보 목표 : ${goalValue(row, "second_touch")}개`);
     lines.push("");
   });
 
@@ -377,13 +373,10 @@ function buildResultReport(dateText: string, rows: DailyActivityRow[]) {
       `1. 당일 TM : ${goalValue(row, "new_tm")}건(목표) / ${resultValue(row, "new_tm")}건(달성) / 달성율 ${percent(resultValue(row, "new_tm"), goalValue(row, "new_tm"))}%`,
     );
     lines.push(
-      `2. 당일 콜드톡 : ${goalValue(row, "coldtalk")}건(목표) / ${resultValue(row, "coldtalk")}건(달성) / 달성율 ${percent(resultValue(row, "coldtalk"), goalValue(row, "coldtalk"))}%`,
+      `2. 브론즈 DB 확보 : ${goalValue(row, "consultant_db")}개(목표) / ${resultValue(row, "consultant_db")}개(달성) / 달성율 ${percent(resultValue(row, "consultant_db"), goalValue(row, "consultant_db"))}%`,
     );
     lines.push(
-      `3. 브론즈 DB 확보 : ${goalValue(row, "consultant_db")}개(목표) / ${resultValue(row, "consultant_db")}개(달성) / 달성율 ${percent(resultValue(row, "consultant_db"), goalValue(row, "consultant_db"))}%`,
-    );
-    lines.push(
-      `4. 1% DB 확보 : ${goalValue(row, "second_touch")}개(목표) / ${resultValue(row, "second_touch")}개(달성) / 달성율 ${percent(resultValue(row, "second_touch"), goalValue(row, "second_touch"))}%`,
+      `3. 1% DB 확보 : ${goalValue(row, "second_touch")}개(목표) / ${resultValue(row, "second_touch")}개(달성) / 달성율 ${percent(resultValue(row, "second_touch"), goalValue(row, "second_touch"))}%`,
     );
     lines.push("──────────");
     lines.push(
@@ -932,7 +925,7 @@ function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValu
       <div className="mb-3">
         <p className="crm-section-title">자동 집계 활동결과</p>
         <p className="crm-tiny mt-1">
-          TM·콜드톡·DB 확보 달성값은 관련 데이터 입력 시 자동으로 집계됩니다.
+          TM·DB 확보 달성값은 관련 데이터 입력 시 자동으로 집계됩니다.
         </p>
       </div>
       <div className="grid flex-1 content-start gap-2 sm:grid-cols-2">
@@ -1040,7 +1033,6 @@ export default function DailyActivityPage() {
       setIsOutsideMeeting(row.is_outside_meeting);
       setGoal({
         new_tm: row.goal_new_tm || 0,
-        coldtalk: row.goal_coldtalk || 0,
         consultant_db: row.goal_consultant_db || 0,
         second_touch: row.goal_second_touch || 0,
         meeting_confirmed: 0,
@@ -1135,7 +1127,7 @@ export default function DailyActivityPage() {
       goal_second_touch: isOutsideMeeting ? 0 : goal.second_touch,
       goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
       goal_manage_tm: 0,
-      goal_coldtalk: isOutsideMeeting ? 0 : goal.coldtalk,
+      goal_coldtalk: 0,
       goal_media_mix: 0,
       goal_meeting_confirmed: 0,
       goal_work_items: isOutsideMeeting ? [] : workItems,
@@ -1143,7 +1135,7 @@ export default function DailyActivityPage() {
       result_second_touch: isOutsideMeeting ? 0 : autoResult.second_touch,
       result_new_tm: isOutsideMeeting ? 0 : autoResult.new_tm,
       result_manage_tm: 0,
-      result_coldtalk: isOutsideMeeting ? 0 : autoResult.coldtalk,
+      result_coldtalk: 0,
       result_media_mix: 0,
       result_meeting_confirmed: 0,
     };
@@ -1169,7 +1161,7 @@ export default function DailyActivityPage() {
           owner_title: currentMember.title,
           work_date: date,
           goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
-          goal_coldtalk: isOutsideMeeting ? 0 : goal.coldtalk,
+          goal_coldtalk: 0,
           goal_consultant_db: isOutsideMeeting ? 0 : goal.consultant_db,
           goal_second_touch: isOutsideMeeting ? 0 : goal.second_touch,
           is_outside_meeting: isOutsideMeeting,
@@ -1192,14 +1184,12 @@ export default function DailyActivityPage() {
     setIsOutsideMeeting(row.is_outside_meeting);
     setGoal({
       new_tm: row.goal_new_tm || 0,
-      coldtalk: row.goal_coldtalk || 0,
       consultant_db: row.goal_consultant_db || 0,
       second_touch: row.goal_second_touch || 0,
       meeting_confirmed: 0,
     });
     setResult({
       new_tm: row.result_new_tm || 0,
-      coldtalk: row.result_coldtalk || 0,
       consultant_db: row.result_consultant_db || 0,
       second_touch: row.result_second_touch || 0,
       meeting_confirmed: 0,
@@ -1334,8 +1324,6 @@ export default function DailyActivityPage() {
   const totalResultMeeting = cardRows.reduce(
     (sum, item) => sum + resultValue(item.row, "meeting_confirmed"), 0,
   );
-  const totalGoalColdtalk = totalFieldGoal(cardRows, "coldtalk");
-  const totalResultColdtalk = totalFieldResult(cardRows, "coldtalk");
   const totalGoalBronzeDb = totalFieldGoal(cardRows, "consultant_db");
   const totalResultBronzeDb = totalFieldResult(cardRows, "consultant_db");
   const totalGoalOnePercentDb = totalFieldGoal(cardRows, "second_touch");
@@ -1400,20 +1388,13 @@ export default function DailyActivityPage() {
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-5">
+        <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
           <StatCard
             icon={Clock3}
             label="당일 TM 목표 달성율"
             value={`${totalGoalTm}/${totalResultTm}`}
             sub={`목표/달성 · 달성율 ${percent(totalResultTm, totalGoalTm)}%`}
             tone="warning"
-          />
-          <StatCard
-            icon={CheckCircle2}
-            label="당일 콜드톡 목표 달성율"
-            value={`${totalGoalColdtalk}/${totalResultColdtalk}`}
-            sub={`목표/달성 · 달성율 ${percent(totalResultColdtalk, totalGoalColdtalk)}%`}
-            tone="success"
           />
           <StatCard
             icon={Users}
@@ -1668,12 +1649,11 @@ export default function DailyActivityPage() {
                 </div>
               </div>
               <div className="max-h-[560px] overflow-auto">
-                <table className="crm-table min-w-[1240px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
+                <table className="crm-table min-w-[1120px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
                     <col className="w-[10%]" />
                     <col className="w-[13%]" />
                     <col className="w-[9%]" />
-                    <col className="w-[11%]" />
                     <col className="w-[11%]" />
                     <col className="w-[12%]" />
                     <col className="w-[11%]" />
@@ -1687,7 +1667,6 @@ export default function DailyActivityPage() {
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>담당자</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>상태</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>TM 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>콜드톡 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>브론즈DB 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>1%DB 목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>특발성활동목표 목표/달성</th>
@@ -1698,7 +1677,7 @@ export default function DailyActivityPage() {
                   <tbody>
                     {visibleDetailRows.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="text-center align-middle">
+                        <td colSpan={9} className="text-center align-middle">
                           기록이 없습니다.
                         </td>
                       </tr>
@@ -1738,9 +1717,6 @@ export default function DailyActivityPage() {
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
-                          </td>
-                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "coldtalk").toLocaleString()} / {resultValue(row, "coldtalk").toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
