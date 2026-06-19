@@ -14,6 +14,7 @@ type BunyanglineRow = {
   manager_phone: string | null;
   agency_company: string | null;
   apartment_fee: string | null;
+  assigned_to?: string | null;
   is_new: boolean;
   detail_text: string | null;
   source_url: string | null;
@@ -39,6 +40,8 @@ const REGIONS = [
   '강원도',
   '제주도',
 ];
+
+const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -97,6 +100,7 @@ export default function BunyanglineDataPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [openedId, setOpenedId] = useState<string | null>(null);
+  const [assignSavingId, setAssignSavingId] = useState<string | null>(null);
 
   const newCount = useMemo(() => rows.filter((row) => row.is_new).length, [rows]);
   const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '' || onlyNew;
@@ -141,6 +145,42 @@ export default function BunyanglineDataPage() {
     setOnlyNew(false);
     setOpenedId(null);
     void fetchRows('모든지역', '', false);
+  }
+
+  async function updateAssignee(rowId: string, assignedTo: string) {
+    const previousRows = rows;
+    setAssignSavingId(rowId);
+    setErrorMessage('');
+
+    setRows((currentRows) =>
+      currentRows.map((row) => (row.id === rowId ? { ...row, assigned_to: assignedTo || null } : row))
+    );
+
+    try {
+      const response = await fetch('/api/bunyangline-data/assign', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify({
+          id: rowId,
+          assigned_to: assignedTo || null,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || result?.message || '담당자 저장 실패');
+      }
+    } catch (error) {
+      setRows(previousRows);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+      alert(`담당자 저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAssignSavingId(null);
+    }
   }
 
   useEffect(() => {
@@ -197,7 +237,7 @@ export default function BunyanglineDataPage() {
             onKeyDown={(event) => {
               if (event.key === 'Enter') loadRows();
             }}
-            placeholder="현장명 / 담당자 / 연락처 / 대행사 검색"
+            placeholder="현장명 / 담당자 / 연락처 / 대행사 / 배정담당자 검색"
             style={inputStyle}
           />
 
@@ -228,10 +268,10 @@ export default function BunyanglineDataPage() {
 
       <section style={tablePanelStyle}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1280px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1400px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
-                {['지역', '현장명', '등록일', '담당자이름', '담당자연락처', '대행사', '수수료', '신규여부', '원본공고', '상세정보'].map((header) => (
+                {['지역', '현장명', '등록일', '담당자이름', '담당자연락처', '대행사', '수수료', '신규여부', '원본공고', '담당자', '상세정보'].map((header) => (
                   <th key={header} style={thStyle}>
                     {header}
                   </th>
@@ -241,7 +281,7 @@ export default function BunyanglineDataPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: '42px 12px', textAlign: 'center', color: 'var(--text-subtle)', fontWeight: 700 }}>
+                  <td colSpan={11} style={{ padding: '42px 12px', textAlign: 'center', color: 'var(--text-subtle)', fontWeight: 700 }}>
                     {loading ? '데이터를 불러오는 중입니다.' : '등록된 분양라인데이터가 없습니다.'}
                   </td>
                 </tr>
@@ -253,7 +293,9 @@ export default function BunyanglineDataPage() {
                       key={row.id}
                       row={row}
                       opened={opened}
+                      assignSaving={assignSavingId === row.id}
                       onToggle={() => setOpenedId(opened ? null : row.id)}
+                      onAssigneeChange={(value) => void updateAssignee(row.id, value)}
                     />
                   );
                 })
@@ -275,7 +317,19 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: boolean; onToggle: () => void }) {
+function FragmentRow({
+  row,
+  opened,
+  assignSaving,
+  onToggle,
+  onAssigneeChange,
+}: {
+  row: BunyanglineRow;
+  opened: boolean;
+  assignSaving: boolean;
+  onToggle: () => void;
+  onAssigneeChange: (value: string) => void;
+}) {
   return (
     <>
       <tr style={{ borderBottom: opened ? '0' : '1px solid var(--border-subtle)' }}>
@@ -301,6 +355,21 @@ function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: b
           )}
         </td>
         <td style={tdCenter}>
+          <select
+            value={row.assigned_to || ''}
+            onChange={(event) => onAssigneeChange(event.target.value)}
+            disabled={assignSaving}
+            style={assigneeSelectStyle(assignSaving)}
+          >
+            <option value="">담당자 선택</option>
+            {ASSIGNEES.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td style={tdCenter}>
           <button type="button" onClick={onToggle} style={smallButtonStyle}>
             {opened ? '접기' : '보기'}
           </button>
@@ -309,7 +378,7 @@ function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: b
 
       {opened ? (
         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <td colSpan={10} style={{ padding: '0 16px 18px' }}>
+          <td colSpan={11} style={{ padding: '0 16px 18px' }}>
             <div style={detailBoxStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
                 <strong style={{ fontSize: '15px', color: 'var(--text-strong)' }}>상세정보</strong>
@@ -496,6 +565,22 @@ const sourceLinkButtonStyle: React.CSSProperties = {
   textDecoration: 'none',
   whiteSpace: 'nowrap',
 };
+
+function assigneeSelectStyle(disabled: boolean): React.CSSProperties {
+  return {
+    height: '34px',
+    minWidth: '118px',
+    padding: '0 10px',
+    borderRadius: '9px',
+    border: '1px solid var(--border-2)',
+    background: disabled ? 'var(--surface-3)' : 'var(--surface-2)',
+    color: disabled ? 'var(--text-faint)' : 'var(--text)',
+    fontSize: '13px',
+    fontWeight: 800,
+    outline: 'none',
+    cursor: disabled ? 'wait' : 'pointer',
+  };
+}
 
 const smallButtonStyle: React.CSSProperties = {
   height: '32px',
