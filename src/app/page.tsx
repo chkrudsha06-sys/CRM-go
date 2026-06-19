@@ -750,7 +750,6 @@ export default function HomePage() {
     id: number;
     owner_name: string;
     goal_new_tm: number; result_new_tm: number;
-    goal_coldtalk: number; result_coldtalk: number;
     goal_consultant_db: number; result_consultant_db: number;
     goal_second_touch: number; result_second_touch: number;
     goal_work_items: { id: string; text: string; done: boolean }[] | null;
@@ -1511,7 +1510,6 @@ export default function HomePage() {
     if (!dailyGoal) return [];
     return [
       { label: "당일 TM", goal: dailyGoal.goal_new_tm, result: dailyGoal.result_new_tm, unit: "건" },
-      { label: "당일 콜드톡", goal: dailyGoal.goal_coldtalk, result: dailyGoal.result_coldtalk, unit: "건" },
       { label: "브론즈 DB 확보", goal: dailyGoal.goal_consultant_db, result: dailyGoal.result_consultant_db, unit: "개" },
       { label: "1% DB 확보", goal: dailyGoal.goal_second_touch, result: dailyGoal.result_second_touch, unit: "개" },
     ];
@@ -2003,8 +2001,8 @@ export default function HomePage() {
                             const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
                             const isExpanded = expandedDailyMember === memberName;
                             const isOutsideMeeting = Boolean(memberGoal?.is_outside_meeting);
-                            const totalGoal = memberGoal && !isOutsideMeeting ? (memberGoal.goal_new_tm + memberGoal.goal_coldtalk + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
-                            const totalResult = memberGoal && !isOutsideMeeting ? (memberGoal.result_new_tm + memberGoal.result_coldtalk + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
+                            const totalGoal = memberGoal && !isOutsideMeeting ? (memberGoal.goal_new_tm + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
+                            const totalResult = memberGoal && !isOutsideMeeting ? (memberGoal.result_new_tm + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
                             const totalRate = totalGoal > 0 ? percent(totalResult, totalGoal) : 0;
                             return (
                               <button
@@ -2053,7 +2051,6 @@ export default function HomePage() {
                           const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(expandedDailyMember));
                           const fields = memberGoal ? [
                             { label: "당일 TM", goal: memberGoal.goal_new_tm, result: memberGoal.result_new_tm, unit: "건" },
-                            { label: "당일 콜드톡", goal: memberGoal.goal_coldtalk, result: memberGoal.result_coldtalk, unit: "건" },
                             { label: "브론즈 DB 확보", goal: memberGoal.goal_consultant_db, result: memberGoal.result_consultant_db, unit: "개" },
                             { label: "1% DB 확보", goal: memberGoal.goal_second_touch, result: memberGoal.result_second_touch, unit: "개" },
                           ] : [];
