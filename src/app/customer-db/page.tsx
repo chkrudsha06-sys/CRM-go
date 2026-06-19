@@ -363,6 +363,61 @@ async function saveCustomerDbNoteToSupabase(contactId: number | null, note: Cust
   if (error) throw error;
 }
 
+function normalizeContactNoteRow(note: any): CustomerDbNote {
+  const rawContent = String(note?.content || "");
+  const content = rawContent.replace(/^\[(TM|콜드톡)\]\s*/g, "").trim();
+  const isColdTalk =
+    rawContent.startsWith("[콜드톡]") ||
+    rawContent.includes("활동항목: 콜드톡");
+  const isTm =
+    rawContent.startsWith("[TM]") ||
+    rawContent.includes("활동항목: TM") ||
+    String(note?.author || "").includes("AI 통화요약");
+
+  return {
+    id: Number(note?.id || Date.now()),
+    noteDate: String(note?.note_date || new Date().toISOString().slice(0, 10)),
+    activityType: isTm && !isColdTalk ? "TM" : "콜드톡",
+    content,
+    author: String(note?.author || "AI 통화요약"),
+    createdAt: String(note?.created_at || note?.updated_at || new Date().toISOString()),
+  };
+}
+
+function sortCustomerNotesDesc(notes: CustomerDbNote[]) {
+  return [...notes].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
+
+async function loadContactNotesByContactIds(contactIds: number[]) {
+  const ids = Array.from(new Set(contactIds.filter((id) => Number.isFinite(id) && id > 0)));
+  const noteMap = new Map<number, CustomerDbNote[]>();
+  if (!ids.length) return noteMap;
+
+  const { data, error } = await supabase
+    .from("contact_notes")
+    .select("id, contact_id, note_date, content, author, created_at, updated_at")
+    .in("contact_id", ids)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  (data || []).forEach((note: any) => {
+    const contactId = Number(note?.contact_id || 0);
+    if (!contactId) return;
+    const current = noteMap.get(contactId) || [];
+    current.push(normalizeContactNoteRow(note));
+    noteMap.set(contactId, current);
+  });
+
+  noteMap.forEach((notes, contactId) => {
+    noteMap.set(contactId, sortCustomerNotesDesc(notes));
+  });
+
+  return noteMap;
+}
+
 function fmt(value?: string | null) {
   return value && value.trim() ? value : "-";
 }
@@ -1081,7 +1136,10 @@ export default function CustomerDbPage() {
         if (error) throw error;
         if (!alive) return;
 
-        const remoteRecords: RawCustomerRecord[] = (data || []).map((row: any) => normalizeRawRecord({
+        const rows = (data || []) as any[];
+        const noteMap = await loadContactNotesByContactIds(rows.map((row) => Number(row.id)));
+
+        const remoteRecords: RawCustomerRecord[] = rows.map((row: any) => normalizeRawRecord({
           id: row.id,
           name: row.name || "",
           title: row.title || "",
@@ -1102,7 +1160,7 @@ export default function CustomerDbPage() {
             // 태그가 없으면 created_at(등록일) 기준 — updated_at은 수정 시 갱신되어 기준 오염
             return match ? match[1].trim() : String(row.created_at || row.updated_at || "").slice(0, 10);
           })(),
-          notes: [],
+          notes: noteMap.get(Number(row.id)) || [],
           created_at: row.created_at || new Date().toISOString(),
           updated_at: row.updated_at || new Date().toISOString(),
         }));
@@ -1147,17 +1205,19 @@ export default function CustomerDbPage() {
       if (execName) q = q.eq("assigned_to", execName) as typeof q;
       const { data } = await q;
       if (data) {
-        setRecords((data as any[]).map((row: any) => normalizeRawRecord({
+        const rows = data as any[];
+        const noteMap = await loadContactNotesByContactIds(rows.map((row) => Number(row.id)));
+        setRecords(rows.map((row: any) => normalizeRawRecord({
           id: row.id,
           name: row.name || "",
           title: row.title || "",
-          phone: row.phone || "",
+          phone: row.phone || row.customer_phone || "",
           intake_route: row.intake_route || "",
           company: row.company || "",
           assigned_to: row.assigned_to || "",
           activity_type: row.activity_type || "TM",
           memo: row.memo || "",
-          notes: [],
+          notes: noteMap.get(Number(row.id)) || [],
           created_at: row.created_at || new Date().toISOString(),
           updated_at: row.updated_at || new Date().toISOString(),
         })));
@@ -1195,26 +1255,9 @@ export default function CustomerDbPage() {
 
       if (error) throw error;
 
-      const notes: CustomerDbNote[] = (data || []).map((note: any) => {
-        const rawContent = String(note.content || "");
-        const content = rawContent.replace(/^\[(TM|콜드톡)\]\s*/g, "").trim();
-        const isColdTalk =
-          rawContent.startsWith("[콜드톡]") ||
-          rawContent.includes("활동항목: 콜드톡");
-        const isTm =
-          rawContent.startsWith("[TM]") ||
-          rawContent.includes("활동항목: TM") ||
-          String(note.author || "").includes("AI 통화요약");
-
-        return {
-          id: Number(note.id || Date.now()),
-          noteDate: String(note.note_date || new Date().toISOString().slice(0, 10)),
-          activityType: isTm && !isColdTalk ? "TM" : "콜드톡",
-          content,
-          author: String(note.author || "AI 통화요약"),
-          createdAt: String(note.created_at || note.updated_at || new Date().toISOString()),
-        };
-      });
+      const notes: CustomerDbNote[] = sortCustomerNotesDesc(
+        (data || []).map((note: any) => normalizeContactNoteRow(note)),
+      );
 
       setSelectedRemoteNotes(notes);
     } catch (error) {
