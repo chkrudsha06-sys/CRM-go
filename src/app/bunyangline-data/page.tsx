@@ -99,16 +99,17 @@ export default function BunyanglineDataPage() {
   const [openedId, setOpenedId] = useState<string | null>(null);
 
   const newCount = useMemo(() => rows.filter((row) => row.is_new).length, [rows]);
+  const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '' || onlyNew;
 
-  async function loadRows() {
+  async function fetchRows(nextRegion = selectedRegion, nextKeyword = keyword, nextOnlyNew = onlyNew) {
     setLoading(true);
     setErrorMessage('');
 
     try {
       const params = new URLSearchParams({
-        region: selectedRegion,
-        keyword,
-        onlyNew: String(onlyNew),
+        region: nextRegion,
+        keyword: nextKeyword,
+        onlyNew: String(nextOnlyNew),
         limit: '300',
       });
 
@@ -130,8 +131,20 @@ export default function BunyanglineDataPage() {
     }
   }
 
+  function loadRows() {
+    void fetchRows();
+  }
+
+  function resetFilters() {
+    setSelectedRegion('모든지역');
+    setKeyword('');
+    setOnlyNew(false);
+    setOpenedId(null);
+    void fetchRows('모든지역', '', false);
+  }
+
   useEffect(() => {
-    loadRows();
+    void fetchRows(selectedRegion, keyword, onlyNew);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRegion, onlyNew]);
 
@@ -144,6 +157,9 @@ export default function BunyanglineDataPage() {
             <p style={{ margin: '8px 0 0', color: 'var(--text-subtle)', fontSize: '14px' }}>
               분양라인 지역현장 구인공고를 지역별로 누적 수집하고 신규 현장을 확인합니다.
             </p>
+            <div style={syncInfoStyle}>
+              자동동기화 시간: 매일 오전 11:59 / 오후 11:59 · 마지막 크롤링 이후 신규 등록 공고만 누적 저장
+            </div>
           </div>
 
           <button
@@ -189,6 +205,10 @@ export default function BunyanglineDataPage() {
             검색
           </button>
 
+          <button type="button" onClick={resetFilters} disabled={!filterActive && !loading} style={resetButtonStyle(!filterActive && !loading)}>
+            필터해제
+          </button>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: 'var(--text-subtle)' }}>
             <input type="checkbox" checked={onlyNew} onChange={(event) => setOnlyNew(event.target.checked)} />
             신규만 보기
@@ -208,10 +228,10 @@ export default function BunyanglineDataPage() {
 
       <section style={tablePanelStyle}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1120px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1280px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
-                {['지역', '현장명', '등록일', '담당자이름', '담당자연락처', '대행사', '수수료', '신규여부', '상세정보'].map((header) => (
+                {['지역', '현장명', '등록일', '담당자이름', '담당자연락처', '대행사', '수수료', '신규여부', '원본공고', '상세정보'].map((header) => (
                   <th key={header} style={thStyle}>
                     {header}
                   </th>
@@ -221,7 +241,7 @@ export default function BunyanglineDataPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: '42px 12px', textAlign: 'center', color: 'var(--text-subtle)', fontWeight: 700 }}>
+                  <td colSpan={10} style={{ padding: '42px 12px', textAlign: 'center', color: 'var(--text-subtle)', fontWeight: 700 }}>
                     {loading ? '데이터를 불러오는 중입니다.' : '등록된 분양라인데이터가 없습니다.'}
                   </td>
                 </tr>
@@ -272,6 +292,15 @@ function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: b
           </span>
         </td>
         <td style={tdCenter}>
+          {row.source_url ? (
+            <a href={row.source_url} target="_blank" rel="noreferrer" style={sourceLinkButtonStyle}>
+              원본공고
+            </a>
+          ) : (
+            <span style={{ color: 'var(--text-faint)', fontWeight: 700 }}>-</span>
+          )}
+        </td>
+        <td style={tdCenter}>
           <button type="button" onClick={onToggle} style={smallButtonStyle}>
             {opened ? '접기' : '보기'}
           </button>
@@ -280,7 +309,7 @@ function FragmentRow({ row, opened, onToggle }: { row: BunyanglineRow; opened: b
 
       {opened ? (
         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <td colSpan={9} style={{ padding: '0 16px 18px' }}>
+          <td colSpan={10} style={{ padding: '0 16px 18px' }}>
             <div style={detailBoxStyle}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
                 <strong style={{ fontSize: '15px', color: 'var(--text-strong)' }}>상세정보</strong>
@@ -306,6 +335,19 @@ const pageStyle: React.CSSProperties = {
   background: 'var(--bg)',
   minHeight: '100vh',
   color: 'var(--text)',
+};
+
+const syncInfoStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  marginTop: '10px',
+  padding: '8px 11px',
+  borderRadius: '999px',
+  background: 'var(--accent-subtle)',
+  border: '1px solid var(--accent-border)',
+  color: 'var(--accent-text)',
+  fontSize: '13px',
+  fontWeight: 800,
+  lineHeight: 1.35,
 };
 
 const panelStyle: React.CSSProperties = {
@@ -355,6 +397,19 @@ const primaryButtonStyle: React.CSSProperties = {
   fontWeight: 800,
   cursor: 'pointer',
 };
+
+function resetButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    height: '42px',
+    padding: '0 15px',
+    borderRadius: '10px',
+    border: '1px solid var(--border-2)',
+    background: 'var(--surface-2)',
+    color: disabled ? 'var(--text-disabled)' : 'var(--text-subtle)',
+    fontWeight: 800,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+  };
+}
 
 function secondaryButtonStyle(disabled: boolean): React.CSSProperties {
   return {
@@ -425,6 +480,22 @@ function newBadgeStyle(isNew: boolean): React.CSSProperties {
     fontWeight: 900,
   };
 }
+
+const sourceLinkButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: '32px',
+  padding: '0 11px',
+  borderRadius: '8px',
+  border: '1px solid var(--accent-border)',
+  background: 'var(--accent-subtle)',
+  color: 'var(--accent-text)',
+  fontSize: '13px',
+  fontWeight: 900,
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
+};
 
 const smallButtonStyle: React.CSSProperties = {
   height: '32px',
