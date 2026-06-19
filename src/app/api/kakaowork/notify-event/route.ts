@@ -130,7 +130,6 @@ function buildDailyActivityBlocks(d: Record<string, any>, baseUrl: string): any[
       type: "text",
       text: [
         `TM : ${d.goal_new_tm || 0}건`,
-        `콜드톡 : ${d.goal_coldtalk || 0}건`,
         `브론즈DB수취 : ${d.goal_consultant_db || 0}개`,
         `1%DB수취 : ${d.goal_second_touch || 0}개`,
       ].join("\n"),
@@ -154,7 +153,7 @@ function buildFallbackText(event: string, d: Record<string, any>, baseUrl: strin
   }
   if (event === "daily_activity_saved") {
     const workItems = Array.isArray(d.work_items) ? d.work_items : [];
-    return ["📋 일별활동목표 등록","──────────────",`▪ ${d.owner_name || "-"} ${d.owner_title || ""}`,`▪ 날짜 : ${d.work_date || "-"}`,"──────────",d.is_outside_meeting ? "📌 외근/미팅일" : null,!d.is_outside_meeting ? `▪ TM : ${d.goal_new_tm || 0}건` : null,!d.is_outside_meeting ? `▪ 콜드톡 : ${d.goal_coldtalk || 0}건` : null,!d.is_outside_meeting ? `▪ 브론즈 : ${d.goal_consultant_db || 0}개` : null,!d.is_outside_meeting ? `▪ 1%DB : ${d.goal_second_touch || 0}개` : null,...workItems.filter((i: any) => i?.text?.trim()).map((i: any, idx: number) => `${idx + 1}. ${i.text}`),"──────────────",`🔗 CRM : ${baseUrl}/daily-activity`].filter(Boolean).join("\n");
+    return ["📋 일별활동목표 등록","──────────────",`▪ ${d.owner_name || "-"} ${d.owner_title || ""}`,`▪ 날짜 : ${d.work_date || "-"}`,"──────────",d.is_outside_meeting ? "📌 외근/미팅일" : null,!d.is_outside_meeting ? `▪ TM : ${d.goal_new_tm || 0}건` : null,!d.is_outside_meeting ? `▪ 브론즈 : ${d.goal_consultant_db || 0}개` : null,!d.is_outside_meeting ? `▪ 1%DB : ${d.goal_second_touch || 0}개` : null,...workItems.filter((i: any) => i?.text?.trim()).map((i: any, idx: number) => `${idx + 1}. ${i.text}`),"──────────────",`🔗 CRM : ${baseUrl}/daily-activity`].filter(Boolean).join("\n");
   }
   return "";
 }
