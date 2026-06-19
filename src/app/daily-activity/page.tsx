@@ -52,6 +52,8 @@ type ActivityKey = (typeof ACTIVITY_FIELDS)[number]["key"];
 
 type FormValues = Record<ActivityKey | "meeting_confirmed", number>;
 
+type AutoResultMap = Record<string, FormValues>;
+
 type WorkItem = {
   id: string;
   text: string;
@@ -195,6 +197,91 @@ async function loadAutoResultCounts(workDate: string, ownerName?: string): Promi
     }).length,
     meeting_confirmed: 0,
   };
+}
+
+function autoResultKey(workDate: string, ownerName: string) {
+  return `${workDate}__${ownerName}`;
+}
+
+function storedResultFromRow(row: DailyActivityRow | undefined): FormValues {
+  if (!row || row.is_outside_meeting) return { ...EMPTY_VALUES };
+  return {
+    new_tm: row.result_new_tm || 0,
+    consultant_db: row.result_consultant_db || 0,
+    second_touch: row.result_second_touch || 0,
+    meeting_confirmed: 0,
+  };
+}
+
+function getAutoResultForRow(row: DailyActivityRow | undefined, autoResults: AutoResultMap): FormValues {
+  if (!row || row.is_outside_meeting) return { ...EMPTY_VALUES };
+  return autoResults[autoResultKey(row.work_date, row.owner_name)] || storedResultFromRow(row);
+}
+
+async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<AutoResultMap> {
+  const targets = Array.from(
+    new Map(
+      rows
+        .filter((row) => row && !row.is_outside_meeting && row.work_date && row.owner_name)
+        .map((row) => [autoResultKey(row.work_date, row.owner_name), row]),
+    ).values(),
+  );
+
+  if (targets.length === 0) return {};
+
+  const dates = targets.map((row) => row.work_date).sort();
+  const owners = Array.from(new Set(targets.map((row) => row.owner_name)));
+  const start = `${dates[0]}T00:00:00`;
+  const end = `${nextDateString(dates[dates.length - 1])}T00:00:00`;
+
+  const emptyMap = Object.fromEntries(
+    targets.map((row) => [autoResultKey(row.work_date, row.owner_name), { ...EMPTY_VALUES }]),
+  ) as AutoResultMap;
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id,created_at,activity_type,customer_grade,crm_db_source,assigned_to")
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .in("assigned_to", owners);
+
+  if (error) return emptyMap;
+
+  const resultMap: AutoResultMap = { ...emptyMap };
+
+  ((data || []) as Array<{
+    created_at?: string | null;
+    activity_type?: string | null;
+    customer_grade?: string | null;
+    crm_db_source?: string | null;
+    assigned_to?: string | null;
+  }>).forEach((row) => {
+    const ownerName = String(row.assigned_to || "").trim();
+    const workDate = String(row.created_at || "").slice(0, 10);
+    const key = autoResultKey(workDate, ownerName);
+    if (!resultMap[key]) return;
+
+    const activityType = String(row.activity_type || "").trim();
+    const source = String(row.crm_db_source || "").trim();
+    const grade = String(row.customer_grade || "").trim();
+
+    if (activityType === "TM") resultMap[key].new_tm += 1;
+    if (source === "vip_activity" && grade === "브론즈") resultMap[key].consultant_db += 1;
+    if (source === "vip_activity" && (grade === "마스터" || grade === "챌린저")) {
+      resultMap[key].second_touch += 1;
+    }
+  });
+
+  return resultMap;
+}
+
+function liveResultValue(
+  row: DailyActivityRow | undefined,
+  key: ActivityKey | "meeting_confirmed",
+  autoResults: AutoResultMap,
+) {
+  if (!row || row.is_outside_meeting) return 0;
+  return n(getAutoResultForRow(row, autoResults)[key]);
 }
 
 function formatKoreanDate(dateText: string) {
@@ -698,9 +785,11 @@ function MemberDayCard({
 function PeriodSummary({
   title,
   rows,
+  autoResults = {},
 }: {
   title: string;
   rows: DailyActivityRow[];
+  autoResults?: AutoResultMap;
 }) {
   const included = rows.filter((row) => !row.is_outside_meeting);
   const goals = ACTIVITY_FIELDS.reduce(
@@ -710,11 +799,11 @@ function PeriodSummary({
   );
   const results = ACTIVITY_FIELDS.reduce(
     (sum, field) =>
-      sum + included.reduce((s, row) => s + resultValue(row, field.key), 0),
+      sum + included.reduce((s, row) => s + liveResultValue(row, field.key, autoResults), 0),
     0,
   );
   const meetings = included.reduce(
-    (sum, row) => sum + resultValue(row, "meeting_confirmed"),
+    (sum, row) => sum + liveResultValue(row, "meeting_confirmed", autoResults),
     0,
   );
   const excluded = rows.length - included.length;
@@ -953,6 +1042,7 @@ export default function DailyActivityPage() {
   const [monthFilter, setMonthFilter] = useState(todayString().slice(0, 7));
   const [dailyRows, setDailyRows] = useState<DailyActivityRow[]>([]);
   const [periodRows, setPeriodRows] = useState<DailyActivityRow[]>([]);
+  const [periodAutoResults, setPeriodAutoResults] = useState<AutoResultMap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
@@ -1018,10 +1108,14 @@ export default function DailyActivityPage() {
       setDailyRows((dailyRes.data || []) as DailyActivityRow[]);
     }
 
+    const nextPeriodRows = periodRes.error ? [] : ((periodRes.data || []) as DailyActivityRow[]);
+
     if (periodRes.error) {
       setPeriodRows([]);
+      setPeriodAutoResults({});
     } else {
-      setPeriodRows((periodRes.data || []) as DailyActivityRow[]);
+      setPeriodRows(nextPeriodRows);
+      setPeriodAutoResults(await loadAutoResultCountsForRows(nextPeriodRows));
     }
 
     const row = loginUser?.name
@@ -1188,12 +1282,7 @@ export default function DailyActivityPage() {
       second_touch: row.goal_second_touch || 0,
       meeting_confirmed: 0,
     });
-    setResult({
-      new_tm: row.result_new_tm || 0,
-      consultant_db: row.result_consultant_db || 0,
-      second_touch: row.result_second_touch || 0,
-      meeting_confirmed: 0,
-    });
+    setResult(getAutoResultForRow(row, periodAutoResults));
     setWorkItems(normalizeWorkItems(row.goal_work_items));
 
     window.requestAnimationFrame(() => {
@@ -1600,10 +1689,12 @@ export default function DailyActivityPage() {
                   <PeriodSummary
                     title={`${selectedMember.name} 주간 통계`}
                     rows={visibleWeekRows}
+                    autoResults={periodAutoResults}
                   />
                   <PeriodSummary
                     title={`${selectedMember.name} 월간 통계`}
                     rows={visibleMonthRows}
+                    autoResults={periodAutoResults}
                   />
                 </>
               ) : (
@@ -1611,10 +1702,12 @@ export default function DailyActivityPage() {
                   <PeriodSummary
                     title="나의 주간 통계"
                     rows={visibleWeekRows}
+                    autoResults={periodAutoResults}
                   />
                   <PeriodSummary
                     title="나의 월간 통계"
                     rows={visibleMonthRows}
+                    autoResults={periodAutoResults}
                   />
                 </>
               )}
@@ -1727,13 +1820,13 @@ export default function DailyActivityPage() {
                             </span>
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "new_tm").toLocaleString()} / {resultValue(row, "new_tm").toLocaleString()}
+                            {goalValue(row, "new_tm").toLocaleString()} / {liveResultValue(row, "new_tm", periodAutoResults).toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "consultant_db").toLocaleString()} / {resultValue(row, "consultant_db").toLocaleString()}
+                            {goalValue(row, "consultant_db").toLocaleString()} / {liveResultValue(row, "consultant_db", periodAutoResults).toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "second_touch").toLocaleString()} / {resultValue(row, "second_touch").toLocaleString()}
+                            {goalValue(row, "second_touch").toLocaleString()} / {liveResultValue(row, "second_touch", periodAutoResults).toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {activeWorkItems(normalizeWorkItems(row.goal_work_items)).length.toLocaleString()} / {activeWorkItems(normalizeWorkItems(row.goal_work_items)).filter((item) => item.done).length.toLocaleString()}
