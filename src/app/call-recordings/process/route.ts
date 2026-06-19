@@ -15,6 +15,14 @@ type DriveFile = {
   size?: string;
 };
 
+type RecordingFileMeta = {
+  phone: string | null;
+  customerName: string | null;
+  recordDate: string | null;
+  recordTime: string | null;
+  recordedAt: string | null;
+};
+
 type ManagerFolder = {
   manager: string;
   envKey: string;
@@ -22,13 +30,6 @@ type ManagerFolder = {
 };
 
 type ContactRow = Record<string, unknown>;
-
-type MatchSource = "customer_db" | "vip_db";
-
-type MatchedContact = ReturnType<typeof simplifyContact> & {
-  matchSource: MatchSource;
-  matchSourceLabel: string;
-};
 
 function getRequiredEnv(name: string) {
   const value = process.env[name];
@@ -93,10 +94,30 @@ function normalizeGeminiMimeType(mimeType: string) {
 }
 
 
+
+function getKstTodayStart() {
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return new Date(
+    Date.UTC(
+      kstNow.getUTCFullYear(),
+      kstNow.getUTCMonth(),
+      kstNow.getUTCDate(),
+      -9,
+      0,
+      0,
+      0
+    )
+  );
+}
+
 function getSyncStartAt() {
   const raw = process.env.CALL_RECORDING_SYNC_START_AT;
 
-  if (!raw) return null;
+  if (!raw) {
+    // 기본값: 오늘 00:00 KST 이후 구글드라이브에 업로드된 녹취만 처리
+    // 기존 구글드라이브에 오래전부터 쌓여 있던 녹취가 한 번에 전부 처리되는 것을 방지합니다.
+    return getKstTodayStart();
+  }
 
   const parsed = new Date(raw);
 
@@ -112,6 +133,8 @@ function getSyncStartAt() {
 function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
   if (!syncStartAt) return true;
 
+  // "녹음 기록일"이 아니라 "구글드라이브 업로드일" 기준입니다.
+  // 파일명은 260211처럼 과거 통화일이어도, 오늘 드라이브에 업로드되면 처리 대상입니다.
   const baseTime = file.createdTime || file.modifiedTime;
   if (!baseTime) return false;
 
@@ -121,17 +144,182 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
   return fileTime.getTime() >= syncStartAt.getTime();
 }
 
-function extractPhoneFromFileName(fileName: string) {
-  const candidates = fileName.match(/01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g);
+function parseRecordingMetaFromFileName(fileName: string): RecordingFileMeta {
+  const nameOnly = fileName.replace(/\.[^/.]+$/, "");
+  const parts = nameOnly
+    .split("_")
+    .map((part) => part.trim())
+    .filter(Boolean);
 
-  if (!candidates || candidates.length === 0) {
-    return null;
+  const firstPartDigits = normalizePhone(parts[0] || "");
+  const phone =
+    firstPartDigits.length >= 8 && firstPartDigits.length <= 11
+      ? firstPartDigits
+      : null;
+
+  const customerName = parts[1] || null;
+
+  let rawDate: string | null = null;
+  let rawTime: string | null = null;
+
+  // 파일명 규칙:
+  // 01055555555_강연우실장님_260211_145901
+  // 연락처_고객명_YYMMDD_HHMMSS
+  for (let index = 2; index < parts.length; index += 1) {
+    const value = parts[index];
+
+    if (!rawDate && (/^\d{6}$/.test(value) || /^20\d{6}$/.test(value))) {
+      rawDate = value;
+      const next = parts[index + 1];
+
+      if (next && /^\d{4,6}$/.test(next)) {
+        rawTime = next.padEnd(6, "0").slice(0, 6);
+      }
+      break;
+    }
   }
 
-  return normalizePhone(candidates[0]);
+  if (!rawDate) {
+    const fallback = nameOnly.match(/(?:^|_)(20\d{6}|\d{6})(?:_|$)/);
+    if (fallback) rawDate = fallback[1];
+  }
+
+  if (!rawTime) {
+    const fallbackTime = nameOnly.match(/(?:^|_)(\d{6})(?:_|$)/g);
+    const candidates = (fallbackTime || [])
+      .map((value) => value.replace(/_/g, ""))
+      .filter((value) => value !== rawDate);
+
+    rawTime = candidates.find((value) => {
+      const hour = Number(value.slice(0, 2));
+      const minute = Number(value.slice(2, 4));
+      const second = Number(value.slice(4, 6));
+      return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
+    }) || null;
+  }
+
+  let recordDate: string | null = null;
+  if (rawDate) {
+    const normalizedDate =
+      rawDate.length === 6
+        ? `20${rawDate}`
+        : rawDate;
+
+    const year = Number(normalizedDate.slice(0, 4));
+    const month = Number(normalizedDate.slice(4, 6));
+    const day = Number(normalizedDate.slice(6, 8));
+
+    if (
+      year >= 2020 &&
+      year <= 2099 &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31
+    ) {
+      recordDate = `${normalizedDate.slice(0, 4)}-${normalizedDate.slice(4, 6)}-${normalizedDate.slice(6, 8)}`;
+    }
+  }
+
+  let recordTime: string | null = null;
+  if (rawTime && /^\d{6}$/.test(rawTime)) {
+    const hour = Number(rawTime.slice(0, 2));
+    const minute = Number(rawTime.slice(2, 4));
+    const second = Number(rawTime.slice(4, 6));
+
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
+      recordTime = `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}:${rawTime.slice(4, 6)}`;
+    }
+  }
+
+  const recordedAt =
+    recordDate && recordTime
+      ? `${recordDate}T${recordTime}+09:00`
+      : recordDate
+        ? `${recordDate}T00:00:00+09:00`
+        : null;
+
+  return {
+    phone,
+    customerName,
+    recordDate,
+    recordTime,
+    recordedAt,
+  };
+}
+
+function getRecordingSortTime(file: DriveFile & { recordingMeta?: RecordingFileMeta }) {
+  const candidates = [
+    file.recordingMeta?.recordedAt,
+    file.createdTime,
+    file.modifiedTime,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+
+  return 0;
+}
+
+function extractPhoneFromFileName(fileName: string) {
+  const meta = parseRecordingMetaFromFileName(fileName);
+  if (meta.phone) return meta.phone;
+
+  const nameOnly = fileName.replace(/\.[^/.]+$/, "");
+  const candidates: string[] = [];
+
+  // 1순위: 파일명 맨 앞 구간을 연락처로 인식
+  // 예: 01055555555_강연우실장님_260211_145901.m4a
+  // 예: 53252347456_김중석본부장_260605.m4a
+  const firstPart = nameOnly.split("_")[0] || "";
+  const firstPartDigits = normalizePhone(firstPart);
+
+  if (firstPartDigits.length >= 8 && firstPartDigits.length <= 11) {
+    candidates.push(firstPartDigits);
+  }
+
+  // 2순위: 010/지역번호처럼 0으로 시작하는 일반 전화번호
+  const patterns = [
+    /01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g,
+    /0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = fileName.match(pattern);
+    if (matches) {
+      candidates.push(...matches.map(normalizePhone));
+    }
+  }
+
+  // 3순위: 파일명 전체의 숫자 덩어리 중 8~11자리 후보 인식
+  // 325-6357-6458처럼 0 없이 저장된 번호도 처리하기 위함
+  const numericChunks = nameOnly.match(/\d+/g) || [];
+
+  for (const chunk of numericChunks) {
+    const digits = normalizePhone(chunk);
+    if (digits.length >= 8 && digits.length <= 11) {
+      candidates.push(digits);
+    }
+  }
+
+  const uniqueCandidates = Array.from(new Set(candidates))
+    .filter((value) => value.length >= 8 && value.length <= 11)
+    .sort((a, b) => {
+      if (a === firstPartDigits) return -1;
+      if (b === firstPartDigits) return 1;
+      return b.length - a.length;
+    });
+
+  return uniqueCandidates[0] || null;
 }
 
 function extractDateFromFileName(fileName: string) {
+  const meta = parseRecordingMetaFromFileName(fileName);
+  if (meta.recordDate) return meta.recordDate;
+
   const match = fileName.match(/20\d{6}/);
 
   if (!match) {
@@ -210,35 +398,47 @@ async function getGoogleAccessToken() {
 }
 
 async function listDriveFiles(accessToken: string, folderId: string) {
-  const params = new URLSearchParams({
-    q: `'${folderId}' in parents and trashed = false`,
-    pageSize: "20",
-    orderBy: "createdTime desc",
-    fields:
-      "files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",
-    includeItemsFromAllDrives: "true",
-    supportsAllDrives: "true",
-  });
+  const allFiles: DriveFile[] = [];
+  let pageToken: string | undefined;
 
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
+  do {
+    const params = new URLSearchParams({
+      q: `'${folderId}' in parents and trashed = false`,
+      pageSize: "1000",
+      orderBy: "createdTime asc",
+      fields:
+        "nextPageToken,files(id,name,mimeType,createdTime,modifiedTime,webViewLink,size)",
+      includeItemsFromAllDrives: "true",
+      supportsAllDrives: "true",
+    });
+
+    if (pageToken) {
+      params.set("pageToken", pageToken);
     }
-  );
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(
-      `Google Drive files.list failed: ${JSON.stringify(data, null, 2)}`
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      }
     );
-  }
 
-  return (data.files || []) as DriveFile[];
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        `Google Drive files.list failed: ${JSON.stringify(data, null, 2)}`
+      );
+    }
+
+    allFiles.push(...((data.files || []) as DriveFile[]));
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+
+  return allFiles;
 }
 
 async function downloadDriveFileAsBase64(accessToken: string, fileId: string) {
@@ -688,20 +888,21 @@ async function summarizeAudioWithGemini(params: {
 }
 
 
-function isVipLikeContact(contact: ContactRow) {
-  const meetingResult = getStringField(contact, "meeting_result");
-  const managementStage = getStringField(contact, "management_stage");
-  const prospectType = getStringField(contact, "prospect_type");
-  const customerGrade = getStringField(contact, "customer_grade");
+async function findContactsByPhone(phone: string | null) {
+  if (!phone) {
+    return {
+      status: "no_phone",
+      message: "파일명에서 연락처를 추출하지 못했습니다.",
+      normalizedPhone: null,
+      matchedCount: 0,
+      contacts: [],
+      matchSource: null,
+      matchSourceLabel: null,
+    };
+  }
 
-  return [meetingResult, managementStage, prospectType, customerGrade].some((value) =>
-    ["계약완료", "예약완료", "VIP", "VIP활동DB", "리텐션", "마스터", "챌린저", "브론즈"].includes(
-      String(value || "").trim()
-    )
-  );
-}
+  const normalizedPhone = normalizePhone(phone);
 
-async function loadContactsTable() {
   const { data, error } = await supabase
     .from("contacts")
     .select("*")
@@ -712,97 +913,93 @@ async function loadContactsTable() {
     throw new Error(`Supabase contacts query failed: ${error.message}`);
   }
 
-  return (data || []) as ContactRow[];
-}
-
-function matchContactsByPhone(rows: ContactRow[], normalizedPhone: string) {
-  return rows.filter(
-    (contact) => normalizePhone(getContactPhone(contact)) === normalizedPhone
-  );
-}
-
-async function findContactsByPhone(phone: string | null) {
-  if (!phone) {
-    return {
-      status: "no_phone",
-      message: "파일명에서 연락처를 추출하지 못했습니다.",
-      normalizedPhone: null,
-      matchedCount: 0,
-      contacts: [] as MatchedContact[],
-      matchSource: null as MatchSource | null,
-      matchSourceLabel: null as string | null,
-    };
+  // memo 필드에서 고객감도 파싱
+  function getContactSensitivity(contact: ContactRow): string {
+    const memo = getStringField(contact, "memo");
+    const match = memo.match(/\[고객감도:\s*(.+?)\]/);
+    return match ? match[1].trim() : "감도없음";
   }
 
-  const normalizedPhone = normalizePhone(phone);
-  const rows = await loadContactsTable();
-  const matchedRows = matchContactsByPhone(rows, normalizedPhone);
+  const matchedRows = ((data || []) as ContactRow[]).filter((contact) => {
+    const numbers = [
+      getStringField(contact, "phone"),
+      getStringField(contact, "mobile"),
+      getStringField(contact, "contact_phone"),
+      getStringField(contact, "customer_phone"),
+      getStringField(contact, "tel"),
+    ].map(normalizePhone);
 
-  const customerDbRows = matchedRows.filter((contact) => !isVipLikeContact(contact));
-  const vipDbRows = matchedRows.filter((contact) => isVipLikeContact(contact));
-
-  const toMatchedContact = (source: MatchSource, label: string) => (contact: ContactRow) => ({
-    ...simplifyContact(contact),
-    matchSource: source,
-    matchSourceLabel: label,
+    return numbers.includes(normalizedPhone);
   });
 
-  if (customerDbRows.length === 1) {
+  // 고객DB TM 고객 중 재TM진행인 경우만 통화요약 대상
+  const tmRows = matchedRows.filter((contact) => {
+    if (contact.has_tm !== true) return false;
+    const sensitivity = getContactSensitivity(contact);
+    return sensitivity === "재TM진행";
+  });
+
+  // 파이프라인3 고객 (감도 필터 미적용 — 파이프라인은 별도 관리)
+  const pipelineRows = matchedRows.filter((contact) => {
+    const stage = getStringField(contact, "management_stage");
+    return ["리드", "프로스펙팅", "딜크로징", "딜클로징", "리텐션"].includes(stage);
+  });
+
+  // 고객DB TM 중 감도없음인 경우 → 요약 제외 처리용
+  const tmRowsAll = matchedRows.filter((contact) => contact.has_tm === true);
+  const tmSensitivitySkipped = tmRowsAll.length > 0 && tmRows.length === 0;
+
+  // 감도없음 고객DB TM이 매칭된 경우 → 통화요약 건너뜀
+  if (tmSensitivitySkipped) {
+    return {
+      status: "not_found",
+      message: "고객DB TM 고객이 매칭되었으나 고객감도가 '감도없음'으로 설정되어 통화요약을 진행하지 않습니다.",
+      normalizedPhone,
+      matchedCount: 0,
+      contacts: [],
+      matchSource: null,
+      matchSourceLabel: null,
+    };
+  }
+
+  const selectedRows = tmRows.length > 0 ? tmRows : pipelineRows.length > 0 ? pipelineRows : matchedRows;
+  const contacts = selectedRows.map(simplifyContact);
+
+  if (contacts.length === 1) {
+    const matchSource = tmRows.length > 0 ? "customer_db_tm" : "pipeline3";
     return {
       status: "matched",
-      message: "고객DB에서 정확히 1명의 고객이 매칭되었습니다.",
+      message: tmRows.length > 0
+        ? "고객DB TM 고객(재TM진행)이 정확히 1명 매칭되었습니다."
+        : "파이프라인3 고객이 정확히 1명 매칭되었습니다.",
       normalizedPhone,
-      matchedCount: 1,
-      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
-      matchSource: "customer_db" as MatchSource,
-      matchSourceLabel: "고객DB",
+      matchedCount: contacts.length,
+      contacts,
+      matchSource,
+      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM·재TM진행)" : "파이프라인3",
     };
   }
 
-  if (customerDbRows.length > 1) {
+  if (contacts.length > 1) {
     return {
       status: "duplicate",
-      message: "고객DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      message: "동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
       normalizedPhone,
-      matchedCount: customerDbRows.length,
-      contacts: customerDbRows.map(toMatchedContact("customer_db", "고객DB")),
-      matchSource: "customer_db" as MatchSource,
-      matchSourceLabel: "고객DB",
-    };
-  }
-
-  if (vipDbRows.length === 1) {
-    return {
-      status: "matched",
-      message: "고객DB에는 없고 VIP활동DB에서 정확히 1명의 고객이 매칭되었습니다.",
-      normalizedPhone,
-      matchedCount: 1,
-      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
-      matchSource: "vip_db" as MatchSource,
-      matchSourceLabel: "VIP활동DB",
-    };
-  }
-
-  if (vipDbRows.length > 1) {
-    return {
-      status: "duplicate",
-      message: "VIP활동DB에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
-      normalizedPhone,
-      matchedCount: vipDbRows.length,
-      contacts: vipDbRows.map(toMatchedContact("vip_db", "VIP활동DB")),
-      matchSource: "vip_db" as MatchSource,
-      matchSourceLabel: "VIP활동DB",
+      matchedCount: contacts.length,
+      contacts,
+      matchSource: null,
+      matchSourceLabel: null,
     };
   }
 
   return {
     status: "not_found",
-    message: "고객DB와 VIP활동DB 모두에서 일치하는 연락처를 찾지 못했습니다.",
+    message: "고객DB TM 고객과 파이프라인3 고객 모두에서 일치하는 연락처를 찾지 못했습니다.",
     normalizedPhone,
     matchedCount: 0,
-    contacts: [] as MatchedContact[],
-    matchSource: null as MatchSource | null,
-    matchSourceLabel: null as string | null,
+    contacts: [],
+    matchSource: null,
+    matchSourceLabel: null,
   };
 }
 
@@ -891,7 +1088,7 @@ async function saveAiSummaryToContactNote(params: {
   driveFileUrl?: string;
   managerName: string;
   extractedPhone: string | null;
-  matchSourceLabel?: string | null;
+  recordingMeta?: RecordingFileMeta | null;
 }) {
   if (!params.contactId) {
     return {
@@ -929,14 +1126,19 @@ async function saveAiSummaryToContactNote(params: {
     };
   }
 
-  const content = `${params.summary}
+  const content = `[AI 통화요약]
+활동항목: TM
+
+${params.summary}
 
 ---
 
 [AI 처리 정보]
 담당자: ${params.managerName}
-매칭 메뉴: ${params.matchSourceLabel || "확인 필요"}
 추출 연락처: ${params.extractedPhone || "없음"}
+파일명 기준 고객명: ${params.recordingMeta?.customerName || "없음"}
+기록일자: ${params.recordingMeta?.recordDate || params.noteDate}
+통화시간: ${params.recordingMeta?.recordTime || "파일명에서 추출 실패"}
 녹음파일명: ${params.driveFileName}
 녹음파일 링크: ${params.driveFileUrl || "없음"}
 ${duplicateMarker}`;
@@ -969,7 +1171,11 @@ ${duplicateMarker}`;
 
 async function processAudioFile(params: {
   accessToken: string;
-  file: DriveFile & { manager: string; extractedPhone: string | null };
+  file: DriveFile & {
+    manager: string;
+    extractedPhone: string | null;
+    recordingMeta?: RecordingFileMeta;
+  };
 }) {
   const { accessToken, file } = params;
   const existingLog = await getExistingLog(file.id);
@@ -1046,7 +1252,6 @@ async function processAudioFile(params: {
     fileName: file.name,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
-    matchSourceLabel: customerMatch.matchSourceLabel,
     contactId: matchedContact.id,
   });
 
@@ -1059,7 +1264,7 @@ async function processAudioFile(params: {
     driveFileUrl: file.webViewLink,
     managerName: file.manager,
     extractedPhone: file.extractedPhone,
-    matchSourceLabel: customerMatch.matchSourceLabel,
+    recordingMeta: file.recordingMeta || parseRecordingMetaFromFileName(file.name),
   });
 
   const finalStatus =
@@ -1095,7 +1300,7 @@ async function processAudioFile(params: {
     status: finalStatus,
     message:
       finalStatus === "processed"
-        ? `AI 통화요약이 ${customerMatch.matchSourceLabel || "고객"} 활동노트에 저장되었습니다.`
+        ? "AI 통화요약이 활동노트에 저장되었습니다."
         : "이미 저장된 활동노트가 있어 중복 저장하지 않았습니다.",
     customerMatch,
     audioSummary,
@@ -1105,20 +1310,23 @@ async function processAudioFile(params: {
 }
 
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
+  const url = new URL(request.url);
+  const processSecret = process.env.CALL_RECORDINGS_PROCESS_SECRET || process.env.CRON_SECRET;
+  const secretFromQuery = url.searchParams.get("secret") || url.searchParams.get("token");
   const authHeader = request.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!cronSecret) {
+  if (!processSecret) {
     return NextResponse.json(
       {
         ok: false,
-        message: "CRON_SECRET is not configured.",
+        message: "CALL_RECORDINGS_PROCESS_SECRET is not configured.",
       },
       { status: 500 }
     );
   }
 
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (secretFromQuery !== processSecret && bearerToken !== processSecret) {
     return NextResponse.json(
       {
         ok: false,
@@ -1129,7 +1337,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = new URL(request.url);
     const limit = Math.max(
       1,
       Math.min(Number(url.searchParams.get("limit") || "1"), 5)
@@ -1158,11 +1365,16 @@ export async function GET(request: NextRequest) {
           envKey: folder.envKey,
           ok: true,
           fileCount: files.length,
-          files: files.map((file) => ({
-            ...file,
-            manager: folder.manager,
-            extractedPhone: extractPhoneFromFileName(file.name),
-          })),
+          files: files.map((file) => {
+            const recordingMeta = parseRecordingMetaFromFileName(file.name);
+
+            return {
+              ...file,
+              manager: folder.manager,
+              extractedPhone: recordingMeta.phone || extractPhoneFromFileName(file.name),
+              recordingMeta,
+            };
+          }),
         };
       })
     );
@@ -1172,7 +1384,15 @@ export async function GET(request: NextRequest) {
     const audioFiles = folderResults
       .flatMap((result) => result.files)
       .filter((file) => file.mimeType?.startsWith("audio/"))
-      .filter((file) => isFileAfterSyncStart(file, syncStartAt));
+      .filter((file) => isFileAfterSyncStart(file, syncStartAt))
+      .sort((a, b) => {
+        const recordSort = getRecordingSortTime(a) - getRecordingSortTime(b);
+        if (recordSort !== 0) return recordSort;
+
+        const createdA = new Date(a.createdTime || a.modifiedTime || 0).getTime();
+        const createdB = new Date(b.createdTime || b.modifiedTime || 0).getTime();
+        return createdA - createdB;
+      });
 
     const skippedOldFileCount = folderResults
       .flatMap((result) => result.files)
@@ -1250,7 +1470,11 @@ export async function GET(request: NextRequest) {
           id: file.id,
           name: file.name,
           mimeType: file.mimeType,
+          createdTime: file.createdTime,
           extractedPhone: file.extractedPhone,
+          recordDate: file.recordingMeta?.recordDate || null,
+          recordTime: file.recordingMeta?.recordTime || null,
+          recordedAt: file.recordingMeta?.recordedAt || null,
         })),
       })),
     });
