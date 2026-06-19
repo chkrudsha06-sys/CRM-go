@@ -88,9 +88,36 @@ function normalizePhone(value: string | null | undefined) {
 }
 
 function normalizeGeminiMimeType(mimeType: string) {
-  if (mimeType === "audio/x-m4a") return "audio/mp4";
-  if (mimeType === "audio/m4a") return "audio/mp4";
-  return mimeType || "audio/mp4";
+  const normalized = String(mimeType || "").toLowerCase();
+
+  // Google Drive가 .m4a 파일을 video/3gpp 또는 video/mp4 계열로 돌려주는 경우가 있습니다.
+  // Gemini에는 지원 안정성이 높은 오디오 MIME으로 재매핑합니다.
+  if (
+    normalized === "audio/x-m4a" ||
+    normalized === "audio/m4a" ||
+    normalized === "audio/mp4" ||
+    normalized === "video/mp4" ||
+    normalized === "video/3gpp" ||
+    normalized === "audio/3gpp"
+  ) {
+    return "audio/aac";
+  }
+
+  if (normalized === "audio/mpeg") return "audio/mp3";
+
+  return normalized || "audio/aac";
+}
+
+function isSupportedRecordingFile(file: DriveFile) {
+  const mimeType = String(file.mimeType || "").toLowerCase();
+  const fileName = String(file.name || "").toLowerCase();
+
+  if (mimeType.startsWith("audio/")) return true;
+
+  // 실제 구글드라이브 로그에서 .m4a 파일이 video/3gpp로 잡히는 경우가 확인되어 포함합니다.
+  if (mimeType === "video/3gpp" || mimeType === "video/mp4") return true;
+
+  return /\.(m4a|mp3|wav|flac|ogg|aac|aif|aiff|3gp)$/i.test(fileName);
 }
 
 
@@ -144,93 +171,136 @@ function isFileAfterSyncStart(file: DriveFile, syncStartAt: Date | null) {
   return fileTime.getTime() >= syncStartAt.getTime();
 }
 
+function isValidDateParts(year: number, month: number, day: number) {
+  if (year < 2020 || year > 2099) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function normalizeRecordDate(rawDate: string | null | undefined) {
+  if (!rawDate) return null;
+
+  const digits = normalizePhone(rawDate);
+  const normalizedDate =
+    digits.length === 6
+      ? `20${digits}`
+      : digits.length === 8 && digits.startsWith("20")
+        ? digits
+        : null;
+
+  if (!normalizedDate) return null;
+
+  const year = Number(normalizedDate.slice(0, 4));
+  const month = Number(normalizedDate.slice(4, 6));
+  const day = Number(normalizedDate.slice(6, 8));
+
+  if (!isValidDateParts(year, month, day)) return null;
+
+  return `${normalizedDate.slice(0, 4)}-${normalizedDate.slice(4, 6)}-${normalizedDate.slice(6, 8)}`;
+}
+
+function normalizeRecordTime(rawTime: string | null | undefined) {
+  if (!rawTime) return null;
+
+  const digits = normalizePhone(rawTime);
+  if (!/^\d{4,6}$/.test(digits)) return null;
+
+  const padded = digits.padEnd(6, "0").slice(0, 6);
+  const hour = Number(padded.slice(0, 2));
+  const minute = Number(padded.slice(2, 4));
+  const second = Number(padded.slice(4, 6));
+
+  if (hour < 0 || hour > 23) return null;
+  if (minute < 0 || minute > 59) return null;
+  if (second < 0 || second > 59) return null;
+
+  return `${padded.slice(0, 2)}:${padded.slice(2, 4)}:${padded.slice(4, 6)}`;
+}
+
+function stripRecordingFilePrefix(fileName: string) {
+  return fileName
+    .replace(/\.[^/.]+$/, "")
+    .replace(/^\s*통화\s*녹음\s*/i, "")
+    .trim();
+}
+
 function parseRecordingMetaFromFileName(fileName: string): RecordingFileMeta {
-  const nameOnly = fileName.replace(/\.[^/.]+$/, "");
+  const nameOnly = stripRecordingFilePrefix(fileName);
   const parts = nameOnly
     .split("_")
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const firstPartDigits = normalizePhone(parts[0] || "");
-  const phone =
-    firstPartDigits.length >= 8 && firstPartDigits.length <= 11
-      ? firstPartDigits
-      : null;
-
-  const customerName = parts[1] || null;
-
+  let phone: string | null = null;
+  let customerName: string | null = null;
   let rawDate: string | null = null;
   let rawTime: string | null = null;
 
-  // 파일명 규칙:
-  // 01055555555_강연우실장님_260211_145901
-  // 연락처_고객명_YYMMDD_HHMMSS
-  for (let index = 2; index < parts.length; index += 1) {
-    const value = parts[index];
+  // 지원 파일명 형식:
+  // 1) 01055555555_고객명_260619_172247.m4a
+  // 2) 01022222222_260619_172247.m4a
+  // 3) 통화 녹음 01055555555_고객명_260619_172247.m4a
+  // 4) 통화 녹음 01022222222_260619_172247.m4a
+  // 5) 010-5555-5555_고객명_260619_172247.m4a
+  // 핵심 규칙: 첫 번째 구간은 연락처, 마지막 두 구간은 기록일자/통화시간, 중간 구간이 있으면 고객명입니다.
+  const firstPartDigits = normalizePhone(parts[0] || "");
+  if (firstPartDigits.length >= 8 && firstPartDigits.length <= 11) {
+    phone = firstPartDigits;
+  }
 
-    if (!rawDate && (/^\d{6}$/.test(value) || /^20\d{6}$/.test(value))) {
-      rawDate = value;
-      const next = parts[index + 1];
+  if (parts.length >= 3) {
+    const dateCandidate = parts[parts.length - 2];
+    const timeCandidate = parts[parts.length - 1];
+    const normalizedDate = normalizeRecordDate(dateCandidate);
+    const normalizedTime = normalizeRecordTime(timeCandidate);
 
-      if (next && /^\d{4,6}$/.test(next)) {
-        rawTime = next.padEnd(6, "0").slice(0, 6);
+    if (normalizedDate && normalizedTime) {
+      rawDate = normalizePhone(dateCandidate);
+      rawTime = normalizePhone(timeCandidate).padEnd(6, "0").slice(0, 6);
+
+      const nameParts = parts.slice(1, parts.length - 2).filter(Boolean);
+      customerName = nameParts.length > 0 ? nameParts.join("_") : null;
+    }
+  }
+
+  // 날짜/시간이 마지막 두 구간에서 잡히지 않으면 전체 파일명에서 YYMMDD_HHMMSS 패턴을 찾습니다.
+  if (!rawDate || !rawTime) {
+    const dateTimeMatch = nameOnly.match(/(?:^|_)(20\d{6}|\d{6})_(\d{4,6})(?:$|_)/);
+    if (dateTimeMatch) {
+      const normalizedDate = normalizeRecordDate(dateTimeMatch[1]);
+      const normalizedTime = normalizeRecordTime(dateTimeMatch[2]);
+      if (normalizedDate && normalizedTime) {
+        rawDate = normalizePhone(dateTimeMatch[1]);
+        rawTime = normalizePhone(dateTimeMatch[2]).padEnd(6, "0").slice(0, 6);
       }
-      break;
     }
   }
 
-  if (!rawDate) {
-    const fallback = nameOnly.match(/(?:^|_)(20\d{6}|\d{6})(?:_|$)/);
-    if (fallback) rawDate = fallback[1];
-  }
+  // 연락처가 첫 구간에서 안 잡히면 파일명 전체에서 010/지역번호 전화번호를 찾습니다.
+  if (!phone) {
+    const phonePatterns = [
+      /01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g,
+      /0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g,
+    ];
 
-  if (!rawTime) {
-    const fallbackTime = nameOnly.match(/(?:^|_)(\d{6})(?:_|$)/g);
-    const candidates = (fallbackTime || [])
-      .map((value) => value.replace(/_/g, ""))
-      .filter((value) => value !== rawDate);
-
-    rawTime = candidates.find((value) => {
-      const hour = Number(value.slice(0, 2));
-      const minute = Number(value.slice(2, 4));
-      const second = Number(value.slice(4, 6));
-      return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59;
-    }) || null;
-  }
-
-  let recordDate: string | null = null;
-  if (rawDate) {
-    const normalizedDate =
-      rawDate.length === 6
-        ? `20${rawDate}`
-        : rawDate;
-
-    const year = Number(normalizedDate.slice(0, 4));
-    const month = Number(normalizedDate.slice(4, 6));
-    const day = Number(normalizedDate.slice(6, 8));
-
-    if (
-      year >= 2020 &&
-      year <= 2099 &&
-      month >= 1 &&
-      month <= 12 &&
-      day >= 1 &&
-      day <= 31
-    ) {
-      recordDate = `${normalizedDate.slice(0, 4)}-${normalizedDate.slice(4, 6)}-${normalizedDate.slice(6, 8)}`;
+    for (const pattern of phonePatterns) {
+      const matches = nameOnly.match(pattern);
+      if (matches && matches.length > 0) {
+        phone = normalizePhone(matches[0]);
+        break;
+      }
     }
   }
 
-  let recordTime: string | null = null;
-  if (rawTime && /^\d{6}$/.test(rawTime)) {
-    const hour = Number(rawTime.slice(0, 2));
-    const minute = Number(rawTime.slice(2, 4));
-    const second = Number(rawTime.slice(4, 6));
-
-    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
-      recordTime = `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}:${rawTime.slice(4, 6)}`;
-    }
-  }
+  const recordDate = normalizeRecordDate(rawDate);
+  const recordTime = normalizeRecordTime(rawTime);
 
   const recordedAt =
     recordDate && recordTime
@@ -1383,7 +1453,7 @@ export async function GET(request: NextRequest) {
 
     const audioFiles = folderResults
       .flatMap((result) => result.files)
-      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => isSupportedRecordingFile(file))
       .filter((file) => isFileAfterSyncStart(file, syncStartAt))
       .sort((a, b) => {
         const recordSort = getRecordingSortTime(a) - getRecordingSortTime(b);
@@ -1396,7 +1466,7 @@ export async function GET(request: NextRequest) {
 
     const skippedOldFileCount = folderResults
       .flatMap((result) => result.files)
-      .filter((file) => file.mimeType?.startsWith("audio/"))
+      .filter((file) => isSupportedRecordingFile(file))
       .filter((file) => !isFileAfterSyncStart(file, syncStartAt)).length;
 
     const processTargets = [];
