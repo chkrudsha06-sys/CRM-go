@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
           `manager_phone.ilike.%${keyword}%`,
           `agency_company.ilike.%${keyword}%`,
           `apartment_fee.ilike.%${keyword}%`,
+          `assigned_to.ilike.%${keyword}%`,
         ].join(',')
       );
     }
