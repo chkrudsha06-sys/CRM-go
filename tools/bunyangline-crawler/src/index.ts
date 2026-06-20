@@ -31,6 +31,17 @@ type RegionTarget = {
   source: string;
 };
 
+type LinkItem = {
+  text: string;
+  href: string;
+};
+
+type DisplayedRegion = {
+  regionName: string;
+  source: string;
+  matchText: string;
+};
+
 type RecruitItem = {
   source_url: string;
   source_post_key: string;
@@ -53,11 +64,6 @@ type RecruitItem = {
   crawled_at: string;
 };
 
-type LinkItem = {
-  text: string;
-  href: string;
-};
-
 function env(name: string, fallback = '') {
   return process.env[name] || fallback;
 }
@@ -70,8 +76,10 @@ function normalizeText(value: unknown, max = 0) {
   const text = String(value ?? '')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
+    .replace(/\r/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
   return max > 0 ? text.slice(0, max) : text;
 }
 
@@ -104,28 +112,15 @@ function absolutizeUrl(value: string) {
   }
 }
 
-
-function buildListPageUrl(regionUrl: string, pageNo: number) {
-  const url = new URL(regionUrl, BASE_URL);
-  url.hash = '';
-  if (pageNo > 1) {
-    url.searchParams.set('keyword', url.searchParams.get('keyword') || '');
-    url.searchParams.set('page', String(pageNo));
-  } else {
-    url.searchParams.delete('page');
-  }
-  return url.toString();
-}
-
 function normalizeSourceUrl(value: string) {
   try {
     const url = new URL(value, BASE_URL);
     url.hash = '';
-    url.searchParams.delete('utm_source');
-    url.searchParams.delete('utm_medium');
-    url.searchParams.delete('utm_campaign');
-    url.searchParams.delete('utm_term');
-    url.searchParams.delete('utm_content');
+
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((param) => {
+      url.searchParams.delete(param);
+    });
+
     return url.toString();
   } catch {
     return value;
@@ -133,8 +128,21 @@ function normalizeSourceUrl(value: string) {
 }
 
 function getRecruitId(url: string) {
-  const match = url.match(/\/recruit\/view\/(\d+)/i);
-  return match?.[1] || '';
+  return url.match(/\/recruit\/view\/(\d+)/i)?.[1] || '';
+}
+
+function buildListPageUrl(regionUrl: string, pageNo: number) {
+  const url = new URL(regionUrl, BASE_URL);
+  url.hash = '';
+
+  if (pageNo > 1) {
+    url.searchParams.set('keyword', url.searchParams.get('keyword') || '');
+    url.searchParams.set('page', String(pageNo));
+  } else {
+    url.searchParams.delete('page');
+  }
+
+  return url.toString();
 }
 
 function normalizePhone(value: string) {
@@ -159,6 +167,12 @@ function parseKoreanDate(text: string): string | null {
   const short = normalized.match(/(?:^|\D)(\d{2})[-./](\d{1,2})[-./](\d{1,2})(?:\D|$)/);
   if (short) return `20${short[1]}-${short[2].padStart(2, '0')}-${short[3].padStart(2, '0')}`;
 
+  const koreanShort = normalized.match(/(?:^|\D)(\d{1,2})[.월\s]+(\d{1,2})[.일\s]/);
+  if (koreanShort) {
+    const year = new Date().getFullYear();
+    return `${year}-${koreanShort[1].padStart(2, '0')}-${koreanShort[2].padStart(2, '0')}`;
+  }
+
   return null;
 }
 
@@ -172,15 +186,17 @@ function pickLineAfterLabel(lines: string[], labels: string[]) {
       .replace(new RegExp(`^.*?${matchedLabel}[:：]?\\s*`), '')
       .replace(/^[-|·•:\s]+/, '')
       .trim();
+
     if (inline && inline !== matchedLabel && inline.length >= 2) return inline;
 
     const next = lines[i + 1]?.trim();
     if (next) return next;
   }
+
   return '';
 }
 
-function findLines(text: string, keywords: string[], limit = 6) {
+function findLines(text: string, keywords: string[], limit = 8) {
   return text
     .split('\n')
     .map((line) => compactText(line, 500))
@@ -189,41 +205,67 @@ function findLines(text: string, keywords: string[], limit = 6) {
 }
 
 function cleanSiteName(value: string) {
-  return compactText(value, 160)
-    .replace(/^\[[^\]]+\]\s*/, '')
+  return compactText(value, 180)
+    .replace(/^[\[【][^\]】]+[\]】]\s*/, '')
     .replace(/\s+-\s+분양라인.*$/i, '')
+    .replace(/^분양라인\s*/, '')
     .trim();
 }
 
 function inferManagerName(text: string, phone: string) {
   if (!phone) return '';
-  const plainPhone = phone.replace(/(\d{3})(\d{3,4})(\d{4})/, '$1-$2-$3');
-  const phoneVariants = [phone, plainPhone];
+
+  const formatted = phone.replace(/(\d{3})(\d{3,4})(\d{4})/, '$1-$2-$3');
+  const phoneDigits = phone.replace(/\D/g, '');
   const lines = text.split('\n').map((line) => compactText(line, 500)).filter(Boolean);
 
   for (const line of lines) {
-    if (!phoneVariants.some((item) => line.replace(/\D/g, '').includes(item.replace(/\D/g, '')))) continue;
+    const lineDigits = line.replace(/\D/g, '');
+    if (!line.includes(formatted) && !lineDigits.includes(phoneDigits)) continue;
 
-    const labelCandidate = line
+    const candidate = line
       .replace(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, '')
-      .replace(/연락처|전화|문의|담당자|핸드폰|휴대폰|본부장|팀장|팀원|실장|님|:/g, ' ')
+      .replace(/연락처|전화|문의|담당자|핸드폰|휴대폰|본부장|팀장|팀원|실장|님|대표|부장|이사|:/g, ' ')
       .replace(/[|·•,，]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
-    const nameMatch = labelCandidate.match(/[가-힣]{2,4}/);
+    const nameMatch = candidate.match(/[가-힣]{2,4}/);
     if (nameMatch) return nameMatch[0];
   }
 
   return '';
 }
 
-function getCategoryFromText(text: string) {
-  const categories = ['유니크', '슈페리어', '전국TOP', '지역TOP', '일반 구인글', '일반구인글'];
-  for (const category of categories) {
-    if (text.includes(category)) return category.replace('일반 구인글', '일반구인글');
-  }
-  return '';
+function fallbackRegionTargets(): RegionTarget[] {
+  const pairs: Array<[RegionName, string]> = [
+    ['서울', '1'],
+    ['경기남부', '2'],
+    ['경기북부', '16'],
+    ['인천', '3'],
+    ['부산', '10'],
+    ['울산', '14'],
+    ['대구', '11'],
+    ['경상도', '6'],
+    ['대전', '13'],
+    ['세종', '15'],
+    ['충청도', '4'],
+    ['광주', '12'],
+    ['전라도', '5'],
+    ['강원도', '7'],
+    ['제주도', '8'],
+  ];
+
+  return pairs.map(([name, id]) => ({
+    id,
+    name,
+    url: `${BASE_URL}/recruit/regional/${id}`,
+    source: 'fallback-confirmed-region-map',
+  }));
+}
+
+function isRegionName(value: string): value is RegionName {
+  return (REGION_NAMES as readonly string[]).includes(value);
 }
 
 async function ensureDebugDir() {
@@ -240,39 +282,162 @@ async function saveText(filePath: string, value: string) {
   await fs.writeFile(filePath, value, 'utf8');
 }
 
-// page.evaluate 문자열 실행은 GitHub Actions/tsx 환경에서 문법 오류가 발생할 수 있어 사용하지 않습니다.
-// 아래 크롤러는 모두 locator.evaluateAll 또는 page.evaluate(function) 방식으로 실행합니다.
-
 async function autoScroll(page: Page, rounds: number) {
   let previousHeight = 0;
-  let sameHeightCount = 0;
+  let stableCount = 0;
 
   for (let i = 0; i < rounds; i += 1) {
-    const state = await page.evaluate(() => {
-    const normalize = (value: string | null | undefined) => String(value || '')
-      .replace(/\u00a0/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const currentHeight = await page.evaluate(() => document.body?.scrollHeight || 0).catch(() => 0);
 
+    await page.mouse.wheel(0, 1800).catch(() => undefined);
+    await page.keyboard.press('PageDown').catch(() => undefined);
+    await sleep(250);
+
+    const nextHeight = await page.evaluate(() => document.body?.scrollHeight || 0).catch(() => 0);
+
+    if (nextHeight === previousHeight || nextHeight === currentHeight) {
+      stableCount += 1;
+    } else {
+      stableCount = 0;
+    }
+
+    previousHeight = nextHeight;
+
+    if (stableCount >= 8) break;
+  }
+
+  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
+  await sleep(300);
+}
+
+async function extractRegionLinks(page: Page): Promise<RegionTarget[]> {
+  const links = await page.locator('a').evaluateAll((anchors) => {
+    const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
+
+    return anchors.map((anchor) => {
+      const a = anchor as HTMLAnchorElement;
+      return {
+        text: normalize(a.textContent),
+        href: a.href || a.getAttribute('href') || '',
+      };
+    });
+  }).catch(() => [] as Array<{ text: string; href: string }>);
+
+  const byName = new Map<string, RegionTarget>();
+
+  for (const link of links) {
+    const href = absolutizeUrl(link.href);
+    const id = href.match(/\/recruit\/regional\/(\d+)/i)?.[1];
+    if (!id) continue;
+
+    const name = REGION_NAMES.find((regionName) => link.text.includes(regionName));
+    if (!name) continue;
+
+    if (!byName.has(name)) {
+      byName.set(name, {
+        id,
+        name,
+        url: `${BASE_URL}/recruit/regional/${id}`,
+        source: 'page-region-anchor',
+      });
+    }
+  }
+
+  const targets = Array.from(byName.values());
+
+  if (!targets.length) return fallbackRegionTargets();
+
+  const ordered: RegionTarget[] = [];
+  for (const name of REGION_NAMES) {
+    const found = targets.find((item) => item.name === name);
+    if (found) ordered.push(found);
+  }
+
+  return ordered.length ? ordered : fallbackRegionTargets();
+}
+
+async function detectDisplayedRegion(page: Page, fallbackName: string): Promise<DisplayedRegion> {
+  const activeTexts = await page.locator('a, button, li, span, div').evaluateAll((nodes) => {
+    const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
+
+    return nodes
+      .map((node) => {
+        const element = node as HTMLElement;
+        const text = normalize(element.textContent);
+        const className = String(element.getAttribute('class') || '');
+        const ariaCurrent = String(element.getAttribute('aria-current') || '');
+        const style = String(element.getAttribute('style') || '');
+        return { text, className, ariaCurrent, style };
+      })
+      .filter((item) => item.text && item.text.length <= 30)
+      .slice(0, 500);
+  }).catch(() => [] as Array<{ text: string; className: string; ariaCurrent: string; style: string }>);
+
+  for (const item of activeTexts) {
+    const text = item.text.replace(/모든지역/g, '').trim();
+    const found = REGION_NAMES.find((regionName) => text === regionName || text.includes(regionName));
+    const marker = `${item.className} ${item.ariaCurrent} ${item.style}`;
+    if (found && /active|selected|on|current|blue|#00|rgb\(0/i.test(marker)) {
+      return {
+        regionName: found,
+        source: 'active-region-element',
+        matchText: `${item.text} / ${marker}`,
+      };
+    }
+  }
+
+  const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+  const breadcrumbMatch = bodyText.match(/지역현장\s*>\s*([가-힣]+)/);
+  if (breadcrumbMatch?.[1] && isRegionName(breadcrumbMatch[1])) {
     return {
-      title: normalize(document.title),
-      h1: normalize(document.querySelector('h1')?.textContent),
-      h2: normalize(document.querySelector('h2')?.textContent),
-      h3: normalize(document.querySelector('h3')?.textContent),
-      bodyText: normalize(document.body?.innerText || ''),
-      htmlText: normalize(document.documentElement?.outerHTML || '').slice(0, 3000),
+      regionName: breadcrumbMatch[1],
+      source: 'breadcrumb-text',
+      matchText: breadcrumbMatch[0],
     };
-  });
+  }
 
-  const sourceUrl = normalizeSourceUrl(link.href);
-    if (!byUrl.has(sourceUrl)) byUrl.set(sourceUrl, { text: link.text, href: sourceUrl });
+  return {
+    regionName: fallbackName,
+    source: 'fallback-list-region',
+    matchText: fallbackName,
+  };
+}
+
+async function extractViewLinks(page: Page): Promise<LinkItem[]> {
+  const anchorLinks = await page.locator('a').evaluateAll((anchors) => {
+    const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
+
+    return anchors.map((anchor) => {
+      const a = anchor as HTMLAnchorElement;
+      return {
+        text: normalize(a.textContent),
+        href: a.href || a.getAttribute('href') || '',
+      };
+    });
+  }).catch(() => [] as Array<{ text: string; href: string }>);
+
+  const html = await page.content().catch(() => '');
+  const regexLinks = Array.from(html.matchAll(/(?:href=["']|url\(|location\.href\s*=\s*["'])([^"')]+\/recruit\/view\/\d+[^"')<]*)/gi))
+    .map((match) => ({ text: '', href: match[1].replace(/&amp;/g, '&') }));
+
+  const allLinks = [...anchorLinks, ...regexLinks];
+  const byUrl = new Map<string, LinkItem>();
+
+  for (const link of allLinks) {
+    if (!/\/recruit\/view\/\d+/i.test(link.href)) continue;
+    const sourceUrl = normalizeSourceUrl(link.href);
+    if (!byUrl.has(sourceUrl)) {
+      byUrl.set(sourceUrl, {
+        text: compactText(link.text, 160),
+        href: sourceUrl,
+      });
+    }
   }
 
   return Array.from(byUrl.values());
 }
 
-async function parseDetailPage(page: Page, detailUrl: string, region: RegionTarget, actualRegion: Awaited<ReturnType<typeof detectDisplayedRegion>>): Promise<RecruitItem> {
+async function parseDetailPage(page: Page, detailUrl: string, region: RegionTarget, actualRegion: DisplayedRegion): Promise<RecruitItem> {
   const response = await page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch((error) => {
     console.log(`[${region.name}] 상세 접속 실패: ${detailUrl} / ${error?.message || String(error)}`);
     return null;
@@ -285,32 +450,47 @@ async function parseDetailPage(page: Page, detailUrl: string, region: RegionTarg
     const normalize = (value: string | null | undefined) => String(value || '')
       .replace(/\u00a0/g, ' ')
       .replace(/[ \t]+/g, ' ')
+      .replace(/\r/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+
+    const metaDescription = document.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+    const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '';
+    const ogDescription = document.querySelector('meta[property="og:description"]')?.getAttribute('content') || '';
 
     return {
       title: normalize(document.title),
       h1: normalize(document.querySelector('h1')?.textContent),
       h2: normalize(document.querySelector('h2')?.textContent),
       h3: normalize(document.querySelector('h3')?.textContent),
+      metaDescription: normalize(metaDescription),
+      ogTitle: normalize(ogTitle),
+      ogDescription: normalize(ogDescription),
       bodyText: normalize(document.body?.innerText || ''),
-      htmlText: normalize(document.documentElement?.outerHTML || '').slice(0, 3000),
     };
   });
 
   const sourceUrl = normalizeSourceUrl(response?.url() || detailUrl);
-  const bodyText = normalizeText(state.bodyText);
-  const lines = bodyText.split('\n').map((line) => compactText(line, 500)).filter(Boolean);
+  const bodyText = normalizeText([state.ogTitle, state.ogDescription, state.metaDescription, state.bodyText].filter(Boolean).join('\n'));
+  const lines = bodyText.split('\n').map((line) => compactText(line, 600)).filter(Boolean);
   const phones = extractAllPhones(bodyText);
   const managerPhone = phones[0] || '';
 
-  const titleCandidates = [state.h1, state.h2, state.h3, state.title, lines.find((line) => /분양|아파트|오피스텔|생활형|상가|모집|채용|팀장|팀원|본부장/.test(line)) || ''];
+  const titleCandidates = [
+    state.h1,
+    state.h2,
+    state.h3,
+    state.ogTitle,
+    state.title,
+    lines.find((line) => /분양|아파트|오피스텔|생활형|상가|모집|채용|팀장|팀원|본부장|수수료/.test(line)) || '',
+  ];
+
   const siteName = cleanSiteName(titleCandidates.find((item) => compactText(item, 10)) || `분양라인 공고 ${getRecruitId(sourceUrl)}`);
 
-  const siteAddress = pickLineAfterLabel(lines, ['현장주소', '현장 주소', '주소', '위치', '근무지']);
-  const managerName = pickLineAfterLabel(lines, ['담당자명', '담당자', '문의']) || inferManagerName(bodyText, managerPhone);
-  const agencyCompany = pickLineAfterLabel(lines, ['대행사', '분양대행사', '시행사', '시공사', '소속회사', '회사명']);
-  const feeLines = findLines(bodyText, ['수수료', '급여', '계약금', '지원', '만원', '%', '월급', '일비', '경력무관'], 8);
+  const siteAddress = pickLineAfterLabel(lines, ['현장주소', '현장 주소', '주소', '위치', '근무지', '현장위치']);
+  const managerName = pickLineAfterLabel(lines, ['담당자명', '담당자', '문의', '연락 담당']) || inferManagerName(bodyText, managerPhone);
+  const agencyCompany = pickLineAfterLabel(lines, ['대행사', '분양대행사', '시행사', '시공사', '소속회사', '회사명', '대행']);
+  const feeLines = findLines(bodyText, ['수수료', '급여', '계약금', '지원', '만원', '%', '월급', '일비', '경력무관', '팀장', '팀원'], 12);
   const apartmentFee = feeLines.join(' / ');
   const postedAt = parseKoreanDate(pickLineAfterLabel(lines, ['등록일', '작성일', '게시일']) || bodyText);
 
@@ -361,29 +541,29 @@ async function sendToCrm(rows: RecruitItem[]) {
 
   const text = await response.text();
   let json: unknown = text;
+
   try {
     json = JSON.parse(text);
   } catch {
-    // keep text
+    // keep original text
   }
 
   if (!response.ok) {
-    throw new Error(`[CRM저장실패] status=${response.status} body=${compactText(text, 1000)}`);
+    throw new Error(`[CRM저장실패] status=${response.status} body=${compactText(text, 1200)}`);
   }
 
   console.log(`[CRM저장] ${rows.length}건 전송 완료 / status=${response.status}`);
-  console.log(`[CRM저장] 응답: ${compactText(JSON.stringify(json), 1000)}`);
+  console.log(`[CRM저장] 응답: ${compactText(JSON.stringify(json), 1200)}`);
   return json;
 }
 
 async function main() {
   const regionArg = env('BUNYANGLINE_REGION_IDS', 'all');
   const maxPages = Math.max(1, Number(env('BUNYANGLINE_MAX_PAGES', '1')) || 1);
-  const scrollRounds = Math.max(5, Number(env('BUNYANGLINE_SCROLL_ROUNDS', '80')) || 80);
+  const scrollRounds = Math.max(5, Number(env('BUNYANGLINE_SCROLL_ROUNDS', '120')) || 120);
   const headless = env('HEADLESS', 'true') !== 'false';
   const sendToCrmEnabled = env('BUNYANGLINE_SEND_TO_CRM', 'true') !== 'false';
   const batchSize = Math.max(10, Number(env('BUNYANGLINE_IMPORT_BATCH_SIZE', '50')) || 50);
-
   const debugDir = await ensureDebugDir();
 
   console.log('분양라인 상세페이지 기준 크롤러를 시작합니다.');
@@ -409,16 +589,11 @@ async function main() {
   const detailPage = await context.newPage();
 
   try {
-    const seedUrl = `${BASE_URL}/recruit/regional/1`;
-    await listPage.goto(seedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await listPage.goto(`${BASE_URL}/recruit/regional/1`, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await listPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
     await sleep(1000);
 
     let regionTargets = await extractRegionLinks(listPage);
-    if (!regionTargets.length) {
-      console.log('[지역발견] 지역 링크 자동 발견 실패 - fallback 지역 URL을 사용합니다.');
-      regionTargets = fallbackRegionTargets();
-    }
 
     if (regionArg !== 'all') {
       const requested = regionArg.split(',').map((item) => item.trim()).filter(Boolean);
@@ -437,8 +612,8 @@ async function main() {
     const regionSummaries: Array<Record<string, unknown>> = [];
 
     for (const region of regionTargets) {
-      let regionRows: RecruitItem[] = [];
-      let regionViewLinks: LinkItem[] = [];
+      const regionRows: RecruitItem[] = [];
+      let lastViewLinks: LinkItem[] = [];
 
       for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
         const pageUrl = buildListPageUrl(region.url, pageNo);
@@ -446,7 +621,7 @@ async function main() {
         console.log('='.repeat(90));
         console.log(`[${region.name}] 목록 접속: ${pageUrl}`);
 
-        await listPage.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(async (error) => {
+        await listPage.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch((error) => {
           console.log(`[${region.name}] 목록 접속 실패: ${error?.message || String(error)}`);
         });
         await listPage.waitForLoadState('networkidle', { timeout: 18000 }).catch(() => undefined);
@@ -459,12 +634,16 @@ async function main() {
         console.log(`[${region.name}] 초기 상세공고 후보: ${initialLinks.length}건`);
 
         await autoScroll(listPage, scrollRounds);
+
         const viewLinks = await extractViewLinks(listPage);
+        lastViewLinks = viewLinks;
+
         console.log(`[${region.name}] 스크롤 후 상세공고 후보: ${viewLinks.length}건`);
 
-        regionViewLinks = viewLinks;
-        await saveJson(path.join(debugDir, `${safeFileName(region.name)}_view_links.json`), viewLinks);
-        await listPage.screenshot({ path: path.join(debugDir, `${safeFileName(region.name)}_list_screenshot.png`), fullPage: true }).catch(() => undefined);
+        const debugPrefix = `${safeFileName(region.name)}_page_${pageNo}`;
+        await saveJson(path.join(debugDir, `${debugPrefix}_view_links.json`), viewLinks);
+        await saveText(path.join(debugDir, `${debugPrefix}_body.txt`), await listPage.locator('body').innerText().catch(() => ''));
+        await listPage.screenshot({ path: path.join(debugDir, `${debugPrefix}_screenshot.png`), fullPage: true }).catch(() => undefined);
 
         for (let i = 0; i < viewLinks.length; i += 1) {
           const link = viewLinks[i];
@@ -482,7 +661,7 @@ async function main() {
 
             if (sendToCrmEnabled && regionRows.length % batchSize === 0) {
               const batch = regionRows.slice(regionRows.length - batchSize);
-              await sendToCrmFunc(batch);
+              await sendToCrm(batch);
             }
           } catch (error: any) {
             console.log(`[${region.name}] 상세 파싱 실패: ${sourceUrl} / ${error?.message || String(error)}`);
@@ -492,19 +671,19 @@ async function main() {
 
       if (sendToCrmEnabled && regionRows.length % batchSize !== 0) {
         const remain = regionRows.slice(Math.floor(regionRows.length / batchSize) * batchSize);
-        if (remain.length) await sendToCrmFunc(remain);
+        if (remain.length) await sendToCrm(remain);
       }
 
       regionSummaries.push({
         region: region.name,
         regionId: region.id,
         regionUrl: region.url,
-        viewLinkCount: regionViewLinks.length,
+        viewLinkCount: lastViewLinks.length,
         parsedCount: regionRows.length,
       });
 
       await saveJson(path.join(debugDir, `${safeFileName(region.name)}_rows.json`), regionRows);
-      console.log(`[${region.name}] 완료: 상세후보 ${regionViewLinks.length}건 / 파싱 ${regionRows.length}건`);
+      console.log(`[${region.name}] 완료: 상세후보 ${lastViewLinks.length}건 / 파싱 ${regionRows.length}건`);
     }
 
     await saveJson(path.join(debugDir, 'summary.json'), {
@@ -520,10 +699,6 @@ async function main() {
     console.log('[완료] debug-output의 summary.json / all_rows.json / 지역별 rows 파일을 확인하세요.');
   } finally {
     await browser.close();
-  }
-
-  async function sendToCrmFunc(rows: RecruitItem[]) {
-    return sendToCrm(rows);
   }
 }
 
