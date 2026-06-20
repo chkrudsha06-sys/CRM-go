@@ -767,18 +767,15 @@ async function sendToCrm(rows: CrawledRow[]) {
   };
 }
 
-async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTarget, maxPages: number, maxDetailsPerRegion: number, scrollRounds: number) {
+async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTarget, maxPages: number, scrollRounds: number) {
   const rows: CrawledRow[] = [];
   const seenUrls = new Set<string>();
 
   for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
-    const remainingSlots = Math.max(maxDetailsPerRegion - rows.length, 0);
-    if (remainingSlots <= 0) break;
-
     const { listUrl, detection, targets } = await gotoListAndCollect(browserPage, region, pageNo, scrollRounds);
-    const freshTargets = targets.filter((target) => !seenUrls.has(target.url)).slice(0, remainingSlots);
+    const freshTargets = targets.filter((target) => !seenUrls.has(target.url));
 
-    console.log(`[${region.name}] ${pageNo}페이지 상세공고 처리 대상: ${freshTargets.length}건`);
+    console.log(`[${region.name}] ${pageNo}페이지 상세공고 처리 대상: ${freshTargets.length}건 / 발견 ${targets.length}건 / 누적 ${rows.length}건`);
 
     await saveJson(`${safeFileName(region.name)}-${pageNo}-view-links.json`, {
       region,
@@ -786,7 +783,7 @@ async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTa
       detection,
       candidateCount: targets.length,
       processCount: freshTargets.length,
-      sampleTargets: freshTargets.slice(0, 30),
+      sampleTargets: freshTargets.slice(0, 50),
       mode: 'detail-view-url',
     });
 
@@ -801,7 +798,6 @@ async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTa
       console.log(`[${region.name}] 상세공고 URL을 찾지 못했습니다. debug-output/${safeFileName(region.name)}-${pageNo}-html.txt에서 /recruit/view/ 존재 여부를 확인하세요.`);
     }
 
-    if (rows.length >= maxDetailsPerRegion) break;
   }
 
   return rows;
@@ -810,15 +806,14 @@ async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTa
 async function main() {
   const regionArg = env('BUNYANGLINE_REGION_IDS', 'all');
   const maxPages = Math.max(Number(env('BUNYANGLINE_MAX_PAGES', '1')), 1);
-  const maxDetailsPerRegion = Math.max(Number(env('BUNYANGLINE_MAX_DETAILS_PER_REGION', '30')), 1);
-  const scrollRounds = Math.max(Number(env('BUNYANGLINE_SCROLL_ROUNDS', '12')), 1);
+  const scrollRounds = Math.max(Number(env('BUNYANGLINE_SCROLL_ROUNDS', '80')), 1);
   const headless = env('HEADLESS', 'true') !== 'false';
   const shouldSendToCrm = env('BUNYANGLINE_SEND_TO_CRM', 'true') !== 'false';
 
   console.log('분양라인 크롤러 시작');
   console.log(`- regionArg: ${regionArg}`);
   console.log(`- maxPages: ${maxPages}`);
-  console.log(`- maxDetailsPerRegion: ${maxDetailsPerRegion}`);
+  console.log('- maxDetailsPerRegion: unlimited');
   console.log(`- scrollRounds: ${scrollRounds}`);
   console.log(`- headless: ${headless}`);
   console.log(`- sendToCrm: ${shouldSendToCrm}`);
@@ -844,7 +839,7 @@ async function main() {
     const seenSourceUrls = new Set<string>();
 
     for (const region of regions) {
-      const rows = await crawlRegion(page, detailPage, region, maxPages, maxDetailsPerRegion, scrollRounds);
+      const rows = await crawlRegion(page, detailPage, region, maxPages, scrollRounds);
 
       for (const row of rows) {
         if (seenSourceUrls.has(row.source_url)) {
