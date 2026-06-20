@@ -240,132 +240,32 @@ async function saveText(filePath: string, value: string) {
   await fs.writeFile(filePath, value, 'utf8');
 }
 
-async function pageEvalJson<T>(page: Page, scriptBody: string): Promise<T> {
-  const result = await page.evaluate(`(() => { ${scriptBody} })()`);
-  return result as T;
-}
+// page.evaluate 문자열 실행은 GitHub Actions/tsx 환경에서 문법 오류가 발생할 수 있어 사용하지 않습니다.
+// 아래 크롤러는 모두 locator.evaluateAll 또는 page.evaluate(function) 방식으로 실행합니다.
 
 async function autoScroll(page: Page, rounds: number) {
   let previousHeight = 0;
   let sameHeightCount = 0;
 
   for (let i = 0; i < rounds; i += 1) {
-    const state = await pageEvalJson<{ height: number; y: number }>(page, `
-      window.scrollTo(0, document.body.scrollHeight);
-      return { height: document.body.scrollHeight, y: window.scrollY };
-    `).catch(() => ({ height: 0, y: 0 }));
+    const state = await page.evaluate(() => {
+    const normalize = (value: string | null | undefined) => String(value || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
 
-    await sleep(800);
-
-    if (state.height === previousHeight) sameHeightCount += 1;
-    else sameHeightCount = 0;
-
-    previousHeight = state.height;
-
-    if (sameHeightCount >= 8) break;
-  }
-}
-
-async function extractRegionLinks(page: Page): Promise<RegionTarget[]> {
-  const rawLinks = await pageEvalJson<LinkItem[]>(page, `
-    const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-    return Array.from(document.querySelectorAll('a')).map((a) => ({
-      text: normalize(a.textContent),
-      href: a.href || a.getAttribute('href') || ''
-    })).filter((item) => item.href.includes('/recruit/regional/'));
-  `);
-
-  const regionLinks: RegionTarget[] = [];
-
-  for (const regionName of REGION_NAMES) {
-    const found = rawLinks.find((link) => link.text === regionName || link.text.includes(regionName));
-    if (!found) continue;
-    const url = absolutizeUrl(found.href);
-    const id = url.match(/\/recruit\/regional\/(\d+)/)?.[1] || '';
-    if (!id) continue;
-    regionLinks.push({ id, name: regionName, url, source: 'discovered-anchor' });
-  }
-
-  return regionLinks;
-}
-
-function fallbackRegionTargets(): RegionTarget[] {
-  // 분양라인 실제 링크는 사이트에서 자동 발견하는 것을 1순위로 사용합니다.
-  // 아래 값은 발견 실패 시 접속 자체를 중단하지 않기 위한 예비값입니다.
-  return [
-    { id: '1', name: '서울', url: `${BASE_URL}/recruit/regional/1`, source: 'fallback' },
-    { id: '2', name: '경기남부', url: `${BASE_URL}/recruit/regional/2`, source: 'fallback' },
-    { id: '3', name: '인천', url: `${BASE_URL}/recruit/regional/3`, source: 'fallback' },
-    { id: '4', name: '충청도', url: `${BASE_URL}/recruit/regional/4`, source: 'fallback' },
-    { id: '5', name: '전라도', url: `${BASE_URL}/recruit/regional/5`, source: 'fallback' },
-    { id: '6', name: '경상도', url: `${BASE_URL}/recruit/regional/6`, source: 'fallback' },
-    { id: '7', name: '강원도', url: `${BASE_URL}/recruit/regional/7`, source: 'fallback' },
-    { id: '8', name: '제주도', url: `${BASE_URL}/recruit/regional/8`, source: 'fallback' },
-    { id: '10', name: '부산', url: `${BASE_URL}/recruit/regional/10`, source: 'fallback' },
-    { id: '11', name: '대구', url: `${BASE_URL}/recruit/regional/11`, source: 'fallback' },
-    { id: '12', name: '광주', url: `${BASE_URL}/recruit/regional/12`, source: 'fallback' },
-    { id: '13', name: '대전', url: `${BASE_URL}/recruit/regional/13`, source: 'fallback' },
-    { id: '14', name: '울산', url: `${BASE_URL}/recruit/regional/14`, source: 'fallback' },
-    { id: '15', name: '세종', url: `${BASE_URL}/recruit/regional/15`, source: 'fallback' },
-  ];
-}
-
-async function detectDisplayedRegion(page: Page, fallback: string) {
-  const pageText = await pageEvalJson<{ selectedText: string; bodySample: string }>(page, `
-    const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-    const regionNames = ${JSON.stringify(REGION_NAMES)};
-    const anchors = Array.from(document.querySelectorAll('a'));
-    const selected = anchors.find((a) => {
-      const text = normalize(a.textContent);
-      if (!regionNames.includes(text)) return false;
-      const cls = String(a.className || '');
-      const aria = a.getAttribute('aria-current') || '';
-      const style = window.getComputedStyle(a);
-      return cls.includes('active') || cls.includes('on') || aria === 'page' || style.color.includes('0, 174') || style.borderBottomColor.includes('0, 174');
-    });
-    const selectedText = selected ? normalize(selected.textContent) : '';
-    const bodySample = normalize(document.body?.innerText || '').slice(0, 2000);
-    return { selectedText, bodySample };
-  `).catch(() => ({ selectedText: '', bodySample: '' }));
-
-  if (REGION_NAMES.includes(pageText.selectedText as RegionName)) {
     return {
-      regionName: pageText.selectedText,
-      source: 'selected-anchor',
-      matchText: pageText.selectedText,
+      title: normalize(document.title),
+      h1: normalize(document.querySelector('h1')?.textContent),
+      h2: normalize(document.querySelector('h2')?.textContent),
+      h3: normalize(document.querySelector('h3')?.textContent),
+      bodyText: normalize(document.body?.innerText || ''),
+      htmlText: normalize(document.documentElement?.outerHTML || '').slice(0, 3000),
     };
-  }
+  });
 
-  for (const regionName of REGION_NAMES) {
-    if (pageText.bodySample.includes(`지역현장 > ${regionName}`) || pageText.bodySample.includes(`지역현장 ${regionName}`)) {
-      return {
-        regionName,
-        source: 'breadcrumb-text',
-        matchText: `지역현장>${regionName}`,
-      };
-    }
-  }
-
-  return {
-    regionName: fallback,
-    source: 'fallback-list-region',
-    matchText: fallback,
-  };
-}
-
-async function extractViewLinks(page: Page) {
-  const links = await pageEvalJson<LinkItem[]>(page, `
-    const normalize = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-    const anchors = Array.from(document.querySelectorAll('a'));
-    return anchors.map((a) => ({
-      text: normalize(a.textContent),
-      href: a.href || a.getAttribute('href') || ''
-    })).filter((item) => /\/recruit\/view\/\d+/i.test(item.href));
-  `);
-
-  const byUrl = new Map<string, LinkItem>();
-  for (const link of links) {
-    const sourceUrl = normalizeSourceUrl(link.href);
+  const sourceUrl = normalizeSourceUrl(link.href);
     if (!byUrl.has(sourceUrl)) byUrl.set(sourceUrl, { text: link.text, href: sourceUrl });
   }
 
@@ -381,28 +281,22 @@ async function parseDetailPage(page: Page, detailUrl: string, region: RegionTarg
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
   await sleep(800);
 
-  const state = await pageEvalJson<{
-    title: string;
-    h1: string;
-    h2: string;
-    h3: string;
-    bodyText: string;
-    htmlText: string;
-  }>(page, `
-    const normalize = (value) => String(value || '')
-      .replace(/\\u00a0/g, ' ')
-      .replace(/[ \\t]+/g, ' ')
-      .replace(/\\n{3,}/g, '\\n\\n')
+  const state = await page.evaluate(() => {
+    const normalize = (value: string | null | undefined) => String(value || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
+
     return {
       title: normalize(document.title),
       h1: normalize(document.querySelector('h1')?.textContent),
       h2: normalize(document.querySelector('h2')?.textContent),
       h3: normalize(document.querySelector('h3')?.textContent),
       bodyText: normalize(document.body?.innerText || ''),
-      htmlText: normalize(document.documentElement?.outerHTML || '').slice(0, 3000)
+      htmlText: normalize(document.documentElement?.outerHTML || '').slice(0, 3000),
     };
-  `);
+  });
 
   const sourceUrl = normalizeSourceUrl(response?.url() || detailUrl);
   const bodyText = normalizeText(state.bodyText);
