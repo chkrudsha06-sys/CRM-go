@@ -36,6 +36,14 @@ type LinkItem = {
   href: string;
 };
 
+type JsonPayload = {
+  url: string;
+  status: number;
+  contentType: string;
+  value: unknown;
+  textSample: string;
+};
+
 type DisplayedRegion = {
   regionName: string;
   source: string;
@@ -403,35 +411,260 @@ async function detectDisplayedRegion(page: Page, fallbackName: string): Promise<
   };
 }
 
-async function extractViewLinks(page: Page): Promise<LinkItem[]> {
+
+function looksLikeRecruitObject(obj: Record<string, unknown>) {
+  const keys = Object.keys(obj).map((key) => key.toLowerCase());
+  const joinedValues = Object.values(obj)
+    .filter((value) => typeof value === 'string' || typeof value === 'number')
+    .map((value) => String(value))
+    .join(' ');
+
+  const hasRecruitText = /분양|아파트|오피스텔|상가|팀장|팀원|본부장|수수료|경력무관|일비|대행|현장|모집/.test(joinedValues);
+  const hasTitleKey = keys.some((key) => /title|subject|name|site|field|headline|company|agency|content/.test(key));
+  const hasIdKey = keys.some((key) => /^(idx|id|no|seq)$|recruit|wr_id|post|board/.test(key));
+
+  return hasIdKey && (hasTitleKey || hasRecruitText);
+}
+
+function extractRecruitIdFromObject(obj: Record<string, unknown>) {
+  const priorityKeys = [
+    'idx',
+    'recruit_idx',
+    'recruitIdx',
+    'recruit_id',
+    'recruitId',
+    'id',
+    'wr_id',
+    'wrId',
+    'no',
+    'seq',
+    'post_id',
+    'postId',
+  ];
+
+  for (const key of priorityKeys) {
+    const value = obj[key];
+    const match = String(value ?? '').match(/^\d{4,}$/);
+    if (match) return match[0];
+  }
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (!/idx|id|no|seq|recruit|wr|post|board/i.test(key)) continue;
+    const match = String(value ?? '').match(/\d{4,}/);
+    if (match) return match[0];
+  }
+
+  return '';
+}
+
+function extractTitleFromObject(obj: Record<string, unknown>) {
+  const priorityKeys = [
+    'title',
+    'subject',
+    'site_name',
+    'siteName',
+    'name',
+    'company_name',
+    'companyName',
+    'field_name',
+    'fieldName',
+  ];
+
+  for (const key of priorityKeys) {
+    const value = compactText(obj[key], 160);
+    if (value && !/^\d+$/.test(value)) return value;
+  }
+
+  for (const value of Object.values(obj)) {
+    const text = compactText(value, 160);
+    if (/분양|아파트|오피스텔|상가|팀장|팀원|본부장|모집|수수료/.test(text)) return text;
+  }
+
+  return '';
+}
+
+function walkJsonForRecruitLinks(value: unknown, byUrl: Map<string, LinkItem>, depth = 0) {
+  if (depth > 10 || value == null) return;
+
+  if (Array.isArray(value)) {
+    for (const child of value) walkJsonForRecruitLinks(child, byUrl, depth + 1);
+    return;
+  }
+
+  if (typeof value === 'string') {
+    const viewMatches = Array.from(value.matchAll(/\/recruit\/view\/(\d+)\/?[^\s"'<)]*/gi));
+    for (const match of viewMatches) {
+      const id = match[1];
+      const url = normalizeSourceUrl(`${BASE_URL}/recruit/view/${id}/?previousActiveNaviId=regional`);
+      if (!byUrl.has(url)) byUrl.set(url, { text: '', href: url });
+    }
+    return;
+  }
+
+  if (typeof value !== 'object') return;
+
+  const obj = value as Record<string, unknown>;
+
+  for (const [key, child] of Object.entries(obj)) {
+    if (/url|href|link|path/i.test(key)) {
+      const text = String(child ?? '');
+      const match = text.match(/\/recruit\/view\/(\d+)/i);
+      if (match) {
+        const url = normalizeSourceUrl(text.startsWith('http') ? text : `${BASE_URL}${text.startsWith('/') ? '' : '/'}${text}`);
+        if (!byUrl.has(url)) byUrl.set(url, { text: extractTitleFromObject(obj), href: url });
+      }
+    }
+  }
+
+  if (looksLikeRecruitObject(obj)) {
+    const id = extractRecruitIdFromObject(obj);
+    if (id) {
+      const url = normalizeSourceUrl(`${BASE_URL}/recruit/view/${id}/?previousActiveNaviId=regional`);
+      if (!byUrl.has(url)) byUrl.set(url, { text: extractTitleFromObject(obj), href: url });
+    }
+  }
+
+  for (const child of Object.values(obj)) walkJsonForRecruitLinks(child, byUrl, depth + 1);
+}
+
+async function captureListJsonResponses(page: Page, bucket: JsonPayload[], jobs: Promise<void>[]) {
+  const handler = (response: any) => {
+    const url = String(response.url?.() || '');
+    if (!url.includes('bunyangline.com')) return;
+
+    const job = (async () => {
+      const headers = response.headers?.() || {};
+      const contentType = String(headers['content-type'] || '');
+      const likelyData =
+        contentType.includes('application/json') ||
+        /api|ajax|list|recruit|regional|json|load|more|search/i.test(url);
+
+      if (!likelyData) return;
+
+      try {
+        const text = await response.text();
+        const trimmed = text.trim();
+        if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+          bucket.push({
+            url,
+            status: response.status?.() || 0,
+            contentType,
+            value: null,
+            textSample: compactText(text, 1000),
+          });
+          return;
+        }
+
+        bucket.push({
+          url,
+          status: response.status?.() || 0,
+          contentType,
+          value: JSON.parse(trimmed),
+          textSample: compactText(text, 1000),
+        });
+      } catch (error: any) {
+        bucket.push({
+          url,
+          status: response.status?.() || 0,
+          contentType,
+          value: null,
+          textSample: `read failed: ${error?.message || String(error)}`,
+        });
+      }
+    })();
+
+    jobs.push(job);
+  };
+
+  page.on('response', handler);
+
+  return () => {
+    page.off('response', handler);
+  };
+}
+
+async function extractViewLinks(page: Page, jsonPayloads: JsonPayload[] = []): Promise<LinkItem[]> {
   const anchorLinks = await page.locator('a').evaluateAll((anchors) => {
     const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
 
     return anchors.map((anchor) => {
       const a = anchor as HTMLAnchorElement;
+      const attrs = Array.from(a.attributes).map((attr) => `${attr.name}=${attr.value}`).join(' ');
       return {
         text: normalize(a.textContent),
         href: a.href || a.getAttribute('href') || '',
+        attrs,
       };
     });
-  }).catch(() => [] as Array<{ text: string; href: string }>);
+  }).catch(() => [] as Array<{ text: string; href: string; attrs: string }>);
 
   const html = await page.content().catch(() => '');
-  const regexLinks = Array.from(html.matchAll(/(?:href=["']|url\(|location\.href\s*=\s*["'])([^"')]+\/recruit\/view\/\d+[^"')<]*)/gi))
-    .map((match) => ({ text: '', href: match[1].replace(/&amp;/g, '&') }));
-
-  const allLinks = [...anchorLinks, ...regexLinks];
+  const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
   const byUrl = new Map<string, LinkItem>();
 
-  for (const link of allLinks) {
-    if (!/\/recruit\/view\/\d+/i.test(link.href)) continue;
-    const sourceUrl = normalizeSourceUrl(link.href);
-    if (!byUrl.has(sourceUrl)) {
-      byUrl.set(sourceUrl, {
-        text: compactText(link.text, 160),
-        href: sourceUrl,
-      });
+  const pushId = (id: string, text = '') => {
+    if (!/^\d{4,}$/.test(id)) return;
+    const url = normalizeSourceUrl(`${BASE_URL}/recruit/view/${id}/?previousActiveNaviId=regional`);
+    if (!byUrl.has(url)) byUrl.set(url, { text: compactText(text, 160), href: url });
+  };
+
+  const pushHref = (href: string, text = '') => {
+    if (!href) return;
+    const match = href.match(/\/recruit\/view\/(\d+)/i);
+    if (match) {
+      pushId(match[1], text);
+      return;
     }
+
+    const full = href.startsWith('http') ? href : `${BASE_URL}${href.startsWith('/') ? '' : '/'}${href}`;
+    const fullMatch = full.match(/\/recruit\/view\/(\d+)/i);
+    if (fullMatch) pushId(fullMatch[1], text);
+  };
+
+  for (const link of anchorLinks) {
+    pushHref(link.href, link.text);
+    pushHref(link.attrs, link.text);
+  }
+
+  const htmlPatterns = [
+    /\/recruit\/view\/(\d+)\/?[^\s"'<)]*/gi,
+    /recruit\/view\/(\d+)/gi,
+    /["']idx["']\s*:\s*["']?(\d{4,})["']?/gi,
+    /\bidx\s*[:=]\s*["']?(\d{4,})["']?/gi,
+    /["']recruit[_-]?idx["']\s*:\s*["']?(\d{4,})["']?/gi,
+    /["']recruit[_-]?id["']\s*:\s*["']?(\d{4,})["']?/gi,
+  ];
+
+  for (const pattern of htmlPatterns) {
+    for (const match of html.matchAll(pattern)) {
+      const id = match[1];
+      const offset = Math.max(0, (match.index || 0) - 250);
+      const context = html.slice(offset, (match.index || 0) + 250);
+      if (/recruit|분양|아파트|오피스텔|상가|팀장|팀원|본부장|모집|title|subject|name|현장/i.test(context)) {
+        pushId(id, compactText(context.replace(/<[^>]+>/g, ' '), 160));
+      }
+    }
+  }
+
+  for (const payload of jsonPayloads) {
+    if (payload.value !== null) {
+      walkJsonForRecruitLinks(payload.value, byUrl);
+      continue;
+    }
+
+    for (const match of payload.textSample.matchAll(/\/recruit\/view\/(\d+)/gi)) {
+      pushId(match[1]);
+    }
+  }
+
+  if (!byUrl.size) {
+    console.log(`[링크진단] DOM/HTML/JSON에서 /recruit/view 후보 0건`);
+    console.log(`[링크진단] JSON/API 후보 응답 ${jsonPayloads.length}건`);
+    jsonPayloads.slice(0, 5).forEach((payload, index) => {
+      console.log(`  JSON ${index + 1}. status=${payload.status} url=${payload.url}`);
+      console.log(`  sample=${compactText(JSON.stringify(payload.value ?? payload.textSample), 500)}`);
+    });
+    console.log(`[링크진단] body sample=${compactText(bodyText, 700)}`);
   }
 
   return Array.from(byUrl.values());
@@ -621,28 +854,44 @@ async function main() {
         console.log('='.repeat(90));
         console.log(`[${region.name}] 목록 접속: ${pageUrl}`);
 
+        const jsonPayloads: JsonPayload[] = [];
+        const jsonJobs: Promise<void>[] = [];
+        const detachJsonCapture = await captureListJsonResponses(listPage, jsonPayloads, jsonJobs);
+
         await listPage.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch((error) => {
           console.log(`[${region.name}] 목록 접속 실패: ${error?.message || String(error)}`);
         });
         await listPage.waitForLoadState('networkidle', { timeout: 18000 }).catch(() => undefined);
-        await sleep(1200);
+        await sleep(1800);
 
         const actualRegion = await detectDisplayedRegion(listPage, region.name);
         console.log(`[${region.name}] 실제 표시 지역: ${actualRegion.regionName} / source=${actualRegion.source}`);
 
-        const initialLinks = await extractViewLinks(listPage);
-        console.log(`[${region.name}] 초기 상세공고 후보: ${initialLinks.length}건`);
+        await Promise.allSettled(jsonJobs);
+        const initialLinks = await extractViewLinks(listPage, jsonPayloads);
+        console.log(`[${region.name}] 초기 상세공고 후보: ${initialLinks.length}건 / JSON/API=${jsonPayloads.length}건`);
 
         await autoScroll(listPage, scrollRounds);
+        await listPage.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+        await sleep(1200);
+        await Promise.allSettled(jsonJobs);
+        detachJsonCapture();
 
-        const viewLinks = await extractViewLinks(listPage);
+        const viewLinks = await extractViewLinks(listPage, jsonPayloads);
         lastViewLinks = viewLinks;
 
-        console.log(`[${region.name}] 스크롤 후 상세공고 후보: ${viewLinks.length}건`);
+        console.log(`[${region.name}] 스크롤 후 상세공고 후보: ${viewLinks.length}건 / JSON/API=${jsonPayloads.length}건`);
 
         const debugPrefix = `${safeFileName(region.name)}_page_${pageNo}`;
         await saveJson(path.join(debugDir, `${debugPrefix}_view_links.json`), viewLinks);
+        await saveJson(path.join(debugDir, `${debugPrefix}_json_payloads_summary.json`), jsonPayloads.map((payload) => ({
+          url: payload.url,
+          status: payload.status,
+          contentType: payload.contentType,
+          sample: compactText(JSON.stringify(payload.value ?? payload.textSample), 1200),
+        })));
         await saveText(path.join(debugDir, `${debugPrefix}_body.txt`), await listPage.locator('body').innerText().catch(() => ''));
+        await saveText(path.join(debugDir, `${debugPrefix}_html_sample.txt`), (await listPage.content().catch(() => '')).slice(0, 120000));
         await listPage.screenshot({ path: path.join(debugDir, `${debugPrefix}_screenshot.png`), fullPage: true }).catch(() => undefined);
 
         for (let i = 0; i < viewLinks.length; i += 1) {
