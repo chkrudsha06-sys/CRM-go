@@ -735,132 +735,6 @@ function findLabelValue(lines: string[], labels: string[]) {
   return null;
 }
 
-
-function strictLineLabelValue(lines: string[], labels: string[]) {
-  const normalizedLabels = labels.map((label) => normalizeText(label).replace(/\s+/g, ''));
-  const isAnyLabel = (value: string) => {
-    const compact = normalizeText(value).replace(/\s+/g, '');
-    return normalizedLabels.includes(compact);
-  };
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    const compact = line.replace(/\s+/g, '');
-
-    const labelIndex = normalizedLabels.findIndex((label) => compact === label);
-    if (labelIndex >= 0) {
-      for (let nextIndex = index + 1; nextIndex < Math.min(lines.length, index + 5); nextIndex += 1) {
-        const value = normalizeText(lines[nextIndex]);
-        if (!value) continue;
-        if (isAnyLabel(value)) continue;
-        return value;
-      }
-    }
-
-    for (const label of labels) {
-      const direct = line.match(new RegExp(`^${escapeRegExp(label)}\\s*[:：]\\s*(.+)$`));
-      if (direct?.[1]) return normalizeText(direct[1]);
-    }
-  }
-
-  return null;
-}
-
-function cleanAgencyValue(value: string | null | undefined) {
-  const text = stripLabelNoise(value || '');
-  if (!text || text === '-') return '-';
-
-  // 상세본문 광고 문구가 잘못 들어오는 것을 차단합니다.
-  if (text.length > 40) return '-';
-  if (/(?:AD\s|직영\)|모집|담당자|연락처|아파트\s*분양|수수료|투입|현장명|상세정보)/i.test(text)) return '-';
-
-  return text;
-}
-
-function cleanApartmentFeeValue(value: string | null | undefined) {
-  const text = stripLabelNoise(value || '');
-  if (!text || text === '-') return '-';
-
-  // 수수료는 금액/협의/지급 관련 짧은 값이어야 합니다. 광고본문 문장은 버립니다.
-  if (text.length > 35) return '-';
-  if (!/\d|만|원|%|협의|지급|별도/.test(text)) return '-';
-  if (/(?:AD\s|직영\)|모집|담당자|연락처|상세정보|현장명)/i.test(text)) return '-';
-
-  return text;
-}
-
-async function extractDetailFieldMap(page: Page): Promise<Record<string, string>> {
-  return page.evaluate(() => {
-    const labels = [
-      '현장명',
-      '사업지명',
-      '사업지 주소',
-      '사업지주소',
-      '현장 주소',
-      '현장주소',
-      '근무지역 주소',
-      '근무지 주소',
-      '근무주소',
-      '근무지역',
-      '담당자 이름',
-      '담당자명',
-      '담당자 연락처',
-      '담당자연락처',
-      '연락처',
-      '전화번호',
-      '대행사',
-      '아파트 분양',
-      '투입일',
-    ];
-    const normalize = (value: unknown) => String(value ?? '').replace(/\u00a0/g, ' ').replace(/[ \t\n\r]+/g, ' ').trim();
-    const compact = (value: unknown) => normalize(value).replace(/\s+/g, '');
-    const labelByCompact = new Map(labels.map((label) => [compact(label), label]));
-    const isLabelText = (value: unknown) => labelByCompact.has(compact(value));
-    const result: Record<string, string> = {};
-
-    const setValue = (labelText: unknown, valueText: unknown) => {
-      const key = labelByCompact.get(compact(labelText));
-      const value = normalize(valueText);
-      if (!key || !value || isLabelText(value)) return;
-      if (!result[key]) result[key] = value;
-    };
-
-    document.querySelectorAll('table tr').forEach((row) => {
-      const cells = Array.from(row.querySelectorAll('th,td')).map((cell) => normalize(cell.textContent));
-      for (let index = 0; index < cells.length - 1; index += 1) {
-        if (isLabelText(cells[index])) setValue(cells[index], cells[index + 1]);
-      }
-    });
-
-    document.querySelectorAll('dl').forEach((dl) => {
-      const children = Array.from(dl.children).map((child) => normalize(child.textContent));
-      for (let index = 0; index < children.length - 1; index += 1) {
-        if (isLabelText(children[index])) setValue(children[index], children[index + 1]);
-      }
-    });
-
-    // 일부 페이지는 표 스타일 div로 라벨/값을 배치합니다. 같은 부모의 인접 텍스트만 제한적으로 읽습니다.
-    document.querySelectorAll('div,li,p,span').forEach((element) => {
-      const children = Array.from(element.children);
-      if (children.length < 2 || children.length > 8) return;
-      const texts = children.map((child) => normalize(child.textContent)).filter(Boolean);
-      for (let index = 0; index < texts.length - 1; index += 1) {
-        if (isLabelText(texts[index])) setValue(texts[index], texts[index + 1]);
-      }
-    });
-
-    return result;
-  });
-}
-
-function extractAgencyValue(fieldMap: Record<string, string>, lines: string[]) {
-  return cleanAgencyValue(fieldMap['대행사'] || strictLineLabelValue(lines, ['대행사']) || null);
-}
-
-function extractApartmentFeeValue(fieldMap: Record<string, string>, lines: string[]) {
-  return cleanApartmentFeeValue(fieldMap['아파트 분양'] || strictLineLabelValue(lines, ['아파트 분양']) || null);
-}
-
 function extractDetailSection(lines: string[], startLabels: string[], endLabels: string[]) {
   let start = -1;
   for (let index = 0; index < lines.length; index += 1) {
@@ -951,16 +825,14 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
       return null;
     }
 
-    const fieldMap = await extractDetailFieldMap(page);
     const title = await bestTitleFromPage(page, candidate.title);
-    const siteName = fieldMap['현장명'] || fieldMap['사업지명'] || findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
-    const siteAddress = fieldMap['사업지 주소'] || fieldMap['사업지주소'] || fieldMap['현장 주소'] || fieldMap['현장주소'] || findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
-    const workAddress = fieldMap['근무지역 주소'] || fieldMap['근무지 주소'] || fieldMap['근무주소'] || fieldMap['근무지역'] || findLabelValue(lines, ['근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
-    const managerNameRaw = fieldMap['담당자 이름'] || fieldMap['담당자명'] || strictLineLabelValue(lines, ['담당자 이름', '담당자명']) || '-';
-    const managerPhoneRaw = fieldMap['담당자 연락처'] || fieldMap['담당자연락처'] || fieldMap['연락처'] || fieldMap['전화번호'] || strictLineLabelValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']) || '-';
+    const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
+    const siteAddress = findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
+    const workAddress = findLabelValue(lines, ['근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
+    const managerNameRaw = extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-';
+    const managerPhoneRaw = extractBusinessValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']) || '-';
     const { managerName, managerPhone } = splitManagerFields(managerNameRaw, managerPhoneRaw);
-    const agencyCompany = extractAgencyValue(fieldMap, lines);
-    const apartmentFee = extractApartmentFeeValue(fieldMap, lines);
+    const agencyCompany = stripLabelNoise(extractBusinessValue(lines, ['대행사'], ['담당자 이름', '담당자명', '담당자 연락처', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-');
     const category = findLabelValue(lines, ['업종', '상품유형', '분류', '카테고리']);
     const detailText = extractDetailSection(lines, ['상세정보', '상세 정보'], ['접수방법', '접수 방법', '기업정보', '사업자 정보']) || rawText.slice(0, 3000) || '-';
     const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
@@ -974,7 +846,7 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
       manager_name: managerName,
       manager_phone: managerPhone,
       agency_company: agencyCompany,
-      apartment_fee: apartmentFee,
+      apartment_fee: extractApartmentFee(lines),
       move_in_date: extractMoveInDate(lines),
       source_url: normalizeSourceUrl(candidate.source_url),
       source_id: extractSourceId(candidate.source_url),
