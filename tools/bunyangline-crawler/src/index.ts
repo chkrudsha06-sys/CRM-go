@@ -277,6 +277,238 @@ async function saveJson(fileName: string, value: unknown) {
   await fs.writeFile(path.join(DEBUG_DIR, fileName), JSON.stringify(value, null, 2), 'utf8');
 }
 
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0).toString(36);
+}
+
+const LISTING_TYPE_WORDS = [
+  '아파트',
+  '오피스텔',
+  '상가',
+  '도시형생활주택',
+  '생활형숙박시설',
+  '지식산업센터',
+  '토지',
+  '빌라',
+  '주택',
+  '타운하우스',
+  '민간임대',
+  '기타',
+];
+
+const LISTING_BADGE_WORDS = [
+  '유니크',
+  '슈페리어',
+  '프리미엄',
+  '인기현장',
+  '전국 Top',
+  '지역 Top',
+  'HOT',
+  '급구',
+  '대박',
+  '소수',
+  '일반 구인글',
+  'AD',
+];
+
+function isListingTypeLine(line: string) {
+  const value = normalizeSpace(line);
+  return LISTING_TYPE_WORDS.includes(value);
+}
+
+function isListingBadgeLine(line: string) {
+  const value = normalizeSpace(line);
+  return LISTING_BADGE_WORDS.includes(value);
+}
+
+function isNavigationLine(line: string) {
+  const value = normalizeSpace(line);
+  if (!value) return true;
+  if (REGION_NAMES.includes(value as RegionName)) return true;
+  return /^(HOME|홈|로그인|회원가입|이벤트|공지사항|고객센터|상품안내|지역현장|맞춤현장|지도현장|관심현장|서포터즈|모든지역|검색|검색하기|고객안내|글쓰기|TOP)$/.test(value);
+}
+
+function extractListSectionLines(bodyText: string) {
+  const lines = normalizeSpace(bodyText)
+    .split('\n')
+    .map((line) => normalizeSpace(line))
+    .filter(Boolean);
+
+  const loadingIndex = lines.findIndex((line) => /목록을\s*로딩중/.test(line));
+  const footerIndex = lines.findIndex((line) => /회사소개|개인정보 처리방침|이용약관/.test(line));
+  const endIndex = loadingIndex >= 0 ? loadingIndex : footerIndex >= 0 ? footerIndex : lines.length;
+
+  let startIndex = 0;
+
+  const allRegionIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter((item) => item.line === '모든지역')
+    .map((item) => item.index);
+
+  if (allRegionIndexes.length > 0) {
+    const navStart = allRegionIndexes[allRegionIndexes.length - 1];
+    let cursor = navStart + 1;
+
+    while (cursor < endIndex) {
+      const line = lines[cursor];
+      if (isNavigationLine(line)) {
+        cursor += 1;
+        continue;
+      }
+      break;
+    }
+
+    startIndex = cursor;
+  } else {
+    const firstTypeIndex = lines.findIndex((line, index) => index < endIndex && isListingTypeLine(line));
+    startIndex = firstTypeIndex >= 0 ? firstTypeIndex : 0;
+  }
+
+  return lines.slice(startIndex, endIndex).filter((line) => !isNavigationLine(line));
+}
+
+function splitListSegments(lines: string[]) {
+  const segments: string[][] = [];
+  let current: string[] = [];
+  let currentHasType = false;
+
+  for (const line of lines) {
+    if (isListingBadgeLine(line) && current.length === 0) continue;
+
+    if (isListingTypeLine(line)) {
+      if (current.length >= 3 && currentHasType) segments.push(current);
+      current = [line];
+      currentHasType = true;
+      continue;
+    }
+
+    if (!currentHasType) continue;
+    current.push(line);
+  }
+
+  if (current.length >= 3 && currentHasType) segments.push(current);
+  return segments;
+}
+
+function pickAgencyFromListSegment(segment: string[]) {
+  const skip = new Set([
+    ...LISTING_TYPE_WORDS,
+    ...LISTING_BADGE_WORDS,
+    '팀장/팀원',
+    '본부/팀장',
+    '팀원',
+    '본부장',
+    '계약 수수료',
+    '기본급',
+    '일비',
+    '경력무관',
+  ]);
+
+  for (let i = segment.length - 1; i >= 0; i -= 1) {
+    const line = segment[i];
+    if (!line || skip.has(line)) continue;
+    if (/수수료|계약|일비|개월|경력|팀장|팀원|본부|직원|모집|현장|분양|광고|지원|조건|아파트|오피스텔/.test(line)) continue;
+    if (line.length > 40) continue;
+    return line;
+  }
+
+  return null;
+}
+
+function parseListSegmentToRow(
+  segment: string[],
+  region: RegionTarget,
+  detection: RegionDetection,
+  listUrl: string,
+  pageNo: number,
+  index: number
+): CrawledRow | null {
+  const cleanSegment = segment.map((line) => normalizeSpace(line)).filter(Boolean);
+  if (cleanSegment.length < 3) return null;
+
+  const upjong = cleanSegment[0];
+  const title = cleanSegment[1] || null;
+  const summaryLine = cleanSegment[2] || null;
+  const fullText = cleanSegment.join('\n');
+
+  if (!title || /목록을\s*로딩중|회사소개|개인정보/.test(fullText)) return null;
+
+  const position = cleanSegment.find((line) => /본부|팀장|팀원|직원|상담사|TM|각개|사이드/.test(line)) || null;
+  const payroll = cleanSegment.find((line) => /수수료|급여|기본급|일비|인센티브|만원|%/.test(line)) || null;
+  const career = cleanSegment.find((line) => /경력|개월|년/.test(line)) || null;
+  const agency = pickAgencyFromListSegment(cleanSegment);
+  const phone = normalizePhone(fullText);
+  const addressRegion = extractRegionFromAddress(fullText);
+  const actualRegionName = detection.actualRegionName || addressRegion || region.name;
+  const actualRegionSource = detection.actualRegionName ? detection.source : addressRegion ? 'list-text-address-fallback' : region.source;
+  const rowKeySource = `${actualRegionName}\n${pageNo}\n${fullText}`;
+  const rowHash = stableHash(rowKeySource);
+  const sourceUrl = normalizeSourceUrl(`${listUrl}#list-row-${rowHash}`);
+
+  const detailLines = [
+    `[목록 수집 공고]`,
+    `업종: ${upjong}`,
+    title ? `현장명: ${title}` : null,
+    summaryLine ? `요약: ${summaryLine}` : null,
+    position ? `모집구분: ${position}` : null,
+    payroll ? `수수료/급여: ${payroll}` : null,
+    career ? `경력: ${career}` : null,
+    agency ? `대행사: ${agency}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    source_url: sourceUrl,
+    source_post_key: `bunyangline_list_${rowHash}`,
+    region_id: region.id,
+    region_name: actualRegionName,
+    list_region_name: region.name,
+    actual_region_name: actualRegionName,
+    actual_region_source: `${actualRegionSource}:list-fallback`,
+    region_match_text: detection.matchText || fullText.slice(0, 300),
+    site_name: compact(title, 180),
+    site_address: null,
+    posted_at: null,
+    posted_datetime: null,
+    manager_name: null,
+    manager_phone: compact(phone, 40),
+    agency_company: compact(agency, 160),
+    apartment_fee: compact(payroll || extractApartmentFee(fullText), 180),
+    detail_text: limitText(detailLines, MAX_DETAIL_TEXT_LENGTH),
+    raw_text: limitText(fullText, MAX_RAW_TEXT_LENGTH),
+    crawled_at: new Date().toISOString(),
+  };
+}
+
+async function parseListRowsFromPage(
+  page: Page,
+  region: RegionTarget,
+  detection: RegionDetection,
+  listUrl: string,
+  pageNo: number,
+  limit: number
+) {
+  const bodyText = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }).catch(() => ''));
+  const lines = extractListSectionLines(bodyText);
+  const segments = splitListSegments(lines);
+  const rows = segments
+    .map((segment, index) => parseListSegmentToRow(segment, region, detection, listUrl, pageNo, index))
+    .filter((row): row is CrawledRow => Boolean(row))
+    .slice(0, limit);
+
+  return {
+    lines,
+    segments,
+    rows,
+  };
+}
+
 async function getAnchorSnapshots(page: Page) {
   const anchors = page.locator('a');
   const count = await anchors.count();
@@ -559,19 +791,42 @@ async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTa
 
     console.log(`[${region.name}] ${pageNo}페이지 상세 후보: ${detailUrls.length}건 / 처리: ${targets.length}건`);
 
-    await saveJson(`${safeFileName(region.name)}-${pageNo}-links.json`, {
-      region,
-      listUrl,
-      detection,
-      detailUrls,
-      targets,
-    });
+    if (detailUrls.length > 0) {
+      await saveJson(`${safeFileName(region.name)}-${pageNo}-links.json`, {
+        region,
+        listUrl,
+        detection,
+        detailUrls,
+        targets,
+        mode: 'detail-url',
+      });
 
-    for (const url of targets) {
-      seenUrls.add(url);
-      const row = await parseDetailPage(detailPage, url, region, detection);
-      if (row) rows.push(row);
-      await sleep(500);
+      for (const url of targets) {
+        seenUrls.add(url);
+        const row = await parseDetailPage(detailPage, url, region, detection);
+        if (row) rows.push(row);
+        await sleep(500);
+      }
+    } else {
+      const listParse = await parseListRowsFromPage(browserPage, region, detection, listUrl, pageNo, remainingSlots);
+      console.log(`[${region.name}] 상세 URL 없음 → 목록 텍스트 fallback 수집: ${listParse.rows.length}건`);
+
+      await saveJson(`${safeFileName(region.name)}-${pageNo}-list-fallback.json`, {
+        region,
+        listUrl,
+        detection,
+        mode: 'list-text-fallback',
+        parsedLineCount: listParse.lines.length,
+        segmentCount: listParse.segments.length,
+        sampleSegments: listParse.segments.slice(0, 10),
+        rows: listParse.rows.slice(0, 10),
+      });
+
+      for (const row of listParse.rows) {
+        if (seenUrls.has(row.source_url)) continue;
+        seenUrls.add(row.source_url);
+        rows.push(row);
+      }
     }
 
     if (rows.length >= maxDetailsPerRegion) break;
