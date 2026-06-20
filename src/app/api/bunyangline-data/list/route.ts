@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const region = url.searchParams.get('region')?.trim() || '모든지역';
     const keyword = escapeSearch(url.searchParams.get('keyword') || '');
     const onlyNew = url.searchParams.get('onlyNew') === 'true';
-    const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 500);
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 5000);
 
     const supabase = getSupabaseAdmin();
 
@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
           `manager_phone.ilike.%${keyword}%`,
           `agency_company.ilike.%${keyword}%`,
           `apartment_fee.ilike.%${keyword}%`,
+          `ad_section.ilike.%${keyword}%`,
           `assigned_to.ilike.%${keyword}%`,
         ].join(',')
       );
