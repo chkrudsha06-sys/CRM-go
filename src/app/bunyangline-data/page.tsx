@@ -85,6 +85,108 @@ function truncate(value: string | null | undefined, length = 28) {
   return text.length > length ? `${text.slice(0, length)}...` : text;
 }
 
+function xmlEscape(value: string | null | undefined) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function normalizeExcelText(value: string | null | undefined) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim() || '-';
+}
+
+function excelCell(value: string | null | undefined, styleId = 'Text') {
+  return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${xmlEscape(normalizeExcelText(value))}</Data></Cell>`;
+}
+
+function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
+  const headers = ['지역', '게재지면', '현장명', '등록일', '담당자이름', '담당자 연락처', '대행사', '수수료', '투입일', '원본공고링크', '담당자', '상세정보'];
+  const columnWidths = [80, 90, 220, 90, 110, 130, 220, 190, 90, 260, 100, 360];
+
+  const headerRow = `<Row>${headers.map((header) => excelCell(header, 'Header')).join('')}</Row>`;
+  const bodyRows = rows
+    .map((row) => {
+      const cells = [
+        emptyText(row.region_name),
+        emptyText(row.ad_section),
+        emptyText(row.site_name),
+        formatDate(row.posted_at || row.posted_datetime),
+        emptyText(row.manager_name),
+        formatPhone(row.manager_phone),
+        emptyText(row.agency_company),
+        emptyText(row.apartment_fee),
+        emptyText(row.move_in_date),
+        emptyText(row.source_url),
+        emptyText(row.assigned_to),
+        emptyText(row.detail_text),
+      ];
+
+      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 11 ? 'Detail' : 'Text')).join('')}</Row>`;
+    })
+    .join('');
+
+  const worksheet = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:html="http://www.w3.org/TR/REC-html40">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1"/>
+      <Interior ss:Color="#E5E7EB" ss:Pattern="Solid"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="Text">
+      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
+    </Style>
+    <Style ss:ID="Detail">
+      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="분양라인데이터">
+    <Table>
+      ${columnWidths.map((width) => `<Column ss:Width="${width}"/>`).join('')}
+      ${headerRow}
+      ${bodyRows}
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>1</SplitHorizontal>
+      <TopRowBottomPane>1</TopRowBottomPane>
+      <ActivePane>2</ActivePane>
+    </WorksheetOptions>
+  </Worksheet>
+</Workbook>`;
+
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const safeRegion = selectedRegion.replace(/[\\/:*?"<>|]/g, '_');
+  const fileName = `분양라인데이터_${safeRegion}_${y}${m}${d}.xls`;
+  const blob = new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function BunyanglineDataPage() {
   const [selectedRegion, setSelectedRegion] = useState('모든지역');
   const [keyword, setKeyword] = useState('');
@@ -112,7 +214,7 @@ export default function BunyanglineDataPage() {
       const params = new URLSearchParams({
         region: nextRegion,
         keyword: nextKeyword,
-        limit: '2000',
+        limit: '5000',
       });
 
       const response = await fetch(`/api/bunyangline-data/list?${params.toString()}`, { cache: 'no-store' });
@@ -178,9 +280,14 @@ export default function BunyanglineDataPage() {
             <p style={subtitleStyle}>분양라인 지역현장 구인공고를 최근 5일 기준으로 수집하고, 담당자 연락처 중복 여부를 확인합니다.</p>
             <div style={noticeStyle}>수집 기준: 지역별 전체 지면 · 최근 5일 등록 공고 · 원본공고 링크 기준 누적 저장</div>
           </div>
-          <button type="button" onClick={() => fetchRows()} disabled={loading} style={secondaryButtonStyle(loading)}>
-            {loading ? '불러오는 중...' : '새로고침'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => downloadRowsAsExcel(rows, selectedRegion)} disabled={rows.length === 0 || loading} style={excelButtonStyle(rows.length === 0 || loading)}>
+              엑셀 다운로드
+            </button>
+            <button type="button" onClick={() => fetchRows()} disabled={loading} style={secondaryButtonStyle(loading)}>
+              {loading ? '불러오는 중...' : '새로고침'}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -352,6 +459,7 @@ const searchRowStyle: React.CSSProperties = { display: 'grid', gridTemplateColum
 const searchInputStyle: React.CSSProperties = { height: 42, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: '#101010', color: '#fff', padding: '0 14px', outline: 'none' };
 const primaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 18px', border: 0, borderRadius: 10, color: '#fff', background: disabled ? '#4b5563' : '#8b5cf6', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
 const secondaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', color: disabled ? '#667085' : '#fff', background: '#171717', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 800 });
+const excelButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.35)', color: disabled ? '#667085' : '#dcfce7', background: disabled ? '#171717' : '#14532d', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
 const errorStyle: React.CSSProperties = { marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(127,29,29,0.25)', color: '#fecaca' };
 const summaryGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 16 };
 const summaryCardStyle: React.CSSProperties = { border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 18, background: '#151515' };
