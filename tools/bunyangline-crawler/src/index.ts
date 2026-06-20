@@ -1,4 +1,4 @@
-import { chromium, BrowserContext, Page } from '@playwright/test';
+import { chromium, BrowserContext, Page, Response } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -31,15 +31,30 @@ const REGIONS = [
 
 type Region = (typeof REGIONS)[number];
 
+type CandidateOrigin = 'api-json' | 'api-text' | 'html-link' | 'html-json' | 'static-ad-click';
+
 type Candidate = {
-  source_url?: string;
-  source_id?: string;
+  source_url: string;
+  source_id: string;
   title: string;
   region_name: string;
   ad_section: string;
-  list_date_group?: string | null;
-  raw_text?: string | null;
-  origin: 'href' | 'html' | 'title-click';
+  list_date_group: string | null;
+  posted_at_hint: string | null;
+  posted_datetime_hint: string | null;
+  raw_text: string | null;
+  origin: CandidateOrigin;
+  confidence: number;
+};
+
+type NetworkRecord = {
+  url: string;
+  status: number;
+  contentType: string;
+  bodyLength: number;
+  kind: string;
+  candidateCount: number;
+  sample: string;
 };
 
 type BunyanglineItem = {
@@ -78,7 +93,7 @@ function normalizeText(value: unknown) {
     .trim();
 }
 
-function oneLine(value: unknown, max = 160) {
+function compactText(value: unknown, max = 200) {
   return normalizeText(value).replace(/\s+/g, ' ').slice(0, max);
 }
 
@@ -86,7 +101,7 @@ function safeFileName(value: string) {
   return value
     .replace(/[\\/:*?"<>|#%&{}$!`'@+=]/g, '_')
     .replace(/\s+/g, '_')
-    .slice(0, 120);
+    .slice(0, 140);
 }
 
 async function ensureDebugDir() {
@@ -151,10 +166,15 @@ function isRecentDate(dateText: string | null | undefined) {
   return date >= cutoffKstDate() && date <= currentKstDate();
 }
 
+function isOlderThanCutoff(dateText: string | null | undefined) {
+  const date = parseDateOnly(dateText);
+  if (!date) return false;
+  return date < cutoffKstDate();
+}
+
 function hasOlderThanCutoffDate(text: string) {
-  const cutoff = cutoffKstDate();
   const matches = Array.from(text.matchAll(/20\d{2}-\d{2}-\d{2}/g)).map((item) => item[0]);
-  return matches.some((date) => date < cutoff);
+  return matches.some((date) => date < cutoffKstDate());
 }
 
 function normalizeSourceUrl(value: string) {
@@ -166,8 +186,13 @@ function normalizeSourceUrl(value: string) {
   return url.toString();
 }
 
-function extractSourceId(sourceUrl: string) {
-  return sourceUrl.match(/\/recruit\/view\/(\d+)/)?.[1] || null;
+function sourceUrlFromId(id: string | number) {
+  const clean = String(id).replace(/\D/g, '');
+  return normalizeSourceUrl(`${BASE_URL}/recruit/view/${clean}/?previousActiveNaviId=regional`);
+}
+
+function extractSourceId(sourceUrl: string | null | undefined) {
+  return String(sourceUrl || '').match(/\/recruit\/view\/(\d+)/)?.[1] || null;
 }
 
 function normalizePhone(value: string | null | undefined) {
@@ -181,117 +206,241 @@ function normalizePhone(value: string | null | undefined) {
   if (tel) return tel.replace(/\D/g, '');
 
   const digits = text.replace(/\D/g, '');
-  return digits || text;
+  return digits || text || '-';
 }
 
-function isMetaLine(line: string) {
-  const value = normalizeText(line);
-  if (!value) return true;
-  if (/^AD$/i.test(value)) return true;
-  if (/^(HOME|지역현장|맞춤현장|지도현장|관심현장|서포터즈)$/.test(value)) return true;
-  if (/^(유니크|슈페리어|전국 Top|전국TOP|지역 Top|지역TOP|일반 구인글|일반구인글)$/.test(value)) return true;
-  if (/^(소수|신규|HOT|대박|TODAY)$/.test(value)) return true;
-  if (/^\(총\s*\d+개\)$/.test(value)) return true;
-  if (/^20\d{2}-\d{2}-\d{2}$/.test(value)) return true;
-  if (/^(팀장\/팀원|본부\/팀장|팀원|팀장|본부장|계약 수수료|일비|경력무관|\d+개월이상|캐치뷰어)$/.test(value)) return true;
-  if (/^(아파트|오피스텔|아파트\/오피스텔|아파트\/기타|기타|도시형 생활주택|지식산업센터|아파트\/상가\/쇼핑몰|오피스텔\/상가\/쇼핑몰|상가\/쇼핑몰)$/.test(value)) return true;
-  return false;
+function normalizeSection(value: unknown) {
+  const text = normalizeText(value).replace(/\s+/g, '').toLowerCase();
+  if (text.includes('unique') || text.includes('유니크')) return '유니크';
+  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
+  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
+  if (text.includes('일반구인글') || text.includes('normal') || text.includes('basic')) return '일반구인글';
+  return normalizeText(value) || '일반구인글';
 }
 
-function isLikelyCategoryLine(line: string) {
-  const value = normalizeText(line);
-  if (!value) return false;
-  if (value.length > 30) return false;
-  return /(아파트|오피스텔|상가|쇼핑몰|도시형|생활주택|지식산업센터|기타|호텔|레지던스)/.test(value);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isLikelyTitleLine(line: string) {
-  const value = normalizeText(line);
-  if (!value) return false;
-  if (value.length < 5 || value.length > 95) return false;
-  if (isMetaLine(value)) return false;
-  if (/^(검색어를 입력해주세요|사용자수|오늘|전체|방문회원|오늘방문|신규현장|오늘신규|홈|로그인|회원가입)/.test(value)) return false;
-  return true;
+function firstText(obj: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = normalizeText(value);
+      if (text) return text;
+    }
+  }
+  return null;
 }
 
-function normalizeSection(value: string) {
-  const text = normalizeText(value).replace(/\s+/g, '');
-  if (text.includes('유니크')) return '유니크';
-  if (text.includes('슈페리어')) return '슈페리어';
-  if (text.includes('전국Top') || text.includes('전국TOP')) return '전국TOP';
-  if (text.includes('지역Top') || text.includes('지역TOP')) return '지역TOP';
-  if (text.includes('일반구인글')) return '일반구인글';
-  return normalizeText(value) || '미지정';
+function firstDateValue(obj: Record<string, unknown>) {
+  return firstText(obj, [
+    'created_at',
+    'createdAt',
+    'reg_date',
+    'regDate',
+    'registered_at',
+    'write_date',
+    'wdate',
+    'insert_date',
+    'posted_at',
+    'post_date',
+    'display_date',
+    'date',
+  ]);
 }
 
-function extractTitleCandidatesFromText(text: string, regionName: string): Candidate[] {
-  const lines = text
-    .split('\n')
-    .map((line) => normalizeText(line))
-    .filter(Boolean);
+function firstIdValue(obj: Record<string, unknown>) {
+  for (const key of ['idx', 'recruit_idx', 'recruit_id', 'site_idx', 'post_id', 'board_id', 'wr_id', 'id', 'seq', 'no']) {
+    const value = obj[key];
+    if (typeof value === 'number' || typeof value === 'string') {
+      const digits = String(value).match(/\d{4,}/)?.[0];
+      if (digits) return digits;
+    }
+  }
+  return null;
+}
 
-  const today = currentKstDate();
-  let section = '미지정';
-  let listDateGroup: string | null = null;
-  const candidates = new Map<string, Candidate>();
+function findAnySourceUrl(obj: Record<string, unknown>) {
+  for (const key of ['source_url', 'url', 'href', 'link', 'view_url', 'viewUrl']) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.includes('/recruit/view/')) {
+      return normalizeSourceUrl(value);
+    }
+  }
+  return null;
+}
 
-  const setCandidate = (title: string, index: number) => {
-    const cleanTitle = normalizeText(title);
-    if (!isLikelyTitleLine(cleanTitle)) return;
+function inferSectionFromObject(obj: Record<string, unknown>, pathText: string) {
+  const direct = firstText(obj, [
+    'ad_section',
+    'section',
+    'section_name',
+    'service_name',
+    'serviceName',
+    'product_name',
+    'productName',
+    'goods_name',
+    'goodsName',
+    'display_type',
+    'displayType',
+    'grade_name',
+    'type_name',
+  ]);
+  const fromDirect = normalizeSection(direct || '');
+  if (fromDirect !== '일반구인글' || (direct && /일반|normal|basic/i.test(direct))) return fromDirect;
+  return normalizeSection(pathText) || '일반구인글';
+}
 
-    if (listDateGroup && !isRecentDate(listDateGroup)) return;
+function candidateFromObject(obj: Record<string, unknown>, regionName: string, origin: CandidateOrigin, pathText: string): Candidate | null {
+  const sourceUrl = findAnySourceUrl(obj);
+  const id = extractSourceId(sourceUrl || '') || firstIdValue(obj);
+  if (!id) return null;
 
-    const rawText = lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 8)).join(' / ');
-    const key = `${regionName}|${section}|${listDateGroup || ''}|${cleanTitle}`;
-    if (candidates.has(key)) return;
+  const title =
+    firstText(obj, [
+      'title',
+      'subject',
+      'name',
+      'site_name',
+      'siteName',
+      'field_name',
+      'fieldName',
+      'recruit_title',
+      'article_title',
+      'workplace_name',
+      'company_name',
+    ]) || `공고 ${id}`;
 
-    candidates.set(key, {
-      title: cleanTitle,
-      region_name: regionName,
-      ad_section: normalizeSection(section),
-      list_date_group: listDateGroup,
-      raw_text: rawText,
-      origin: 'title-click',
-    });
+  // 너무 짧은 이름 또는 시스템 id 객체를 공고로 오인하는 것을 줄입니다.
+  const compactTitle = compactText(title, 160);
+  const textBlob = compactText(JSON.stringify(obj), 1000);
+  if (!/분양|아파트|오피스텔|상가|팀장|팀원|본부|수수료|계약|모집|현장|대행|부동산|레지던스|생활주택|지식산업/i.test(`${compactTitle} ${textBlob}`)) {
+    return null;
+  }
+
+  const dateText = firstDateValue(obj);
+  const dateInfo = parseDateTime(dateText || '');
+  const source = sourceUrl || sourceUrlFromId(id);
+
+  return {
+    source_url: source,
+    source_id: extractSourceId(source) || String(id),
+    title: compactTitle,
+    region_name: regionName,
+    ad_section: inferSectionFromObject(obj, pathText),
+    list_date_group: dateInfo.postedAt,
+    posted_at_hint: dateInfo.postedAt,
+    posted_datetime_hint: dateInfo.postedDatetime,
+    raw_text: textBlob,
+    origin,
+    confidence: compactTitle.startsWith('공고 ') ? 60 : 90,
   };
+}
 
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const compact = line.replace(/\s+/g, '');
+function extractCandidatesFromJson(value: unknown, regionName: string, origin: CandidateOrigin, pathParts: string[] = [], out: Candidate[] = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => extractCandidatesFromJson(item, regionName, origin, [...pathParts, String(index)], out));
+    return out;
+  }
 
-    if (/^(유니크|슈페리어|전국 Top|전국TOP|지역 Top|지역TOP|일반 구인글|일반구인글)$/.test(line)) {
-      section = normalizeSection(line);
-      if (section !== '일반구인글') listDateGroup = null;
-      continue;
-    }
+  if (!isPlainObject(value)) return out;
 
-    if (line === 'TODAY') {
-      section = '일반구인글';
-      listDateGroup = today;
-      continue;
-    }
+  const pathText = pathParts.join('/');
+  const candidate = candidateFromObject(value, regionName, origin, pathText);
+  if (candidate) out.push(candidate);
 
-    if (/^20\d{2}-\d{2}-\d{2}$/.test(line)) {
-      section = '일반구인글';
-      listDateGroup = line;
-      continue;
-    }
-
-    if (isLikelyCategoryLine(line) && isLikelyTitleLine(lines[i + 1] || '')) {
-      setCandidate(lines[i + 1], i + 1);
-      continue;
-    }
-
-    // 섹션 바로 아래에서 카테고리/배지 라인을 건너뛰고 제목이 나오는 구조 대응
-    if (['유니크', '슈페리어', '전국TOP', '지역TOP', '일반구인글'].includes(section)) {
-      const prev = lines[i - 1] || '';
-      if (isLikelyCategoryLine(prev) && isLikelyTitleLine(line)) {
-        setCandidate(line, i);
-      }
+  for (const [key, child] of Object.entries(value)) {
+    if (child && typeof child === 'object') {
+      extractCandidatesFromJson(child, regionName, origin, [...pathParts, key], out);
+    } else if (typeof child === 'string' && child.includes('/recruit/view/')) {
+      out.push(...extractCandidatesFromText(child, regionName, origin));
     }
   }
 
-  return Array.from(candidates.values());
+  return out;
+}
+
+function extractCandidatesFromText(text: string, regionName: string, origin: CandidateOrigin): Candidate[] {
+  const out: Candidate[] = [];
+  const seen = new Set<string>();
+  const sourcePatterns = [
+    /https?:\/\/www\.bunyangline\.com\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
+    /\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
+  ];
+
+  for (const pattern of sourcePatterns) {
+    for (const match of text.matchAll(pattern)) {
+      const sourceUrl = normalizeSourceUrl(match[0].startsWith('http') ? match[0] : `${BASE_URL}${match[0]}`);
+      if (seen.has(sourceUrl)) continue;
+      seen.add(sourceUrl);
+      out.push({
+        source_url: sourceUrl,
+        source_id: match[1],
+        title: `공고 ${match[1]}`,
+        region_name: regionName,
+        ad_section: '일반구인글',
+        list_date_group: null,
+        posted_at_hint: null,
+        posted_datetime_hint: null,
+        raw_text: `text-link:${match[0]}`,
+        origin,
+        confidence: 70,
+      });
+    }
+  }
+
+  // JSON 안에 문자열로만 포함된 idx 값 대응
+  for (const match of text.matchAll(/['"](?:idx|recruit_idx|recruit_id|post_id|id)['"]\s*:\s*['"]?(\d{4,})['"]?/g)) {
+    const id = match[1];
+    const sourceUrl = sourceUrlFromId(id);
+    if (seen.has(sourceUrl)) continue;
+    seen.add(sourceUrl);
+    out.push({
+      source_url: sourceUrl,
+      source_id: id,
+      title: `공고 ${id}`,
+      region_name: regionName,
+      ad_section: '일반구인글',
+      list_date_group: null,
+      posted_at_hint: null,
+      posted_datetime_hint: null,
+      raw_text: `text-idx:${id}`,
+      origin,
+      confidence: 40,
+    });
+  }
+
+  return out;
+}
+
+function mergeCandidates(candidates: Candidate[]) {
+  const byUrl = new Map<string, Candidate>();
+
+  for (const candidate of candidates) {
+    if (!candidate.source_url) continue;
+    const existing = byUrl.get(candidate.source_url);
+    if (!existing) {
+      byUrl.set(candidate.source_url, candidate);
+      continue;
+    }
+
+    const betterTitle = existing.title.startsWith('공고 ') && !candidate.title.startsWith('공고 ') ? candidate.title : existing.title;
+    byUrl.set(candidate.source_url, {
+      ...existing,
+      ...candidate,
+      title: betterTitle,
+      ad_section: existing.ad_section !== '일반구인글' ? existing.ad_section : candidate.ad_section,
+      list_date_group: existing.list_date_group || candidate.list_date_group,
+      posted_at_hint: existing.posted_at_hint || candidate.posted_at_hint,
+      posted_datetime_hint: existing.posted_datetime_hint || candidate.posted_datetime_hint,
+      raw_text: existing.raw_text || candidate.raw_text,
+      confidence: Math.max(existing.confidence, candidate.confidence),
+    });
+  }
+
+  return Array.from(byUrl.values());
 }
 
 async function getBodyText(page: Page) {
@@ -302,97 +451,6 @@ async function getHtml(page: Page) {
   return page.content().catch(() => '');
 }
 
-async function collectAnchorViewLinks(page: Page, regionName: string): Promise<Candidate[]> {
-  const candidates: Candidate[] = [];
-  const anchors = page.locator('a');
-  const count = await anchors.count().catch(() => 0);
-
-  for (let index = 0; index < Math.min(count, 3000); index += 1) {
-    const anchor = anchors.nth(index);
-    const href = await anchor.getAttribute('href').catch(() => null);
-    if (!href || !href.includes('/recruit/view/')) continue;
-
-    const text = oneLine(await anchor.innerText({ timeout: 500 }).catch(() => '')) || `공고 ${href.match(/\/recruit\/view\/(\d+)/)?.[1] || ''}`;
-    const sourceUrl = normalizeSourceUrl(href);
-
-    candidates.push({
-      source_url: sourceUrl,
-      source_id: extractSourceId(sourceUrl) || undefined,
-      title: text,
-      region_name: regionName,
-      ad_section: '일반구인글',
-      list_date_group: null,
-      raw_text: text,
-      origin: 'href',
-    });
-  }
-
-  return candidates;
-}
-
-function collectHtmlViewLinks(html: string, regionName: string): Candidate[] {
-  const candidates: Candidate[] = [];
-  const seen = new Set<string>();
-  const patterns = [
-    /https?:\/\/www\.bunyangline\.com\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
-    /\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
-    /recruit\/view\/(\d+)\/?[^"'\s<]*/g,
-  ];
-
-  for (const pattern of patterns) {
-    for (const match of html.matchAll(pattern)) {
-      const raw = match[0].startsWith('http') ? match[0] : `/${match[0].replace(/^\//, '')}`;
-      const sourceUrl = normalizeSourceUrl(raw);
-      if (seen.has(sourceUrl)) continue;
-      seen.add(sourceUrl);
-
-      candidates.push({
-        source_url: sourceUrl,
-        source_id: match[1],
-        title: `공고 ${match[1]}`,
-        region_name: regionName,
-        ad_section: '일반구인글',
-        list_date_group: null,
-        raw_text: `html-link:${match[0]}`,
-        origin: 'html',
-      });
-    }
-  }
-
-  return candidates;
-}
-
-function mergeCandidates(candidates: Candidate[]) {
-  const byUrl = new Map<string, Candidate>();
-  const noUrl: Candidate[] = [];
-
-  for (const candidate of candidates) {
-    if (!candidate.source_url) {
-      const key = `${candidate.region_name}|${candidate.ad_section}|${candidate.list_date_group || ''}|${candidate.title}`;
-      if (!noUrl.some((item) => `${item.region_name}|${item.ad_section}|${item.list_date_group || ''}|${item.title}` === key)) {
-        noUrl.push(candidate);
-      }
-      continue;
-    }
-
-    const existing = byUrl.get(candidate.source_url);
-    if (!existing) {
-      byUrl.set(candidate.source_url, candidate);
-      continue;
-    }
-
-    byUrl.set(candidate.source_url, {
-      ...existing,
-      title: existing.title.startsWith('공고 ') && !candidate.title.startsWith('공고 ') ? candidate.title : existing.title,
-      ad_section: existing.ad_section !== '미지정' ? existing.ad_section : candidate.ad_section,
-      list_date_group: existing.list_date_group || candidate.list_date_group,
-      raw_text: existing.raw_text || candidate.raw_text,
-    });
-  }
-
-  return { withUrl: Array.from(byUrl.values()), noUrl };
-}
-
 async function gotoList(page: Page, url: string) {
   const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((error) => {
     console.log(`[목록접속] page.goto 경고: ${error?.message || String(error)}`);
@@ -400,187 +458,192 @@ async function gotoList(page: Page, url: string) {
   });
 
   await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => undefined);
-  await sleep(2500);
+  await sleep(1800);
 
   return response?.status() || null;
 }
 
-async function discoverSourceUrlByClick(page: Page, listUrl: string, candidate: Candidate): Promise<string | null> {
-  const title = candidate.title;
-  const locators = [
-    page.getByText(title, { exact: true }).first(),
-    page.getByText(title, { exact: false }).first(),
-  ];
+async function maybeCollectResponse(response: Response, regionName: string): Promise<{ record: NetworkRecord; candidates: Candidate[] } | null> {
+  const url = response.url();
+  if (!url.includes('bunyangline.com')) return null;
 
-  for (const locator of locators) {
-    const count = await locator.count().catch(() => 0);
-    if (!count) continue;
+  const headers = response.headers();
+  const contentType = headers['content-type'] || '';
+  const likelyUseful =
+    contentType.includes('application/json') ||
+    /ajax|api|recruit|regional|list|view|supporters|search|load|more/i.test(url);
 
+  if (!likelyUseful) return null;
+
+  let text = '';
+  try {
+    text = await response.text();
+  } catch (error: any) {
+    return {
+      record: {
+        url,
+        status: response.status(),
+        contentType,
+        bodyLength: 0,
+        kind: 'read-failed',
+        candidateCount: 0,
+        sample: error?.message || String(error),
+      },
+      candidates: [],
+    };
+  }
+
+  if (!text || text.length > 3_000_000) {
+    return {
+      record: {
+        url,
+        status: response.status(),
+        contentType,
+        bodyLength: text.length,
+        kind: 'too-large-or-empty',
+        candidateCount: 0,
+        sample: text.slice(0, 300),
+      },
+      candidates: [],
+    };
+  }
+
+  let candidates: Candidate[] = [];
+  let kind = 'text';
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      const popupPromise = page.waitForEvent('popup', { timeout: 2500 }).catch(() => null);
-      const urlPromise = page
-        .waitForURL((url) => url.toString().includes('/recruit/view/'), { timeout: 4500 })
-        .catch(() => null);
-
-      await locator.click({ timeout: 4000, force: true });
-
-      const popup = await popupPromise;
-      if (popup) {
-        await popup.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => undefined);
-        const popupUrl = popup.url();
-        await popup.close().catch(() => undefined);
-        if (popupUrl.includes('/recruit/view/')) return normalizeSourceUrl(popupUrl);
-      }
-
-      await urlPromise;
-      const currentUrl = page.url();
-      if (currentUrl.includes('/recruit/view/')) {
-        const sourceUrl = normalizeSourceUrl(currentUrl);
-        await page.goBack({ waitUntil: 'domcontentloaded', timeout: 12000 }).catch(async () => {
-          await gotoList(page, listUrl);
-        });
-        return sourceUrl;
-      }
+      const json = JSON.parse(trimmed);
+      kind = 'json';
+      candidates = extractCandidatesFromJson(json, regionName, 'api-json');
     } catch {
-      // 다음 locator 방식 시도
-    }
-
-    if (page.url() !== listUrl && !page.url().includes('/recruit/regional/')) {
-      await gotoList(page, listUrl);
+      kind = 'json-parse-failed';
     }
   }
 
-  return null;
+  candidates.push(...extractCandidatesFromText(text, regionName, kind === 'json' ? 'api-json' : 'api-text'));
+  candidates = mergeCandidates(candidates);
+
+  return {
+    record: {
+      url,
+      status: response.status(),
+      contentType,
+      bodyLength: text.length,
+      kind,
+      candidateCount: candidates.length,
+      sample: compactText(text, 700),
+    },
+    candidates,
+  };
 }
 
-async function discoverRegionCandidates(page: Page, region: Region, debugDir: string) {
+async function collectRegionApiCandidates(page: Page, region: Region, debugDir: string) {
   const listUrl = `${BASE_URL}/recruit/regional/${region.id}`;
+  const prefix = safeFileName(`${region.id}_${region.name}_${Date.now()}`);
+  const candidates: Candidate[] = [];
+  const networkRecords: NetworkRecord[] = [];
+  const responseJobs: Promise<void>[] = [];
+
+  const onResponse = (response: Response) => {
+    const job = maybeCollectResponse(response, region.name)
+      .then((result) => {
+        if (!result) return;
+        networkRecords.push(result.record);
+        if (result.candidates.length > 0) {
+          candidates.push(...result.candidates);
+          console.log(`[${region.name}] API 후보 ${result.candidates.length}건: ${result.record.url}`);
+        }
+      })
+      .catch(() => undefined);
+    responseJobs.push(job);
+  };
+
+  page.on('response', onResponse);
+
   console.log('');
   console.log('='.repeat(90));
   console.log(`[${region.name}] 목록 접속: ${listUrl}`);
 
-  const responseStatus = await gotoList(page, listUrl);
-  const prefix = safeFileName(`${region.id}_${region.name}_${Date.now()}`);
+  const status = await gotoList(page, listUrl);
+  console.log(`[${region.name}] 응답 status: ${status ?? '-'}`);
 
-  let previousTextLength = 0;
-  let stableRounds = 0;
-  let olderDateSeen = false;
-  let lastCandidateCount = 0;
-  let stagnantCandidateCheckpoints = 0;
+  let lastCount = 0;
+  let stagnant = 0;
+  let olderSeen = false;
 
   for (let round = 0; round <= SCROLL_ROUNDS; round += 1) {
+    await Promise.allSettled(responseJobs.splice(0));
+
     const bodyText = await getBodyText(page);
     const html = await getHtml(page);
-    olderDateSeen = olderDateSeen || hasOlderThanCutoffDate(bodyText);
+    olderSeen = olderSeen || hasOlderThanCutoffDate(bodyText);
 
-    const merged = mergeCandidates([
-      ...collectHtmlViewLinks(html, region.name),
-      ...(await collectAnchorViewLinks(page, region.name)),
-      ...extractTitleCandidatesFromText(bodyText, region.name),
-    ]);
+    // HTML 안에 포함된 API/템플릿/링크 후보도 함께 수집
+    candidates.push(...extractCandidatesFromText(html, region.name, 'html-link'));
 
-    const totalCandidates = merged.withUrl.length + merged.noUrl.length;
+    const merged = mergeCandidates(candidates);
+    const currentCount = merged.length;
 
     if (round === 0) {
-      console.log(`[${region.name}] 응답 status: ${responseStatus ?? '-'}`);
       console.log(`[${region.name}] body text 길이: ${bodyText.length.toLocaleString()}`);
-      console.log(`[${region.name}] 초기 후보: URL ${merged.withUrl.length}건 / 제목클릭 ${merged.noUrl.length}건`);
+      console.log(`[${region.name}] 초기 API/HTML 후보: ${currentCount}건`);
       await saveText(path.join(debugDir, `${prefix}_visible_text_initial.txt`), bodyText);
-      await saveText(path.join(debugDir, `${prefix}_html_initial.html`), html.slice(0, 300000));
-      await saveJson(path.join(debugDir, `${prefix}_candidates_initial.json`), merged);
+      await saveText(path.join(debugDir, `${prefix}_html_initial.html`), html.slice(0, 500000));
       await page.screenshot({ path: path.join(debugDir, `${prefix}_initial.png`), fullPage: true }).catch(() => undefined);
     }
 
     if (round > 0 && round % 5 === 0) {
-      const delta = totalCandidates - lastCandidateCount;
+      const delta = currentCount - lastCount;
       console.log(
-        `[${region.name}] 스크롤 ${round}/${SCROLL_ROUNDS}: URL ${merged.withUrl.length}건 / 제목클릭 ${merged.noUrl.length}건 / 후보증가 ${delta >= 0 ? '+' : ''}${delta} / 오래된날짜 ${olderDateSeen ? 'Y' : 'N'}`,
+        `[${region.name}] 스크롤 ${round}/${SCROLL_ROUNDS}: API/URL 후보 ${currentCount}건 / 증가 ${delta >= 0 ? '+' : ''}${delta} / 오래된날짜 ${olderSeen ? 'Y' : 'N'}`,
       );
 
-      if (olderDateSeen && delta <= 0) stagnantCandidateCheckpoints += 1;
-      else if (delta > 0) stagnantCandidateCheckpoints = 0;
+      if (olderSeen && delta <= 0) stagnant += 1;
+      else if (delta > 0) stagnant = 0;
+      lastCount = currentCount;
 
-      lastCandidateCount = totalCandidates;
-
-      if (round >= 10 && olderDateSeen && stagnantCandidateCheckpoints >= 3) {
-        console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + 후보 증가 없음 ${stagnantCandidateCheckpoints}회 → 스크롤 즉시 종료`);
+      if (round >= 10 && olderSeen && stagnant >= 3) {
+        console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + API 후보 증가 없음 ${stagnant}회 → 스크롤 종료`);
         break;
       }
     }
 
-    if (bodyText.length === previousTextLength) stableRounds += 1;
-    else stableRounds = 0;
-    previousTextLength = bodyText.length;
-
-    if (round >= 12 && stableRounds >= 5 && olderDateSeen) {
-      console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + 화면 변화 없음 → 스크롤 종료`);
-      break;
-    }
-
     if (round === SCROLL_ROUNDS) break;
-
     await page.mouse.wheel(0, 2600).catch(() => undefined);
-    await sleep(450);
+    await sleep(500);
   }
+
+  await Promise.allSettled(responseJobs);
+  page.off('response', onResponse);
 
   const finalText = await getBodyText(page);
   const finalHtml = await getHtml(page);
-  const finalMerged = mergeCandidates([
-    ...collectHtmlViewLinks(finalHtml, region.name),
-    ...(await collectAnchorViewLinks(page, region.name)),
-    ...extractTitleCandidatesFromText(finalText, region.name),
-  ]);
+  candidates.push(...extractCandidatesFromText(finalHtml, region.name, 'html-link'));
 
-  await saveText(path.join(debugDir, `${prefix}_visible_text_final.txt`), finalText);
-  await saveText(path.join(debugDir, `${prefix}_html_final.html`), finalHtml.slice(0, 500000));
-  await saveJson(path.join(debugDir, `${prefix}_candidates_final_before_click.json`), finalMerged);
-  await page.screenshot({ path: path.join(debugDir, `${prefix}_final.png`), fullPage: true }).catch(() => undefined);
-
-  console.log(`[${region.name}] 스크롤 완료 후보: URL ${finalMerged.withUrl.length}건 / 제목클릭 ${finalMerged.noUrl.length}건`);
-
-  // URL이 없는 광고/상단지면/최근 일반 공고는 제목 클릭으로 상세 URL 확보
-  const clicked: Candidate[] = [];
-  const clickTargets = finalMerged.noUrl.filter((candidate) => {
-    if (!['유니크', '슈페리어', '전국TOP', '지역TOP', '일반구인글'].includes(candidate.ad_section)) return false;
-
-    // 일반구인글은 목록에서 날짜 그룹이 명확해야 최근 5일 판단이 가능합니다.
-    // 날짜 그룹이 없는 일반구인글까지 클릭하면 오래된 공고를 수백 개 클릭하게 되어 실행 시간이 비정상적으로 길어집니다.
-    if (candidate.ad_section === '일반구인글') {
-      return !!candidate.list_date_group && isRecentDate(candidate.list_date_group);
-    }
-
-    // 유니크/슈페리어/전국TOP/지역TOP은 목록 날짜 그룹이 없는 경우가 많으므로 상세페이지 등록일로 최종 필터링합니다.
-    if (candidate.list_date_group && !isRecentDate(candidate.list_date_group)) return false;
+  const finalCandidates = mergeCandidates(candidates).filter((candidate) => {
+    // API에 등록일 힌트가 있는 경우 여기서 1차 필터링합니다. 등록일이 없으면 상세페이지에서 최종 필터링합니다.
+    if (candidate.posted_at_hint) return isRecentDate(candidate.posted_at_hint);
+    if (candidate.list_date_group) return isRecentDate(candidate.list_date_group);
     return true;
   });
 
-  if (clickTargets.length > 0) {
-    await gotoList(page, listUrl);
-    await sleep(1000);
-    console.log(`[${region.name}] 제목 클릭으로 상세 URL 확인 시작: ${clickTargets.length}건 / 전체 제목후보 ${finalMerged.noUrl.length}건 중 최근 ${LOOKBACK_DAYS}일 대상만 클릭`);
+  await saveText(path.join(debugDir, `${prefix}_visible_text_final.txt`), finalText);
+  await saveText(path.join(debugDir, `${prefix}_html_final.html`), finalHtml.slice(0, 800000));
+  await saveJson(path.join(debugDir, `${prefix}_network_records.json`), networkRecords);
+  await saveJson(path.join(debugDir, `${prefix}_api_candidates.json`), finalCandidates);
+  await page.screenshot({ path: path.join(debugDir, `${prefix}_final.png`), fullPage: true }).catch(() => undefined);
+
+  const usefulResponses = networkRecords.filter((record) => record.candidateCount > 0);
+  console.log(`[${region.name}] JSON/API 응답 ${networkRecords.length}개 감지 / 후보 포함 응답 ${usefulResponses.length}개`);
+  console.log(`[${region.name}] 상세 URL 후보 최종 ${finalCandidates.length}건`);
+
+  if (finalCandidates.length === 0) {
+    console.log(`[${region.name}] 후보 0건입니다. debug-output의 ${prefix}_network_records.json / html_final.html을 확인하세요.`);
   }
 
-  for (let index = 0; index < clickTargets.length; index += 1) {
-    const target = clickTargets[index];
-    if (index > 0 && index % 10 === 0) {
-      console.log(`[${region.name}] 제목 클릭 진행 ${index}/${clickTargets.length}`);
-    }
-
-    const sourceUrl = await discoverSourceUrlByClick(page, listUrl, target);
-    if (!sourceUrl) continue;
-
-    clicked.push({
-      ...target,
-      source_url: sourceUrl,
-      source_id: extractSourceId(sourceUrl) || undefined,
-    });
-  }
-
-  const final = mergeCandidates([...finalMerged.withUrl, ...clicked]);
-  await saveJson(path.join(debugDir, `${prefix}_candidates_final_after_click.json`), final);
-
-  console.log(`[${region.name}] 최종 상세 URL 후보: ${final.withUrl.length}건 / 클릭성공 ${clicked.length}건`);
-  return final.withUrl;
+  return finalCandidates;
 }
 
 function findLabelValue(lines: string[], labels: string[]) {
@@ -638,9 +701,9 @@ function extractApartmentFee(lines: string[]) {
       .split('\n')
       .map((line) => normalizeText(line))
       .filter((line) => /분양|수수료|만원|원|%/.test(line))
-      .slice(0, 4)
+      .slice(0, 6)
       .join(' / ');
-    return useful || salarySection.slice(0, 200);
+    return useful || salarySection.slice(0, 250);
   }
 
   return '-';
@@ -666,17 +729,15 @@ async function bestTitleFromPage(page: Page, fallback: string) {
   for (const selector of selectors) {
     const loc = page.locator(selector);
     const count = await loc.count().catch(() => 0);
-    for (let index = 0; index < Math.min(count, 6); index += 1) {
-      const text = oneLine(await loc.nth(index).innerText({ timeout: 500 }).catch(() => ''));
-      if (text && !isMetaLine(text) && text.length >= 5) return text;
+    for (let index = 0; index < Math.min(count, 8); index += 1) {
+      const text = compactText(await loc.nth(index).innerText({ timeout: 500 }).catch(() => ''), 160);
+      if (text && text.length >= 5 && !/구인글 상세보기|지역현장|분양라인/.test(text)) return text;
     }
   }
   return fallback;
 }
 
 async function parseDetail(context: BrowserContext, candidate: Candidate): Promise<BunyanglineItem | null> {
-  if (!candidate.source_url) return null;
-
   const page = await context.newPage();
   try {
     await page.goto(candidate.source_url, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((error) => {
@@ -684,12 +745,14 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
       return null;
     });
     await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => undefined);
-    await sleep(1200);
+    await sleep(900);
 
     const rawText = await getBodyText(page);
     const lines = rawText.split('\n').map((line) => normalizeText(line)).filter(Boolean);
-    const firstDateTime = rawText.match(/20\d{2}[-.\/]\d{1,2}[-.\/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/)?.[0] || null;
-    const dateInfo = parseDateTime(firstDateTime || candidate.list_date_group || '');
+
+    // 상세페이지 오른쪽 상단 등록일시를 최우선으로 사용합니다.
+    const firstDateTime = rawText.match(/20\d{2}[-.\/]\d{1,2}[-.\/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/)?.[0] || candidate.posted_datetime_hint;
+    const dateInfo = parseDateTime(firstDateTime || candidate.posted_at_hint || candidate.list_date_group || '');
 
     if (!dateInfo.postedAt || !isRecentDate(dateInfo.postedAt)) {
       return null;
@@ -703,8 +766,8 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
     const managerPhoneRaw = findLabelValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']) || '-';
     const agencyCompany = findLabelValue(lines, ['대행사', '회사명', '상호명']) || '-';
     const category = findLabelValue(lines, ['업종', '상품유형', '분류', '카테고리']);
-    const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 120 && !line.includes('지역현장')) || candidate.raw_text || null;
     const detailText = extractDetailSection(lines, ['상세정보', '상세 정보'], ['접수방법', '접수 방법', '기업정보', '사업자 정보']) || rawText.slice(0, 3000) || '-';
+    const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
 
     return {
       region_name: candidate.region_name,
@@ -770,10 +833,10 @@ async function main() {
     throw new Error(`수집할 지역이 없습니다. BUNYANGLINE_REGION_IDS=${REGION_ARG}`);
   }
 
-  console.log('분양라인 상세페이지 기준 크롤러를 시작합니다.');
-  console.log(`- 수집 기준: /recruit/view/{공고ID} 상세페이지`);
-  console.log(`- 출력 기준: 지역/게재지면/현장명/등록일/담당자/연락처/대행사/수수료/투입일/상세정보`);
-  console.log(`- 중복 기준: source_url 단독`);
+  console.log('분양라인 JSON/API 우선 크롤러를 시작합니다.');
+  console.log('- 수집 방식: 목록 JSON/API 응답에서 공고 idx 추출 → 상세페이지 직접 접근');
+  console.log('- 클릭 방식: 사용하지 않음');
+  console.log('- 중복 기준: source_url 단독');
   console.log(`- 수집 기간: ${cutoffKstDate()} 이후 등록 공고`);
   console.log(`- regionArg: ${REGION_ARG}`);
   console.log(`- scrollRounds: ${SCROLL_ROUNDS}`);
@@ -796,18 +859,14 @@ async function main() {
 
   try {
     for (const region of targetRegions) {
-      const candidates = await discoverRegionCandidates(listPage, region, debugDir);
-      const uniqueCandidates = mergeCandidates(candidates).withUrl;
+      const candidates = await collectRegionApiCandidates(listPage, region, debugDir);
+      console.log(`[${region.name}] 상세 파싱 시작: ${candidates.length}건`);
 
-      console.log(`[${region.name}] 상세 파싱 시작: ${uniqueCandidates.length}건`);
       let regionSaved = 0;
-
-      for (let index = 0; index < uniqueCandidates.length; index += 1) {
-        const candidate = uniqueCandidates[index];
-        if (!candidate.source_url) continue;
-
-        if (index > 0 && index % 20 === 0) {
-          console.log(`[${region.name}] 상세 파싱 진행 ${index}/${uniqueCandidates.length} / 저장대상 ${regionSaved}건`);
+      for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        if (index > 0 && index % 30 === 0) {
+          console.log(`[${region.name}] 상세 파싱 진행 ${index}/${candidates.length} / 저장대상 ${regionSaved}건`);
         }
 
         try {
@@ -822,7 +881,7 @@ async function main() {
         }
       }
 
-      console.log(`[${region.name}] 완료: 후보 ${uniqueCandidates.length}건 / 최근 ${LOOKBACK_DAYS}일 저장대상 ${regionSaved}건 / 실패 누적 ${failures.length}건`);
+      console.log(`[${region.name}] 완료: 후보 ${candidates.length}건 / 최근 ${LOOKBACK_DAYS}일 저장대상 ${regionSaved}건 / 실패 누적 ${failures.length}건`);
     }
 
     const deduped = Array.from(new Map(allItems.map((item) => [item.source_url, item])).values());
