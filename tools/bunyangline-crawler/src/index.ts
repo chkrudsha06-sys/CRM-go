@@ -392,164 +392,198 @@ async function saveText(filePath: string, value: string) {
 
 type VisibleCardCandidate = {
   key: string;
+  title: string;
   text: string;
   section: string;
   listDateGroup: string | null;
-  x: number;
-  y: number;
   href: string | null;
 };
 
 async function collectVisibleCards(page: Page): Promise<VisibleCardCandidate[]> {
-  return page.locator('body').evaluate((body) => {
-    const normalize = (value: string | null | undefined) =>
-      String(value || '')
-        .replace(/\u00a0/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+  const bodyText = await page.locator('body').innerText({ timeout: 15000 }).catch(() => '');
+  const html = await page.content().catch(() => '');
 
-    const isVisible = (element: Element) => {
-      const rect = element.getBoundingClientRect();
-      const style = window.getComputedStyle(element);
-      return (
-        rect.width >= 160 &&
-        rect.height >= 45 &&
-        rect.top < window.innerHeight - 20 &&
-        rect.bottom > 90 &&
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        Number(style.opacity || '1') > 0
-      );
-    };
+  const lines = bodyText
+    .split('\n')
+    .map((line) => normalizeText(line))
+    .filter(Boolean);
 
-    const inferSection = (top: number) => {
-      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,strong,b,p,div,span'))
-        .map((element) => {
-          const text = normalize((element as HTMLElement).innerText || element.textContent || '');
-          const rect = element.getBoundingClientRect();
-          return { text, top: rect.top };
-        })
-        .filter((item) =>
-          item.top <= top + 20 &&
-          /^(유니크|슈페리어|전국\s*Top|전국\s*TOP|지역\s*Top|지역\s*TOP|일반\s*구인글|TODAY|20\d{2}-\d{2}-\d{2})/.test(item.text),
-        )
-        .sort((a, b) => b.top - a.top);
+  const candidates: VisibleCardCandidate[] = [];
+  const seen = new Set<string>();
 
-      const headingText = headings[0]?.text || '';
-      if (/유니크/.test(headingText)) return '유니크';
-      if (/슈페리어/.test(headingText)) return '슈페리어';
-      if (/전국\s*Top|전국\s*TOP/.test(headingText)) return '전국TOP';
-      if (/지역\s*Top|지역\s*TOP/.test(headingText)) return '지역TOP';
-      if (/일반\s*구인글|TODAY|20\d{2}-\d{2}-\d{2}/.test(headingText)) return '일반구인글';
-      return '미지정';
-    };
+  let currentSection = '미지정';
+  let currentDateGroup: string | null = null;
 
-    const inferDateGroup = (top: number) => {
-      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,strong,b,p,div,span'))
-        .map((element) => {
-          const text = normalize((element as HTMLElement).innerText || element.textContent || '');
-          const rect = element.getBoundingClientRect();
-          return { text, top: rect.top };
-        })
-        .filter((item) => item.top <= top + 20 && /^(TODAY|20\d{2}-\d{2}-\d{2})/.test(item.text))
-        .sort((a, b) => b.top - a.top);
+  const normalizeSectionLine = (line: string) => {
+    if (/^유니크$/.test(line)) return '유니크';
+    if (/^슈페리어$/.test(line)) return '슈페리어';
+    if (/^전국\s*Top$/i.test(line) || /^전국\s*TOP$/.test(line)) return '전국TOP';
+    if (/^지역\s*Top$/i.test(line) || /^지역\s*TOP$/.test(line)) return '지역TOP';
+    if (/^일반\s*구인글$/.test(line)) return '일반구인글';
+    return null;
+  };
 
-      const text = headings[0]?.text || '';
-      if (text.startsWith('TODAY')) return 'TODAY';
-      const match = text.match(/20\d{2}-\d{2}-\d{2}/);
-      return match?.[0] || null;
-    };
+  const isDateGroup = (line: string) => line === 'TODAY' || /^20\d{2}-\d{2}-\d{2}/.test(line);
+  const isBadge = (line: string) => /^(AD|소수|신규|HOT|대박|급구|TODAY|♡|♥)$/.test(line);
+  const isCategory = (line: string) => /^(아파트|오피스텔|기타|도시형 생활주택|지식산업센터|상가|쇼핑몰|타운하우스|토지|생활형숙박|아파트\/|오피스텔\/|아파트\/오피스텔|아파트\/상가\/쇼핑몰|아파트\/도시형 생활주택|오피스텔\/상가\/쇼핑몰)/.test(line);
+  const isTagOrMeta = (line: string) => /^(팀장\/팀원|본부\/팀장|팀원|본부장|계약 수수료|기본급|인센|일비|숙소비|경력무관|\d+개월이상|캐치뷰어|전화문의|지승|BN|TAEONE|휴머니글로벌|\(주\)|<주>)/.test(line);
+  const isUiText = (line: string) => /^(분양라인|지역현장|모든지역|서울|경기남부|경기북부|인천|부산|울산|대구|경상도|대전|세종|충청도|광주|전라도|강원도|제주도|검색|검색어|HOME|맞춤현장|지도현장|관심현장|서포터즈|글쓰기|TOP|목록을 로딩중입니다|회사명|개인정보|이용약관)/.test(line);
+  const looksLikeTitle = (line: string) => {
+    if (!line || line.length < 5 || line.length > 95) return false;
+    if (isBadge(line) || isCategory(line) || isTagOrMeta(line) || isUiText(line)) return false;
+    if (/^\d{4}-\d{2}-\d{2}/.test(line)) return false;
+    if (/원$/.test(line) && line.length < 12) return false;
+    return /(아파트|오피스텔|팀|본부|모집|수수료|분양|현장|조건|신규|서울|강남|서초|노원|역|파트너|센터|상가|호텔|레지던스|민간임대|도시형|주택|입주|계약|광고|파격|프라이빗|갤러리)/.test(line);
+  };
 
-    const selectors = [
-      'a',
-      'li',
-      'article',
-      '[onclick]',
-      '[role="button"]',
-      '.card',
-      '.item',
-      '.list-item',
-      '.recruit',
-      '.recruit-item',
-      '.recruit-list',
-      '.recruit-card',
-      'div',
-    ];
+  const pushCandidate = (title: string, index: number, sectionOverride?: string | null, dateOverride?: string | null) => {
+    const cleanTitle = normalizeText(title);
+    if (!looksLikeTitle(cleanTitle)) return;
 
-    const elements = Array.from(document.querySelectorAll(selectors.join(','))) as HTMLElement[];
-    const candidates: VisibleCardCandidate[] = [];
-    const seen = new Set<string>();
+    const key = `${sectionOverride || currentSection}|${dateOverride || currentDateGroup || ''}|${cleanTitle}`;
+    if (seen.has(key)) return;
+    seen.add(key);
 
-    for (const element of elements) {
-      if (!isVisible(element)) continue;
+    const context = lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 8)).join(' / ');
+    candidates.push({
+      key,
+      title: cleanTitle,
+      text: context,
+      section: sectionOverride || currentSection,
+      listDateGroup: dateOverride || (currentDateGroup === 'TODAY' ? todayDateString() : currentDateGroup),
+      href: null,
+    });
+  };
 
-      const text = normalize(element.innerText || element.textContent || '');
-      if (text.length < 18 || text.length > 650) continue;
-      if (!/(팀장|팀원|본부|분양|수수료|경력무관|일비|아파트|오피스텔|생활주택|지식산업|계약|모집|투입)/.test(text)) continue;
-      if (/지역현장|검색어를 입력|상품안내|고객센터|회원가입|로그인/.test(text)) continue;
-
-      const childCardCount = Array.from(element.querySelectorAll('a,li,article,[onclick],[role="button"],.card,.item,.list-item'))
-        .filter((child) => child !== element && isVisible(child) && normalize((child as HTMLElement).innerText || child.textContent || '').length >= 18).length;
-      if (childCardCount >= 2) continue;
-
-      const rect = element.getBoundingClientRect();
-      const anchor = element.tagName.toLowerCase() === 'a' ? element : element.querySelector('a[href]');
-      const href = anchor ? (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || null : null;
-
-      const key = text.slice(0, 180).replace(/\s+/g, ' ');
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      candidates.push({
-        key,
-        text: text.slice(0, 400),
-        section: inferSection(rect.top),
-        listDateGroup: inferDateGroup(rect.top),
-        x: Math.max(10, Math.min(window.innerWidth - 10, rect.left + rect.width * 0.42)),
-        y: Math.max(90, Math.min(window.innerHeight - 10, rect.top + rect.height * 0.46)),
-        href,
-      });
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const section = normalizeSectionLine(line);
+    if (section) {
+      currentSection = section;
+      continue;
     }
 
-    return candidates.sort((a, b) => a.y - b.y).slice(0, 30);
-  });
+    if (isDateGroup(line)) {
+      currentSection = '일반구인글';
+      currentDateGroup = line === 'TODAY' ? todayDateString() : line.match(/20\d{2}-\d{2}-\d{2}/)?.[0] || currentDateGroup;
+      continue;
+    }
+
+    // 가장 안정적인 규칙: 카테고리 다음 줄이 공고 제목인 구조
+    if (isCategory(line)) {
+      for (let next = index + 1; next < Math.min(lines.length, index + 5); next += 1) {
+        const nextLine = lines[next];
+        if (!nextLine || isBadge(nextLine)) continue;
+        pushCandidate(nextLine, next);
+        break;
+      }
+      continue;
+    }
+
+    // 일반구인글은 이미지가 없는 카드도 있어서 제목형 문구를 보조로 수집
+    if (currentSection === '일반구인글' && looksLikeTitle(line)) {
+      const nextFew = lines.slice(index + 1, index + 6).join(' ');
+      if (/(팀장\/팀원|본부\/팀장|팀원|계약 수수료|경력무관|일비|캐치뷰어)/.test(nextFew)) {
+        pushCandidate(line, index);
+      }
+    }
+  }
+
+  // 서버 HTML 안에 onclick/data 속성으로 id가 숨어있는 경우 보조 추출
+  const idRegexes = [
+    /recruit\/view\/(\d{4,})/g,
+    /go\w*\((\d{4,})\)/g,
+    /["']idx["']\s*[:=]\s*["']?(\d{4,})["']?/g,
+    /data-(?:idx|id|no)=['"](\d{4,})['"]/g,
+  ];
+
+  for (const regex of idRegexes) {
+    for (const match of html.matchAll(regex)) {
+      const sourceId = match[1];
+      const sourceUrl = canonicalViewUrl(sourceId);
+      const key = `html-id|${sourceUrl}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({
+        key,
+        title: `공고 ${sourceId}`,
+        text: `HTML에서 발견된 공고ID ${sourceId}`,
+        section: currentSection || '미지정',
+        listDateGroup: currentDateGroup === 'TODAY' ? todayDateString() : currentDateGroup,
+        href: sourceUrl,
+      });
+    }
+  }
+
+  await saveText(path.resolve(process.cwd(), 'debug-output', `visible-text-${Date.now()}.txt`), lines.slice(0, 500).join('\n')).catch(() => undefined);
+  await saveJson(path.resolve(process.cwd(), 'debug-output', `title-candidates-${Date.now()}.json`), candidates.slice(0, 200)).catch(() => undefined);
+
+  return candidates.slice(0, 200);
 }
 
 async function tryClickCardForUrl(page: Page, card: VisibleCardCandidate): Promise<string | null> {
+  if (card.href && sourceIdFromUrl(card.href)) return canonicalViewUrl(sourceIdFromUrl(card.href) || '');
+
   const beforeUrl = page.url();
   const beforeScrollY = await page.evaluate(() => window.scrollY).catch(() => 0);
 
-  const popupPromise = page.waitForEvent('popup', { timeout: 2500 }).catch(() => null);
-  await page.mouse.click(card.x, card.y).catch(() => undefined);
+  const clickAndReadUrl = async (locator: ReturnType<Page['locator']>) => {
+    const count = Math.min(await locator.count().catch(() => 0), 8);
 
-  const popup = await popupPromise;
-  if (popup) {
-    await popup.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => undefined);
-    const popupUrl = popup.url();
-    await popup.close().catch(() => undefined);
-    const id = sourceIdFromUrl(popupUrl);
-    return id ? canonicalViewUrl(id) : null;
-  }
+    for (let index = 0; index < count; index += 1) {
+      const target = locator.nth(index);
+      const visible = await target.isVisible().catch(() => false);
+      if (!visible) continue;
 
-  await page.waitForTimeout(1200);
-  const afterUrl = page.url();
-  const id = sourceIdFromUrl(afterUrl);
+      await target.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => undefined);
+      await page.waitForTimeout(150);
 
-  if (id) {
-    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(async () => {
-      await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
-    });
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
-    await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
-    await page.waitForTimeout(500);
-    return canonicalViewUrl(id);
-  }
+      const popupPromise = page.waitForEvent('popup', { timeout: 1500 }).catch(() => null);
+      await target.click({ timeout: 5000 }).catch(() => undefined);
+      const popup = await popupPromise;
 
-  if (afterUrl !== beforeUrl) {
-    await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
-    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
-    await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
-    await page.waitForTimeout(500);
+      if (popup) {
+        await popup.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => undefined);
+        const popupUrl = popup.url();
+        await popup.close().catch(() => undefined);
+        const popupId = sourceIdFromUrl(popupUrl);
+        if (popupId) return canonicalViewUrl(popupId);
+      }
+
+      await page.waitForTimeout(900);
+      const afterUrl = page.url();
+      const id = sourceIdFromUrl(afterUrl);
+      if (id) {
+        await page.goBack({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(async () => {
+          await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
+        });
+        await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+        await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
+        await page.waitForTimeout(400);
+        return canonicalViewUrl(id);
+      }
+
+      if (afterUrl !== beforeUrl) {
+        await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
+        await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+        await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
+        await page.waitForTimeout(400);
+      }
+    }
+
+    return null;
+  };
+
+  // 1순위: 제목 텍스트 자체 클릭
+  const exactText = page.getByText(card.title, { exact: true });
+  const exactResult = await clickAndReadUrl(exactText).catch(() => null);
+  if (exactResult) return exactResult;
+
+  // 2순위: 제목 일부 텍스트 클릭. 말줄임/공백 차이 대응
+  const shortTitle = card.title.length > 24 ? card.title.slice(0, 24) : card.title;
+  if (shortTitle && shortTitle !== card.title) {
+    const partialResult = await clickAndReadUrl(page.getByText(shortTitle, { exact: false })).catch(() => null);
+    if (partialResult) return partialResult;
   }
 
   return null;
