@@ -3,15 +3,13 @@ name: Bunyangline Data Crawler
 on:
   workflow_dispatch:
   schedule:
-    # GitHub Actions cron은 UTC 기준입니다.
-    # 한국시간 11:59 = UTC 02:59
-    # 한국시간 23:59 = UTC 14:59
-    - cron: '59 2,14 * * *'
+    # UTC 기준입니다. 한국시간 10:00 / 14:00 / 18:00 실행
+    - cron: '0 1,5,9 * * *'
 
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -20,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
 
       - name: Install crawler dependencies
         working-directory: tools/bunyangline-crawler
@@ -38,10 +36,15 @@ jobs:
           BUNYANGLINE_REGION_IDS: all
           BUNYANGLINE_MAX_PAGES: '1'
           BUNYANGLINE_MAX_DETAILS_PER_REGION: '30'
-          BUNYANGLINE_MIN_POSTED_AT: '2026-05-01'
-          BUNYANGLINE_INCREMENTAL: 'true'
-          BUNYANGLINE_IMPORT_BATCH_SIZE: '2'
-          BUNYANGLINE_MAX_DETAIL_TEXT_LENGTH: '7000'
-          BUNYANGLINE_MAX_RAW_TEXT_LENGTH: '0'
+          BUNYANGLINE_SEND_TO_CRM: 'true'
           HEADLESS: 'true'
         run: npm run start
+
+      - name: Upload Bunyangline debug output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bunyangline-debug-output
+          path: tools/bunyangline-crawler/debug-output
+          if-no-files-found: warn
+          retention-days: 7
