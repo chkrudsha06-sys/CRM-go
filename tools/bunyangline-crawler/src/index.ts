@@ -6,10 +6,10 @@ const BASE_URL = 'https://www.bunyangline.com';
 const IMPORT_URL = process.env.CRM_BUNYANGLINE_IMPORT_URL || '';
 const IMPORT_SECRET = process.env.BUNYANGLINE_IMPORT_SECRET || '';
 const REGION_ARG = process.env.BUNYANGLINE_REGION_IDS || 'all';
-const SCROLL_ROUNDS = Math.max(1, Number(process.env.BUNYANGLINE_SCROLL_ROUNDS || '120') || 120);
+const SCROLL_ROUNDS = Math.max(1, Number(process.env.BUNYANGLINE_SCROLL_ROUNDS || '10') || 10);
 const HEADLESS = process.env.HEADLESS !== 'false';
 const SEND_TO_CRM = process.env.SEND_TO_CRM !== 'false';
-const LOOKBACK_DAYS = Math.max(0, Number(process.env.BUNYANGLINE_LOOKBACK_DAYS || '5') || 5);
+const LOOKBACK_DAYS = Math.max(0, Number(process.env.BUNYANGLINE_LOOKBACK_DAYS || process.env.BUNYANGLINE_DAYS_BACK || '5') || 5);
 
 const REGIONS = [
   { id: '1', name: '서울' },
@@ -856,6 +856,8 @@ async function main() {
   const listPage = await context.newPage();
   const allItems: BunyanglineItem[] = [];
   const failures: Array<{ region: string; source_url?: string; title: string; reason: string }> = [];
+  let globalBatchNo = 1;
+  let totalSavedToCrm = 0;
 
   try {
     for (const region of targetRegions) {
@@ -863,6 +865,8 @@ async function main() {
       console.log(`[${region.name}] 상세 파싱 시작: ${candidates.length}건`);
 
       let regionSaved = 0;
+      const regionItems: BunyanglineItem[] = [];
+
       for (let index = 0; index < candidates.length; index += 1) {
         const candidate = candidates[index];
         if (index > 0 && index % 30 === 0) {
@@ -872,6 +876,7 @@ async function main() {
         try {
           const item = await parseDetail(context, candidate);
           if (!item) continue;
+          regionItems.push(item);
           allItems.push(item);
           regionSaved += 1;
         } catch (error: any) {
@@ -881,7 +886,24 @@ async function main() {
         }
       }
 
-      console.log(`[${region.name}] 완료: 후보 ${candidates.length}건 / 최근 ${LOOKBACK_DAYS}일 저장대상 ${regionSaved}건 / 실패 누적 ${failures.length}건`);
+      const regionDeduped = Array.from(new Map(regionItems.map((item) => [item.source_url, item])).values());
+      await saveJson(path.join(debugDir, `collected-items-${safeFileName(region.name)}.json`), regionDeduped);
+
+      console.log(`[${region.name}] 완료: 후보 ${candidates.length}건 / 최근 ${LOOKBACK_DAYS}일 저장대상 ${regionSaved}건 / 지역 중복제거 후 ${regionDeduped.length}건 / 실패 누적 ${failures.length}건`);
+
+      if (regionDeduped.length > 0) {
+        console.log(`[${region.name}] CRM 지역별 즉시 저장 시작: ${regionDeduped.length}건`);
+        const batchSize = 50;
+        for (let start = 0; start < regionDeduped.length; start += batchSize) {
+          const batch = regionDeduped.slice(start, start + batchSize);
+          await sendBatch(batch, globalBatchNo);
+          globalBatchNo += 1;
+          totalSavedToCrm += batch.length;
+        }
+        console.log(`[${region.name}] CRM 지역별 즉시 저장 완료: ${regionDeduped.length}건`);
+      } else {
+        console.log(`[${region.name}] CRM 저장 대상 없음`);
+      }
     }
 
     const deduped = Array.from(new Map(allItems.map((item) => [item.source_url, item])).values());
@@ -890,14 +912,7 @@ async function main() {
 
     console.log('');
     console.log('='.repeat(90));
-    console.log(`[최종] 수집 대상: ${deduped.length}건 / 실패: ${failures.length}건`);
-
-    const batchSize = 50;
-    for (let start = 0; start < deduped.length; start += batchSize) {
-      const batch = deduped.slice(start, start + batchSize);
-      await sendBatch(batch, Math.floor(start / batchSize) + 1);
-    }
-
+    console.log(`[최종] 수집 대상: ${deduped.length}건 / CRM 전송 누적: ${totalSavedToCrm}건 / 실패: ${failures.length}건`);
     console.log('[완료] 분양라인 크롤링이 완료되었습니다.');
   } finally {
     await listPage.close().catch(() => undefined);
