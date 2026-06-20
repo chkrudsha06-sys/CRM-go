@@ -3,7 +3,6 @@ name: Bunyangline Data Crawler
 on:
   workflow_dispatch:
   schedule:
-    # UTC 기준입니다. 한국시간 10:00 / 14:00 / 18:00 실행
     - cron: '0 1,5,9 * * *'
 
 jobs:
@@ -35,7 +34,8 @@ jobs:
           BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
           BUNYANGLINE_REGION_IDS: all
           BUNYANGLINE_MAX_PAGES: '1'
-          BUNYANGLINE_SCROLL_ROUNDS: '80'
+          BUNYANGLINE_SCROLL_ROUNDS: '120'
+          BUNYANGLINE_IMPORT_BATCH_SIZE: '50'
           BUNYANGLINE_SEND_TO_CRM: 'true'
           HEADLESS: 'true'
         run: npm run start
