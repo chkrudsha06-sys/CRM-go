@@ -199,14 +199,86 @@ function normalizePhone(value: string | null | undefined) {
   const text = normalizeText(value);
   if (!text) return '-';
 
-  const phone = text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
-  if (phone) return phone.replace(/\D/g, '');
+  const mobile = text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+  if (mobile) return mobile.replace(/\D/g, '');
 
   const tel = text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
   if (tel) return tel.replace(/\D/g, '');
 
+  const service = text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0];
+  if (service) return service.replace(/\D/g, '');
+
   const digits = text.replace(/\D/g, '');
   return digits || text || '-';
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function firstPhoneInText(value: string | null | undefined) {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const match =
+    text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0] ||
+    null;
+
+  return match ? normalizePhone(match) : null;
+}
+
+function cleanManagerName(value: string | null | undefined) {
+  let text = normalizeText(value);
+  if (!text) return '-';
+
+  text = text
+    .replace(/담당자\s*이름/g, ' ')
+    .replace(/담당자명/g, ' ')
+    .replace(/담당자\s*연락처.*$/g, ' ')
+    .replace(/연락처.*$/g, ' ')
+    .replace(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
+    .replace(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
+    .replace(/\b\d{4}[-\s.]?\d{4}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text || '-';
+}
+
+function stripLabelNoise(value: string | null | undefined) {
+  return normalizeText(value)
+    .replace(/^(시행사|시공사|신탁사|대행사|담당자\s*이름|담당자\s*연락처|형태|아파트\s*분양)\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || '-';
+}
+
+function findJoinedLabelValue(joinedText: string, label: string, nextLabels: string[]) {
+  const next = nextLabels.map(escapeRegExp).join('|');
+  const pattern = new RegExp(`${escapeRegExp(label)}\\s*[:：]?\\s*(.+?)(?=\\s*(?:${next})\\s*[:：]?|$)`);
+  const match = joinedText.match(pattern);
+  return match?.[1] ? normalizeText(match[1]) : null;
+}
+
+function extractBusinessValue(lines: string[], labels: string[], nextLabels: string[]) {
+  const joined = lines.join(' ');
+  for (const label of labels) {
+    const value = findJoinedLabelValue(joined, label, nextLabels);
+    if (value) return value;
+  }
+
+  const direct = findLabelValue(lines, labels);
+  if (direct) return direct;
+
+  return null;
+}
+
+function splitManagerFields(managerNameRaw: string | null | undefined, managerPhoneRaw: string | null | undefined) {
+  const combined = normalizeText(`${managerNameRaw || ''} ${managerPhoneRaw || ''}`);
+  const phone = firstPhoneInText(combined) || normalizePhone(managerPhoneRaw || '') || '-';
+  const name = cleanManagerName(managerNameRaw || combined);
+  return { managerName: name, managerPhone: phone };
 }
 
 function normalizeSection(value: unknown) {
@@ -215,8 +287,7 @@ function normalizeSection(value: unknown) {
   if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
   if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
   if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
-  if (text.includes('일반구인글') || text.includes('normal') || text.includes('basic')) return '일반구인글';
-  return normalizeText(value) || '일반구인글';
+  return '일반';
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -380,7 +451,7 @@ function extractCandidatesFromText(text: string, regionName: string, origin: Can
         source_id: match[1],
         title: `공고 ${match[1]}`,
         region_name: regionName,
-        ad_section: '일반구인글',
+        ad_section: '일반',
         list_date_group: null,
         posted_at_hint: null,
         posted_datetime_hint: null,
@@ -402,7 +473,7 @@ function extractCandidatesFromText(text: string, regionName: string, origin: Can
       source_id: id,
       title: `공고 ${id}`,
       region_name: regionName,
-      ad_section: '일반구인글',
+      ad_section: '일반',
       list_date_group: null,
       posted_at_hint: null,
       posted_datetime_hint: null,
@@ -431,7 +502,7 @@ function mergeCandidates(candidates: Candidate[]) {
       ...existing,
       ...candidate,
       title: betterTitle,
-      ad_section: existing.ad_section !== '일반구인글' ? existing.ad_section : candidate.ad_section,
+      ad_section: existing.ad_section !== '일반' ? existing.ad_section : candidate.ad_section,
       list_date_group: existing.list_date_group || candidate.list_date_group,
       posted_at_hint: existing.posted_at_hint || candidate.posted_at_hint,
       posted_datetime_hint: existing.posted_datetime_hint || candidate.posted_datetime_hint,
@@ -686,24 +757,20 @@ function extractDetailSection(lines: string[], startLabels: string[], endLabels:
 }
 
 function extractApartmentFee(lines: string[]) {
+  const joined = lines.join(' ');
+  const joinedValue = findJoinedLabelValue(joined, '아파트 분양', ['오피스텔 분양', '상가 분양', '상세정보', '상세 정보', '근무지 정보', '사업자 정보', '접수방법']);
+  if (joinedValue && /\d|만|원|%|협의|지급/.test(joinedValue)) return stripLabelNoise(joinedValue);
+
   for (let index = 0; index < lines.length; index += 1) {
     const line = normalizeText(lines[index]);
     if (/아파트\s*분양/.test(line)) {
-      const next = normalizeText(lines[index + 1] || '');
-      if (next && /\d|만|원|%|수수료/.test(next)) return `${line} ${next}`;
-      return line;
-    }
-  }
+      const direct = line.replace(/.*아파트\s*분양\s*[:：]?\s*/, '').trim();
+      if (direct && direct !== line && /\d|만|원|%|협의|지급/.test(direct)) return stripLabelNoise(direct);
 
-  const salarySection = extractDetailSection(lines, ['급여정보', '급여 정보'], ['상세정보', '상세 정보', '근무지 정보', '사업자 정보']);
-  if (salarySection) {
-    const useful = salarySection
-      .split('\n')
-      .map((line) => normalizeText(line))
-      .filter((line) => /분양|수수료|만원|원|%/.test(line))
-      .slice(0, 6)
-      .join(' / ');
-    return useful || salarySection.slice(0, 250);
+      const next = normalizeText(lines[index + 1] || '');
+      if (next && /\d|만|원|%|협의|지급/.test(next)) return stripLabelNoise(next);
+      return '-';
+    }
   }
 
   return '-';
@@ -762,21 +829,22 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
     const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
     const siteAddress = findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
     const workAddress = findLabelValue(lines, ['근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
-    const managerName = findLabelValue(lines, ['담당자 이름', '담당자명', '담당자']) || '-';
-    const managerPhoneRaw = findLabelValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']) || '-';
-    const agencyCompany = findLabelValue(lines, ['대행사', '회사명', '상호명']) || '-';
+    const managerNameRaw = extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-';
+    const managerPhoneRaw = extractBusinessValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']) || '-';
+    const { managerName, managerPhone } = splitManagerFields(managerNameRaw, managerPhoneRaw);
+    const agencyCompany = stripLabelNoise(extractBusinessValue(lines, ['대행사'], ['담당자 이름', '담당자명', '담당자 연락처', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-');
     const category = findLabelValue(lines, ['업종', '상품유형', '분류', '카테고리']);
     const detailText = extractDetailSection(lines, ['상세정보', '상세 정보'], ['접수방법', '접수 방법', '기업정보', '사업자 정보']) || rawText.slice(0, 3000) || '-';
     const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
 
     return {
       region_name: candidate.region_name,
-      ad_section: candidate.ad_section || '미지정',
+      ad_section: normalizeSection(candidate.ad_section),
       site_name: siteName,
       posted_at: dateInfo.postedAt,
       posted_datetime: dateInfo.postedDatetime,
       manager_name: managerName,
-      manager_phone: normalizePhone(managerPhoneRaw),
+      manager_phone: managerPhone,
       agency_company: agencyCompany,
       apartment_fee: extractApartmentFee(lines),
       move_in_date: extractMoveInDate(lines),
