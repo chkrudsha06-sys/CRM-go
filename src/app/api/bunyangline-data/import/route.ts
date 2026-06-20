@@ -70,8 +70,74 @@ function normalizePhone(value: unknown): string | null {
   const text = normalizeText(value);
   if (!text) return null;
 
+  const mobile = text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+  if (mobile) return mobile.replace(/\D/g, '');
+
+  const tel = text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
+  if (tel) return tel.replace(/\D/g, '');
+
+  const service = text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0];
+  if (service) return service.replace(/\D/g, '');
+
   const digits = text.replace(/\D/g, '');
   return digits || text;
+}
+
+function normalizeAdSection(value: unknown): string {
+  const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
+  if (text.includes('unique') || text.includes('유니크')) return '유니크';
+  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
+  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
+  return '일반';
+}
+
+function firstPhoneInText(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const match =
+    text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0] ||
+    null;
+
+  return match ? normalizePhone(match) : null;
+}
+
+function cleanManagerName(value: unknown): string | null {
+  let text = normalizeText(value);
+  if (!text) return null;
+
+  text = text
+    .replace(/담당자\s*이름/g, ' ')
+    .replace(/담당자명/g, ' ')
+    .replace(/담당자\s*연락처.*$/g, ' ')
+    .replace(/연락처.*$/g, ' ')
+    .replace(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
+    .replace(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
+    .replace(/\b\d{4}[-\s.]?\d{4}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text || null;
+}
+
+function stripLabelNoise(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+  return text
+    .replace(/^(시행사|시공사|신탁사|대행사|담당자\s*이름|담당자\s*연락처|형태|아파트\s*분양)\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || null;
+}
+
+function splitManagerFields(nameValue: unknown, phoneValue: unknown) {
+  const combined = normalizeText(`${nameValue ?? ''} ${phoneValue ?? ''}`);
+  return {
+    managerName: cleanManagerName(nameValue) || cleanManagerName(combined) || '-',
+    managerPhone: firstPhoneInText(combined) || normalizePhone(phoneValue) || '-',
+  };
 }
 
 function normalizeDate(value: unknown): string | null {
@@ -118,18 +184,23 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     normalizeDate(firstValue(row, ['posted_at', 'postedAt', 'registered_date', 'registeredDate'])) ||
     (postedDatetime ? postedDatetime.slice(0, 10) : null);
 
+  const managerFields = splitManagerFields(
+    firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName']),
+    firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])
+  );
+
   return {
     source_url: sourceUrl,
     source_id: normalizeText(firstValue(row, ['source_id', 'sourceId', 'post_id', 'postId'])) || null,
     region_name: normalizeText(firstValue(row, ['region_name', 'regionName', 'region'])) || '미지정',
-    ad_section: normalizeText(firstValue(row, ['ad_section', 'adSection', 'section', 'listing_section', 'listingSection'])) || '미지정',
+    ad_section: normalizeAdSection(firstValue(row, ['ad_section', 'adSection', 'section', 'listing_section', 'listingSection'])),
     site_name: normalizeText(firstValue(row, ['site_name', 'siteName', 'field_name', 'fieldName'])) || '-',
     posted_at: postedAt,
     posted_datetime: postedDatetime,
-    manager_name: normalizeText(firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName'])) || '-',
-    manager_phone: normalizePhone(firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])) || '-',
-    agency_company: normalizeText(firstValue(row, ['agency_company', 'agencyCompany', 'agency', 'company_name', 'companyName'])) || '-',
-    apartment_fee: normalizeText(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
+    manager_name: managerFields.managerName,
+    manager_phone: managerFields.managerPhone,
+    agency_company: stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
+    apartment_fee: stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
     move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
     assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
     detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || '-',
