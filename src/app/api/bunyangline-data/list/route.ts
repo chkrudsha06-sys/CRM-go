@@ -149,28 +149,67 @@ function findJoinedLabelValue(joinedText: string, label: string, nextLabels: str
   return match?.[1] ? normalizeText(match[1]) : null;
 }
 
-function parseBusinessValue(text: string, labels: string[], nextLabels: string[]) {
-  const joined = String(text || '').replace(/\s+/g, ' ').trim();
-  for (const label of labels) {
-    const value = findJoinedLabelValue(joined, label, nextLabels);
-    if (value) return value;
+function splitSourceLines(text: string) {
+  return String(text || '')
+    .split(/\n+/)
+    .map((line) => normalizeText(line))
+    .filter((line): line is string => Boolean(line));
+}
+
+function strictLineLabelValue(text: string, labels: string[]) {
+  const lines = splitSourceLines(text);
+  const normalizedLabels = labels.map((label) => normalizeText(label)?.replace(/\s+/g, '') || '');
+  const isAnyLabel = (value: string) => normalizedLabels.includes(value.replace(/\s+/g, ''));
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const compact = line.replace(/\s+/g, '');
+
+    if (normalizedLabels.includes(compact)) {
+      for (let nextIndex = index + 1; nextIndex < Math.min(lines.length, index + 5); nextIndex += 1) {
+        const value = lines[nextIndex];
+        if (!value || isAnyLabel(value)) continue;
+        return value;
+      }
+    }
+
+    for (const label of labels) {
+      const direct = line.match(new RegExp(`^${escapeRegExp(label)}\\s*[:：]\\s*(.+)$`));
+      if (direct?.[1]) return normalizeText(direct[1]);
+    }
   }
+
   return null;
+}
+
+function cleanAgencyValue(value: unknown) {
+  const text = stripLabelNoise(value);
+  if (!text) return null;
+  if (text.length > 40) return null;
+  if (/(?:AD\s|직영\)|모집|담당자|연락처|아파트\s*분양|수수료|투입|현장명|상세정보)/i.test(text)) return null;
+  return text;
+}
+
+function cleanApartmentFeeValue(value: unknown) {
+  const text = stripLabelNoise(value);
+  if (!text) return null;
+  if (text.length > 35) return null;
+  if (!/\d|만|원|%|협의|지급|별도/.test(text)) return null;
+  if (/(?:AD\s|직영\)|모집|담당자|연락처|상세정보|현장명)/i.test(text)) return null;
+  return text;
 }
 
 function parseAgencyFromText(text: string) {
-  return stripLabelNoise(parseBusinessValue(text, ['대행사'], ['담당자 이름', '담당자명', '담당자 연락처', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || null);
+  return cleanAgencyValue(strictLineLabelValue(text, ['대행사']));
 }
 
 function parseApartmentFeeFromText(text: string) {
-  const value = parseBusinessValue(text, ['아파트 분양'], ['오피스텔 분양', '상가 분양', '상세정보', '상세 정보', '근무지 정보', '사업자 정보', '접수방법']);
-  if (value && /\d|만|원|%|협의|지급/.test(value)) return stripLabelNoise(value);
-  return null;
+  return cleanApartmentFeeValue(strictLineLabelValue(text, ['아파트 분양']));
 }
 
 function splitManagerFields(nameValue: unknown, phoneValue: unknown, sourceText = '') {
-  const parsedName = parseBusinessValue(sourceText, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']);
-  const parsedPhone = parseBusinessValue(sourceText, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']);
+  const parsedName = strictLineLabelValue(sourceText, ['담당자 이름', '담당자명']);
+  const parsedPhone = strictLineLabelValue(sourceText, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']);
   const combined = `${parsedName || nameValue || ''} ${parsedPhone || phoneValue || ''}`;
 
   return {
@@ -189,8 +228,8 @@ function normalizeRows(rows: any[]) {
       ad_section: normalizeAdSection(row.ad_section),
       manager_name: manager.manager_name,
       manager_phone: manager.manager_phone,
-      agency_company: parseAgencyFromText(sourceText) || stripLabelNoise(row.agency_company) || '-',
-      apartment_fee: parseApartmentFeeFromText(sourceText) || stripLabelNoise(row.apartment_fee) || '-',
+      agency_company: parseAgencyFromText(sourceText) || cleanAgencyValue(row.agency_company) || '-',
+      apartment_fee: parseApartmentFeeFromText(sourceText) || cleanApartmentFeeValue(row.apartment_fee) || '-',
     };
   });
 
