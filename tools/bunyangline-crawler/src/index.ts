@@ -277,38 +277,44 @@ async function saveJson(fileName: string, value: unknown) {
   await fs.writeFile(path.join(DEBUG_DIR, fileName), JSON.stringify(value, null, 2), 'utf8');
 }
 
+async function getAnchorSnapshots(page: Page) {
+  const anchors = page.locator('a');
+  const count = await anchors.count();
+  const items: Array<{ text: string; href: string; className: string; ariaCurrent: string }> = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const anchor = anchors.nth(i);
+    const text = normalizeSpace(await anchor.innerText({ timeout: 1000 }).catch(() => ''));
+    const href = normalizeSpace(await anchor.getAttribute('href').catch(() => ''));
+    const className = normalizeSpace(await anchor.getAttribute('class').catch(() => ''));
+    const ariaCurrent = normalizeSpace(await anchor.getAttribute('aria-current').catch(() => ''));
+
+    if (!href && !text) continue;
+    items.push({ text, href, className, ariaCurrent });
+  }
+
+  return items;
+}
+
 async function discoverRegions(page: Page): Promise<RegionTarget[]> {
   const seedUrl = `${BASE_URL}/recruit/regional/1`;
   await page.goto(seedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
   await sleep(800);
 
-  const discovered = await page.evaluate((regionNames) => {
-    const names = regionNames as string[];
-    const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
-
-    return Array.from(document.querySelectorAll('a'))
-      .map((anchor) => {
-        const href = (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || '';
-        const text = normalize(anchor.textContent);
-        const idMatch = href.match(/\/recruit\/regional\/(\d+)/);
-        return {
-          id: idMatch?.[1] || '',
-          name: text,
-          url: href,
-        };
-      })
-      .filter((item) => item.id && names.includes(item.name));
-  }, REGION_NAMES);
-
+  const anchors = await getAnchorSnapshots(page);
   const byName = new Map<string, RegionTarget>();
-  for (const item of discovered) {
-    if (!isRegionName(item.name)) continue;
-    if (byName.has(item.name)) continue;
-    byName.set(item.name, {
-      id: item.id,
-      name: item.name,
-      url: buildAbsoluteUrl(item.url),
+
+  for (const anchor of anchors) {
+    const idMatch = anchor.href.match(/\/recruit\/regional\/(\d+)/);
+    if (!idMatch?.[1]) continue;
+    if (!isRegionName(anchor.text)) continue;
+    if (byName.has(anchor.text)) continue;
+
+    byName.set(anchor.text, {
+      id: idMatch[1],
+      name: anchor.text,
+      url: buildAbsoluteUrl(anchor.href),
       source: 'discovered-link',
     });
   }
@@ -343,49 +349,47 @@ function filterRegions(regions: RegionTarget[], regionArg: string) {
 }
 
 async function detectActualRegion(page: Page, fallback: RegionTarget): Promise<RegionDetection> {
-  const detected = await page.evaluate((regionNames) => {
-    const names = regionNames as string[];
-    const normalize = (value: string | null | undefined) => String(value || '').replace(/\s+/g, ' ').trim();
-    const currentPath = window.location.pathname.replace(/\/$/, '');
+  const anchors = await getAnchorSnapshots(page);
+  const currentUrl = new URL(page.url() || fallback.url, BASE_URL);
+  const currentPath = currentUrl.pathname.replace(/\/$/, '');
 
-    const anchors = Array.from(document.querySelectorAll('a')).map((anchor) => ({
-      text: normalize(anchor.textContent),
-      href: (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || '',
-      path: (() => {
-        try {
-          return new URL((anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || '', window.location.origin).pathname.replace(/\/$/, '');
-        } catch {
-          return '';
-        }
-      })(),
-      className: String((anchor as HTMLElement).className || ''),
-      ariaCurrent: anchor.getAttribute('aria-current') || '',
-    }));
+  for (const anchor of anchors) {
+    if (!isRegionName(anchor.text)) continue;
 
-    const sameUrlAnchor = anchors.find((anchor) => names.includes(anchor.text) && anchor.path === currentPath);
-    if (sameUrlAnchor) {
-      return { actualRegionName: sameUrlAnchor.text, source: 'current-url-anchor', matchText: sameUrlAnchor.href };
-    }
-
-    const activeAnchor = anchors.find((anchor) =>
-      names.includes(anchor.text) && /(active|on|selected|current)/i.test(`${anchor.className} ${anchor.ariaCurrent}`)
-    );
-    if (activeAnchor) {
-      return { actualRegionName: activeAnchor.text, source: 'active-anchor', matchText: activeAnchor.href || activeAnchor.className };
-    }
-
-    const bodyText = normalize(document.body?.innerText || '');
-    for (const name of names) {
-      if (new RegExp(`지역현장\\s*[>›]\\s*${name}`).test(bodyText)) {
-        return { actualRegionName: name, source: 'breadcrumb', matchText: `지역현장 > ${name}` };
+    try {
+      const anchorPath = new URL(anchor.href, BASE_URL).pathname.replace(/\/$/, '');
+      if (anchorPath === currentPath) {
+        return {
+          actualRegionName: anchor.text,
+          source: 'current-url-anchor',
+          matchText: buildAbsoluteUrl(anchor.href),
+        };
       }
+    } catch {
+      // ignore malformed href
     }
+  }
 
-    return null;
-  }, REGION_NAMES);
+  for (const anchor of anchors) {
+    if (!isRegionName(anchor.text)) continue;
+    if (/(active|on|selected|current)/i.test(`${anchor.className} ${anchor.ariaCurrent}`)) {
+      return {
+        actualRegionName: anchor.text,
+        source: 'active-anchor',
+        matchText: anchor.href || anchor.className,
+      };
+    }
+  }
 
-  if (detected?.actualRegionName && isRegionName(detected.actualRegionName)) {
-    return detected;
+  const bodyText = normalizeSpace(await page.locator('body').innerText({ timeout: 5000 }).catch(() => ''));
+  for (const name of REGION_NAMES) {
+    if (new RegExp(`지역현장\\s*[>›]\\s*${name}`).test(bodyText)) {
+      return {
+        actualRegionName: name,
+        source: 'breadcrumb',
+        matchText: `지역현장 > ${name}`,
+      };
+    }
   }
 
   return {
@@ -396,23 +400,16 @@ async function detectActualRegion(page: Page, fallback: RegionTarget): Promise<R
 }
 
 async function collectDetailUrls(page: Page) {
-  const urls = await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('a')).map((anchor) => {
-      const href = (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || '';
-      const text = String(anchor.textContent || '').replace(/\s+/g, ' ').trim();
-      return { href, text };
-    });
-
-    return items
-      .filter((item) => /\/recruit\/(list|view|detail)\//i.test(item.href) || /\/recruit\/list/i.test(item.href))
-      .map((item) => item.href)
-      .filter(Boolean);
-  });
-
+  const anchors = await getAnchorSnapshots(page);
   const unique = new Set<string>();
-  for (const url of urls) {
+
+  for (const anchor of anchors) {
+    if (!anchor.href) continue;
+
     try {
-      unique.add(normalizeSourceUrl(url));
+      const absoluteUrl = buildAbsoluteUrl(anchor.href);
+      if (!(/\/recruit\/(list|view|detail)\//i.test(absoluteUrl) || /\/recruit\/list/i.test(absoluteUrl))) continue;
+      unique.add(normalizeSourceUrl(absoluteUrl));
     } catch {
       // ignore malformed link
     }
@@ -549,7 +546,8 @@ async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTa
     await browserPage.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await browserPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
     await sleep(1000);
-    await browserPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => null);
+    await browserPage.keyboard.press('End').catch(() => null);
+    await browserPage.mouse.wheel(0, 1800).catch(() => null);
     await sleep(800);
 
     const detection = await detectActualRegion(browserPage, region);
