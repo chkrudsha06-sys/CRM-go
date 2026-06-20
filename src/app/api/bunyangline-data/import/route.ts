@@ -40,10 +40,6 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function firstValue(row: ImportItem, keys: string[]): unknown {
   for (const key of keys) {
     const value = row[key];
@@ -144,62 +140,6 @@ function splitManagerFields(nameValue: unknown, phoneValue: unknown) {
   };
 }
 
-function splitSourceLines(text: unknown) {
-  return String(text ?? '')
-    .split(/\n+/)
-    .map((line) => normalizeText(line))
-    .filter((line): line is string => Boolean(line));
-}
-
-function strictLineLabelValue(text: unknown, labels: string[]) {
-  const lines = splitSourceLines(text);
-  const normalizedLabels = labels.map((label) => normalizeText(label)?.replace(/\s+/g, '') || '');
-  const isAnyLabel = (value: string) => normalizedLabels.includes(value.replace(/\s+/g, ''));
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const compact = line.replace(/\s+/g, '');
-
-    if (normalizedLabels.includes(compact)) {
-      for (let nextIndex = index + 1; nextIndex < Math.min(lines.length, index + 5); nextIndex += 1) {
-        const value = lines[nextIndex];
-        if (!value || isAnyLabel(value)) continue;
-        return value;
-      }
-    }
-
-    for (const label of labels) {
-      const direct = line.match(new RegExp(`^${escapeRegExp(label)}\\s*[:：]\\s*(.+)$`));
-      if (direct?.[1]) return normalizeText(direct[1]);
-    }
-  }
-
-  return null;
-}
-
-function cleanAgencyValue(value: unknown) {
-  const text = stripLabelNoise(value);
-  if (!text) return null;
-  if (text.length > 40) return null;
-  if (/(?:AD\s|직영\)|모집|담당자|연락처|아파트\s*분양|수수료|투입|현장명|상세정보)/i.test(text)) return null;
-  return text;
-}
-
-function cleanApartmentFeeValue(value: unknown) {
-  const text = stripLabelNoise(value);
-  if (!text) return null;
-  if (text.length > 35) return null;
-  if (!/\d|만|원|%|협의|지급|별도/.test(text)) return null;
-  if (/(?:AD\s|직영\)|모집|담당자|연락처|상세정보|현장명)/i.test(text)) return null;
-  return text;
-}
-
-function splitManagerFieldsFromSource(nameValue: unknown, phoneValue: unknown, sourceText: unknown) {
-  const parsedName = strictLineLabelValue(sourceText, ['담당자 이름', '담당자명']);
-  const parsedPhone = strictLineLabelValue(sourceText, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']);
-  return splitManagerFields(parsedName || nameValue, parsedPhone || phoneValue);
-}
-
 function normalizeDate(value: unknown): string | null {
   const text = normalizeText(value);
   if (!text) return null;
@@ -244,22 +184,10 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     normalizeDate(firstValue(row, ['posted_at', 'postedAt', 'registered_date', 'registeredDate'])) ||
     (postedDatetime ? postedDatetime.slice(0, 10) : null);
 
-  const sourceText = [
-    firstValue(row, ['raw_text', 'rawText']),
-    firstValue(row, ['detail_text', 'detailText', 'details']),
-    firstValue(row, ['summary', 'subtitle', 'description']),
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  const managerFields = splitManagerFieldsFromSource(
+  const managerFields = splitManagerFields(
     firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName']),
-    firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone']),
-    sourceText
+    firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])
   );
-
-  const parsedAgency = cleanAgencyValue(strictLineLabelValue(sourceText, ['대행사']));
-  const parsedApartmentFee = cleanApartmentFeeValue(strictLineLabelValue(sourceText, ['아파트 분양']));
 
   return {
     source_url: sourceUrl,
@@ -271,8 +199,8 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     posted_datetime: postedDatetime,
     manager_name: managerFields.managerName,
     manager_phone: managerFields.managerPhone,
-    agency_company: parsedAgency || cleanAgencyValue(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
-    apartment_fee: parsedApartmentFee || cleanApartmentFeeValue(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
+    agency_company: stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
+    apartment_fee: stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
     move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
     assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
     detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || '-',
