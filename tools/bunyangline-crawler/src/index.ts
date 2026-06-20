@@ -436,7 +436,9 @@ async function discoverSourceUrlByClick(page: Page, listUrl: string, candidate: 
       const currentUrl = page.url();
       if (currentUrl.includes('/recruit/view/')) {
         const sourceUrl = normalizeSourceUrl(currentUrl);
-        await gotoList(page, listUrl);
+        await page.goBack({ waitUntil: 'domcontentloaded', timeout: 12000 }).catch(async () => {
+          await gotoList(page, listUrl);
+        });
         return sourceUrl;
       }
     } catch {
@@ -464,6 +466,7 @@ async function discoverRegionCandidates(page: Page, region: Region, debugDir: st
   let stableRounds = 0;
   let olderDateSeen = false;
   let lastCandidateCount = 0;
+  let stagnantCandidateCheckpoints = 0;
 
   for (let round = 0; round <= SCROLL_ROUNDS; round += 1) {
     const bodyText = await getBodyText(page);
@@ -493,14 +496,23 @@ async function discoverRegionCandidates(page: Page, region: Region, debugDir: st
       console.log(
         `[${region.name}] 스크롤 ${round}/${SCROLL_ROUNDS}: URL ${merged.withUrl.length}건 / 제목클릭 ${merged.noUrl.length}건 / 후보증가 ${delta >= 0 ? '+' : ''}${delta} / 오래된날짜 ${olderDateSeen ? 'Y' : 'N'}`,
       );
+
+      if (olderDateSeen && delta <= 0) stagnantCandidateCheckpoints += 1;
+      else if (delta > 0) stagnantCandidateCheckpoints = 0;
+
       lastCandidateCount = totalCandidates;
+
+      if (round >= 10 && olderDateSeen && stagnantCandidateCheckpoints >= 3) {
+        console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + 후보 증가 없음 ${stagnantCandidateCheckpoints}회 → 스크롤 즉시 종료`);
+        break;
+      }
     }
 
     if (bodyText.length === previousTextLength) stableRounds += 1;
     else stableRounds = 0;
     previousTextLength = bodyText.length;
 
-    if (round >= 12 && stableRounds >= 8 && olderDateSeen) {
+    if (round >= 12 && stableRounds >= 5 && olderDateSeen) {
       console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + 화면 변화 없음 → 스크롤 종료`);
       break;
     }
@@ -529,14 +541,23 @@ async function discoverRegionCandidates(page: Page, region: Region, debugDir: st
   // URL이 없는 광고/상단지면/최근 일반 공고는 제목 클릭으로 상세 URL 확보
   const clicked: Candidate[] = [];
   const clickTargets = finalMerged.noUrl.filter((candidate) => {
+    if (!['유니크', '슈페리어', '전국TOP', '지역TOP', '일반구인글'].includes(candidate.ad_section)) return false;
+
+    // 일반구인글은 목록에서 날짜 그룹이 명확해야 최근 5일 판단이 가능합니다.
+    // 날짜 그룹이 없는 일반구인글까지 클릭하면 오래된 공고를 수백 개 클릭하게 되어 실행 시간이 비정상적으로 길어집니다.
+    if (candidate.ad_section === '일반구인글') {
+      return !!candidate.list_date_group && isRecentDate(candidate.list_date_group);
+    }
+
+    // 유니크/슈페리어/전국TOP/지역TOP은 목록 날짜 그룹이 없는 경우가 많으므로 상세페이지 등록일로 최종 필터링합니다.
     if (candidate.list_date_group && !isRecentDate(candidate.list_date_group)) return false;
-    return ['유니크', '슈페리어', '전국TOP', '지역TOP', '일반구인글'].includes(candidate.ad_section);
+    return true;
   });
 
   if (clickTargets.length > 0) {
     await gotoList(page, listUrl);
     await sleep(1000);
-    console.log(`[${region.name}] 제목 클릭으로 상세 URL 확인 시작: ${clickTargets.length}건`);
+    console.log(`[${region.name}] 제목 클릭으로 상세 URL 확인 시작: ${clickTargets.length}건 / 전체 제목후보 ${finalMerged.noUrl.length}건 중 최근 ${LOOKBACK_DAYS}일 대상만 클릭`);
   }
 
   for (let index = 0; index < clickTargets.length; index += 1) {
