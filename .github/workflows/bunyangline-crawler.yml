@@ -33,10 +33,9 @@ jobs:
           CRM_BUNYANGLINE_IMPORT_URL: ${{ secrets.CRM_BUNYANGLINE_IMPORT_URL }}
           BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
           BUNYANGLINE_REGION_IDS: all
-          BUNYANGLINE_MAX_PAGES: '1'
+          BUNYANGLINE_DAYS_BACK: '5'
           BUNYANGLINE_SCROLL_ROUNDS: '120'
-          BUNYANGLINE_IMPORT_BATCH_SIZE: '50'
-          BUNYANGLINE_SEND_TO_CRM: 'true'
+          SEND_TO_CRM: 'true'
           HEADLESS: 'true'
         run: npm run start
 
