@@ -5,8 +5,8 @@ import path from 'node:path';
 const BASE_URL = 'https://www.bunyangline.com';
 const DEBUG_DIR = path.resolve(process.cwd(), 'debug-output');
 const IMPORT_BATCH_SIZE = 80;
-const MAX_DETAIL_TEXT_LENGTH = 5000;
-const MAX_RAW_TEXT_LENGTH = 12000;
+const MAX_DETAIL_TEXT_LENGTH = 7000;
+const MAX_RAW_TEXT_LENGTH = 16000;
 
 const REGION_NAMES = [
   '서울',
@@ -41,6 +41,12 @@ type RegionDetection = {
   matchText: string;
 };
 
+type DetailTarget = {
+  url: string;
+  listPreviewText: string | null;
+  source: 'anchor' | 'html-regex';
+};
+
 type CrawledRow = {
   source_url: string;
   source_post_key: string;
@@ -73,6 +79,8 @@ function sleep(ms: number) {
 
 function normalizeSpace(value: unknown) {
   return String(value ?? '')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
@@ -118,13 +126,23 @@ function normalizeSourceUrl(value: string) {
 
 function buildListUrl(region: RegionTarget, pageNo: number) {
   const url = new URL(region.url, BASE_URL);
-  url.searchParams.set('keyword', '');
-  url.searchParams.set('page', String(pageNo));
+  url.hash = '';
+
+  if (pageNo > 1) {
+    url.searchParams.set('page', String(pageNo));
+  } else {
+    url.searchParams.delete('page');
+    url.searchParams.delete('keyword');
+  }
+
   return url.toString();
 }
 
 function sourceKey(url: string) {
   const parsed = new URL(url, BASE_URL);
+  const idMatch = parsed.pathname.match(/\/recruit\/view\/(\d+)/i);
+  if (idMatch?.[1]) return `bunyangline_view_${idMatch[1]}`;
+
   const pathname = parsed.pathname.replace(/\/$/, '');
   const keySource = `${pathname}${parsed.search}` || url;
   let hash = 0;
@@ -184,7 +202,7 @@ function normalizeDateTime(value: unknown) {
   return `${date}T${time}+09:00`;
 }
 
-function pickAfterLabel(text: string, labels: string[], max = 160) {
+function pickAfterLabel(text: string, labels: string[], max = 180) {
   const normalized = normalizeSpace(text);
   const lines = normalized.split('\n').map((line) => line.trim()).filter(Boolean);
 
@@ -193,14 +211,21 @@ function pickAfterLabel(text: string, labels: string[], max = 160) {
     if (inline?.[1]) return inline[1].trim();
 
     for (let i = 0; i < lines.length; i += 1) {
-      if (lines[i] === label || lines[i].replace(/\s/g, '') === label.replace(/\s/g, '')) {
+      const line = lines[i];
+      const lineWithoutSpaces = line.replace(/\s/g, '');
+      const labelWithoutSpaces = label.replace(/\s/g, '');
+
+      if (line === label || lineWithoutSpaces === labelWithoutSpaces) {
         const next = lines[i + 1];
         if (next) return next.slice(0, max).trim();
       }
 
-      if (lines[i].startsWith(label)) {
-        const value = lines[i].slice(label.length).replace(/^\s*[:：-]?\s*/, '').trim();
-        if (value) return value.slice(0, max);
+      if (line.startsWith(label) || lineWithoutSpaces.startsWith(labelWithoutSpaces)) {
+        const value = line
+          .replace(new RegExp(`^${label}\\s*[:：-]?\\s*`, 'i'), '')
+          .replace(new RegExp(`^${labelWithoutSpaces}\\s*[:：-]?\\s*`, 'i'), '')
+          .trim();
+        if (value && value !== line) return value.slice(0, max);
       }
     }
   }
@@ -208,7 +233,7 @@ function pickAfterLabel(text: string, labels: string[], max = 160) {
   return null;
 }
 
-function extractSection(text: string, labels: string[], maxLines = 25) {
+function extractSection(text: string, labels: string[], maxLines = 35) {
   const lines = normalizeSpace(text).split('\n').map((line) => line.trim()).filter(Boolean);
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -221,26 +246,64 @@ function extractSection(text: string, labels: string[], maxLines = 25) {
 
 function extractApartmentFee(text: string) {
   const normalized = normalizeSpace(text);
-  const labelValue = pickAfterLabel(normalized, ['수수료', '분양수수료', '지급수수료', '수당', '급여'], 120);
+  const labelValue = pickAfterLabel(normalized, ['계약 수수료', '계약수수료', '수수료', '분양수수료', '지급수수료', '수당', '급여', '일비', '조건'], 160);
   if (labelValue) return labelValue;
 
-  const match = normalized.match(/(?:수수료|수당|급여)[^\n]{0,60}/);
+  const match = normalized.match(/(?:계약\s*수수료|수수료|수당|급여|일비|조건)[^\n]{0,90}/);
   return match?.[0] ?? null;
 }
 
-function extractProjectName(text: string, pageTitle: string) {
-  const labelValue = pickAfterLabel(text, ['현장명', '현장 이름', '사업지명', '프로젝트명', '단지명'], 140);
+function cleanTitle(text: string) {
+  return normalizeSpace(text)
+    .replace(/^\[[^\]]+\]\s*/g, '')
+    .replace(/\s*[-|｜>].*분양라인.*$/g, '')
+    .replace(/분양라인/g, '')
+    .trim();
+}
+
+async function getFirstText(page: Page, selectors: string[], timeout = 900) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (!count) continue;
+    const text = normalizeSpace(await locator.innerText({ timeout }).catch(() => ''));
+    if (text) return text;
+  }
+  return null;
+}
+
+async function getMetaContent(page: Page, selectors: string[]) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    const count = await locator.count().catch(() => 0);
+    if (!count) continue;
+    const value = normalizeSpace(await locator.getAttribute('content').catch(() => ''));
+    if (value) return value;
+  }
+  return null;
+}
+
+async function extractProjectName(page: Page, text: string, pageTitle: string) {
+  const labelValue = pickAfterLabel(text, ['현장명', '현장 이름', '사업지명', '프로젝트명', '단지명', '제목'], 180);
   if (labelValue) return labelValue;
 
-  const title = normalizeSpace(pageTitle)
-    .replace(/분양라인/g, '')
-    .replace(/[>|｜|\-]\s*$/g, '')
-    .trim();
+  const heading = await getFirstText(page, ['h1', 'h2', 'h3', '.title', '.subject', '.view-title', '.recruit-title', '.board-title']);
+  if (heading && !/분양라인|지역현장|HOME|로그인|회원가입/.test(heading)) return heading;
 
-  if (title && !/지역현장|구인|로그인|회원/.test(title)) return title;
+  const ogTitle = await getMetaContent(page, ['meta[property="og:title"]', 'meta[name="title"]']);
+  if (ogTitle && !/분양라인|지역현장|HOME|로그인|회원가입/.test(ogTitle)) return cleanTitle(ogTitle);
+
+  const title = cleanTitle(pageTitle);
+  if (title && !/지역현장|구인|로그인|회원|분양라인/.test(title)) return title;
 
   const lines = normalizeSpace(text).split('\n').map((line) => line.trim()).filter(Boolean);
-  const candidate = lines.find((line) => line.length >= 3 && line.length <= 80 && !/HOME|지역현장|맞춤현장|지도현장|관심현장|서포터즈/.test(line));
+  const candidate = lines.find((line) => {
+    if (line.length < 3 || line.length > 90) return false;
+    if (/HOME|지역현장|맞춤현장|지도현장|관심현장|서포터즈|로그인|회원가입|공지사항|고객센터|상품안내/.test(line)) return false;
+    if (REGION_NAMES.includes(line as RegionName)) return false;
+    return /분양|아파트|오피스텔|상가|모집|현장|파격|팀장|팀원|수수료|입주|조건|프리미엄|센트럴|더|시티|파크|힐|자이|래미안|푸르지오|롯데|데시앙/i.test(line);
+  });
+
   return candidate ?? null;
 }
 
@@ -249,13 +312,13 @@ function extractRegionFromAddress(text: string): string | null {
   if (!value) return null;
 
   if (/서울|강남|서초|송파|강동|마포|용산|성동|광진|동대문|중랑|성북|강북|도봉|노원|은평|서대문|양천|구로|금천|영등포|동작|관악/.test(value)) return '서울';
-  if (/인천|검단|청라|송도|부평|계양|남동|미추홀|연수|서구|중구|동구|강화|옹진/.test(value)) return '인천';
+  if (/인천|검단|청라|송도|부평|계양|남동|미추홀|연수|서구|강화|옹진/.test(value)) return '인천';
   if (/부산|해운대|수영|동래|기장|사하|사상|부산진|연제|금정/.test(value)) return '부산';
-  if (/울산|남구|중구|동구|북구|울주/.test(value)) return '울산';
-  if (/대구|수성|달서|달성|동구|서구|남구|북구|중구/.test(value)) return '대구';
-  if (/대전|유성|서구|동구|중구|대덕/.test(value)) return '대전';
+  if (/울산|울주/.test(value)) return '울산';
+  if (/대구|수성|달서|달성/.test(value)) return '대구';
+  if (/대전|유성|대덕/.test(value)) return '대전';
   if (/세종/.test(value)) return '세종';
-  if (/광주|광산|동구|서구|남구|북구/.test(value)) return '광주';
+  if (/광주|광산/.test(value)) return '광주';
   if (/제주|서귀포/.test(value)) return '제주도';
   if (/강원|춘천|원주|강릉|동해|속초|삼척|홍천|횡성|평창|정선|철원|화천|양구|인제|고성|양양/.test(value)) return '강원도';
   if (/충북|충남|청주|충주|제천|천안|아산|공주|보령|서산|논산|계룡|당진|증평|진천|괴산|음성|단양|금산|부여|서천|청양|홍성|예산|태안/.test(value)) return '충청도';
@@ -264,6 +327,28 @@ function extractRegionFromAddress(text: string): string | null {
   if (/고양|파주|의정부|양주|동두천|구리|남양주|포천|가평|연천/.test(value)) return '경기북부';
   if (/수원|성남|용인|화성|평택|안산|안양|부천|광명|시흥|군포|의왕|과천|하남|광주|이천|여주|안성|오산|김포/.test(value)) return '경기남부';
   if (/경기|경기도/.test(value)) return '경기남부';
+
+  return null;
+}
+
+function extractManagerName(text: string, phone: string | null) {
+  const labelValue = pickAfterLabel(text, ['담당자 이름', '담당자이름', '담당자명', '담당자', '연락 담당자', '본부장', '팀장'], 120);
+  if (labelValue) {
+    const cleaned = labelValue
+      .replace(/(?:\+?82[-\s.]?)?0?1[016789][-\s.]?\d{3,4}[-\s.]?\d{4}/g, '')
+      .replace(/연락처|휴대폰|전화번호|문의|상담/g, '')
+      .trim();
+    if (cleaned && cleaned.length <= 30) return cleaned;
+  }
+
+  if (phone) {
+    const rawPhonePattern = phone.replace(/(\d{3})(\d{3,4})(\d{4})/, '$1[-\\s.]?$2[-\\s.]?$3');
+    const nearPhone = new RegExp(`([가-힣]{2,5})\\s*(?:대표|본부장|팀장|실장|부장|차장|과장|대리|담당자)?\\s*${rawPhonePattern}`).exec(text);
+    if (nearPhone?.[1]) return nearPhone[1];
+  }
+
+  const rolePattern = /([가-힣]{2,5})\s*(대표|본부장|팀장|실장|부장|차장|과장|대리|담당자)/.exec(text);
+  if (rolePattern?.[0]) return rolePattern[0];
 
   return null;
 }
@@ -277,241 +362,14 @@ async function saveJson(fileName: string, value: unknown) {
   await fs.writeFile(path.join(DEBUG_DIR, fileName), JSON.stringify(value, null, 2), 'utf8');
 }
 
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return Math.abs(hash >>> 0).toString(36);
-}
-
-const LISTING_TYPE_WORDS = [
-  '아파트',
-  '오피스텔',
-  '상가',
-  '도시형생활주택',
-  '생활형숙박시설',
-  '지식산업센터',
-  '토지',
-  '빌라',
-  '주택',
-  '타운하우스',
-  '민간임대',
-  '기타',
-];
-
-const LISTING_BADGE_WORDS = [
-  '유니크',
-  '슈페리어',
-  '프리미엄',
-  '인기현장',
-  '전국 Top',
-  '지역 Top',
-  'HOT',
-  '급구',
-  '대박',
-  '소수',
-  '일반 구인글',
-  'AD',
-];
-
-function isListingTypeLine(line: string) {
-  const value = normalizeSpace(line);
-  return LISTING_TYPE_WORDS.includes(value);
-}
-
-function isListingBadgeLine(line: string) {
-  const value = normalizeSpace(line);
-  return LISTING_BADGE_WORDS.includes(value);
-}
-
-function isNavigationLine(line: string) {
-  const value = normalizeSpace(line);
-  if (!value) return true;
-  if (REGION_NAMES.includes(value as RegionName)) return true;
-  return /^(HOME|홈|로그인|회원가입|이벤트|공지사항|고객센터|상품안내|지역현장|맞춤현장|지도현장|관심현장|서포터즈|모든지역|검색|검색하기|고객안내|글쓰기|TOP)$/.test(value);
-}
-
-function extractListSectionLines(bodyText: string) {
-  const lines = normalizeSpace(bodyText)
-    .split('\n')
-    .map((line) => normalizeSpace(line))
-    .filter(Boolean);
-
-  const loadingIndex = lines.findIndex((line) => /목록을\s*로딩중/.test(line));
-  const footerIndex = lines.findIndex((line) => /회사소개|개인정보 처리방침|이용약관/.test(line));
-  const endIndex = loadingIndex >= 0 ? loadingIndex : footerIndex >= 0 ? footerIndex : lines.length;
-
-  let startIndex = 0;
-
-  const allRegionIndexes = lines
-    .map((line, index) => ({ line, index }))
-    .filter((item) => item.line === '모든지역')
-    .map((item) => item.index);
-
-  if (allRegionIndexes.length > 0) {
-    const navStart = allRegionIndexes[allRegionIndexes.length - 1];
-    let cursor = navStart + 1;
-
-    while (cursor < endIndex) {
-      const line = lines[cursor];
-      if (isNavigationLine(line)) {
-        cursor += 1;
-        continue;
-      }
-      break;
-    }
-
-    startIndex = cursor;
-  } else {
-    const firstTypeIndex = lines.findIndex((line, index) => index < endIndex && isListingTypeLine(line));
-    startIndex = firstTypeIndex >= 0 ? firstTypeIndex : 0;
-  }
-
-  return lines.slice(startIndex, endIndex).filter((line) => !isNavigationLine(line));
-}
-
-function splitListSegments(lines: string[]) {
-  const segments: string[][] = [];
-  let current: string[] = [];
-  let currentHasType = false;
-
-  for (const line of lines) {
-    if (isListingBadgeLine(line) && current.length === 0) continue;
-
-    if (isListingTypeLine(line)) {
-      if (current.length >= 3 && currentHasType) segments.push(current);
-      current = [line];
-      currentHasType = true;
-      continue;
-    }
-
-    if (!currentHasType) continue;
-    current.push(line);
-  }
-
-  if (current.length >= 3 && currentHasType) segments.push(current);
-  return segments;
-}
-
-function pickAgencyFromListSegment(segment: string[]) {
-  const skip = new Set([
-    ...LISTING_TYPE_WORDS,
-    ...LISTING_BADGE_WORDS,
-    '팀장/팀원',
-    '본부/팀장',
-    '팀원',
-    '본부장',
-    '계약 수수료',
-    '기본급',
-    '일비',
-    '경력무관',
-  ]);
-
-  for (let i = segment.length - 1; i >= 0; i -= 1) {
-    const line = segment[i];
-    if (!line || skip.has(line)) continue;
-    if (/수수료|계약|일비|개월|경력|팀장|팀원|본부|직원|모집|현장|분양|광고|지원|조건|아파트|오피스텔/.test(line)) continue;
-    if (line.length > 40) continue;
-    return line;
-  }
-
-  return null;
-}
-
-function parseListSegmentToRow(
-  segment: string[],
-  region: RegionTarget,
-  detection: RegionDetection,
-  listUrl: string,
-  pageNo: number,
-  index: number
-): CrawledRow | null {
-  const cleanSegment = segment.map((line) => normalizeSpace(line)).filter(Boolean);
-  if (cleanSegment.length < 3) return null;
-
-  const upjong = cleanSegment[0];
-  const title = cleanSegment[1] || null;
-  const summaryLine = cleanSegment[2] || null;
-  const fullText = cleanSegment.join('\n');
-
-  if (!title || /목록을\s*로딩중|회사소개|개인정보/.test(fullText)) return null;
-
-  const position = cleanSegment.find((line) => /본부|팀장|팀원|직원|상담사|TM|각개|사이드/.test(line)) || null;
-  const payroll = cleanSegment.find((line) => /수수료|급여|기본급|일비|인센티브|만원|%/.test(line)) || null;
-  const career = cleanSegment.find((line) => /경력|개월|년/.test(line)) || null;
-  const agency = pickAgencyFromListSegment(cleanSegment);
-  const phone = normalizePhone(fullText);
-  const addressRegion = extractRegionFromAddress(fullText);
-  const actualRegionName = detection.actualRegionName || addressRegion || region.name;
-  const actualRegionSource = detection.actualRegionName ? detection.source : addressRegion ? 'list-text-address-fallback' : region.source;
-  const rowKeySource = `${actualRegionName}\n${pageNo}\n${fullText}`;
-  const rowHash = stableHash(rowKeySource);
-  const sourceUrl = normalizeSourceUrl(`${listUrl}#list-row-${rowHash}`);
-
-  const detailLines = [
-    `[목록 수집 공고]`,
-    `업종: ${upjong}`,
-    title ? `현장명: ${title}` : null,
-    summaryLine ? `요약: ${summaryLine}` : null,
-    position ? `모집구분: ${position}` : null,
-    payroll ? `수수료/급여: ${payroll}` : null,
-    career ? `경력: ${career}` : null,
-    agency ? `대행사: ${agency}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  return {
-    source_url: sourceUrl,
-    source_post_key: `bunyangline_list_${rowHash}`,
-    region_id: region.id,
-    region_name: actualRegionName,
-    list_region_name: region.name,
-    actual_region_name: actualRegionName,
-    actual_region_source: `${actualRegionSource}:list-fallback`,
-    region_match_text: detection.matchText || fullText.slice(0, 300),
-    site_name: compact(title, 180),
-    site_address: null,
-    posted_at: null,
-    posted_datetime: null,
-    manager_name: null,
-    manager_phone: compact(phone, 40),
-    agency_company: compact(agency, 160),
-    apartment_fee: compact(payroll || extractApartmentFee(fullText), 180),
-    detail_text: limitText(detailLines, MAX_DETAIL_TEXT_LENGTH),
-    raw_text: limitText(fullText, MAX_RAW_TEXT_LENGTH),
-    crawled_at: new Date().toISOString(),
-  };
-}
-
-async function parseListRowsFromPage(
-  page: Page,
-  region: RegionTarget,
-  detection: RegionDetection,
-  listUrl: string,
-  pageNo: number,
-  limit: number
-) {
-  const bodyText = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }).catch(() => ''));
-  const lines = extractListSectionLines(bodyText);
-  const segments = splitListSegments(lines);
-  const rows = segments
-    .map((segment, index) => parseListSegmentToRow(segment, region, detection, listUrl, pageNo, index))
-    .filter((row): row is CrawledRow => Boolean(row))
-    .slice(0, limit);
-
-  return {
-    lines,
-    segments,
-    rows,
-  };
+async function saveText(fileName: string, value: string) {
+  await ensureDebugDir();
+  await fs.writeFile(path.join(DEBUG_DIR, fileName), value, 'utf8');
 }
 
 async function getAnchorSnapshots(page: Page) {
   const anchors = page.locator('a');
-  const count = await anchors.count();
+  const count = await anchors.count().catch(() => 0);
   const items: Array<{ text: string; href: string; className: string; ariaCurrent: string }> = [];
 
   for (let i = 0; i < count; i += 1) {
@@ -528,11 +386,54 @@ async function getAnchorSnapshots(page: Page) {
   return items;
 }
 
+async function clickPossibleMoreButtons(page: Page) {
+  const labels = ['더보기', 'MORE', 'more', '다음', 'Next'];
+  let clicked = false;
+
+  for (const label of labels) {
+    const locator = page.getByText(label, { exact: false }).first();
+    const count = await locator.count().catch(() => 0);
+    if (!count) continue;
+
+    const visible = await locator.isVisible({ timeout: 500 }).catch(() => false);
+    if (!visible) continue;
+
+    await locator.click({ timeout: 1500 }).catch(() => null);
+    clicked = true;
+    await sleep(1000);
+  }
+
+  return clicked;
+}
+
+async function scrollListPage(page: Page, rounds: number) {
+  let previousViewCount = 0;
+  let stableRounds = 0;
+
+  for (let i = 0; i < rounds; i += 1) {
+    const htmlBefore = await page.content().catch(() => '');
+    previousViewCount = (htmlBefore.match(/\/recruit\/view\//g) || []).length;
+
+    await page.keyboard.press('End').catch(() => null);
+    await page.mouse.wheel(0, 2600).catch(() => null);
+    await clickPossibleMoreButtons(page);
+    await sleep(1200);
+
+    const htmlAfter = await page.content().catch(() => '');
+    const nextViewCount = (htmlAfter.match(/\/recruit\/view\//g) || []).length;
+
+    if (nextViewCount <= previousViewCount) stableRounds += 1;
+    else stableRounds = 0;
+
+    if (stableRounds >= 3) break;
+  }
+}
+
 async function discoverRegions(page: Page): Promise<RegionTarget[]> {
   const seedUrl = `${BASE_URL}/recruit/regional/1`;
   await page.goto(seedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
-  await sleep(800);
+  await sleep(1200);
 
   const anchors = await getAnchorSnapshots(page);
   const byName = new Map<string, RegionTarget>();
@@ -554,7 +455,27 @@ async function discoverRegions(page: Page): Promise<RegionTarget[]> {
   const regions = Array.from(byName.values());
 
   if (regions.length === 0) {
-    throw new Error('분양라인 페이지에서 지역 링크를 발견하지 못했습니다. 사이트 구조 또는 접근 차단 여부를 확인하세요.');
+    const fallback: RegionTarget[] = [
+      { id: '1', name: '서울', url: `${BASE_URL}/recruit/regional/1`, source: 'fallback' },
+      { id: '2', name: '경기남부', url: `${BASE_URL}/recruit/regional/2`, source: 'fallback' },
+      { id: '9', name: '경기북부', url: `${BASE_URL}/recruit/regional/9`, source: 'fallback' },
+      { id: '3', name: '인천', url: `${BASE_URL}/recruit/regional/3`, source: 'fallback' },
+      { id: '10', name: '부산', url: `${BASE_URL}/recruit/regional/10`, source: 'fallback' },
+      { id: '14', name: '울산', url: `${BASE_URL}/recruit/regional/14`, source: 'fallback' },
+      { id: '11', name: '대구', url: `${BASE_URL}/recruit/regional/11`, source: 'fallback' },
+      { id: '6', name: '경상도', url: `${BASE_URL}/recruit/regional/6`, source: 'fallback' },
+      { id: '13', name: '대전', url: `${BASE_URL}/recruit/regional/13`, source: 'fallback' },
+      { id: '15', name: '세종', url: `${BASE_URL}/recruit/regional/15`, source: 'fallback' },
+      { id: '4', name: '충청도', url: `${BASE_URL}/recruit/regional/4`, source: 'fallback' },
+      { id: '12', name: '광주', url: `${BASE_URL}/recruit/regional/12`, source: 'fallback' },
+      { id: '5', name: '전라도', url: `${BASE_URL}/recruit/regional/5`, source: 'fallback' },
+      { id: '7', name: '강원도', url: `${BASE_URL}/recruit/regional/7`, source: 'fallback' },
+      { id: '8', name: '제주도', url: `${BASE_URL}/recruit/regional/8`, source: 'fallback' },
+    ];
+
+    console.log('분양라인 지역 링크 자동 발견 실패 → 확인된 fallback 매핑 사용');
+    await saveJson('discovered-regions.json', fallback);
+    return fallback;
   }
 
   console.log('분양라인 실제 지역 링크 발견:');
@@ -631,56 +552,135 @@ async function detectActualRegion(page: Page, fallback: RegionTarget): Promise<R
   };
 }
 
+function extractViewUrlsFromHtml(html: string): DetailTarget[] {
+  const decoded = html
+    .replace(/&amp;/g, '&')
+    .replace(/\\\//g, '/')
+    .replace(/%2F/gi, '/')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'");
+
+  const patterns = [
+    /https?:\/\/www\.bunyangline\.com\/recruit\/view\/\d+\/?(?:\?[^"'<>\s)]*)?/gi,
+    /\/recruit\/view\/\d+\/?(?:\?[^"'<>\s)]*)?/gi,
+  ];
+
+  const urls = new Set<string>();
+
+  for (const pattern of patterns) {
+    const matches = decoded.matchAll(pattern);
+    for (const match of matches) {
+      const raw = match[0]
+        .replace(/["'<>)]*$/g, '')
+        .replace(/amp;/g, '')
+        .trim();
+      if (!raw) continue;
+      urls.add(normalizeSourceUrl(buildAbsoluteUrl(raw)));
+    }
+  }
+
+  return Array.from(urls).map((url) => ({
+    url,
+    listPreviewText: null,
+    source: 'html-regex' as const,
+  }));
+}
+
 async function collectDetailUrls(page: Page) {
+  const result = new Map<string, DetailTarget>();
   const anchors = await getAnchorSnapshots(page);
-  const unique = new Set<string>();
 
   for (const anchor of anchors) {
     if (!anchor.href) continue;
 
     try {
       const absoluteUrl = buildAbsoluteUrl(anchor.href);
-      if (!(/\/recruit\/(list|view|detail)\//i.test(absoluteUrl) || /\/recruit\/list/i.test(absoluteUrl))) continue;
-      unique.add(normalizeSourceUrl(absoluteUrl));
+      if (!/\/recruit\/view\/\d+/i.test(absoluteUrl)) continue;
+      const normalized = normalizeSourceUrl(absoluteUrl);
+      result.set(normalized, {
+        url: normalized,
+        listPreviewText: anchor.text || null,
+        source: 'anchor',
+      });
     } catch {
       // ignore malformed link
     }
   }
 
-  return Array.from(unique);
+  const html = await page.content().catch(() => '');
+  for (const item of extractViewUrlsFromHtml(html)) {
+    if (!result.has(item.url)) result.set(item.url, item);
+  }
+
+  return Array.from(result.values());
 }
 
-async function parseDetailPage(page: Page, sourceUrl: string, region: RegionTarget, detection: RegionDetection): Promise<CrawledRow | null> {
+async function gotoListAndCollect(page: Page, region: RegionTarget, pageNo: number, scrollRounds: number) {
+  const listUrl = buildListUrl(region, pageNo);
+  console.log(`\n[${region.name}] 목록 접속: ${listUrl}`);
+
+  await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
+  await sleep(1500);
+
+  const detection = await detectActualRegion(page, region);
+  console.log(`[${region.name}] 실제 표시 지역: ${detection.actualRegionName} / source=${detection.source}`);
+
+  let targets = await collectDetailUrls(page);
+  console.log(`[${region.name}] 초기 상세공고 후보: ${targets.length}건`);
+
+  await scrollListPage(page, scrollRounds);
+  targets = await collectDetailUrls(page);
+  console.log(`[${region.name}] 스크롤 후 상세공고 후보: ${targets.length}건`);
+
+  const bodyText = normalizeSpace(await page.locator('body').innerText({ timeout: 5000 }).catch(() => ''));
+  const html = await page.content().catch(() => '');
+  await saveText(`${safeFileName(region.name)}-${pageNo}-body.txt`, bodyText.slice(0, 20000));
+  await saveText(`${safeFileName(region.name)}-${pageNo}-html.txt`, html.slice(0, 30000));
+
+  return { listUrl, detection, targets };
+}
+
+async function parseDetailPage(page: Page, target: DetailTarget, region: RegionTarget, detection: RegionDetection): Promise<CrawledRow | null> {
+  const sourceUrl = target.url;
+
   try {
     console.log(`[${region.name}] 상세 파싱 시작: ${sourceUrl}`);
     await page.goto(sourceUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
-    await sleep(700);
+    await sleep(1200);
 
     const text = normalizeSpace(await page.locator('body').innerText({ timeout: 15000 }));
     const pageTitle = normalizeSpace(await page.title().catch(() => ''));
     const finalUrl = normalizeSourceUrl(page.url() || sourceUrl);
 
-    if (!text || /로그인\s*필요|권한이 없습니다|페이지를 찾을 수 없습니다/.test(text)) {
+    if (!text || /로그인\s*필요|권한이 없습니다|페이지를 찾을 수 없습니다|삭제되었거나/.test(text)) {
       console.log(`[${region.name}] 상세 파싱 제외: 접근 제한 또는 빈 본문 / ${sourceUrl}`);
       return null;
     }
 
-    const siteName = extractProjectName(text, pageTitle);
-    const siteAddress = pickAfterLabel(text, ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '근무지주소', '근무지 주소', '주소'], 240);
-    const postedSource = pickAfterLabel(text, ['등록일', '작성일', '게시일', '최초등록일'], 100) || text;
+    const siteName = await extractProjectName(page, text, pageTitle);
+    const siteAddress =
+      pickAfterLabel(text, ['사업지주소', '사업지 주소', '현장주소', '현장 주소', '근무지주소', '근무지 주소', '주소', '위치'], 260) ||
+      null;
+    const postedSource = pickAfterLabel(text, ['등록일', '작성일', '게시일', '최초등록일', '업데이트'], 120) || text;
     const postedAt = normalizeDate(postedSource);
     const postedDatetime = normalizeDateTime(postedSource);
-    const managerName = pickAfterLabel(text, ['담당자 이름', '담당자이름', '담당자명', '담당자', '연락 담당자'], 100);
-    const managerPhone = normalizePhone(pickAfterLabel(text, ['담당자 연락처', '담당자연락처', '연락처', '휴대폰', '전화번호'], 140) || text);
-    const agencyCompany = pickAfterLabel(text, ['대행사', '분양대행사', '분양 대행사', '회사명', '업체명'], 160);
+    const managerPhone = normalizePhone(pickAfterLabel(text, ['담당자 연락처', '담당자연락처', '연락처', '휴대폰', '전화번호', '문의전화', '문의'], 160) || text);
+    const managerName = extractManagerName(text, managerPhone);
+    const agencyCompany = pickAfterLabel(text, ['대행사', '분양대행사', '분양 대행사', '회사명', '업체명', '소속', '상호'], 180);
     const apartmentFee = extractApartmentFee(text);
-    const detailText = extractSection(text, ['상세정보', '상세 정보', '상세요강', '모집내용', '급여정보', '채용정보'], 30);
+    const detailText = extractSection(text, ['상세정보', '상세 정보', '상세요강', '모집내용', '급여정보', '채용정보', '현장정보', '공고내용'], 40);
 
-    const addressRegion = extractRegionFromAddress(`${siteAddress || ''}\n${text.slice(0, 1200)}`);
+    const addressRegion = extractRegionFromAddress(`${siteAddress || ''}\n${text.slice(0, 1500)}`);
     const actualRegionName = detection.actualRegionName || addressRegion || region.name;
     const actualRegionSource = detection.actualRegionName ? detection.source : addressRegion ? 'address-fallback' : region.source;
     const regionMatchText = detection.matchText || siteAddress || region.url;
+
+    if (!siteName && !managerPhone && !detailText) {
+      console.log(`[${region.name}] 상세 파싱 제외: 유효 데이터 부족 / ${sourceUrl}`);
+      return null;
+    }
 
     return {
       source_url: finalUrl,
@@ -691,14 +691,14 @@ async function parseDetailPage(page: Page, sourceUrl: string, region: RegionTarg
       actual_region_name: actualRegionName,
       actual_region_source: actualRegionSource,
       region_match_text: regionMatchText,
-      site_name: compact(siteName, 180),
-      site_address: compact(siteAddress, 240),
+      site_name: compact(siteName, 220),
+      site_address: compact(siteAddress, 280),
       posted_at: postedAt,
       posted_datetime: postedDatetime,
       manager_name: compact(managerName, 120),
       manager_phone: compact(managerPhone, 40),
-      agency_company: compact(agencyCompany, 160),
-      apartment_fee: compact(apartmentFee, 180),
+      agency_company: compact(agencyCompany, 180),
+      apartment_fee: compact(apartmentFee, 220),
       detail_text: limitText(detailText, MAX_DETAIL_TEXT_LENGTH),
       raw_text: limitText(text, MAX_RAW_TEXT_LENGTH),
       crawled_at: new Date().toISOString(),
@@ -767,66 +767,38 @@ async function sendToCrm(rows: CrawledRow[]) {
   };
 }
 
-async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTarget, maxPages: number, maxDetailsPerRegion: number) {
+async function crawlRegion(browserPage: Page, detailPage: Page, region: RegionTarget, maxPages: number, maxDetailsPerRegion: number, scrollRounds: number) {
   const rows: CrawledRow[] = [];
   const seenUrls = new Set<string>();
 
   for (let pageNo = 1; pageNo <= maxPages; pageNo += 1) {
-    const listUrl = buildListUrl(region, pageNo);
-    console.log(`\n[${region.name}] 목록 접속: ${listUrl}`);
-
-    await browserPage.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await browserPage.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => null);
-    await sleep(1000);
-    await browserPage.keyboard.press('End').catch(() => null);
-    await browserPage.mouse.wheel(0, 1800).catch(() => null);
-    await sleep(800);
-
-    const detection = await detectActualRegion(browserPage, region);
-    console.log(`[${region.name}] 실제 표시 지역: ${detection.actualRegionName} / source=${detection.source}`);
-
-    const detailUrls = await collectDetailUrls(browserPage);
     const remainingSlots = Math.max(maxDetailsPerRegion - rows.length, 0);
-    const targets = detailUrls.filter((url) => !seenUrls.has(url)).slice(0, remainingSlots);
+    if (remainingSlots <= 0) break;
 
-    console.log(`[${region.name}] ${pageNo}페이지 상세 후보: ${detailUrls.length}건 / 처리: ${targets.length}건`);
+    const { listUrl, detection, targets } = await gotoListAndCollect(browserPage, region, pageNo, scrollRounds);
+    const freshTargets = targets.filter((target) => !seenUrls.has(target.url)).slice(0, remainingSlots);
 
-    if (detailUrls.length > 0) {
-      await saveJson(`${safeFileName(region.name)}-${pageNo}-links.json`, {
-        region,
-        listUrl,
-        detection,
-        detailUrls,
-        targets,
-        mode: 'detail-url',
-      });
+    console.log(`[${region.name}] ${pageNo}페이지 상세공고 처리 대상: ${freshTargets.length}건`);
 
-      for (const url of targets) {
-        seenUrls.add(url);
-        const row = await parseDetailPage(detailPage, url, region, detection);
-        if (row) rows.push(row);
-        await sleep(500);
-      }
-    } else {
-      const listParse = await parseListRowsFromPage(browserPage, region, detection, listUrl, pageNo, remainingSlots);
-      console.log(`[${region.name}] 상세 URL 없음 → 목록 텍스트 fallback 수집: ${listParse.rows.length}건`);
+    await saveJson(`${safeFileName(region.name)}-${pageNo}-view-links.json`, {
+      region,
+      listUrl,
+      detection,
+      candidateCount: targets.length,
+      processCount: freshTargets.length,
+      sampleTargets: freshTargets.slice(0, 30),
+      mode: 'detail-view-url',
+    });
 
-      await saveJson(`${safeFileName(region.name)}-${pageNo}-list-fallback.json`, {
-        region,
-        listUrl,
-        detection,
-        mode: 'list-text-fallback',
-        parsedLineCount: listParse.lines.length,
-        segmentCount: listParse.segments.length,
-        sampleSegments: listParse.segments.slice(0, 10),
-        rows: listParse.rows.slice(0, 10),
-      });
+    for (const target of freshTargets) {
+      seenUrls.add(target.url);
+      const row = await parseDetailPage(detailPage, target, region, detection);
+      if (row) rows.push(row);
+      await sleep(600);
+    }
 
-      for (const row of listParse.rows) {
-        if (seenUrls.has(row.source_url)) continue;
-        seenUrls.add(row.source_url);
-        rows.push(row);
-      }
+    if (freshTargets.length === 0 && pageNo === 1) {
+      console.log(`[${region.name}] 상세공고 URL을 찾지 못했습니다. debug-output/${safeFileName(region.name)}-${pageNo}-html.txt에서 /recruit/view/ 존재 여부를 확인하세요.`);
     }
 
     if (rows.length >= maxDetailsPerRegion) break;
@@ -839,6 +811,7 @@ async function main() {
   const regionArg = env('BUNYANGLINE_REGION_IDS', 'all');
   const maxPages = Math.max(Number(env('BUNYANGLINE_MAX_PAGES', '1')), 1);
   const maxDetailsPerRegion = Math.max(Number(env('BUNYANGLINE_MAX_DETAILS_PER_REGION', '30')), 1);
+  const scrollRounds = Math.max(Number(env('BUNYANGLINE_SCROLL_ROUNDS', '12')), 1);
   const headless = env('HEADLESS', 'true') !== 'false';
   const shouldSendToCrm = env('BUNYANGLINE_SEND_TO_CRM', 'true') !== 'false';
 
@@ -846,6 +819,7 @@ async function main() {
   console.log(`- regionArg: ${regionArg}`);
   console.log(`- maxPages: ${maxPages}`);
   console.log(`- maxDetailsPerRegion: ${maxDetailsPerRegion}`);
+  console.log(`- scrollRounds: ${scrollRounds}`);
   console.log(`- headless: ${headless}`);
   console.log(`- sendToCrm: ${shouldSendToCrm}`);
 
@@ -855,7 +829,9 @@ async function main() {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1200 },
     userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+    locale: 'ko-KR',
+    timezoneId: 'Asia/Seoul',
   });
 
   const page = await context.newPage();
@@ -868,7 +844,7 @@ async function main() {
     const seenSourceUrls = new Set<string>();
 
     for (const region of regions) {
-      const rows = await crawlRegion(page, detailPage, region, maxPages, maxDetailsPerRegion);
+      const rows = await crawlRegion(page, detailPage, region, maxPages, maxDetailsPerRegion, scrollRounds);
 
       for (const row of rows) {
         if (seenSourceUrls.has(row.source_url)) {
@@ -891,6 +867,7 @@ async function main() {
       regionCount: regions.length,
       collectedCount: allRows.length,
       duplicateRule: 'source_url 단독 기준',
+      collectionMode: 'regional-list -> recruit/view detail page',
       regions,
       sample: allRows.slice(0, 10),
     });
@@ -903,7 +880,7 @@ async function main() {
     }
 
     if (allRows.length === 0) {
-      console.log('수집된 데이터가 없습니다. debug-output의 links.json과 screenshot을 확인하세요.');
+      console.log('수집된 데이터가 없습니다. debug-output의 *-view-links.json, *-html.txt, screenshot을 확인하세요.');
     }
   } finally {
     await browser.close();
