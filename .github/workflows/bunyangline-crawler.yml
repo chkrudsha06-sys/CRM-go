@@ -9,7 +9,7 @@ on:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -35,7 +35,7 @@ jobs:
           BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
           BUNYANGLINE_REGION_IDS: all
           BUNYANGLINE_MAX_PAGES: '1'
-          BUNYANGLINE_MAX_DETAILS_PER_REGION: '30'
+          BUNYANGLINE_SCROLL_ROUNDS: '80'
           BUNYANGLINE_SEND_TO_CRM: 'true'
           HEADLESS: 'true'
         run: npm run start
