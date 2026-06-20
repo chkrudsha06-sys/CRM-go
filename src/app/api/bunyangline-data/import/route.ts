@@ -4,89 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-type SupabaseErrorLike = {
-  message?: string;
-  details?: string;
-  hint?: string;
-  code?: string;
-  name?: string;
+type ImportItem = Record<string, unknown>;
+
+type ExistingRow = {
+  id: number | string;
+  source_url: string | null;
+  assigned_to: string | null;
 };
-
-type ImportRow = {
-  source_url?: unknown;
-  sourceUrl?: unknown;
-  source_post_key?: unknown;
-  sourcePostKey?: unknown;
-  region_id?: unknown;
-  regionId?: unknown;
-  region_name?: unknown;
-  regionName?: unknown;
-  list_region_name?: unknown;
-  listRegionName?: unknown;
-  actual_region_name?: unknown;
-  actualRegionName?: unknown;
-  actual_region_source?: unknown;
-  actualRegionSource?: unknown;
-  region_match_text?: unknown;
-  regionMatchText?: unknown;
-  site_name?: unknown;
-  siteName?: unknown;
-  site_address?: unknown;
-  siteAddress?: unknown;
-  posted_at?: unknown;
-  postedAt?: unknown;
-  posted_datetime?: unknown;
-  postedDatetime?: unknown;
-  manager_name?: unknown;
-  managerName?: unknown;
-  manager_phone?: unknown;
-  managerPhone?: unknown;
-  agency_company?: unknown;
-  agencyCompany?: unknown;
-  apartment_fee?: unknown;
-  apartmentFee?: unknown;
-  detail_text?: unknown;
-  detailText?: unknown;
-  raw_text?: unknown;
-  rawText?: unknown;
-  crawled_at?: unknown;
-  crawledAt?: unknown;
-};
-
-type NormalizedItem = {
-  sourceUrl: string;
-  dbRow: Record<string, string | boolean | null>;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function toErrorPayload(error: unknown) {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-    };
-  }
-
-  if (isRecord(error)) {
-    const supabaseError = error as SupabaseErrorLike;
-    return {
-      name: supabaseError.name ?? 'SupabaseError',
-      message: supabaseError.message ?? '알 수 없는 오류입니다.',
-      details: supabaseError.details ?? null,
-      hint: supabaseError.hint ?? null,
-      code: supabaseError.code ?? null,
-      raw: error,
-    };
-  }
-
-  return {
-    name: 'UnknownError',
-    message: String(error),
-  };
-}
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -116,72 +40,111 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
-function normalizePhone(value: unknown): string | null {
+function firstValue(row: ImportItem, keys: string[]): unknown {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return null;
+}
+
+function normalizeSourceUrl(value: unknown): string | null {
   const raw = normalizeText(value);
   if (!raw) return null;
-
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) return raw;
-
-  return digits;
-}
-
-function normalizeDate(value: unknown): string | null {
-  const text = normalizeText(value);
-  if (!text) return null;
-
-  const iso = text.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
-  if (iso) {
-    return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
-  }
-
-  const korean = text.match(/(20\d{2})[.\/년\s-]+(\d{1,2})[.\/월\s-]+(\d{1,2})/);
-  if (korean) {
-    return `${korean[1]}-${korean[2].padStart(2, '0')}-${korean[3].padStart(2, '0')}`;
-  }
-
-  return null;
-}
-
-function normalizeDateTime(value: unknown): string | null {
-  const text = normalizeText(value);
-  if (!text) return null;
-
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString();
-  }
-
-  return null;
-}
-
-function normalizeSourceUrl(value: unknown): string {
-  const raw = normalizeText(value) || '';
-  if (!raw) return '';
 
   try {
     const url = new URL(raw, 'https://www.bunyangline.com');
     url.hash = '';
-
-    const removableParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
-    removableParams.forEach((param) => url.searchParams.delete(param));
-
+    url.searchParams.delete('utm_source');
+    url.searchParams.delete('utm_medium');
+    url.searchParams.delete('utm_campaign');
+    url.searchParams.delete('utm_term');
+    url.searchParams.delete('utm_content');
     return url.toString();
   } catch {
     return raw;
   }
 }
 
-function hashSourceUrl(url: string) {
-  let hash = 0;
-  for (let i = 0; i < url.length; i += 1) {
-    hash = (hash << 5) - hash + url.charCodeAt(i);
-    hash |= 0;
-  }
-  return `bunyangline_${Math.abs(hash)}`;
+function normalizePhone(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const digits = text.replace(/\D/g, '');
+  return digits || text;
 }
 
-function parseSecret(request: NextRequest, body: any) {
+function normalizeDate(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const iso = text.match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})/);
+  if (!iso) return null;
+
+  return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+}
+
+function normalizeDateTime(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const match = text.match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})(?:[일\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!match) return null;
+
+  const year = match[1];
+  const month = match[2].padStart(2, '0');
+  const day = match[3].padStart(2, '0');
+  const hour = (match[4] || '00').padStart(2, '0');
+  const minute = (match[5] || '00').padStart(2, '0');
+  const second = (match[6] || '00').padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}+09:00`;
+}
+
+function normalizeAssignedTo(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const allowed = ['조계현', '이세호', '기여운', '최연전'];
+  return allowed.includes(text) ? text : null;
+}
+
+function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
+  const sourceUrl = normalizeSourceUrl(firstValue(row, ['source_url', 'sourceUrl', 'source']));
+  if (!sourceUrl) return null;
+
+  const postedDatetime = normalizeDateTime(firstValue(row, ['posted_datetime', 'postedDatetime', 'registered_datetime', 'registeredDatetime']));
+  const postedAt =
+    normalizeDate(firstValue(row, ['posted_at', 'postedAt', 'registered_date', 'registeredDate'])) ||
+    (postedDatetime ? postedDatetime.slice(0, 10) : null);
+
+  return {
+    source_url: sourceUrl,
+    source_id: normalizeText(firstValue(row, ['source_id', 'sourceId', 'post_id', 'postId'])) || null,
+    region_name: normalizeText(firstValue(row, ['region_name', 'regionName', 'region'])) || '미지정',
+    ad_section: normalizeText(firstValue(row, ['ad_section', 'adSection', 'section', 'listing_section', 'listingSection'])) || '미지정',
+    site_name: normalizeText(firstValue(row, ['site_name', 'siteName', 'field_name', 'fieldName'])) || '-',
+    posted_at: postedAt,
+    posted_datetime: postedDatetime,
+    manager_name: normalizeText(firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName'])) || '-',
+    manager_phone: normalizePhone(firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])) || '-',
+    agency_company: normalizeText(firstValue(row, ['agency_company', 'agencyCompany', 'agency', 'company_name', 'companyName'])) || '-',
+    apartment_fee: normalizeText(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
+    move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
+    assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
+    detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || '-',
+    title: normalizeText(firstValue(row, ['title', 'post_title', 'postTitle'])) || null,
+    summary: normalizeText(firstValue(row, ['summary', 'subtitle', 'description'])) || null,
+    site_address: normalizeText(firstValue(row, ['site_address', 'siteAddress', 'business_address', 'businessAddress'])) || null,
+    work_address: normalizeText(firstValue(row, ['work_address', 'workAddress', 'address'])) || null,
+    category: normalizeText(firstValue(row, ['category', 'product_type', 'productType'])) || null,
+    list_date_group: normalizeText(firstValue(row, ['list_date_group', 'listDateGroup'])) || null,
+    raw_text: normalizeText(firstValue(row, ['raw_text', 'rawText'])) || null,
+    crawled_at: normalizeDateTime(firstValue(row, ['crawled_at', 'crawledAt'])) || new Date().toISOString(),
+  };
+}
+
+function getSecretFromRequest(request: NextRequest, body: any) {
   const auth = request.headers.get('authorization') ?? '';
   const bearerSecret = auth.replace(/^Bearer\s+/i, '').trim();
   const headerSecret = request.headers.get('x-import-secret') ?? '';
@@ -191,160 +154,89 @@ function parseSecret(request: NextRequest, body: any) {
   return bearerSecret || headerSecret || querySecret || bodySecret;
 }
 
-function getFirst(row: ImportRow, keys: Array<keyof ImportRow>) {
-  for (const key of keys) {
-    const value = row[key];
-    if (value !== undefined && value !== null && String(value).trim() !== '') {
-      return value;
-    }
-  }
-  return null;
-}
-
-function normalizeItem(row: ImportRow): NormalizedItem {
-  const sourceUrl = normalizeSourceUrl(getFirst(row, ['source_url', 'sourceUrl']));
-  const regionId = normalizeText(getFirst(row, ['region_id', 'regionId']));
-
-  const listRegionName =
-    normalizeText(getFirst(row, ['list_region_name', 'listRegionName'])) ||
-    normalizeText(getFirst(row, ['region_name', 'regionName'])) ||
-    '미지정';
-
-  const actualRegionName =
-    normalizeText(getFirst(row, ['actual_region_name', 'actualRegionName'])) ||
-    normalizeText(getFirst(row, ['region_name', 'regionName'])) ||
-    listRegionName;
-
-  const regionName = actualRegionName || listRegionName || '미지정';
-  const postedDatetime = normalizeDateTime(getFirst(row, ['posted_datetime', 'postedDatetime']));
-  const postedAt = normalizeDate(getFirst(row, ['posted_at', 'postedAt'])) || (postedDatetime ? postedDatetime.slice(0, 10) : null);
-
-  const dbRow: Record<string, string | boolean | null> = {
-    source: 'bunyangline',
-    source_url: sourceUrl,
-    source_post_key: normalizeText(getFirst(row, ['source_post_key', 'sourcePostKey'])) || hashSourceUrl(sourceUrl),
-    region_id: regionId,
-    region_name: regionName,
-    list_region_name: listRegionName,
-    actual_region_name: actualRegionName,
-    actual_region_source: normalizeText(getFirst(row, ['actual_region_source', 'actualRegionSource'])) || 'crawler-page-region',
-    region_match_text: normalizeText(getFirst(row, ['region_match_text', 'regionMatchText'])),
-    site_name: normalizeText(getFirst(row, ['site_name', 'siteName'])),
-    site_address: normalizeText(getFirst(row, ['site_address', 'siteAddress'])),
-    posted_at: postedAt,
-    posted_datetime: postedDatetime,
-    manager_name: normalizeText(getFirst(row, ['manager_name', 'managerName'])),
-    manager_phone: normalizePhone(getFirst(row, ['manager_phone', 'managerPhone'])),
-    agency_company: normalizeText(getFirst(row, ['agency_company', 'agencyCompany'])),
-    apartment_fee: normalizeText(getFirst(row, ['apartment_fee', 'apartmentFee'])),
-    detail_text: normalizeText(getFirst(row, ['detail_text', 'detailText'])),
-    raw_text: normalizeText(getFirst(row, ['raw_text', 'rawText'])),
-    crawled_at: normalizeDateTime(getFirst(row, ['crawled_at', 'crawledAt'])) || new Date().toISOString(),
-  };
-
-  return {
-    sourceUrl,
-    dbRow,
-  };
+function errorPayload(error: unknown) {
+  if (error instanceof Error) return { name: error.name, message: error.message };
+  if (typeof error === 'object' && error !== null) return error;
+  return { message: String(error) };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const expectedSecret = process.env.BUNYANGLINE_IMPORT_SECRET;
-    const receivedSecret = parseSecret(request, body);
+    const incomingSecret = getSecretFromRequest(request, body);
 
-    if (!expectedSecret) {
-      return NextResponse.json({ ok: false, message: 'BUNYANGLINE_IMPORT_SECRET 환경변수가 설정되지 않았습니다.' }, { status: 500 });
+    if (expectedSecret && incomingSecret !== expectedSecret) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: '분양라인 가져오기 비밀키가 일치하지 않습니다.',
+        },
+        { status: 401 }
+      );
     }
 
-    if (receivedSecret !== expectedSecret) {
-      return NextResponse.json({ ok: false, message: '분양라인 가져오기 secret이 일치하지 않습니다.' }, { status: 401 });
-    }
+    const rawItems = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
 
-    const rawItems = Array.isArray(body?.rows) ? body.rows : Array.isArray(body?.items) ? body.items : Array.isArray(body) ? body : [];
-    if (!rawItems.length) {
-      return NextResponse.json({ ok: false, message: '가져올 분양라인 데이터가 없습니다.' }, { status: 400 });
+    if (rawItems.length === 0) {
+      return NextResponse.json({ ok: true, received: 0, insertedOrUpdated: 0, skipped: 0, message: '저장할 항목이 없습니다.' });
     }
 
     const supabase = getSupabaseAdmin();
-    const seenSourceUrls = new Set<string>();
-    const results: Array<{ source_url: string; status: string; id?: string; reason?: string }> = [];
+    const incomingSourceUrls = rawItems
+      .map((item: ImportItem) => normalizeSourceUrl(firstValue(item, ['source_url', 'sourceUrl', 'source'])))
+      .filter((value: string | null): value is string => Boolean(value));
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-    let requestDuplicateCount = 0;
+    const existingAssignedMap = new Map<string, string | null>();
 
-    for (const raw of rawItems) {
-      const item = normalizeItem(raw as ImportRow);
-
-      if (!item.sourceUrl) {
-        skippedCount += 1;
-        results.push({ source_url: '', status: 'skipped', reason: 'source_url 없음' });
-        continue;
-      }
-
-      if (seenSourceUrls.has(item.sourceUrl)) {
-        requestDuplicateCount += 1;
-        results.push({ source_url: item.sourceUrl, status: 'duplicate_in_request', reason: '같은 요청 안의 동일 source_url' });
-        continue;
-      }
-      seenSourceUrls.add(item.sourceUrl);
-
-      const { data: existing, error: findError } = await supabase
+    if (incomingSourceUrls.length > 0) {
+      const { data: existingRows, error: existingError } = await supabase
         .from('bunyangline_data')
-        .select('id, assigned_to, is_new')
-        .eq('source_url', item.sourceUrl)
-        .maybeSingle();
+        .select('id, source_url, assigned_to')
+        .in('source_url', Array.from(new Set(incomingSourceUrls)));
 
-      if (findError) throw findError;
+      if (existingError) throw existingError;
 
-      if (existing?.id) {
-        const { data, error } = await supabase
-          .from('bunyangline_data')
-          .update(item.dbRow)
-          .eq('id', existing.id)
-          .select('id')
-          .single();
-
-        if (error) throw error;
-        updatedCount += 1;
-        results.push({ source_url: item.sourceUrl, status: 'updated', id: String(data.id) });
-      } else {
-        const { data, error } = await supabase
-          .from('bunyangline_data')
-          .insert({ ...item.dbRow, is_new: true })
-          .select('id')
-          .single();
-
-        if (error) throw error;
-        insertedCount += 1;
-        results.push({ source_url: item.sourceUrl, status: 'inserted', id: String(data.id) });
-      }
+      (existingRows as ExistingRow[] | null)?.forEach((row) => {
+        if (row.source_url) existingAssignedMap.set(row.source_url, row.assigned_to || null);
+      });
     }
+
+    const rows = rawItems
+      .map((item: ImportItem) => {
+        const sourceUrl = normalizeSourceUrl(firstValue(item, ['source_url', 'sourceUrl', 'source']));
+        return buildDbRow(item, sourceUrl ? existingAssignedMap.get(sourceUrl) : null);
+      })
+      .filter((row: ReturnType<typeof buildDbRow>): row is NonNullable<ReturnType<typeof buildDbRow>> => Boolean(row));
+
+    if (rows.length === 0) {
+      return NextResponse.json({ ok: true, received: rawItems.length, insertedOrUpdated: 0, skipped: rawItems.length, message: '유효한 source_url 항목이 없습니다.' });
+    }
+
+    const { data, error } = await supabase
+      .from('bunyangline_data')
+      .upsert(rows, { onConflict: 'source_url' })
+      .select('id, source_url');
+
+    if (error) throw error;
 
     return NextResponse.json({
       ok: true,
-      message: '분양라인 데이터 가져오기 완료',
-      duplicateRule: 'source_url 단독 기준',
-      total: rawItems.length,
-      insertedCount,
-      updatedCount,
-      skippedCount,
-      requestDuplicateCount,
-      results,
+      received: rawItems.length,
+      insertedOrUpdated: data?.length ?? rows.length,
+      skipped: rawItems.length - rows.length,
+      preservedAssignedCount: Array.from(existingAssignedMap.values()).filter(Boolean).length,
     });
   } catch (error) {
-    const errorPayload = toErrorPayload(error);
-    console.error('[bunyangline-data/import] 오류:', errorPayload);
+    const payload = errorPayload(error);
+    console.error('[bunyangline-data/import] 오류:', payload);
 
     return NextResponse.json(
       {
         ok: false,
-        message: '분양라인 데이터 가져오기 중 오류가 발생했습니다.',
-        error: errorPayload.message,
-        errorDetails: errorPayload,
+        message: '분양라인 데이터 저장 중 오류가 발생했습니다.',
+        error: typeof payload === 'object' && payload && 'message' in payload ? (payload as any).message : String(payload),
+        errorDetails: payload,
       },
       { status: 500 }
     );
