@@ -389,45 +389,255 @@ async function saveText(filePath: string, value: string) {
   await fs.writeFile(filePath, value, 'utf8');
 }
 
+
+type VisibleCardCandidate = {
+  key: string;
+  text: string;
+  section: string;
+  listDateGroup: string | null;
+  x: number;
+  y: number;
+  href: string | null;
+};
+
+async function collectVisibleCards(page: Page): Promise<VisibleCardCandidate[]> {
+  return page.locator('body').evaluate((body) => {
+    const normalize = (value: string | null | undefined) =>
+      String(value || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const isVisible = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return (
+        rect.width >= 160 &&
+        rect.height >= 45 &&
+        rect.top < window.innerHeight - 20 &&
+        rect.bottom > 90 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        Number(style.opacity || '1') > 0
+      );
+    };
+
+    const inferSection = (top: number) => {
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,strong,b,p,div,span'))
+        .map((element) => {
+          const text = normalize((element as HTMLElement).innerText || element.textContent || '');
+          const rect = element.getBoundingClientRect();
+          return { text, top: rect.top };
+        })
+        .filter((item) =>
+          item.top <= top + 20 &&
+          /^(유니크|슈페리어|전국\s*Top|전국\s*TOP|지역\s*Top|지역\s*TOP|일반\s*구인글|TODAY|20\d{2}-\d{2}-\d{2})/.test(item.text),
+        )
+        .sort((a, b) => b.top - a.top);
+
+      const headingText = headings[0]?.text || '';
+      if (/유니크/.test(headingText)) return '유니크';
+      if (/슈페리어/.test(headingText)) return '슈페리어';
+      if (/전국\s*Top|전국\s*TOP/.test(headingText)) return '전국TOP';
+      if (/지역\s*Top|지역\s*TOP/.test(headingText)) return '지역TOP';
+      if (/일반\s*구인글|TODAY|20\d{2}-\d{2}-\d{2}/.test(headingText)) return '일반구인글';
+      return '미지정';
+    };
+
+    const inferDateGroup = (top: number) => {
+      const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,strong,b,p,div,span'))
+        .map((element) => {
+          const text = normalize((element as HTMLElement).innerText || element.textContent || '');
+          const rect = element.getBoundingClientRect();
+          return { text, top: rect.top };
+        })
+        .filter((item) => item.top <= top + 20 && /^(TODAY|20\d{2}-\d{2}-\d{2})/.test(item.text))
+        .sort((a, b) => b.top - a.top);
+
+      const text = headings[0]?.text || '';
+      if (text.startsWith('TODAY')) return 'TODAY';
+      const match = text.match(/20\d{2}-\d{2}-\d{2}/);
+      return match?.[0] || null;
+    };
+
+    const selectors = [
+      'a',
+      'li',
+      'article',
+      '[onclick]',
+      '[role="button"]',
+      '.card',
+      '.item',
+      '.list-item',
+      '.recruit',
+      '.recruit-item',
+      '.recruit-list',
+      '.recruit-card',
+      'div',
+    ];
+
+    const elements = Array.from(document.querySelectorAll(selectors.join(','))) as HTMLElement[];
+    const candidates: VisibleCardCandidate[] = [];
+    const seen = new Set<string>();
+
+    for (const element of elements) {
+      if (!isVisible(element)) continue;
+
+      const text = normalize(element.innerText || element.textContent || '');
+      if (text.length < 18 || text.length > 650) continue;
+      if (!/(팀장|팀원|본부|분양|수수료|경력무관|일비|아파트|오피스텔|생활주택|지식산업|계약|모집|투입)/.test(text)) continue;
+      if (/지역현장|검색어를 입력|상품안내|고객센터|회원가입|로그인/.test(text)) continue;
+
+      const childCardCount = Array.from(element.querySelectorAll('a,li,article,[onclick],[role="button"],.card,.item,.list-item'))
+        .filter((child) => child !== element && isVisible(child) && normalize((child as HTMLElement).innerText || child.textContent || '').length >= 18).length;
+      if (childCardCount >= 2) continue;
+
+      const rect = element.getBoundingClientRect();
+      const anchor = element.tagName.toLowerCase() === 'a' ? element : element.querySelector('a[href]');
+      const href = anchor ? (anchor as HTMLAnchorElement).href || anchor.getAttribute('href') || null : null;
+
+      const key = text.slice(0, 180).replace(/\s+/g, ' ');
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      candidates.push({
+        key,
+        text: text.slice(0, 400),
+        section: inferSection(rect.top),
+        listDateGroup: inferDateGroup(rect.top),
+        x: Math.max(10, Math.min(window.innerWidth - 10, rect.left + rect.width * 0.42)),
+        y: Math.max(90, Math.min(window.innerHeight - 10, rect.top + rect.height * 0.46)),
+        href,
+      });
+    }
+
+    return candidates.sort((a, b) => a.y - b.y).slice(0, 30);
+  });
+}
+
+async function tryClickCardForUrl(page: Page, card: VisibleCardCandidate): Promise<string | null> {
+  const beforeUrl = page.url();
+  const beforeScrollY = await page.evaluate(() => window.scrollY).catch(() => 0);
+
+  const popupPromise = page.waitForEvent('popup', { timeout: 2500 }).catch(() => null);
+  await page.mouse.click(card.x, card.y).catch(() => undefined);
+
+  const popup = await popupPromise;
+  if (popup) {
+    await popup.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => undefined);
+    const popupUrl = popup.url();
+    await popup.close().catch(() => undefined);
+    const id = sourceIdFromUrl(popupUrl);
+    return id ? canonicalViewUrl(id) : null;
+  }
+
+  await page.waitForTimeout(1200);
+  const afterUrl = page.url();
+  const id = sourceIdFromUrl(afterUrl);
+
+  if (id) {
+    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(async () => {
+      await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
+    });
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+    await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
+    await page.waitForTimeout(500);
+    return canonicalViewUrl(id);
+  }
+
+  if (afterUrl !== beforeUrl) {
+    await page.goto(beforeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+    await page.evaluate((y) => window.scrollTo(0, y), beforeScrollY).catch(() => undefined);
+    await page.waitForTimeout(500);
+  }
+
+  return null;
+}
+
 async function scrollAndCollectCandidates(page: Page, region: Region, scrollRounds: number, debugDir: string) {
   const listUrl = `${BASE_URL}/recruit/regional/${region.id}`;
   const collected = new Map<string, ListingCandidate>();
+  const attemptedCardKeys = new Set<string>();
 
   console.log('='.repeat(90));
   console.log(`[${region.name}] 목록 접속: ${listUrl}`);
 
   await page.goto(listUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => undefined);
-  await sleep(1200);
+  await sleep(1500);
 
   let noNewRounds = 0;
 
   for (let round = 0; round <= scrollRounds; round += 1) {
     const html = await page.content();
-    const found = extractCandidatesFromHtml(html, region);
-    const before = collected.size;
+    const fromHtml = extractCandidatesFromHtml(html, region);
+    const beforeHtml = collected.size;
+    fromHtml.forEach((candidate) => collected.set(candidate.sourceUrl, candidate));
+    const htmlAdded = collected.size - beforeHtml;
 
-    found.forEach((candidate) => collected.set(candidate.sourceUrl, candidate));
+    const visibleCards = await collectVisibleCards(page).catch(() => [] as VisibleCardCandidate[]);
+    let clickAdded = 0;
+    let clickTried = 0;
 
-    const added = collected.size - before;
+    for (const card of visibleCards) {
+      const hrefId = card.href ? sourceIdFromUrl(card.href) : '';
+      if (hrefId) {
+        const sourceUrl = canonicalViewUrl(hrefId);
+        if (!collected.has(sourceUrl)) {
+          collected.set(sourceUrl, {
+            sourceUrl,
+            sourceId: hrefId,
+            regionName: region.name,
+            regionId: region.id,
+            adSection: normalizeSection(card.section),
+            listDateGroup: card.listDateGroup === 'TODAY' ? todayDateString() : card.listDateGroup,
+          });
+          clickAdded += 1;
+        }
+        continue;
+      }
+
+      if (attemptedCardKeys.has(card.key)) continue;
+      attemptedCardKeys.add(card.key);
+      clickTried += 1;
+
+      const clickedUrl = await tryClickCardForUrl(page, card).catch(() => null);
+      const sourceId = clickedUrl ? sourceIdFromUrl(clickedUrl) : '';
+      if (!clickedUrl || !sourceId) continue;
+
+      if (!collected.has(clickedUrl)) {
+        collected.set(clickedUrl, {
+          sourceUrl: clickedUrl,
+          sourceId,
+          regionName: region.name,
+          regionId: region.id,
+          adSection: normalizeSection(card.section),
+          listDateGroup: card.listDateGroup === 'TODAY' ? todayDateString() : card.listDateGroup,
+        });
+        clickAdded += 1;
+      }
+    }
+
+    const added = htmlAdded + clickAdded;
     if (round === 0) {
-      console.log(`[${region.name}] 초기 상세공고 후보: ${collected.size}건`);
-    } else if (round % 10 === 0 || added > 0) {
-      console.log(`[${region.name}] 스크롤 ${round}/${scrollRounds}: 상세공고 후보 ${collected.size}건 (+${added})`);
+      console.log(`[${region.name}] 초기 상세공고 후보: ${collected.size}건 / 화면카드 ${visibleCards.length}건 / 클릭시도 ${clickTried}건`);
+    } else if (round % 5 === 0 || added > 0) {
+      console.log(`[${region.name}] 스크롤 ${round}/${scrollRounds}: 상세공고 후보 ${collected.size}건 (+${added}) / 화면카드 ${visibleCards.length}건 / 클릭시도 ${clickTried}건`);
     }
 
     if (added === 0) noNewRounds += 1;
     else noNewRounds = 0;
 
-    if (round >= 15 && noNewRounds >= 10) break;
+    if (round >= 20 && noNewRounds >= 15) break;
 
-    await page.mouse.wheel(0, 1800);
-    await sleep(450);
+    await page.mouse.wheel(0, 1700);
+    await sleep(700);
   }
 
   const finalHtml = await page.content();
   const prefix = safeFileName(`${region.id}_${region.name}_list`);
-  await saveText(path.join(debugDir, `${prefix}_html_sample.html`), finalHtml.slice(0, 200000));
+  await saveText(path.join(debugDir, `${prefix}_html_sample.html`), finalHtml.slice(0, 250000));
   await saveJson(path.join(debugDir, `${prefix}_candidates.json`), Array.from(collected.values()));
 
   console.log(`[${region.name}] 최종 상세공고 후보: ${collected.size}건`);
