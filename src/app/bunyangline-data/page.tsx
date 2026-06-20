@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 
 const REGIONS = [
@@ -23,6 +23,7 @@ const REGIONS = [
 ];
 
 const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
+const SECTION_NAMES = ['유니크', '슈페리어', '전국TOP', '지역TOP', '일반'] as const;
 
 type BunyanglineRow = {
   id: number | string;
@@ -53,6 +54,19 @@ type BunyanglineRow = {
 function emptyText(value: string | null | undefined) {
   const text = String(value ?? '').trim();
   return text || '-';
+}
+
+function normalizeAdSection(value: string | null | undefined) {
+  const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
+  if (text.includes('unique') || text.includes('유니크')) return '유니크';
+  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
+  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
+  return '일반';
+}
+
+function sectionSummaryText(counts: Record<string, number>) {
+  return SECTION_NAMES.map((name) => `${name} ${Number(counts[name] || 0).toLocaleString()}개`).join(' · ');
 }
 
 function formatDate(value: string | null | undefined) {
@@ -114,7 +128,7 @@ function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
     .map((row) => {
       const cells = [
         emptyText(row.region_name),
-        emptyText(row.ad_section),
+        normalizeAdSection(row.ad_section),
         emptyText(row.site_name),
         formatDate(row.posted_at || row.posted_datetime),
         emptyText(row.manager_name),
@@ -199,11 +213,16 @@ export default function BunyanglineDataPage() {
   const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '';
 
   const sectionCounts = useMemo(() => {
-    return rows.reduce<Record<string, number>>((acc, row) => {
-      const key = emptyText(row.ad_section);
-      acc[key] = (acc[key] || 0) + 1;
+    const base = SECTION_NAMES.reduce<Record<string, number>>((acc, name) => {
+      acc[name] = 0;
       return acc;
     }, {});
+
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      const key = normalizeAdSection(row.ad_section);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, base);
   }, [rows]);
 
   async function fetchRows(nextRegion = selectedRegion, nextKeyword = keyword) {
@@ -327,7 +346,7 @@ export default function BunyanglineDataPage() {
       <section style={summaryGridStyle}>
         <SummaryCard label="현재 출력건수" value={`${rows.length.toLocaleString()}건`} />
         <SummaryCard label="선택 지역" value={selectedRegion} />
-        <SummaryCard label="게재지면" value={Object.entries(sectionCounts).map(([name, count]) => `${name} ${count}`).join(' · ') || '-'} small />
+        <SummaryCard label="게재지면 현황" value={sectionSummaryText(sectionCounts)} small />
       </section>
 
       <section style={tablePanelStyle}>
@@ -362,55 +381,61 @@ export default function BunyanglineDataPage() {
                 rows.map((row) => {
                   const opened = openedId === row.id;
                   return (
-                    <tr key={row.id} style={opened ? openedRowStyle : undefined}>
-                      <Td>{emptyText(row.region_name)}</Td>
-                      <Td><span style={sectionBadgeStyle}>{emptyText(row.ad_section)}</span></Td>
-                      <Td title={emptyText(row.site_name)}><strong>{truncate(row.site_name, 24)}</strong></Td>
-                      <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
-                      <Td>{emptyText(row.manager_name)}</Td>
-                      <Td>
-                        <span style={phoneStyle(Boolean(row.manager_phone_is_duplicate))} title={row.manager_phone_is_duplicate ? `중복 연락처 ${row.manager_phone_duplicate_count}건` : ''}>
-                          {formatPhone(row.manager_phone)}
-                        </span>
-                      </Td>
-                      <Td title={emptyText(row.agency_company)}>{truncate(row.agency_company, 24)}</Td>
-                      <Td title={emptyText(row.apartment_fee)}>{truncate(row.apartment_fee, 20)}</Td>
-                      <Td>{emptyText(row.move_in_date)}</Td>
-                      <Td>
-                        {row.source_url ? (
-                          <a href={row.source_url} target="_blank" rel="noreferrer" style={linkButtonStyle}>원본공고</a>
-                        ) : '-'}
-                      </Td>
-                      <Td>
-                        <select
-                          value={row.assigned_to || ''}
-                          onChange={(event) => updateAssignee(row.id, event.target.value)}
-                          disabled={assignSavingId === row.id}
-                          style={selectStyle}
-                        >
-                          <option value="">담당자 선택</option>
-                          {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
-                        </select>
-                      </Td>
-                      <Td>
-                        <button type="button" onClick={() => setOpenedId(opened ? null : row.id)} style={detailButtonStyle}>
-                          {opened ? '닫기' : '보기'}
-                        </button>
-                        {opened ? (
-                          <div style={detailBoxStyle}>
-                            <div style={detailTitleStyle}>상세정보</div>
-                            <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
-                            <div style={metaGridStyle}>
-                              <Info label="제목" value={row.title} />
-                              <Info label="요약" value={row.summary} />
-                              <Info label="사업지 주소" value={row.site_address} />
-                              <Info label="근무지 주소" value={row.work_address} />
-                              <Info label="카테고리" value={row.category} />
+                    <Fragment key={row.id}>
+                      <tr style={opened ? openedRowStyle : undefined}>
+                        <Td>{emptyText(row.region_name)}</Td>
+                        <Td><span style={sectionBadgeStyle}>{normalizeAdSection(row.ad_section)}</span></Td>
+                        <Td title={emptyText(row.site_name)}><strong>{truncate(row.site_name, 24)}</strong></Td>
+                        <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
+                        <Td>{emptyText(row.manager_name)}</Td>
+                        <Td>
+                          <span style={phoneStyle(Boolean(row.manager_phone_is_duplicate))} title={row.manager_phone_is_duplicate ? `중복 연락처 ${row.manager_phone_duplicate_count}건` : ''}>
+                            {formatPhone(row.manager_phone)}
+                          </span>
+                        </Td>
+                        <Td title={emptyText(row.agency_company)}>{truncate(row.agency_company, 24)}</Td>
+                        <Td title={emptyText(row.apartment_fee)}>{truncate(row.apartment_fee, 20)}</Td>
+                        <Td>{emptyText(row.move_in_date)}</Td>
+                        <Td>
+                          {row.source_url ? (
+                            <a href={row.source_url} target="_blank" rel="noreferrer" style={linkButtonStyle}>원본공고</a>
+                          ) : '-'}
+                        </Td>
+                        <Td>
+                          <select
+                            value={row.assigned_to || ''}
+                            onChange={(event) => updateAssignee(row.id, event.target.value)}
+                            disabled={assignSavingId === row.id}
+                            style={selectStyle}
+                          >
+                            <option value="">담당자 선택</option>
+                            {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                        </Td>
+                        <Td>
+                          <button type="button" onClick={() => setOpenedId(opened ? null : row.id)} style={detailButtonStyle}>
+                            {opened ? '닫기' : '보기'}
+                          </button>
+                        </Td>
+                      </tr>
+                      {opened ? (
+                        <tr>
+                          <td colSpan={12} style={detailRowCellStyle}>
+                            <div style={detailBoxStyle}>
+                              <div style={detailTitleStyle}>상세정보</div>
+                              <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
+                              <div style={metaGridStyle}>
+                                <Info label="제목" value={row.title} />
+                                <Info label="요약" value={row.summary} />
+                                <Info label="사업지 주소" value={row.site_address} />
+                                <Info label="근무지 주소" value={row.work_address} />
+                                <Info label="카테고리" value={row.category} />
+                              </div>
                             </div>
-                          </div>
-                        ) : null}
-                      </Td>
-                    </tr>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })
               )}
@@ -473,12 +498,13 @@ const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center'
 const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.07)', color: '#f8fafc', verticalAlign: 'middle', whiteSpace: 'nowrap' };
 const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: '#94a3b8' };
 const openedRowStyle: React.CSSProperties = { background: 'rgba(139, 92, 246, 0.05)' };
+const detailRowCellStyle: React.CSSProperties = { padding: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', background: '#101010' };
 const sectionBadgeStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 72, padding: '6px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.25)', fontWeight: 900 };
 const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? '#dcfce7' : '#f8fafc', background: duplicate ? '#14532d' : 'transparent', border: duplicate ? '1px solid rgba(34,197,94,0.5)' : 'none', fontWeight: 900 });
 const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: '#ddd6fe', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', textDecoration: 'none', fontWeight: 900 };
 const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: '#101010', color: '#fff', padding: '0 8px', fontWeight: 800 };
 const detailButtonStyle: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.16)', background: '#171717', color: '#fff', cursor: 'pointer', fontWeight: 900 };
-const detailBoxStyle: React.CSSProperties = { position: 'absolute', right: 28, left: 28, marginTop: 12, zIndex: 10, padding: 16, borderRadius: 14, border: '1px solid rgba(255,255,255,0.15)', background: '#101010', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', textAlign: 'left', whiteSpace: 'normal' };
+const detailBoxStyle: React.CSSProperties = { margin: 14, padding: 18, borderRadius: 14, border: '1px solid rgba(255,255,255,0.15)', background: '#0f0f10', textAlign: 'left', whiteSpace: 'normal' };
 const detailTitleStyle: React.CSSProperties = { fontSize: 15, fontWeight: 900, marginBottom: 10, color: '#fff' };
 const detailPreStyle: React.CSSProperties = { maxHeight: 260, overflow: 'auto', margin: 0, padding: 14, borderRadius: 10, background: '#171717', color: '#e5e7eb', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' };
 const metaGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12, fontSize: 13, color: '#e5e7eb' };
