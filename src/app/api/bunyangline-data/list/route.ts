@@ -120,7 +120,7 @@ function extractAddressCandidatesFromText(value: unknown): string[] {
   if (!text) return [];
 
   const candidates = new Set<string>();
-  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
 
   const patterns = [
     /(?:근무지\s*정보|근무지정보)[\s\S]{0,700}/g,
