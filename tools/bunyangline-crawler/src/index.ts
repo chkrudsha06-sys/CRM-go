@@ -448,6 +448,83 @@ function normalizeRegionByAddress(value: string | null | undefined): string | nu
   return null;
 }
 
+function extractAddressCandidatesFromText(value: string | null | undefined): string[] {
+  const text = normalizeText(value);
+  if (!text) return [];
+
+  const candidates = new Set<string>();
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+
+  const strongLinePatterns = [
+    /(?:근무지\s*정보|근무지정보)[\s\S]{0,700}/g,
+    /(?:근무지\s*지역\s*주소|근무지역\s*주소|근무지\s*주소|근무주소|근무지역)\s*[:：]?\s*([^\n]{3,160})/g,
+    /(?:사업지\s*정보|사업지정보|현장\s*정보|현장정보)[\s\S]{0,700}/g,
+    /(?:사업지\s*주소|현장\s*주소|주소)\s*[:：]?\s*([^\n]{3,160})/g,
+  ];
+
+  for (const pattern of strongLinePatterns) {
+    for (const match of text.matchAll(pattern)) {
+      const found = normalizeText(match[1] || match[0]);
+      if (found) candidates.add(found.slice(0, 300));
+    }
+  }
+
+  const regionAddressLine = /(서울특별시|서울시|인천광역시|인천시|부산광역시|부산시|울산광역시|울산시|대구광역시|대구시|대전광역시|대전시|세종특별자치시|세종시|광주광역시|강원특별자치도|강원도|제주특별자치도|제주도|충청북도|충청남도|충북|충남|전북특별자치도|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|경기도)\s*[^\n]{0,120}/g;
+  for (const line of lines) {
+    for (const match of line.matchAll(regionAddressLine)) {
+      const found = normalizeText(match[0]);
+      if (found) candidates.add(found.slice(0, 300));
+    }
+  }
+
+  return Array.from(candidates).filter((candidate) => {
+    const compact = candidate.replace(/\s+/g, '');
+    if (compact.length < 3) return false;
+    if (/서울경기|경기인천|부산대구|광주대전|전국|지역현장|맞춤현장|지도현장|관심현장|서포터즈/.test(compact)) return false;
+    return true;
+  });
+}
+
+function inferRegionFromAddressText(value: string | null | undefined): { regionName: string | null; matchText: string | null } {
+  const direct = normalizeRegionByAddress(value);
+  if (direct) return { regionName: direct, matchText: normalizeText(value)?.slice(0, 300) || null };
+
+  for (const candidate of extractAddressCandidatesFromText(value)) {
+    const region = normalizeRegionByAddress(candidate);
+    if (region) return { regionName: region, matchText: candidate.slice(0, 300) };
+  }
+
+  return { regionName: null, matchText: null };
+}
+
+function extractAddressFromSectionText(rawText: string, sectionNames: string[], labelNames: string[]) {
+  const text = normalizeText(rawText);
+  if (!text) return null;
+
+  for (const sectionName of sectionNames) {
+    const sectionPattern = new RegExp(`${sectionName.replace(/\s+/g, '\\s*')}[\\s\\S]{0,900}`, 'i');
+    const sectionMatch = text.match(sectionPattern)?.[0];
+    if (!sectionMatch) continue;
+
+    const lines = sectionMatch.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const compact = compactLabel(line);
+      for (const label of labelNames) {
+        const labelCompact = compactLabel(label);
+        if (compact === labelCompact || compact.startsWith(labelCompact)) {
+          const inline = removeLeadingLabel(line, label);
+          if (inline && inline !== label) return inline;
+          const next = normalizeText(lines[index + 1] || '');
+          if (next) return next;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 function getWorkSectionLines(lines: string[]) {
   return sliceSectionLines(lines, ['근무지 정보', '근무지정보', '근무 정보', '근무정보'], ['접수방법', '접수 방법', '상세정보', '상세 정보', '기업정보', '사업자 정보', '사업자정보', '급여정보', '급여 정보', '사업지 정보', '사업지정보']);
 }
@@ -475,18 +552,24 @@ const SITE_ADDRESS_LABELS = [
   '주소',
 ];
 
-function extractWorkAddress(lines: string[]) {
+function extractWorkAddress(lines: string[], rawText = '') {
   const workLines = getWorkSectionLines(lines);
   const scoped = extractScopedLabelValue(workLines, WORK_ADDRESS_LABELS, WORK_ADDRESS_LABELS);
   if (scoped) return scoped;
 
+  const fromSection = extractAddressFromSectionText(rawText, ['근무지 정보', '근무지정보', '근무 정보', '근무정보'], WORK_ADDRESS_LABELS);
+  if (fromSection) return fromSection;
+
   return findLabelValue(lines, ['근무지지역 주소', '근무지 지역 주소', '근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
 }
 
-function extractSiteAddress(lines: string[]) {
+function extractSiteAddress(lines: string[], rawText = '') {
   const siteLines = getSiteSectionLines(lines);
   const scoped = extractScopedLabelValue(siteLines, SITE_ADDRESS_LABELS, SITE_ADDRESS_LABELS);
   if (scoped) return scoped;
+
+  const fromSection = extractAddressFromSectionText(rawText, ['사업지 정보', '사업지정보', '현장 정보', '현장정보'], SITE_ADDRESS_LABELS);
+  if (fromSection) return fromSection;
 
   return findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
 }
@@ -500,16 +583,16 @@ function inferActualRegion(params: {
   const candidates = [
     { source: '근무지주소', text: params.workAddress },
     { source: '사업지주소', text: params.siteAddress },
-    { source: '상세본문', text: params.rawText },
+    { source: '상세본문주소', text: params.rawText },
   ];
 
   for (const candidate of candidates) {
-    const region = normalizeRegionByAddress(candidate.text || '');
-    if (region) {
+    const inferred = inferRegionFromAddressText(candidate.text || '');
+    if (inferred.regionName) {
       return {
-        regionName: region,
+        regionName: inferred.regionName,
         source: candidate.source,
-        matchText: normalizeText(candidate.text || '')?.slice(0, 300) || null,
+        matchText: inferred.matchText,
       };
     }
   }
@@ -1058,8 +1141,8 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
 
     const title = await bestTitleFromPage(page, candidate.title);
     const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
-    const siteAddress = extractSiteAddress(lines);
-    const workAddress = extractWorkAddress(lines);
+    const siteAddress = extractSiteAddress(lines, rawText);
+    const workAddress = extractWorkAddress(lines, rawText);
     const actualRegion = inferActualRegion({
       listRegionName: candidate.region_name,
       workAddress,
