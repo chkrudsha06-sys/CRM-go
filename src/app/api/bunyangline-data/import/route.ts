@@ -132,6 +132,76 @@ function stripLabelNoise(value: unknown): string | null {
     .trim() || null;
 }
 
+function compactLabel(value: unknown) {
+  return String(value ?? '').replace(/\s+/g, '').trim();
+}
+
+function sliceSectionLinesFromText(textValue: unknown, startLabels: string[], endLabels: string[]) {
+  const text = normalizeText(textValue);
+  if (!text) return [];
+
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean) as string[];
+  let start = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const compact = compactLabel(lines[index]);
+    if (startLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      start = index + 1;
+      break;
+    }
+  }
+  if (start < 0) return [];
+
+  let end = lines.length;
+  for (let index = start; index < lines.length; index += 1) {
+    const compact = compactLabel(lines[index]);
+    if (endLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      end = index;
+      break;
+    }
+  }
+
+  return lines.slice(start, end);
+}
+
+function extractScopedLabelValue(sectionLines: string[], labels: string[], allLabels: string[]) {
+  if (!sectionLines.length) return null;
+
+  for (let index = 0; index < sectionLines.length; index += 1) {
+    const line = normalizeText(sectionLines[index]);
+    if (!line) continue;
+    const compact = compactLabel(line);
+
+    for (const label of labels) {
+      const labelCompact = compactLabel(label);
+      if (compact === labelCompact || compact.startsWith(labelCompact)) {
+        const inline = line.replace(new RegExp(`^${label.split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*')}\\s*[:：]?\\s*`), '').trim();
+        if (inline && compactLabel(inline) !== labelCompact && !allLabels.some((item) => compactLabel(inline) === compactLabel(item))) return inline;
+
+        for (let cursor = index + 1; cursor < Math.min(index + 6, sectionLines.length); cursor += 1) {
+          const next = normalizeText(sectionLines[cursor]);
+          if (!next) continue;
+          if (allLabels.some((item) => compactLabel(next) === compactLabel(item) || compactLabel(next).startsWith(compactLabel(item)))) break;
+          return next;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractAgencyFromRawText(textValue: unknown) {
+  const lines = sliceSectionLinesFromText(textValue, ['사업자 정보', '사업자정보'], ['급여정보', '급여 정보', '사업지 정보', '사업지정보', '상세정보', '상세 정보', '접수방법', '접수 방법']);
+  return stripLabelNoise(extractScopedLabelValue(lines, ['대행사'], ['시행사', '시공사', '신탁사', '대행사', '담당자 이름', '담당자명', '담당자 연락처', '담당자연락처', '연락처', '전화번호']));
+}
+
+function extractApartmentFeeFromRawText(textValue: unknown) {
+  const lines = sliceSectionLinesFromText(textValue, ['급여정보', '급여 정보'], ['상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법', '기업정보', '사업자 정보', '사업자정보', '사업지 정보', '사업지정보']);
+  const value = extractScopedLabelValue(lines, ['아파트 분양', '아파트분양'], ['형태', '계약 수수료', '계약수수료', '아파트 분양', '아파트분양', '오피스텔 분양', '오피스텔분양', '상가 분양', '상가분양', '수수료']);
+  if (value && /\d|만|원|%|협의|지급/.test(value)) return stripLabelNoise(value);
+  return null;
+}
+
 function splitManagerFields(nameValue: unknown, phoneValue: unknown) {
   const combined = normalizeText(`${nameValue ?? ''} ${phoneValue ?? ''}`);
   return {
@@ -188,6 +258,9 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName']),
     firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])
   );
+  const rawTextForSection = firstValue(row, ['raw_text', 'rawText']) || firstValue(row, ['detail_text', 'detailText', 'details']);
+  const scopedAgency = extractAgencyFromRawText(rawTextForSection);
+  const scopedApartmentFee = extractApartmentFeeFromRawText(rawTextForSection);
 
   return {
     source_url: sourceUrl,
@@ -199,8 +272,8 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     posted_datetime: postedDatetime,
     manager_name: managerFields.managerName,
     manager_phone: managerFields.managerPhone,
-    agency_company: stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
-    apartment_fee: stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
+    agency_company: scopedAgency || stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
+    apartment_fee: scopedApartmentFee || stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
     move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
     assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
     detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || '-',
