@@ -181,7 +181,7 @@ function isOlderThanCutoff(dateText: string | null | undefined) {
 }
 
 function hasOlderThanCutoffDate(text: string) {
-  const matches = Array.from(text.matchAll(/20\d{2}-\d{2}-\d{2}/g)).map((item) => item[0]);
+  const matches = collectRegexMatches(text, /20\d{2}-\d{2}-\d{2}/g).map((item) => item[0]);
   return matches.some((date) => date < cutoffKstDate());
 }
 
@@ -463,7 +463,7 @@ function extractAddressCandidatesFromText(value: string | null | undefined): str
   ];
 
   for (const pattern of strongLinePatterns) {
-    for (const match of text.matchAll(pattern)) {
+    for (const match of collectRegexMatches(text, pattern)) {
       const found = normalizeText(match[1] || match[0]);
       if (found) candidates.add(found.slice(0, 300));
     }
@@ -471,7 +471,7 @@ function extractAddressCandidatesFromText(value: string | null | undefined): str
 
   const regionAddressLine = /(서울특별시|서울시|인천광역시|인천시|부산광역시|부산시|울산광역시|울산시|대구광역시|대구시|대전광역시|대전시|세종특별자치시|세종시|광주광역시|강원특별자치도|강원도|제주특별자치도|제주도|충청북도|충청남도|충북|충남|전북특별자치도|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|경기도)\s*[^\n]{0,120}/g;
   for (const line of lines) {
-    for (const match of line.matchAll(regionAddressLine)) {
+    for (const match of collectRegexMatches(line, regionAddressLine)) {
       const found = normalizeText(match[0]);
       if (found) candidates.add(found.slice(0, 300));
     }
@@ -756,7 +756,7 @@ function extractCandidatesFromText(text: string, regionName: string, origin: Can
   ];
 
   for (const pattern of sourcePatterns) {
-    for (const match of text.matchAll(pattern)) {
+    for (const match of collectRegexMatches(text, pattern)) {
       const sourceUrl = normalizeSourceUrl(match[0].startsWith('http') ? match[0] : `${BASE_URL}${match[0]}`);
       if (seen.has(sourceUrl)) continue;
       seen.add(sourceUrl);
@@ -777,7 +777,7 @@ function extractCandidatesFromText(text: string, regionName: string, origin: Can
   }
 
   // JSON 안에 문자열로만 포함된 idx 값 대응
-  for (const match of text.matchAll(/['"](?:idx|recruit_idx|recruit_id|post_id|id)['"]\s*:\s*['"]?(\d{4,})['"]?/g)) {
+  for (const match of collectRegexMatches(text, /['"](?:idx|recruit_idx|recruit_id|post_id|id)['"]\s*:\s*['"]?(\d{4,})['"]?/g)) {
     const id = match[1];
     const sourceUrl = sourceUrlFromId(id);
     if (seen.has(sourceUrl)) continue;
