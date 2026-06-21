@@ -321,7 +321,7 @@ function sliceSectionLines(lines: string[], startLabels: string[], endLabels: st
     }
   }
 
-  return lines.slice(start, end).map((line) => normalizeText(line)).filter(Boolean);
+  return lines.slice(start, end).map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
 }
 
 function flexibleLabelPattern(label: string) {
@@ -453,7 +453,7 @@ function extractAddressCandidatesFromText(value: string | null | undefined): str
   if (!text) return [];
 
   const candidates = new Set<string>();
-  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
 
   const strongLinePatterns = [
     /(?:근무지\s*정보|근무지정보)[\s\S]{0,700}/g,
@@ -506,7 +506,7 @@ function extractAddressFromSectionText(rawText: string, sectionNames: string[], 
     const sectionMatch = text.match(sectionPattern)?.[0];
     if (!sectionMatch) continue;
 
-    const lines = sectionMatch.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+    const lines = sectionMatch.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
       const compact = compactLabel(line);
@@ -1129,7 +1129,7 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
     await sleep(900);
 
     const rawText = await getBodyText(page);
-    const lines = rawText.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+    const lines = rawText.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
 
     // 상세페이지 오른쪽 상단 등록일시를 최우선으로 사용합니다.
     const firstDateTime = rawText.match(/20\d{2}[-.\/]\d{1,2}[-.\/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/)?.[0] || candidate.posted_datetime_hint;
