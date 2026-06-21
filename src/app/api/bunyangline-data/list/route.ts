@@ -77,6 +77,20 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function collectRegexMatches(text: string, pattern: RegExp): RegExpExecArray[] {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const safePattern = new RegExp(pattern.source, flags);
+  const results: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = safePattern.exec(text)) !== null) {
+    results.push(match);
+    if (match[0] === '') safePattern.lastIndex += 1;
+  }
+
+  return results;
+}
+
 function normalizeAdSection(value: unknown) {
   const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
   if (text.includes('unique') || text.includes('유니크')) return '유니크';
