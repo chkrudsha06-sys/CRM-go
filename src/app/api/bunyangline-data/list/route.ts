@@ -86,6 +86,45 @@ function normalizeAdSection(value: unknown) {
   return '일반';
 }
 
+
+function normalizeRegionByAddress(value: unknown): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+  const compact = text.replace(/\s+/g, '');
+
+  if (/서울특별시|서울시|서울/.test(compact)) return '서울';
+  if (/인천광역시|인천시|인천/.test(compact)) return '인천';
+  if (/부산광역시|부산시|부산/.test(compact)) return '부산';
+  if (/울산광역시|울산시|울산/.test(compact)) return '울산';
+  if (/대구광역시|대구시|대구/.test(compact)) return '대구';
+  if (/대전광역시|대전시|대전/.test(compact)) return '대전';
+  if (/세종특별자치시|세종시|세종/.test(compact)) return '세종';
+  if (/광주광역시|광주광역/.test(compact)) return '광주';
+  if (/강원특별자치도|강원도|강원|강릉|원주|춘천|속초|동해|삼척|태백|홍천|횡성|평창|정선|영월|인제|고성|양양|철원|화천|양구/.test(compact)) return '강원도';
+  if (/제주특별자치도|제주도|제주|서귀포/.test(compact)) return '제주도';
+  if (/충청북도|충청남도|충북|충남|충청|천안|아산|청주|충주|제천|공주|보령|서산|논산|계룡|당진|금산|부여|서천|청양|홍성|예산|태안|음성|진천|괴산|단양|옥천|영동|증평|보은/.test(compact)) return '충청도';
+  if (/전북특별자치도|전라북도|전라남도|전북|전남|전라|전주|군산|익산|정읍|남원|김제|완주|진안|무주|장수|임실|순창|고창|부안|목포|여수|순천|나주|광양|담양|곡성|구례|고흥|보성|화순|장흥|강진|해남|영암|무안|함평|영광|장성|완도|진도|신안/.test(compact)) return '전라도';
+  if (/경상북도|경상남도|경북|경남|경상|포항|경주|김천|안동|구미|영주|영천|상주|문경|경산|군위|의성|청송|영양|영덕|청도|고령|성주|칠곡|예천|봉화|울진|울릉|창원|진주|통영|사천|김해|밀양|거제|양산|의령|함안|창녕|고성|남해|하동|산청|함양|거창|합천/.test(compact)) return '경상도';
+
+  if (/경기도|경기|수원|용인|성남|화성|안산|안양|평택|시흥|광명|군포|오산|이천|안성|의왕|과천|여주|양평|하남|광주시|부천|고양|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) {
+    if (/고양|일산|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) return '경기북부';
+    return '경기남부';
+  }
+
+  if (/광주/.test(compact)) return '광주';
+  return null;
+}
+
+function inferDisplayRegion(row: any) {
+  return (
+    normalizeRegionByAddress(row.work_address) ||
+    normalizeRegionByAddress(row.site_address) ||
+    normalizeRegionByAddress(row.raw_text) ||
+    normalizeText(row.region_name) ||
+    '미지정'
+  );
+}
+
 function normalizePhone(value: unknown): string | null {
   const text = normalizeText(value);
   if (!text) return null;
@@ -249,6 +288,7 @@ function normalizeRows(rows: any[]) {
 
     return {
       ...row,
+      region_name: inferDisplayRegion(row),
       ad_section: normalizeAdSection(row.ad_section),
       manager_name: manager.manager_name,
       manager_phone: manager.manager_phone,
