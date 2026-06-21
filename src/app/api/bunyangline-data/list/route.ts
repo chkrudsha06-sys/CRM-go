@@ -115,11 +115,61 @@ function normalizeRegionByAddress(value: unknown): string | null {
   return null;
 }
 
+function extractAddressCandidatesFromText(value: unknown): string[] {
+  const text = normalizeText(value);
+  if (!text) return [];
+
+  const candidates = new Set<string>();
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean);
+
+  const patterns = [
+    /(?:근무지\s*정보|근무지정보)[\s\S]{0,700}/g,
+    /(?:근무지\s*지역\s*주소|근무지역\s*주소|근무지\s*주소|근무주소|근무지역)\s*[:：]?\s*([^\n]{3,160})/g,
+    /(?:사업지\s*정보|사업지정보|현장\s*정보|현장정보)[\s\S]{0,700}/g,
+    /(?:사업지\s*주소|현장\s*주소|주소)\s*[:：]?\s*([^\n]{3,160})/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const found = normalizeText(match[1] || match[0]);
+      if (found) candidates.add(found.slice(0, 300));
+    }
+  }
+
+  const regionAddressLine = /(서울특별시|서울시|인천광역시|인천시|부산광역시|부산시|울산광역시|울산시|대구광역시|대구시|대전광역시|대전시|세종특별자치시|세종시|광주광역시|강원특별자치도|강원도|제주특별자치도|제주도|충청북도|충청남도|충북|충남|전북특별자치도|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|경기도)\s*[^\n]{0,120}/g;
+  for (const line of lines) {
+    for (const match of line.matchAll(regionAddressLine)) {
+      const found = normalizeText(match[0]);
+      if (found) candidates.add(found.slice(0, 300));
+    }
+  }
+
+  return Array.from(candidates).filter((candidate) => {
+    const compact = candidate.replace(/\s+/g, '');
+    if (compact.length < 3) return false;
+    if (/서울경기|경기인천|부산대구|광주대전|전국|지역현장|맞춤현장|지도현장|관심현장|서포터즈/.test(compact)) return false;
+    return true;
+  });
+}
+
+function inferRegionFromAddressText(value: unknown): string | null {
+  const direct = normalizeRegionByAddress(value);
+  if (direct) return direct;
+
+  for (const candidate of extractAddressCandidatesFromText(value)) {
+    const region = normalizeRegionByAddress(candidate);
+    if (region) return region;
+  }
+
+  return null;
+}
+
 function inferDisplayRegion(row: any) {
   return (
-    normalizeRegionByAddress(row.work_address) ||
-    normalizeRegionByAddress(row.site_address) ||
-    normalizeRegionByAddress(row.raw_text) ||
+    inferRegionFromAddressText(row.work_address) ||
+    inferRegionFromAddressText(row.site_address) ||
+    inferRegionFromAddressText(row.raw_text) ||
+    normalizeText(row.actual_region_name) ||
     normalizeText(row.region_name) ||
     '미지정'
   );
@@ -333,9 +383,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (region !== '모든지역') {
-      query = query.eq('region_name', region);
-    }
+    // 지역은 DB의 목록 기준 값이 아니라, 조회 후 주소 기반 보정값으로 필터링합니다.
 
     if (onlyNew) {
       query = query.eq('is_new', true);
@@ -363,11 +411,14 @@ export async function GET(request: NextRequest) {
     }
 
     const normalizedData = normalizeRows(data ?? []);
+    const filteredData = region === '모든지역'
+      ? normalizedData
+      : normalizedData.filter((row) => row.region_name === region);
 
     return NextResponse.json({
       ok: true,
-      count: normalizedData.length,
-      data: normalizedData,
+      count: filteredData.length,
+      data: filteredData,
     });
   } catch (error) {
     const errorPayload = toErrorPayload(error);
