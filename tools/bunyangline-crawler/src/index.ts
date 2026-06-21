@@ -224,6 +224,21 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+
+function collectRegexMatches(text: string, regex: RegExp) {
+  const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
+  const safeRegex = new RegExp(regex.source, flags);
+  const matches: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = safeRegex.exec(text)) !== null) {
+    matches.push(match);
+    if (match[0] === '') safeRegex.lastIndex += 1;
+  }
+
+  return matches;
+}
+
 function firstPhoneInText(value: string | null | undefined) {
   const text = normalizeText(value);
   if (!text) return null;
