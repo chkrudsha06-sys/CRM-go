@@ -128,7 +128,6 @@ type EditForm = {
 type AdRequestForm = {
   category: string;
   content: string;
-  etc_note: string;
   priority: string;
   assignee: string;
   tagged: string[];
@@ -182,6 +181,13 @@ const LEGACY_STORAGE_KEYS = [
   "crm_pipeline3_customers",
 ];
 const TODAY = new Date().toISOString().slice(0, 10);
+
+function toDateInputValue(value?: string | null) {
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  return TODAY;
+}
+
 const UNREVIEWED_GRADE = "심사미진행";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
@@ -219,6 +225,8 @@ const PIPELINE_SELECT_FIELDS =
   "id,name,title,phone,intake_route,company,management_stage,customer_grade,memo,meeting_result,meeting_date,meeting_date_text,meeting_address,reservation_date,contract_date,churn_date,created_at,updated_at,crm_db_source,vip_transferred_at,assigned_to,regular_payment_date,payment_channel";
 
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
+const QUICK_GRADE_OPTIONS = ["챌린저", "마스터", "브론즈"];
+
 const INTAKE_ROUTES = [
   "분양의신DB",
   "완판트럭",
@@ -261,12 +269,6 @@ const CATEGORIES = [
   "호갱노노(기타광고)",
   "일반 업무요청",
 ];
-const TASK_CATEGORIES_WITH_ETC_NOTE = [
-  "LMS업무요청",
-  "호갱노노(직방)_채널톡",
-  "호갱노노(직방)_단지마커",
-  "호갱노노(기타광고)",
-];
 const PRIORITIES = ["긴급", "높음", "보통", "낮음"];
 const LMS_PLATFORMS = [
   "삼성카드",
@@ -292,7 +294,6 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const EMPTY_AD_REQUEST_FORM: AdRequestForm = {
   category: "LMS업무요청",
   content: "",
-  etc_note: "",
   priority: "보통",
   assignee: "",
   tagged: [],
@@ -623,20 +624,6 @@ function formatPhoneAuto(val: string): string {
   return digits;
 }
 
-function fieldValue(value: string) {
-  return value?.trim() || "-";
-}
-
-function buildEtcNoteBlock(form: AdRequestForm) {
-  if (!TASK_CATEGORIES_WITH_ETC_NOTE.includes(form.category)) return [];
-
-  return [
-    ``,
-    `[기타사항]`,
-    `${fieldValue(form.etc_note)}`,
-  ];
-}
-
 function buildTaskContent(form: AdRequestForm) {
   if (form.category === "LMS업무요청") {
     return [
@@ -657,7 +644,6 @@ function buildTaskContent(form: AdRequestForm) {
       `9. 타겟연령: ${form.age_range}세 (부동산 관심자)`,
       `10. 스크립트: ${form.script === "O" ? form.script_text : form.script === "스크립트요청" ? "스크립트 요청" : "X"}`,
       `11. 발송도메인: ${form.domain || "X"}`,
-      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -685,7 +671,6 @@ function buildTaskContent(form: AdRequestForm) {
       `13. CTA 영역: 왼) ${form.cta_left} , 오) ${form.cta_right}`,
       `→ 발송도메인: ${form.domain || "X"}`,
       `14. 쿠폰여부: ${form.coupon === "O" ? form.coupon_text || "별도첨부" : "해당없음"}`,
-      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -711,14 +696,6 @@ function buildTaskContent(form: AdRequestForm) {
       ``,
       `PSD첨부: ${form.psd_file || "없음"}`,
       `조감도 첨부: ${form.bird_file || "없음"}`,
-      ...buildEtcNoteBlock(form),
-    ].join("\n");
-  }
-
-  if (form.category === "호갱노노(기타광고)") {
-    return [
-      form.content,
-      ...buildEtcNoteBlock(form),
     ].join("\n");
   }
 
@@ -948,6 +925,8 @@ function DetailPanel({
   onClose,
   onStageChange,
   onContractConvert,
+  onContractDateSave,
+  onGradeSave,
   onMeetingSave,
   onOpenNoteComposer,
   onOpenEdit,
@@ -967,6 +946,8 @@ function DetailPanel({
     paymentDate?: string,
     paymentChannel?: string,
   ) => void;
+  onContractDateSave: (customer: PipelineCustomer, contractDate: string) => void;
+  onGradeSave: (customer: PipelineCustomer, grade: string) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -1081,6 +1062,8 @@ function DetailPanel({
               customer={customer}
               onStageChange={onStageChange}
               onContractConvert={onContractConvert}
+              onContractDateSave={onContractDateSave}
+              onGradeSave={onGradeSave}
               onMeetingSave={onMeetingSave}
               onOpenNoteComposer={onOpenNoteComposer}
             />
@@ -1344,6 +1327,8 @@ function SummaryTab({
   customer,
   onStageChange,
   onContractConvert,
+  onContractDateSave,
+  onGradeSave,
   onMeetingSave,
   onOpenNoteComposer,
 }: {
@@ -1355,6 +1340,8 @@ function SummaryTab({
     paymentDate?: string,
     paymentChannel?: string,
   ) => void;
+  onContractDateSave: (customer: PipelineCustomer, contractDate: string) => void;
+  onGradeSave: (customer: PipelineCustomer, grade: string) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -1460,6 +1447,8 @@ function SummaryTab({
         customer={customer}
         onStageChange={onStageChange}
         onContractConvert={onContractConvert}
+        onContractDateSave={onContractDateSave}
+        onGradeSave={onGradeSave}
         onMeetingSave={onMeetingSave}
         onOpenNoteComposer={onOpenNoteComposer}
       />
@@ -1471,6 +1460,8 @@ function QuickActions({
   customer,
   onStageChange,
   onContractConvert,
+  onContractDateSave,
+  onGradeSave,
   onMeetingSave,
   onOpenNoteComposer,
 }: {
@@ -1482,6 +1473,8 @@ function QuickActions({
     paymentDate?: string,
     paymentChannel?: string,
   ) => void;
+  onContractDateSave: (customer: PipelineCustomer, contractDate: string) => void;
+  onGradeSave: (customer: PipelineCustomer, grade: string) => void;
   onMeetingSave: (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -1492,6 +1485,12 @@ function QuickActions({
 }) {
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
+  const [contractDateOpen, setContractDateOpen] = useState(false);
+  const [gradeEditOpen, setGradeEditOpen] = useState(false);
+  const [contractEditDate, setContractEditDate] = useState(toDateInputValue(customer.raw.contract_date));
+  const [gradeEditValue, setGradeEditValue] = useState(
+    QUICK_GRADE_OPTIONS.includes(customer.raw.customer_grade) ? customer.raw.customer_grade : QUICK_GRADE_OPTIONS[0],
+  );
   const [contractPaymentDate, setContractPaymentDate] = useState(customer.raw.regular_payment_date || "");
   const [contractPaymentChannel, setContractPaymentChannel] = useState(customer.raw.payment_channel || "");
   const [meetingDate, setMeetingDate] = useState("");
@@ -1502,8 +1501,20 @@ function QuickActions({
   useEffect(() => {
     setContractPaymentDate(customer.raw.regular_payment_date || "");
     setContractPaymentChannel(customer.raw.payment_channel || "");
+    setContractEditDate(toDateInputValue(customer.raw.contract_date));
+    setGradeEditValue(
+      QUICK_GRADE_OPTIONS.includes(customer.raw.customer_grade) ? customer.raw.customer_grade : QUICK_GRADE_OPTIONS[0],
+    );
     setContractOpen(false);
-  }, [customer.id, customer.raw.regular_payment_date, customer.raw.payment_channel]);
+    setContractDateOpen(false);
+    setGradeEditOpen(false);
+  }, [
+    customer.id,
+    customer.raw.regular_payment_date,
+    customer.raw.payment_channel,
+    customer.raw.contract_date,
+    customer.raw.customer_grade,
+  ]);
 
   const handleMeetingSubmit = () => {
     if (!meetingDate) {
@@ -1530,6 +1541,26 @@ function QuickActions({
 
     onContractConvert(customer, "계약완료", contractPaymentDate, contractPaymentChannel);
     setContractOpen(false);
+  };
+
+  const handleContractDateEditSubmit = () => {
+    if (!contractEditDate) {
+      alert("계약완료일을 선택해주세요.");
+      return;
+    }
+
+    onContractDateSave(customer, contractEditDate);
+    setContractDateOpen(false);
+  };
+
+  const handleGradeEditSubmit = () => {
+    if (!QUICK_GRADE_OPTIONS.includes(gradeEditValue)) {
+      alert("심사결과를 선택해주세요.");
+      return;
+    }
+
+    onGradeSave(customer, gradeEditValue);
+    setGradeEditOpen(false);
   };
 
   return (
@@ -1582,7 +1613,106 @@ function QuickActions({
           <MessageSquare size={14} />
           활동노트 작성
         </button>
+        <button
+          type="button"
+          onClick={() => setContractDateOpen((value) => !value)}
+          className="btn-premium btn-secondary w-full"
+        >
+          <CalendarDays size={14} />
+          계약완료일 수정
+        </button>
+        <button
+          type="button"
+          onClick={() => setGradeEditOpen((value) => !value)}
+          className="btn-premium btn-secondary w-full"
+        >
+          <Award size={14} />
+          심사결과 수정
+        </button>
       </div>
+
+      {contractDateOpen ? (
+        <div
+          className="mt-4 grid gap-3 rounded-[16px] border p-4 md:grid-cols-[1fr_auto_auto]"
+          style={{
+            background: "var(--surface-2)",
+            borderColor: "var(--border-subtle)",
+          }}
+        >
+          <label className="block space-y-1.5">
+            <span className="crm-tiny">계약완료일</span>
+            <input
+              type="date"
+              value={contractEditDate}
+              onChange={(event) => setContractEditDate(event.target.value)}
+              className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setContractDateOpen(false)}
+            className="btn-premium btn-secondary h-10 self-end"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleContractDateEditSubmit}
+            className="btn-premium btn-primary h-10 self-end"
+          >
+            저장
+          </button>
+        </div>
+      ) : null}
+
+      {gradeEditOpen ? (
+        <div
+          className="mt-4 grid gap-3 rounded-[16px] border p-4 md:grid-cols-[1fr_auto_auto]"
+          style={{
+            background: "var(--surface-2)",
+            borderColor: "var(--border-subtle)",
+          }}
+        >
+          <label className="block space-y-1.5">
+            <span className="crm-tiny">심사결과</span>
+            <select
+              value={gradeEditValue}
+              onChange={(event) => setGradeEditValue(event.target.value)}
+              className="h-10 w-full rounded-[10px] border px-3 text-[13px] font-semibold outline-none"
+              style={{
+                background: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+                color: "var(--text-strong)",
+              }}
+            >
+              {QUICK_GRADE_OPTIONS.map((grade) => (
+                <option key={grade} value={grade}>
+                  {grade}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setGradeEditOpen(false)}
+            className="btn-premium btn-secondary h-10 self-end"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleGradeEditSubmit}
+            className="btn-premium btn-primary h-10 self-end"
+          >
+            저장
+          </button>
+        </div>
+      ) : null}
 
       {contractOpen ? (
         <div
@@ -2728,21 +2858,6 @@ function AdRequestModal({
             </div>
           )}
 
-          {TASK_CATEGORIES_WITH_ETC_NOTE.includes(form.category) && (
-            <div>
-              <InputLabel>기타사항</InputLabel>
-              <textarea
-                className={textareaClass}
-                value={form.etc_note}
-                onChange={(event) =>
-                  setForm({ ...form, etc_note: event.target.value })
-                }
-                placeholder="업무요청에 추가로 전달할 기타사항을 입력하세요."
-                rows={4}
-              />
-            </div>
-          )}
-
           <div>
             <InputLabel>파일첨부</InputLabel>
             <input
@@ -3135,6 +3250,24 @@ export default function Pipeline3Page() {
     });
   };
 
+  const handleContractDateSave = (customer: PipelineCustomer, contractDate: string) => {
+    const cleanMemo = stripGradeAssessmentBlock(customer.raw.memo);
+
+    updateRecord(customer.id, {
+      management_stage: "리텐션",
+      meeting_result: "계약완료",
+      reservation_date: customer.raw.reservation_date || null,
+      contract_date: contractDate,
+      memo: mergeMemoWithExistingGradeBlock(cleanMemo, customer.raw.memo),
+    });
+  };
+
+  const handleGradeSave = (customer: PipelineCustomer, grade: string) => {
+    updateRecord(customer.id, {
+      customer_grade: grade,
+    });
+  };
+
   const handleMeetingSave = (
     customer: PipelineCustomer,
     meetingDate: string,
@@ -3416,6 +3549,8 @@ export default function Pipeline3Page() {
           onClose={() => setSelectedCustomerId(null)}
           onStageChange={handleStageChange}
           onContractConvert={handleContractConvert}
+          onContractDateSave={handleContractDateSave}
+          onGradeSave={handleGradeSave}
           onMeetingSave={handleMeetingSave}
           onPaymentSave={handlePaymentSave}
           onOpenNoteComposer={handleOpenNoteComposer}
