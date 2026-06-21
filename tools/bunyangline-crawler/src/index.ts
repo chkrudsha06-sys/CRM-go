@@ -38,6 +38,10 @@ type Candidate = {
   source_id: string;
   title: string;
   region_name: string;
+  list_region_name: string | null;
+  actual_region_name: string | null;
+  actual_region_source: string | null;
+  region_match_text: string | null;
   ad_section: string;
   list_date_group: string | null;
   posted_at_hint: string | null;
@@ -59,6 +63,10 @@ type NetworkRecord = {
 
 type BunyanglineItem = {
   region_name: string;
+  list_region_name: string | null;
+  actual_region_name: string | null;
+  actual_region_source: string | null;
+  region_match_text: string | null;
   ad_section: string;
   site_name: string;
   posted_at: string | null;
@@ -409,6 +417,108 @@ function normalizeSection(value: unknown) {
   if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
   if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
   return '일반';
+}
+
+
+function normalizeRegionByAddress(value: string | null | undefined): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+  const compact = text.replace(/\s+/g, '');
+
+  if (/서울특별시|서울시|\b서울\b|서울/.test(compact)) return '서울';
+  if (/인천광역시|인천시|\b인천\b|인천/.test(compact)) return '인천';
+  if (/부산광역시|부산시|\b부산\b|부산/.test(compact)) return '부산';
+  if (/울산광역시|울산시|\b울산\b|울산/.test(compact)) return '울산';
+  if (/대구광역시|대구시|\b대구\b|대구/.test(compact)) return '대구';
+  if (/대전광역시|대전시|\b대전\b|대전/.test(compact)) return '대전';
+  if (/세종특별자치시|세종시|\b세종\b|세종/.test(compact)) return '세종';
+  if (/광주광역시|광주광역|\b광주광역시\b/.test(compact)) return '광주';
+  if (/강원특별자치도|강원도|\b강원\b|강릉|원주|춘천|속초|동해|삼척|태백|홍천|횡성|평창|정선|영월|인제|고성|양양|철원|화천|양구/.test(compact)) return '강원도';
+  if (/제주특별자치도|제주도|\b제주\b|서귀포/.test(compact)) return '제주도';
+  if (/충청북도|충청남도|충북|충남|\b충청\b|천안|아산|청주|충주|제천|공주|보령|서산|논산|계룡|당진|금산|부여|서천|청양|홍성|예산|태안|음성|진천|괴산|단양|옥천|영동|증평|보은/.test(compact)) return '충청도';
+  if (/전북특별자치도|전라북도|전라남도|전북|전남|\b전라\b|전주|군산|익산|정읍|남원|김제|완주|진안|무주|장수|임실|순창|고창|부안|목포|여수|순천|나주|광양|담양|곡성|구례|고흥|보성|화순|장흥|강진|해남|영암|무안|함평|영광|장성|완도|진도|신안/.test(compact)) return '전라도';
+  if (/경상북도|경상남도|경북|경남|\b경상\b|포항|경주|김천|안동|구미|영주|영천|상주|문경|경산|군위|의성|청송|영양|영덕|청도|고령|성주|칠곡|예천|봉화|울진|울릉|창원|진주|통영|사천|김해|밀양|거제|양산|의령|함안|창녕|고성|남해|하동|산청|함양|거창|합천/.test(compact)) return '경상도';
+
+  if (/경기도|\b경기\b|수원|용인|성남|화성|안산|안양|평택|시흥|광명|군포|오산|이천|안성|의왕|과천|여주|양평|하남|광주시|부천|고양|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) {
+    if (/고양|일산|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) return '경기북부';
+    return '경기남부';
+  }
+
+  if (/광주/.test(compact)) return '광주';
+  return null;
+}
+
+function getWorkSectionLines(lines: string[]) {
+  return sliceSectionLines(lines, ['근무지 정보', '근무지정보', '근무 정보', '근무정보'], ['접수방법', '접수 방법', '상세정보', '상세 정보', '기업정보', '사업자 정보', '사업자정보', '급여정보', '급여 정보', '사업지 정보', '사업지정보']);
+}
+
+function getSiteSectionLines(lines: string[]) {
+  return sliceSectionLines(lines, ['사업지 정보', '사업지정보', '현장 정보', '현장정보'], ['사업자 정보', '사업자정보', '급여정보', '급여 정보', '상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법']);
+}
+
+const WORK_ADDRESS_LABELS = [
+  '근무지지역 주소',
+  '근무지 지역 주소',
+  '근무지역 주소',
+  '근무지 주소',
+  '근무주소',
+  '근무지역',
+  '주소',
+];
+
+const SITE_ADDRESS_LABELS = [
+  '사업지 주소',
+  '사업지주소',
+  '현장 주소',
+  '현장주소',
+  '사업지',
+  '주소',
+];
+
+function extractWorkAddress(lines: string[]) {
+  const workLines = getWorkSectionLines(lines);
+  const scoped = extractScopedLabelValue(workLines, WORK_ADDRESS_LABELS, WORK_ADDRESS_LABELS);
+  if (scoped) return scoped;
+
+  return findLabelValue(lines, ['근무지지역 주소', '근무지 지역 주소', '근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
+}
+
+function extractSiteAddress(lines: string[]) {
+  const siteLines = getSiteSectionLines(lines);
+  const scoped = extractScopedLabelValue(siteLines, SITE_ADDRESS_LABELS, SITE_ADDRESS_LABELS);
+  if (scoped) return scoped;
+
+  return findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
+}
+
+function inferActualRegion(params: {
+  listRegionName: string;
+  workAddress: string | null | undefined;
+  siteAddress: string | null | undefined;
+  rawText: string;
+}) {
+  const candidates = [
+    { source: '근무지주소', text: params.workAddress },
+    { source: '사업지주소', text: params.siteAddress },
+    { source: '상세본문', text: params.rawText },
+  ];
+
+  for (const candidate of candidates) {
+    const region = normalizeRegionByAddress(candidate.text || '');
+    if (region) {
+      return {
+        regionName: region,
+        source: candidate.source,
+        matchText: normalizeText(candidate.text || '')?.slice(0, 300) || null,
+      };
+    }
+  }
+
+  return {
+    regionName: params.listRegionName,
+    source: '목록지역',
+    matchText: params.listRegionName,
+  };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -948,8 +1058,14 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
 
     const title = await bestTitleFromPage(page, candidate.title);
     const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
-    const siteAddress = findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
-    const workAddress = findLabelValue(lines, ['근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
+    const siteAddress = extractSiteAddress(lines);
+    const workAddress = extractWorkAddress(lines);
+    const actualRegion = inferActualRegion({
+      listRegionName: candidate.region_name,
+      workAddress,
+      siteAddress,
+      rawText,
+    });
     const managerNameRaw =
       extractBusinessTableValue(lines, ['담당자 이름', '담당자명']) ||
       extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) ||
@@ -965,7 +1081,11 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
     const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
 
     return {
-      region_name: candidate.region_name,
+      region_name: actualRegion.regionName,
+      list_region_name: candidate.region_name,
+      actual_region_name: actualRegion.regionName,
+      actual_region_source: actualRegion.source,
+      region_match_text: actualRegion.matchText,
       ad_section: normalizeSection(candidate.ad_section),
       site_name: siteName,
       posted_at: dateInfo.postedAt,
