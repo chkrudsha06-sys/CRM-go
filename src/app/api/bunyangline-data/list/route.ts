@@ -158,12 +158,75 @@ function parseBusinessValue(text: string, labels: string[], nextLabels: string[]
   return null;
 }
 
+function compactLabel(value: unknown) {
+  return String(value ?? '').replace(/\s+/g, '').trim();
+}
+
+function sliceSectionLinesFromText(textValue: unknown, startLabels: string[], endLabels: string[]) {
+  const text = normalizeText(textValue);
+  if (!text) return [];
+
+  const lines = text.split('\n').map((line) => normalizeText(line)).filter(Boolean) as string[];
+  let start = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const compact = compactLabel(lines[index]);
+    if (startLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      start = index + 1;
+      break;
+    }
+  }
+  if (start < 0) return [];
+
+  let end = lines.length;
+  for (let index = start; index < lines.length; index += 1) {
+    const compact = compactLabel(lines[index]);
+    if (endLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end);
+}
+
+function escapeLabelPart(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractScopedLabelValue(sectionLines: string[], labels: string[], allLabels: string[]) {
+  if (!sectionLines.length) return null;
+
+  for (let index = 0; index < sectionLines.length; index += 1) {
+    const line = normalizeText(sectionLines[index]);
+    if (!line) continue;
+    const compact = compactLabel(line);
+
+    for (const label of labels) {
+      const labelCompact = compactLabel(label);
+      if (compact === labelCompact || compact.startsWith(labelCompact)) {
+        const labelPattern = label.split(/\s+/).map(escapeLabelPart).join('\\s*');
+        const inline = line.replace(new RegExp(`^${labelPattern}\\s*[:：]?\\s*`), '').trim();
+        if (inline && compactLabel(inline) !== labelCompact && !allLabels.some((item) => compactLabel(inline) === compactLabel(item))) return inline;
+
+        for (let cursor = index + 1; cursor < Math.min(index + 6, sectionLines.length); cursor += 1) {
+          const next = normalizeText(sectionLines[cursor]);
+          if (!next) continue;
+          if (allLabels.some((item) => compactLabel(next) === compactLabel(item) || compactLabel(next).startsWith(compactLabel(item)))) break;
+          return next;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function parseAgencyFromText(text: string) {
-  return stripLabelNoise(parseBusinessValue(text, ['대행사'], ['담당자 이름', '담당자명', '담당자 연락처', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || null);
+  const businessLines = sliceSectionLinesFromText(text, ['사업자 정보', '사업자정보'], ['급여정보', '급여 정보', '사업지 정보', '사업지정보', '상세정보', '상세 정보', '접수방법', '접수 방법']);
+  return stripLabelNoise(extractScopedLabelValue(businessLines, ['대행사'], ['시행사', '시공사', '신탁사', '대행사', '담당자 이름', '담당자명', '담당자 연락처', '담당자연락처', '연락처', '전화번호']));
 }
 
 function parseApartmentFeeFromText(text: string) {
-  const value = parseBusinessValue(text, ['아파트 분양'], ['오피스텔 분양', '상가 분양', '상세정보', '상세 정보', '근무지 정보', '사업자 정보', '접수방법']);
+  const salaryLines = sliceSectionLinesFromText(text, ['급여정보', '급여 정보'], ['상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법', '기업정보', '사업자 정보', '사업자정보', '사업지 정보', '사업지정보']);
+  const value = extractScopedLabelValue(salaryLines, ['아파트 분양', '아파트분양'], ['형태', '계약 수수료', '계약수수료', '아파트 분양', '아파트분양', '오피스텔 분양', '오피스텔분양', '상가 분양', '상가분양', '수수료']);
   if (value && /\d|만|원|%|협의|지급/.test(value)) return stripLabelNoise(value);
   return null;
 }
