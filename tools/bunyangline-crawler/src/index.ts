@@ -274,6 +274,127 @@ function extractBusinessValue(lines: string[], labels: string[], nextLabels: str
   return null;
 }
 
+function compactLabel(value: string | null | undefined) {
+  return normalizeText(value).replace(/\s+/g, '');
+}
+
+function isAnyLabelLine(line: string, labels: string[]) {
+  const compact = compactLabel(line);
+  return labels.some((label) => compact === compactLabel(label));
+}
+
+function startsWithAnyLabel(line: string, labels: string[]) {
+  const compact = compactLabel(line);
+  return labels.some((label) => compact.startsWith(compactLabel(label)));
+}
+
+function sliceSectionLines(lines: string[], startLabels: string[], endLabels: string[]) {
+  let start = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = normalizeText(lines[index]);
+    if (!line) continue;
+    const compact = compactLabel(line);
+    if (startLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      start = index + 1;
+      break;
+    }
+  }
+
+  if (start < 0) return [];
+
+  let end = lines.length;
+  for (let index = start; index < lines.length; index += 1) {
+    const line = normalizeText(lines[index]);
+    if (!line) continue;
+    const compact = compactLabel(line);
+    if (endLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
+      end = index;
+      break;
+    }
+  }
+
+  return lines.slice(start, end).map((line) => normalizeText(line)).filter(Boolean);
+}
+
+function flexibleLabelPattern(label: string) {
+  return label.split(/\s+/).map(escapeRegExp).join('\\s*');
+}
+
+function removeLeadingLabel(line: string, label: string) {
+  const pattern = new RegExp(`^${flexibleLabelPattern(label)}\\s*[:：]?\\s*`);
+  return normalizeText(line.replace(pattern, ''));
+}
+
+function extractScopedLabelValue(sectionLines: string[], labels: string[], allLabels: string[]) {
+  if (!sectionLines.length) return null;
+
+  const sectionHeadingLabels = [
+    '사업자 정보',
+    '사업자정보',
+    '급여정보',
+    '급여 정보',
+    '사업지 정보',
+    '사업지정보',
+    '상세정보',
+    '상세 정보',
+    '접수방법',
+    '접수 방법',
+  ];
+
+  for (let index = 0; index < sectionLines.length; index += 1) {
+    const line = normalizeText(sectionLines[index]);
+    if (!line) continue;
+
+    for (const label of labels) {
+      const compact = compactLabel(line);
+      const labelCompact = compactLabel(label);
+      if (compact === labelCompact || compact.startsWith(labelCompact)) {
+        const inlineValue = removeLeadingLabel(line, label);
+        if (inlineValue && !isAnyLabelLine(inlineValue, allLabels) && !startsWithAnyLabel(inlineValue, sectionHeadingLabels)) {
+          return inlineValue;
+        }
+
+        for (let cursor = index + 1; cursor < Math.min(index + 6, sectionLines.length); cursor += 1) {
+          const next = normalizeText(sectionLines[cursor]);
+          if (!next) continue;
+          if (isAnyLabelLine(next, allLabels) || startsWithAnyLabel(next, sectionHeadingLabels)) break;
+          return next;
+        }
+      }
+    }
+  }
+
+  const joined = sectionLines.join(' ');
+  for (const label of labels) {
+    const nextLabels = allLabels.filter((item) => compactLabel(item) !== compactLabel(label));
+    const value = findJoinedLabelValue(joined, label, [...nextLabels, ...sectionHeadingLabels]);
+    if (value && !isAnyLabelLine(value, allLabels)) return value;
+  }
+
+  return null;
+}
+
+function getBusinessSectionLines(lines: string[]) {
+  return sliceSectionLines(lines, ['사업자 정보', '사업자정보'], ['급여정보', '급여 정보', '사업지 정보', '사업지정보', '상세정보', '상세 정보', '접수방법', '접수 방법']);
+}
+
+function getSalarySectionLines(lines: string[]) {
+  return sliceSectionLines(lines, ['급여정보', '급여 정보'], ['상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법', '기업정보', '사업자 정보', '사업자정보', '사업지 정보', '사업지정보']);
+}
+
+const BUSINESS_TABLE_LABELS = ['시행사', '시공사', '신탁사', '대행사', '담당자 이름', '담당자명', '담당자 연락처', '담당자연락처', '연락처', '전화번호'];
+const SALARY_TABLE_LABELS = ['형태', '계약 수수료', '계약수수료', '아파트 분양', '아파트분양', '오피스텔 분양', '오피스텔분양', '상가 분양', '상가분양', '수수료'];
+
+function extractBusinessTableValue(lines: string[], labels: string[]) {
+  const businessLines = getBusinessSectionLines(lines);
+  return extractScopedLabelValue(businessLines, labels, BUSINESS_TABLE_LABELS);
+}
+
+function extractSalaryTableValue(lines: string[], labels: string[]) {
+  const salaryLines = getSalarySectionLines(lines);
+  return extractScopedLabelValue(salaryLines, labels, SALARY_TABLE_LABELS);
+}
+
 function splitManagerFields(managerNameRaw: string | null | undefined, managerPhoneRaw: string | null | undefined) {
   const combined = normalizeText(`${managerNameRaw || ''} ${managerPhoneRaw || ''}`);
   const phone = firstPhoneInText(combined) || normalizePhone(managerPhoneRaw || '') || '-';
@@ -829,10 +950,16 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
     const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
     const siteAddress = findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
     const workAddress = findLabelValue(lines, ['근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
-    const managerNameRaw = extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-';
-    const managerPhoneRaw = extractBusinessValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']) || '-';
+    const managerNameRaw =
+      extractBusinessTableValue(lines, ['담당자 이름', '담당자명']) ||
+      extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) ||
+      '-';
+    const managerPhoneRaw =
+      extractBusinessTableValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']) ||
+      extractBusinessValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']) ||
+      '-';
     const { managerName, managerPhone } = splitManagerFields(managerNameRaw, managerPhoneRaw);
-    const agencyCompany = stripLabelNoise(extractBusinessValue(lines, ['대행사'], ['담당자 이름', '담당자명', '담당자 연락처', '급여정보', '급여 정보', '상세정보', '사업자 정보']) || '-');
+    const agencyCompany = stripLabelNoise(extractBusinessTableValue(lines, ['대행사']) || '-') || '-';
     const category = findLabelValue(lines, ['업종', '상품유형', '분류', '카테고리']);
     const detailText = extractDetailSection(lines, ['상세정보', '상세 정보'], ['접수방법', '접수 방법', '기업정보', '사업자 정보']) || rawText.slice(0, 3000) || '-';
     const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
@@ -846,7 +973,7 @@ async function parseDetail(context: BrowserContext, candidate: Candidate): Promi
       manager_name: managerName,
       manager_phone: managerPhone,
       agency_company: agencyCompany,
-      apartment_fee: extractApartmentFee(lines),
+      apartment_fee: stripLabelNoise(extractSalaryTableValue(lines, ['아파트 분양', '아파트분양']) || extractApartmentFee(getSalarySectionLines(lines)) || '-') || '-',
       move_in_date: extractMoveInDate(lines),
       source_url: normalizeSourceUrl(candidate.source_url),
       source_id: extractSourceId(candidate.source_url),
