@@ -40,6 +40,21 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
+
+function collectRegexMatches(text: string, pattern: RegExp): RegExpExecArray[] {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const safePattern = new RegExp(pattern.source, flags);
+  const matches: RegExpExecArray[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = safePattern.exec(text)) !== null) {
+    matches.push(match);
+    if (match[0] === '') safePattern.lastIndex += 1;
+  }
+
+  return matches;
+}
+
 function firstValue(row: ImportItem, keys: string[]): unknown {
   for (const key of keys) {
     const value = row[key];
@@ -136,7 +151,7 @@ function extractAddressCandidatesFromText(value: unknown): string[] {
   ];
 
   for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) {
+    for (const match of collectRegexMatches(text, pattern)) {
       const found = normalizeText(match[1] || match[0]);
       if (found) candidates.add(found.slice(0, 300));
     }
@@ -144,7 +159,7 @@ function extractAddressCandidatesFromText(value: unknown): string[] {
 
   const regionAddressLine = /(서울특별시|서울시|인천광역시|인천시|부산광역시|부산시|울산광역시|울산시|대구광역시|대구시|대전광역시|대전시|세종특별자치시|세종시|광주광역시|강원특별자치도|강원도|제주특별자치도|제주도|충청북도|충청남도|충북|충남|전북특별자치도|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|경기도)\s*[^\n]{0,120}/g;
   for (const line of lines) {
-    for (const match of line.matchAll(regionAddressLine)) {
+    for (const match of collectRegexMatches(line, regionAddressLine)) {
       const found = normalizeText(match[0]);
       if (found) candidates.add(found.slice(0, 300));
     }
