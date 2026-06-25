@@ -12,6 +12,13 @@ const EXEC_MEMBERS = [
   { name: "최연전", title: "CX" },
 ];
 
+function normalizeMemberName(name: unknown): string {
+  return String(name || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,8 +97,10 @@ export async function GET() {
       .select("owner_name, is_outside_meeting")
       .eq("work_date", today);
 
-    const registeredNames = new Set((rows || []).map((r: any) => r.owner_name));
-    const missing = EXEC_MEMBERS.filter((m) => !registeredNames.has(m.name));
+    const registeredNames = new Set(
+      (rows || []).map((r: any) => normalizeMemberName(r.owner_name))
+    );
+    const missing = EXEC_MEMBERS.filter((m) => !registeredNames.has(normalizeMemberName(m.name)));
 
     if (missing.length === 0) {
       return NextResponse.json({ ok: true, skipped: true, reason: "전원 등록 완료" });

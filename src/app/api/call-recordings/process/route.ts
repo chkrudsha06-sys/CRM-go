@@ -31,6 +31,10 @@ type ManagerFolder = {
 
 type ContactRow = Record<string, unknown>;
 
+const DEFAULT_PROCESS_LIMIT = 3;
+const FAILED_RETRY_DELAY_MS = 60 * 60 * 1000;
+const PENDING_RETRY_DELAY_MS = 15 * 60 * 1000;
+
 function getRequiredEnv(name: string) {
   const value = process.env[name];
 
@@ -1002,28 +1006,63 @@ async function findContactsByPhone(phone: string | null) {
     return numbers.includes(normalizedPhone);
   });
 
-  // 고객DB TM 고객 중 재TM진행인 경우만 통화요약 대상
-  const tmRows = matchedRows.filter((contact) => {
+  // 파이프라인3은 화면과 동일하게 VIP활동DB 데이터만 대상으로 합니다.
+  // 고객DB에도 management_stage="리드"가 저장되므로 관리단계만으로 구분하면 안 됩니다.
+  const pipelineRows = matchedRows.filter((contact) => {
+    const source = getStringField(contact, "crm_db_source");
+    const stage = getStringField(contact, "management_stage");
+    return (
+      source === "vip_activity" &&
+      ["리드", "프로스펙팅", "딜크로징", "딜클로징", "리텐션"].includes(stage)
+    );
+  });
+
+  // 파이프라인 고객은 고객DB의 TM 감도와 무관하게 항상 우선 처리합니다.
+  if (pipelineRows.length > 0) {
+    const contacts = pipelineRows.map(simplifyContact);
+
+    if (contacts.length === 1) {
+      return {
+        status: "matched",
+        message: "파이프라인3 고객이 정확히 1명 매칭되었습니다.",
+        normalizedPhone,
+        matchedCount: contacts.length,
+        contacts,
+        matchSource: "pipeline3",
+        matchSourceLabel: "파이프라인3",
+      };
+    }
+
+    return {
+      status: "duplicate",
+      message: "파이프라인3에 동일한 연락처를 가진 고객이 2명 이상입니다. 자동 저장 전 검토가 필요합니다.",
+      normalizedPhone,
+      matchedCount: contacts.length,
+      contacts,
+      matchSource: null,
+      matchSourceLabel: null,
+    };
+  }
+
+  const customerDbTmRows = matchedRows.filter((contact) => {
+    return (
+      getStringField(contact, "crm_db_source") === "customer_db" &&
+      contact.has_tm === true
+    );
+  });
+
+  // 고객DB TM 고객은 재TM진행인 경우만 통화요약 대상입니다.
+  const tmRows = customerDbTmRows.filter((contact) => {
     if (contact.has_tm !== true) return false;
     const sensitivity = getContactSensitivity(contact);
     return sensitivity === "재TM진행";
   });
 
-  // 파이프라인3 고객 (감도 필터 미적용 — 파이프라인은 별도 관리)
-  const pipelineRows = matchedRows.filter((contact) => {
-    const stage = getStringField(contact, "management_stage");
-    return ["리드", "프로스펙팅", "딜크로징", "딜클로징", "리텐션"].includes(stage);
-  });
-
-  // 고객DB TM 중 감도없음인 경우 → 요약 제외 처리용
-  const tmRowsAll = matchedRows.filter((contact) => contact.has_tm === true);
-  const tmSensitivitySkipped = tmRowsAll.length > 0 && tmRows.length === 0;
-
-  // 감도없음 고객DB TM이 매칭된 경우 → 통화요약 건너뜀
-  if (tmSensitivitySkipped) {
+  // 고객DB TM이 매칭됐지만 재TM진행이 아니면 요약하지 않습니다.
+  if (customerDbTmRows.length > 0 && tmRows.length === 0) {
     return {
       status: "not_found",
-      message: "고객DB TM 고객이 매칭되었으나 고객감도가 '감도없음'으로 설정되어 통화요약을 진행하지 않습니다.",
+      message: "고객DB TM 고객이 매칭되었으나 고객감도가 '재TM진행'이 아니어서 통화요약을 진행하지 않습니다.",
       normalizedPhone,
       matchedCount: 0,
       contacts: [],
@@ -1032,21 +1071,21 @@ async function findContactsByPhone(phone: string | null) {
     };
   }
 
-  const selectedRows = tmRows.length > 0 ? tmRows : pipelineRows.length > 0 ? pipelineRows : matchedRows;
+  const selectedRows = tmRows.length > 0 ? tmRows : matchedRows;
   const contacts = selectedRows.map(simplifyContact);
 
   if (contacts.length === 1) {
-    const matchSource = tmRows.length > 0 ? "customer_db_tm" : "pipeline3";
+    const matchSource = tmRows.length > 0 ? "customer_db_tm" : "contacts";
     return {
       status: "matched",
       message: tmRows.length > 0
         ? "고객DB TM 고객(재TM진행)이 정확히 1명 매칭되었습니다."
-        : "파이프라인3 고객이 정확히 1명 매칭되었습니다.",
+        : "연락처가 정확히 1명 매칭되었습니다.",
       normalizedPhone,
       matchedCount: contacts.length,
       contacts,
       matchSource,
-      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM·재TM진행)" : "파이프라인3",
+      matchSourceLabel: tmRows.length > 0 ? "고객DB(TM·재TM진행)" : "연락처",
     };
   }
 
@@ -1085,6 +1124,50 @@ async function getExistingLog(driveFileId: string) {
   }
 
   return data;
+}
+
+function getLogProcessedTime(log: Record<string, unknown>) {
+  const raw = log.processed_at || log.updated_at || log.created_at;
+  if (typeof raw !== "string") return 0;
+
+  const parsed = new Date(raw).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shouldSkipExistingLog(
+  log: Record<string, unknown> | null,
+  options: {
+    retryNeedsReview: boolean;
+    now: number;
+  }
+) {
+  if (!log) return false;
+
+  const status = getStringField(log, "status");
+
+  if (status === "processed" || status === "duplicate") {
+    return true;
+  }
+
+  // 고객 매칭 검토 건은 매 크론마다 재선택하지 않습니다.
+  // 데이터 수정 후 수동 재처리가 필요할 때만 retryNeedsReview=1로 다시 시도합니다.
+  if (status === "needs_review") {
+    return !options.retryNeedsReview;
+  }
+
+  const elapsed = options.now - getLogProcessedTime(log);
+
+  // 일시적인 외부 API 실패는 1시간 뒤 재시도합니다.
+  if (status === "failed" && elapsed < FAILED_RETRY_DELAY_MS) {
+    return true;
+  }
+
+  // 동시에 실행된 크론이 같은 파일을 중복 처리하지 않도록 pending에도 유예시간을 둡니다.
+  if (status === "pending" && elapsed < PENDING_RETRY_DELAY_MS) {
+    return true;
+  }
+
+  return false;
 }
 
 async function upsertLog(params: {
@@ -1409,7 +1492,10 @@ export async function GET(request: NextRequest) {
   try {
     const limit = Math.max(
       1,
-      Math.min(Number(url.searchParams.get("limit") || "1"), 5)
+      Math.min(Number(url.searchParams.get("limit") || String(DEFAULT_PROCESS_LIMIT)), 5)
+    );
+    const retryNeedsReview = ["1", "true"].includes(
+      String(url.searchParams.get("retryNeedsReview") || "").toLowerCase()
     );
 
     const accessToken = await getGoogleAccessToken();
@@ -1456,12 +1542,13 @@ export async function GET(request: NextRequest) {
       .filter((file) => isSupportedRecordingFile(file))
       .filter((file) => isFileAfterSyncStart(file, syncStartAt))
       .sort((a, b) => {
-        const recordSort = getRecordingSortTime(a) - getRecordingSortTime(b);
-        if (recordSort !== 0) return recordSort;
-
+        // 파일명 속 과거 통화일이 아니라 Drive 업로드 순서대로 처리합니다.
+        // 과거 녹음이 오늘 대량 업로드되어도 전날 미처리 파일보다 앞서지 않습니다.
         const createdA = new Date(a.createdTime || a.modifiedTime || 0).getTime();
         const createdB = new Date(b.createdTime || b.modifiedTime || 0).getTime();
-        return createdA - createdB;
+        if (createdA !== createdB) return createdA - createdB;
+
+        return getRecordingSortTime(a) - getRecordingSortTime(b);
       });
 
     const skippedOldFileCount = folderResults
@@ -1470,14 +1557,12 @@ export async function GET(request: NextRequest) {
       .filter((file) => !isFileAfterSyncStart(file, syncStartAt)).length;
 
     const processTargets = [];
+    const now = Date.now();
 
     for (const file of audioFiles) {
       const existingLog = await getExistingLog(file.id);
 
-      if (
-        existingLog?.status === "processed" ||
-        existingLog?.status === "duplicate"
-      ) {
+      if (shouldSkipExistingLog(existingLog, { retryNeedsReview, now })) {
         continue;
       }
 
@@ -1527,6 +1612,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       message: "Call recording process completed.",
       limit,
+      retryNeedsReview,
       syncStartAt: syncStartAt?.toISOString() || null,
       foundAudioFileCount: audioFiles.length,
       skippedOldFileCount,

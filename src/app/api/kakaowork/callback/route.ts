@@ -215,6 +215,18 @@ const EXEC_MEMBERS: Record<string, string> = {
   최연전: "CX",
 };
 
+function normalizeMemberName(name: unknown): string {
+  return String(name || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function canonicalExecMemberName(name: string): string {
+  const normalized = normalizeMemberName(name);
+  return Object.keys(EXEC_MEMBERS).find((memberName) => normalizeMemberName(memberName) === normalized) || name.trim();
+}
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -352,52 +364,57 @@ export async function POST(request: Request) {
 
     // ===== 일별활동 외근(미팅) 버튼 =====
     if (domain === "daily") {
-      const memberName = param1;
+      const memberName = canonicalExecMemberName(param1 || "");
       if (action !== "outside" || !memberName) return NextResponse.json({ ok: true });
 
       const title = EXEC_MEMBERS[memberName] || "";
       const today = todayKST();
 
       // 이미 등록된 기록이 있는지 확인
-      const { data: existing } = await supabase
+      // 이름에 공백/숨은 문자가 섞인 기존 행도 같은 담당자로 보고 업데이트합니다.
+      const { data: sameDateRows } = await supabase
         .from("daily_activity_goals")
-        .select("id")
-        .eq("work_date", today)
-        .eq("owner_name", memberName)
-        .maybeSingle();
+        .select("id, owner_name")
+        .eq("work_date", today);
+      const existing = (sameDateRows || []).find(
+        (row: any) => normalizeMemberName(row.owner_name) === normalizeMemberName(memberName)
+      );
 
       let error: any = null;
+      const outsidePayload = {
+        owner_name: memberName,
+        owner_title: title,
+        owner_role: "exec",
+        is_outside_meeting: true,
+        goal_consultant_db: 0,
+        goal_second_touch: 0,
+        goal_new_tm: 0,
+        goal_manage_tm: 0,
+        goal_coldtalk: 0,
+        goal_media_mix: 0,
+        goal_meeting_confirmed: 0,
+        goal_work_items: [],
+        result_consultant_db: 0,
+        result_second_touch: 0,
+        result_new_tm: 0,
+        result_manage_tm: 0,
+        result_coldtalk: 0,
+        result_media_mix: 0,
+        result_meeting_confirmed: 0,
+      };
 
       if (existing) {
         // 기존 기록이 있으면 외근으로 업데이트
         const res = await supabase
           .from("daily_activity_goals")
-          .update({ is_outside_meeting: true })
+          .update(outsidePayload)
           .eq("id", existing.id);
         error = res.error;
       } else {
         // 기록이 없으면 외근으로 신규 생성
         const res = await supabase.from("daily_activity_goals").insert({
           work_date: today,
-          owner_name: memberName,
-          owner_title: title,
-          owner_role: "exec",
-          is_outside_meeting: true,
-          goal_consultant_db: 0,
-          goal_second_touch: 0,
-          goal_new_tm: 0,
-          goal_manage_tm: 0,
-          goal_coldtalk: 0,
-          goal_media_mix: 0,
-          goal_meeting_confirmed: 0,
-          goal_work_items: [],
-          result_consultant_db: 0,
-          result_second_touch: 0,
-          result_new_tm: 0,
-          result_manage_tm: 0,
-          result_coldtalk: 0,
-          result_media_mix: 0,
-          result_meeting_confirmed: 0,
+          ...outsidePayload,
         });
         error = res.error;
       }

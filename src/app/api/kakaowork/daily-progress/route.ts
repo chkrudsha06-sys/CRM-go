@@ -14,6 +14,18 @@ const EXEC_MEMBERS = [
 
 const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
 
+function normalizeMemberName(name: unknown): string {
+  return String(name || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function findMemberRow(rows: any[] | null | undefined, memberName: string) {
+  const normalized = normalizeMemberName(memberName);
+  return (rows || []).find((item: any) => normalizeMemberName(item.owner_name) === normalized);
+}
+
 type AutoResult = {
   new_tm: number;
   consultant_db: number;
@@ -319,7 +331,7 @@ export async function GET() {
     blocks.push({ type: "divider" });
 
     const allMemberText = EXEC_MEMBERS.map((member) => {
-      const row = (rows || []).find((item: any) => item.owner_name === member.name);
+      const row = findMemberRow(rows, member.name);
       const live = realtimeResults[member.name] || { ...EMPTY_AUTO_RESULT };
       return buildMemberLines(row, member, live);
     }).join("\n\n");
@@ -336,7 +348,7 @@ export async function GET() {
       const achievers: { name: string; title: string }[] = [];
 
       for (const member of EXEC_MEMBERS) {
-        const row = (rows || []).find((item: any) => item.owner_name === member.name);
+        const row = findMemberRow(rows, member.name);
         const live = realtimeResults[member.name] || { ...EMPTY_AUTO_RESULT };
 
         if (row && isGoalAchieved(row, live)) {

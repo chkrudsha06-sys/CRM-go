@@ -7,6 +7,13 @@ const KAKAO_WORK_API_BASE = "https://api.kakaowork.com/v1";
 
 const VIEWER_NAMES = ["김창완", "최웅", "김재영", "최은정"];
 
+function normalizeMemberName(name: unknown): string {
+  return String(name || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 function getMentionEmail(name: string | null | undefined): string | null {
   if (!name) return null;
   const map = process.env.KAKAO_WORK_MENTION_MAP || "";
@@ -222,16 +229,19 @@ export async function POST(request: Request) {
         const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
         const { data: todayRows } = await supabase.from("daily_activity_goals").select("owner_name, is_outside_meeting").eq("work_date", d.work_date);
 
-        const registered = new Set((todayRows || []).map((r: any) => r.owner_name));
-        const allDone = EXEC_NAMES.every((name) => registered.has(name));
+        const registered = new Set((todayRows || []).map((r: any) => normalizeMemberName(r.owner_name)));
+        const allDone = EXEC_NAMES.every((name) => registered.has(normalizeMemberName(name)));
 
         if (allDone) {
           const outsideNames: string[] = [];
           const goalNames: string[] = [];
           for (const r of (todayRows || [])) {
             const row = r as any;
-            if (EXEC_NAMES.includes(row.owner_name)) {
-              (row.is_outside_meeting ? outsideNames : goalNames).push(row.owner_name);
+            const matchedName = EXEC_NAMES.find(
+              (name) => normalizeMemberName(name) === normalizeMemberName(row.owner_name)
+            );
+            if (matchedName) {
+              (row.is_outside_meeting ? outsideNames : goalNames).push(matchedName);
             }
           }
 
