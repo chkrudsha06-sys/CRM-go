@@ -61,6 +61,71 @@ function hourKST(): number {
   return kst.getUTCHours();
 }
 
+function nextDateString(dateText: string): string {
+  const date = new Date(`${dateText}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function kstDayRangeIso(dateText: string) {
+  const start = new Date(`${dateText}T00:00:00+09:00`);
+  const end = new Date(`${nextDateString(dateText)}T00:00:00+09:00`);
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
+}
+
+function uniqueRowsByOwner(rows: any[]) {
+  const byOwner = new Map<string, any>();
+
+  for (const row of rows) {
+    const key = normalizeMemberName(row?.owner_name);
+    if (!key) continue;
+    if (!byOwner.has(key)) byOwner.set(key, row);
+  }
+
+  return Array.from(byOwner.values());
+}
+
+async function loadDailyActivityRows(
+  supabase: ReturnType<typeof getSupabase>,
+  dateText: string
+) {
+  const { startIso, endIso } = kstDayRangeIso(dateText);
+
+  const [byWorkDate, byCreatedAt, byUpdatedAt] = await Promise.all([
+    supabase
+      .from("daily_activity_goals")
+      .select("owner_name, is_outside_meeting, work_date, created_at, updated_at")
+      .eq("work_date", dateText),
+    supabase
+      .from("daily_activity_goals")
+      .select("owner_name, is_outside_meeting, work_date, created_at, updated_at")
+      .gte("created_at", startIso)
+      .lt("created_at", endIso),
+    supabase
+      .from("daily_activity_goals")
+      .select("owner_name, is_outside_meeting, work_date, created_at, updated_at")
+      .gte("updated_at", startIso)
+      .lt("updated_at", endIso),
+  ]);
+
+  return uniqueRowsByOwner([
+    ...(byWorkDate.data || []),
+    ...(byCreatedAt.data || []),
+    ...(byUpdatedAt.data || []),
+  ]);
+}
+
+function getMissingMembers(rows: any[]) {
+  const registeredNames = new Set(
+    (rows || []).map((r: any) => normalizeMemberName(r.owner_name))
+  );
+
+  return EXEC_MEMBERS.filter((m) => !registeredNames.has(normalizeMemberName(m.name)));
+}
+
 async function sendMessage(appKey: string, conversationId: string, text: string, blocks?: any[]) {
   const res = await fetch(`${KAKAO_WORK_API_BASE}/messages.send`, {
     method: "POST",
@@ -92,18 +157,20 @@ export async function GET() {
     const today = todayKST();
     const supabase = getSupabase();
 
-    const { data: rows } = await supabase
-      .from("daily_activity_goals")
-      .select("owner_name, is_outside_meeting")
-      .eq("work_date", today);
-
-    const registeredNames = new Set(
-      (rows || []).map((r: any) => normalizeMemberName(r.owner_name))
-    );
-    const missing = EXEC_MEMBERS.filter((m) => !registeredNames.has(normalizeMemberName(m.name)));
+    const rows = await loadDailyActivityRows(supabase, today);
+    let missing = getMissingMembers(rows);
 
     if (missing.length === 0) {
       return NextResponse.json({ ok: true, skipped: true, reason: "전원 등록 완료" });
+    }
+
+    // 저장 직후 크론이 겹쳐 오발송되는 일을 줄이기 위해 발송 직전에 한 번 더 확인합니다.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const refreshedRows = await loadDailyActivityRows(supabase, today);
+    missing = getMissingMembers(refreshedRows);
+
+    if (missing.length === 0) {
+      return NextResponse.json({ ok: true, skipped: true, reason: "전원 등록 완료(재확인)" });
     }
 
     // ===== 미등록자 개별 @멘션 블록 구성 =====
