@@ -1230,26 +1230,6 @@ export default function SalesPage() {
   }, []);
 
 
-  const stats = useMemo(() => {
-    const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
-    const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
-    const membershipGross = rows.filter(isMembership).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
-    const adBenefitGross = rows.filter(isAdBenefit).reduce((sum, row) => sum + (row.execution_amount || 0), 0);
-    const membershipRefund = rows.filter(isMembership).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
-    const adBenefitRefund = rows.filter(isAdBenefit).reduce((sum, row) => sum + (row.refund_amount || 0), 0);
-    const refund = membershipRefund + adBenefitRefund;
-    const total = membershipGross + adBenefitGross - refund;
-    return {
-      count: rows.length,
-      total,
-      membershipGross,
-      adBenefitGross,
-      refund,
-      membershipRefund,
-      adBenefitRefund,
-    };
-  }, [rows]);
-
   const normalizeMemberKey = useCallback((value?: string | null) => {
     return String(value || "")
       .replace(/\s+/g, "")
@@ -1341,6 +1321,39 @@ export default function SalesPage() {
       return matchSearch && (!fRoute || normalizePaymentItem(row.contract_route) === fRoute) && (!fChannel || row.channel === fChannel) && (!fTeam || row.team_member === fTeam);
     });
   }, [displayRows, search, fRoute, fChannel, fTeam]);
+
+  const stats = useMemo(() => {
+    const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
+    const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
+
+    const totalGross = filteredRows.reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const refund = filteredRows.reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+
+    const membershipRows = filteredRows.filter(isMembership);
+    const adBenefitRows = filteredRows.filter(isAdBenefit);
+
+    const membershipGross = membershipRows.reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const adBenefitGross = adBenefitRows.reduce((sum, row) => sum + (row.execution_amount || 0), 0);
+    const membershipRefund = membershipRows.reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+    const adBenefitRefund = adBenefitRows.reduce((sum, row) => sum + (row.refund_amount || 0), 0);
+
+    const membershipNet = membershipGross - membershipRefund;
+    const adBenefitNet = adBenefitGross - adBenefitRefund;
+    const total = totalGross - refund;
+
+    return {
+      count: filteredRows.length,
+      total,
+      totalGross,
+      membershipGross,
+      membershipRefund,
+      membershipNet,
+      adBenefitGross,
+      adBenefitRefund,
+      adBenefitNet,
+      refund,
+    };
+  }, [filteredRows]);
 
 
   const routeStats = useMemo(() => CONTRACT_ROUTES.map((route) => {
@@ -1897,9 +1910,9 @@ export default function SalesPage() {
 
       <div className="flex-shrink-0 px-5 py-4 md:px-7">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="총매출" value={money(stats.total)} icon={TrendingUp} tone="success" sub={`${stats.count}건 · 환불 차감`} />
-          <StatCard label="분양회 월회비" value={money(stats.membershipGross)} icon={BadgeCheck} tone="purple" sub="분양회 회비 합산" />
-          <StatCard label="광고특전" value={money(stats.adBenefitGross)} icon={ReceiptText} tone="cyan" sub="LMS + 호갱노노" />
+          <StatCard label="총매출" value={money(stats.total)} icon={TrendingUp} tone="success" sub={`${stats.count}건 · 필터 적용 · 환불 차감`} />
+          <StatCard label="분양회 월회비" value={money(stats.membershipNet)} icon={BadgeCheck} tone="purple" sub={`집행 ${money(stats.membershipGross)} - 환불 ${money(stats.membershipRefund)}`} />
+          <StatCard label="광고특전" value={money(stats.adBenefitNet)} icon={ReceiptText} tone="cyan" sub={`집행 ${money(stats.adBenefitGross)} - 환불 ${money(stats.adBenefitRefund)}`} />
           <StatCard label="환불금액" value={money(stats.refund)} icon={ArrowDownRight} tone="danger" sub={`월회비 ${money(stats.membershipRefund)} · 광고특전 ${money(stats.adBenefitRefund)}`} />
         </div>
       </div>
