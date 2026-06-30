@@ -202,6 +202,10 @@ function isAdminUser(user?: CRMUserLite | null) {
   return role === "admin" || ADMIN_NAMES.some((item) => normalizePersonName(item) === name);
 }
 
+function isDashboardAllAccessUser(user?: CRMUserLite | null) {
+  return isAdminUser(user) || isOperationUser(user);
+}
+
 function contactOwner(row: Pick<ContactRow, "assigned_to" | "consultant">) {
   return row.assigned_to || row.consultant || "미지정";
 }
@@ -735,10 +739,10 @@ export default function HomePage() {
   const [filterWeekNum, setFilterWeekNum] = useState(() => getCurrentWeekNum(new Date().getFullYear(), new Date().getMonth() + 1));
   const [filterYear] = useState(new Date().getFullYear());
   const [ownerFilter, setOwnerFilter] = useState<string>(() => {
-    // 실행파트/운영파트 담당자면 초기 렌더부터 본인 이름으로 고정
+    // 실행파트 담당자는 본인 이름으로 고정하고, 관리자/운영파트는 전체 데이터를 기본으로 봅니다.
     try {
       const u = readUserFromStorage();
-      if (isExecutionUser(u) || isOperationUser(u)) return u?.name || "전체";
+      if (isExecutionUser(u) && !isDashboardAllAccessUser(u)) return u?.name || "전체";
     } catch {}
     return "전체";
   });
@@ -775,14 +779,17 @@ export default function HomePage() {
     const currentUser = readUserFromStorage();
     setMe(currentUser);
 
-    if (isExecutionUser(currentUser)) {
+    if (isExecutionUser(currentUser) && !isDashboardAllAccessUser(currentUser)) {
       setOwnerFilter(currentUser?.name || "전체");
+    } else if (isDashboardAllAccessUser(currentUser)) {
+      setOwnerFilter("전체");
     }
 
     const { year, month } = getMonthWindow(selectedMonth);
 
-    // 실행파트/운영파트 담당자면 Supabase 쿼리 자체에 본인 필터 적용
-    const isPersonalUser = (isExecutionUser(currentUser) || isOperationUser(currentUser)) && !isAdminUser(currentUser);
+    // 실행파트 담당자만 개인 대시보드로 고정합니다.
+    // 관리자와 운영파트(김재영, 최은정)는 전체 데이터를 볼 수 있도록 전체 로드합니다.
+    const isPersonalUser = isExecutionUser(currentUser) && !isDashboardAllAccessUser(currentUser);
     const personalName = isPersonalUser ? (currentUser?.name || "") : null;
 
     try {
@@ -791,7 +798,7 @@ export default function HomePage() {
       let salesQuery = supabase.from("ad_executions").select("*").order("created_at", { ascending: false }).limit(5000);
 
       if (personalName) {
-        // 실행파트/운영파트 본인 계정에서도 「당월 담당자별 파이프라인 현황」은
+        // 실행파트 본인 계정에서도 「당월 담당자별 파이프라인 현황」은
         // 관리자 뷰처럼 전체 실행파트 데이터를 보여줘야 합니다.
         // 그래서 contacts/ad_executions는 Supabase에서 전체 로드하고,
         // 개인 대시보드용 카드/퍼널/알림은 아래 visibleContacts/visibleSales에서
@@ -987,7 +994,7 @@ export default function HomePage() {
     }
   }, [editForm, editTarget, fetchDashboard, me?.name, popupMode, quickNote]);
 
-  const fixedOwner = isExecutionUser(me) || isOperationUser(me);
+  const fixedOwner = isExecutionUser(me) && !isDashboardAllAccessUser(me);
   const activeOwner = fixedOwner ? me?.name || "전체" : ownerFilter;
 
   const notesByContact = useMemo(() => {
@@ -1366,8 +1373,7 @@ export default function HomePage() {
   }, [vipContacts, rangeStart, rangeEnd]);
 
   const kpiPanelDesc = useMemo(() => {
-    if (isAdminUser(me)) return "실행파트 전체목표 · 운영파트 전체목표";
-    if (isOperationUser(me)) return "광고특전운영매출";
+    if (isDashboardAllAccessUser(me)) return "실행파트 전체목표 · 운영파트 전체목표";
     if (isExecutionUser(me)) return "등급별 분양회 모집 · 분양회 회비";
     return "분양회 모집 · 분양회 회비 · 광고특전운영매출";
   }, [me]);
@@ -1412,7 +1418,7 @@ export default function HomePage() {
       return salesAmount(targetSales, "lms") + salesAmount(targetSales, "hogang");
     };
 
-    if (isAdminUser(me)) {
+    if (isDashboardAllAccessUser(me)) {
       const execContacts = contacts.filter((contact) => isOwnerIn(contact, EXECUTION_PART_NAMES));
       const execSales = sales.filter((row) => salesOwnerIn(row, EXECUTION_PART_NAMES));
       const operationManagedExecutionOwners = getAllOperationManagedExecutionOwners();
