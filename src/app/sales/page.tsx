@@ -1148,8 +1148,6 @@ export default function SalesPage() {
   const [fChannel, setFChannel] = useState("");
   const [fTeam, setFTeam] = useState("");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [page, setPage] = useState(1);
-  const pageSize = 15;
 
   const inputClass = "h-9 w-full rounded-[8px] border px-3 text-[13px] font-semibold outline-none";
   const textareaClass = "min-h-[180px] w-full resize-y rounded-[8px] border px-3 py-2 text-[13px] font-semibold outline-none";
@@ -1344,16 +1342,6 @@ export default function SalesPage() {
     });
   }, [displayRows, search, fRoute, fChannel, fTeam]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [month, search, fRoute, fChannel, fTeam]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pagedRows = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, currentPage]);
 
   const routeStats = useMemo(() => CONTRACT_ROUTES.map((route) => {
     const list = filteredRows.filter((row) => normalizePaymentItem(row.contract_route) === route);
@@ -2018,10 +2006,10 @@ export default function SalesPage() {
       <main className="sales-modern-main min-h-0 flex-1 overflow-hidden px-5 pb-5 pt-4 md:px-7">
         {loading ? <div className="flex h-full items-center justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} /></div> : filteredRows.length === 0 ? <div className="flex h-full items-center justify-center"><div className="premium-card p-8"><EmptyState icon="💳" title="표시할 매출 데이터가 없습니다" description="월 또는 필터 조건을 변경하거나 새 매출을 등록하세요" actionLabel="매출 등록" onAction={openAdd} /></div></div> : (
           <div className="grid h-full gap-5 xl:grid-cols-[1fr_310px]">
-            <section className="min-h-0 overflow-hidden">
-              <div className="crm-table-wrap sales-modern-table hidden h-full overflow-auto xl:block">
+            <section className="flex min-h-0 flex-col overflow-hidden">
+              <div className="crm-table-wrap sales-modern-table hidden min-h-0 flex-1 overflow-auto xl:block">
                 <table className="crm-table min-w-[1380px] text-center" style={{ textAlign: "center" }}><thead><tr><th className="w-[250px] text-center">고객명</th><th className="w-[110px] text-center">직급</th><th className="w-[120px] text-center">결제일</th><th className="w-[130px] text-center">결제채널</th><th className="w-[130px] text-center">결제항목</th><th className="w-[150px] text-center">집행금액</th><th className="w-[140px] text-center">환불금액</th><th className="w-[130px] text-center">담당자</th><th className="w-[170px] text-center">관리</th></tr></thead><tbody>
-                  {pagedRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
+                  {filteredRows.map((row) => <tr key={row.id} data-selected={selectedItem?.id === row.id ? "true" : "false"} className="cursor-pointer" onClick={() => { setSelectedItem(row); setDetailTab("overview"); }}>
                     <td className="text-center"><div className="crm-row-center justify-center gap-3"><div className="crm-avatar" style={{ background: avatarBg(row.member_name) }}>{row.member_name?.[0] || "매"}</div><div className="min-w-0 text-center"><div className="crm-row-main truncate text-center">{row.member_name || "고객명 없음"}</div></div></div></td>
                     <td className="text-center"><span className="font-bold" style={{ color: "var(--text-muted)" }}>{getTitleByName(row.member_name)}</span></td>
                     <td className="text-center"><span className="crm-meta">{formatFullDate(row.payment_date)}</span></td>
@@ -2053,11 +2041,11 @@ export default function SalesPage() {
                   </tr>)}
                 </tbody></table>
               </div>
-              <div className="h-full overflow-y-auto xl:hidden"><div className="space-y-3">{pagedRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage <= 1} className="btn-premium btn-secondary h-8 px-3 text-[12px] disabled:opacity-40">이전</button>
-                <span className="text-[12px] font-bold" style={{ color: "var(--text-muted)" }}>{currentPage.toLocaleString()} / {totalPages.toLocaleString()} 페이지 · {filteredRows.length.toLocaleString()}건</span>
-                <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages} className="btn-premium btn-secondary h-8 px-3 text-[12px] disabled:opacity-40">다음</button>
+              <div className="min-h-0 flex-1 overflow-y-auto xl:hidden"><div className="space-y-3">{filteredRows.map((row) => <SalesMobileCard key={row.id} item={row} selected={selectedItem?.id === row.id} onClick={() => { setSelectedItem(row); setDetailTab("overview"); }} onDelete={handleDeleteSalesRecord} />)}</div></div>
+              <div className="mt-3 flex flex-shrink-0 flex-wrap items-center justify-center gap-2">
+                <span className="rounded-full border px-3 py-1.5 text-[12px] font-bold" style={{ color: "var(--text-muted)", borderColor: "var(--border)", background: "var(--surface-2)" }}>
+                  현재 조건 {filteredRows.length.toLocaleString()}건 전체 표시 · 목록 영역에서 아래로 스크롤하세요
+                </span>
               </div>
             </section>
             <aside className="hidden min-h-0 xl:block"><div className="space-y-4"><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={BarChart3} tone="success" /><div><p className="crm-section-title">결제항목별</p><p className="crm-tiny">현재 필터 기준</p></div></div><div className="space-y-2">{routeStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : routeStats.map((item) => { const max = Math.max(...routeStats.map((x) => x.amount), 1); const width = Math.max((item.amount / max) * 100, 4); return <div key={item.route}><div className="mb-1 flex items-center justify-between gap-2"><Badge tone={routeTone(item.route)}>{item.route}</Badge><span className="text-[12px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div><div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}><div className="h-full rounded-full" style={{ width: `${width}%`, background: toneStyle(routeTone(item.route)).dot }} /></div></div>; })}</div></section><section className="premium-card p-4"><div className="mb-4 flex items-center gap-2"><PremiumIcon icon={Filter} tone="purple" /><div><p className="crm-section-title">채널별 매출</p><p className="crm-tiny">상위 채널</p></div></div><div className="space-y-2">{channelStats.length === 0 ? <p className="crm-tiny">데이터 없음</p> : channelStats.map((item) => <div key={item.channel} className="flex items-center gap-3 rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}><Badge tone={channelTone(item.channel)}>{item.channel}</Badge><span className="crm-tiny">{item.count}건</span><span className="ml-auto text-[13px] font-bold" style={{ color: "var(--text)" }}>{money(item.amount)}</span></div>)}</div></section></div></aside>
