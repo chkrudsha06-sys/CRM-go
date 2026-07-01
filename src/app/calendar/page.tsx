@@ -504,44 +504,100 @@ export default function CalendarPage() {
   const goNextMonth = () => { setCurrentMonth(p => new Date(p.getFullYear(), p.getMonth()+1, 1)); setSelectedEvent(null); };
   const goToday = () => { const t = new Date(); setCurrentMonth(t); setSelectedDate(TODAY); setSelectedEvent(null); };
 
-  const canDeleteCustomEvent = useCallback((event: CalendarEvent) => {
-    const owner = String(event.raw?.created_by || "");
-    return event.kind === "custom" && Boolean(event.raw?.id) && Boolean(currentUser) && owner === currentUser;
+  const canDeleteEvent = useCallback((event: CalendarEvent) => {
+    if (!currentUser) return false;
+
+    if (event.kind === "custom") {
+      const owner = String(event.raw?.created_by || "");
+      return Boolean(event.raw?.id) && owner === currentUser;
+    }
+
+    if (event.kind === "meeting") {
+      const assignedOwner = String(event.contact?.assigned_to || "");
+      const consultantOwner = String(event.contact?.consultant || "");
+      return Boolean(event.contact?.id) && (assignedOwner === currentUser || consultantOwner === currentUser);
+    }
+
+    return false;
   }, [currentUser]);
 
-  const handleDeleteCustomEvent = useCallback(async (event: CalendarEvent) => {
-    if (event.kind !== "custom" || !event.raw?.id) return;
-
-    const owner = String(event.raw?.created_by || "");
-    if (!currentUser || owner !== currentUser) {
-      alert("본인이 등록한 일정만 삭제할 수 있습니다.");
+  const handleDeleteEvent = useCallback(async (event: CalendarEvent) => {
+    if (!currentUser) {
+      alert("로그인 사용자 정보를 확인할 수 없습니다.");
       return;
     }
 
-    const isRangeEvent = Boolean(event.raw?.date_end && event.raw.date_end !== event.raw.date_start);
-    const periodText = isRangeEvent
-      ? `${formatFullDate(event.raw.date_start)} ~ ${formatFullDate(event.raw.date_end)}`
-      : formatFullDate(event.raw?.date_start);
-    const message = isRangeEvent
-      ? `프로젝트 일정 전체 기간을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n기간: ${periodText}\n\n삭제하면 해당 기간에 표시된 모든 프로젝트 일정이 함께 사라집니다.`
-      : `선택한 일정을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n일자: ${periodText}`;
+    if (event.kind === "meeting") {
+      const contact = event.contact;
+      if (!contact?.id) return;
 
-    if (!window.confirm(message)) return;
+      const assignedOwner = String(contact.assigned_to || "");
+      const consultantOwner = String(contact.consultant || "");
+      const isOwner = assignedOwner === currentUser || consultantOwner === currentUser;
 
-    const { error } = await supabase
-      .from("calendar_custom_events")
-      .delete()
-      .eq("id", event.raw.id)
-      .eq("created_by", currentUser);
+      if (!isOwner) {
+        alert("본인 담당 고객의 미팅일정만 삭제할 수 있습니다.");
+        return;
+      }
 
-    if (error) {
-      alert(`삭제 실패: ${error.message}`);
+      const message = `파이프라인에서 등록한 미팅일정을 삭제할까요?\n\n고객명: ${contact.name || event.title}\n일자: ${formatFullDate(event.date)}\n내용: ${contact.meeting_date_text || event.subtitle || "파이프라인3 미팅일정"}\n\n삭제하면 파이프라인 고객카드의 미팅일정도 함께 초기화되고, 운영캘린더에서도 사라집니다.`;
+
+      if (!window.confirm(message)) return;
+
+      const { error } = await supabase
+        .from("contacts")
+        .update({
+          meeting_date: null,
+          meeting_date_text: null,
+          meeting_address: null,
+        })
+        .eq("id", contact.id);
+
+      if (error) {
+        alert(`미팅일정 삭제 실패: ${error.message}`);
+        return;
+      }
+
+      setSelectedEvent(null);
+      await fetchCalendar();
+      alert("미팅일정이 삭제되었습니다.");
       return;
     }
 
-    setSelectedEvent(null);
-    await fetchCalendar();
-    alert("일정이 삭제되었습니다.");
+    if (event.kind === "custom") {
+      if (!event.raw?.id) return;
+
+      const owner = String(event.raw?.created_by || "");
+      if (owner !== currentUser) {
+        alert("본인이 등록한 일정만 삭제할 수 있습니다.");
+        return;
+      }
+
+      const isRangeEvent = Boolean(event.raw?.date_end && event.raw.date_end !== event.raw.date_start);
+      const periodText = isRangeEvent
+        ? `${formatFullDate(event.raw.date_start)} ~ ${formatFullDate(event.raw.date_end)}`
+        : formatFullDate(event.raw?.date_start);
+      const message = isRangeEvent
+        ? `프로젝트 일정 전체 기간을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n기간: ${periodText}\n\n삭제하면 해당 기간에 표시된 모든 프로젝트 일정이 함께 사라집니다.`
+        : `선택한 일정을 삭제할까요?\n\n일정명: ${event.raw.title || event.title}\n일자: ${periodText}`;
+
+      if (!window.confirm(message)) return;
+
+      const { error } = await supabase
+        .from("calendar_custom_events")
+        .delete()
+        .eq("id", event.raw.id)
+        .eq("created_by", currentUser);
+
+      if (error) {
+        alert(`삭제 실패: ${error.message}`);
+        return;
+      }
+
+      setSelectedEvent(null);
+      await fetchCalendar();
+      alert("일정이 삭제되었습니다.");
+    }
   }, [currentUser, fetchCalendar]);
 
   return (
@@ -753,8 +809,8 @@ export default function CalendarPage() {
                         event={ev}
                         selected={selectedEvent?.id===ev.id}
                         onClick={()=>setSelectedEvent(ev===selectedEvent?null:ev)}
-                        canDelete={canDeleteCustomEvent(ev)}
-                        onDelete={()=>handleDeleteCustomEvent(ev)}
+                        canDelete={canDeleteEvent(ev)}
+                        onDelete={()=>handleDeleteEvent(ev)}
                       />
                     ))}
                   </div>
