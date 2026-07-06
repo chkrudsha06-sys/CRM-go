@@ -437,7 +437,7 @@ function salesCategory(row: SalesRow): "membership" | "lms" | "hogang" | "linked
   const route = normalizeText(row.contract_route);
   const item = normalizeText(row.payment_item || row.payment_type || row.item_name || row.memo);
 
-  if (route.includes("연계매출") || route.includes("하이타겟")) return "linked";
+  if (route.includes("연계매출") || route.includes("하이타겟") || channel.includes("하이타겟") || item.includes("하이타겟")) return "linked";
   if (route.includes("LMS") || channel.includes("LMS") || item.includes("LMS")) return "lms";
   if (route.includes("호갱노노") || channel.includes("호갱노노") || item.includes("호갱노노")) return "hogang";
   if (
@@ -1080,6 +1080,7 @@ export default function HomePage() {
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
     const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
+    const linkedSales = monthSales.filter((row) => salesCategory(row) === "linked").reduce((sum, row) => sum + effectiveSales(row), 0);
     const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
@@ -1104,7 +1105,7 @@ export default function HomePage() {
       master, challenger, bronze,
       masterThisMonth, challengerThisMonth, bronzeThisMonth,
       contracts, churnCount, churnRate,
-      membershipSales, lmsSales, hogangSales, refund, totalSales,
+      membershipSales, lmsSales, hogangSales, linkedSales, refund, totalSales,
       stageCounts, retention, activePipeline, contractRate,
       vipTotal: periodVipContacts.length,
     };
@@ -1391,7 +1392,7 @@ export default function HomePage() {
         isInRange(contact.contract_date, rangeStart, rangeEnd)
       );
 
-    const salesAmount = (sourceSales: SalesRow[], category: "membership" | "lms" | "hogang") =>
+    const salesAmount = (sourceSales: SalesRow[], category: "membership" | "lms" | "hogang" | "linked") =>
       sourceSales
         .filter((row) => salesCategory(row) === category && isInRange(row.payment_date, rangeStart, rangeEnd))
         .reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -1461,14 +1462,15 @@ export default function HomePage() {
     ];
   }, [activeOwner, contacts, kpis, me, rangeEnd, rangeStart, sales, salesOwnerLookup, stats.hogangSales, stats.lmsSales, stats.membershipSales, visibleContacts]);
 
-  /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 3종만 */
+  /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 · 하이타겟 */
   const salesBreakdown = useMemo(() => ([
     { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
     { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
     { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
-  ]), [stats.hogangSales, stats.lmsSales, stats.membershipSales]);
+    { label: "하이타겟", value: stats.linkedSales, tone: "cyan" as ToneName },
+  ]), [stats.hogangSales, stats.linkedSales, stats.lmsSales, stats.membershipSales]);
 
-  const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales;
+  const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales + stats.linkedSales;
 
   const periodPrefix = filterMode === "daily" ? "당일" : filterMode === "weekly" ? "주간" : "당월";
   const filterLabel = filterMode === "daily"
@@ -1971,7 +1973,7 @@ export default function HomePage() {
                   </Panel>
 
                   <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={BarChart3} tone="cyan" title={`${periodPrefix} 매출 구성`} desc={`분양회 월회비 · LMS · 호갱노노 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                    <PanelTitle icon={BarChart3} tone="cyan" title={`${periodPrefix} 매출 구성`} desc={`분양회 월회비 · LMS · 호갱노노 · 하이타겟 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
                     <div className="flex flex-1 flex-col justify-center gap-3 p-4">
                       <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                         {salesBreakdown.filter((item) => item.value > 0).map((item) => (
