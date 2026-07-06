@@ -169,13 +169,13 @@ const EMPTY_FORM: FormState = {
 };
 
 const CHANNELS = ["사이다페이", "효성CMS", "광고인입금", "카드결제"];
-const CONTRACT_ROUTES = ["분양회 회비", "LMS", "호갱노노"];
+const CONTRACT_ROUTES = ["분양회 회비", "LMS", "호갱노노", "하이타겟"];
 const TEAM = ["조계현", "이세호", "기여운", "최연전"];
 const CONSULTANTS = ["박경화", "박혜은", "조승현", "박민경", "백선중", "강아름", "전정훈", "박나라"];
 const HYOSUNG_PROVIDER = "HYOSUNG_CMS";
 const TAX_INVOICE_OPTIONS = ["O(세금)", "X", "X추후발행"];
 const CASH_RECEIPT_OPTIONS = ["O(현금)", "X", "X추후발행"];
-const AD_ITEMS = ["LMS", "호갱노노"];
+const AD_ITEMS = ["LMS", "호갱노노", "하이타겟"];
 const FIXED_DEPOSIT_ACCOUNT = "298-122618-04-018";
 const FIXED_DEPOSIT_BANK = "기업은행 (주)광고인";
 
@@ -568,8 +568,10 @@ function parseHyosungCmsRows(rows: Record<string, unknown>[]) {
 }
 
 function normalizePaymentItem(value?: string | null) {
-  if (!value || value === "분양회") return "분양회 회비";
-  return value;
+  const raw = String(value || "").trim();
+  if (!raw || raw === "분양회") return "분양회 회비";
+  if (raw.includes("하이타겟")) return "하이타겟";
+  return raw;
 }
 
 function effectiveSales(row: AdExecution) {
@@ -607,8 +609,10 @@ function toneStyle(tone: string) {
 
 function routeTone(value?: string | null) {
   if (value === "분양회" || value === "분양회 회비") return "success";
-  if (value === "연계매출") return "cyan";
-  if (value === "광고매출") return "purple";
+  if (value === "LMS") return "info";
+  if (value === "호갱노노") return "purple";
+  if (value === "하이타겟" || value === "연계매출") return "cyan";
+  if (value === "광고매출") return "warning";
   return "muted";
 }
 
@@ -1324,7 +1328,7 @@ export default function SalesPage() {
 
   const stats = useMemo(() => {
     const isMembership = (row: AdExecution) => normalizePaymentItem(row.contract_route) === "분양회 회비";
-    const isAdBenefit = (row: AdExecution) => ["LMS", "호갱노노"].includes(normalizePaymentItem(row.contract_route));
+    const isAdBenefit = (row: AdExecution) => AD_ITEMS.includes(normalizePaymentItem(row.contract_route));
 
     const totalGross = filteredRows.reduce((sum, row) => sum + (row.execution_amount || 0), 0);
     const refund = filteredRows.reduce((sum, row) => sum + (row.refund_amount || 0), 0);
@@ -1912,7 +1916,7 @@ export default function SalesPage() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="총매출" value={money(stats.total)} icon={TrendingUp} tone="success" sub={`${stats.count}건 · 필터 적용 · 환불 차감`} />
           <StatCard label="분양회 월회비" value={money(stats.membershipNet)} icon={BadgeCheck} tone="purple" sub={`집행 ${money(stats.membershipGross)} - 환불 ${money(stats.membershipRefund)}`} />
-          <StatCard label="광고특전" value={money(stats.adBenefitNet)} icon={ReceiptText} tone="cyan" sub={`집행 ${money(stats.adBenefitGross)} - 환불 ${money(stats.adBenefitRefund)}`} />
+          <StatCard label="광고특전" value={money(stats.adBenefitNet)} icon={ReceiptText} tone="cyan" sub={`LMS · 호갱노노 · 하이타겟 / 집행 ${money(stats.adBenefitGross)} - 환불 ${money(stats.adBenefitRefund)}`} />
           <StatCard label="환불금액" value={money(stats.refund)} icon={ArrowDownRight} tone="danger" sub={`월회비 ${money(stats.membershipRefund)} · 광고특전 ${money(stats.adBenefitRefund)}`} />
         </div>
       </div>
@@ -2113,7 +2117,7 @@ export default function SalesPage() {
                 <div className="md:col-span-2 rounded-[18px] border p-4" style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}>
                   <div className="mb-4">
                     <p className="text-[15px] font-[950] tracking-[-0.03em]" style={{ color: "var(--text-strong)" }}>광고특전 상세 입력</p>
-                    <p className="mt-1 text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>LMS 또는 호갱노노 선택 시 아래 양식이 메모에 자동 저장됩니다.</p>
+                    <p className="mt-1 text-[12px] font-[750]" style={{ color: "var(--text-muted)" }}>LMS / 호갱노노 / 하이타겟 선택 시 아래 양식이 메모에 자동 저장됩니다.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div><InputLabel>현장명</InputLabel><input className={inputClass} value={form.site_name} onChange={(e) => setFormValue("site_name", e.target.value)} /></div>
