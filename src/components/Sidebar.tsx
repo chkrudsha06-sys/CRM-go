@@ -104,6 +104,7 @@ const ADMIN_MENUS: MenuItem[] = [
   { href: "/management-dashboard", label: "관리대시보드", icon: ChartBarIcon },
   { href: "/reports", label: "팀 성과 분석", icon: ChartBarIcon },
   { href: "/kpi-settings", label: "KPI 설정", icon: Settings2 },
+  { href: "/crm-activity", label: "CRM활동내역", icon: Target },
   { href: "/account-manage", label: "계정관리", icon: Shield },
 ];
 
