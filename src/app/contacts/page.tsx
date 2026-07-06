@@ -55,6 +55,7 @@ type FormState = {
   intake_route: string;
   management_stage: string;
   company: string;
+  manual_customer_grade: string;
   memo: string;
 };
 
@@ -116,9 +117,11 @@ const INTAKE_ROUTES = [
   "완판트럭",
   "분양라인",
   "분양회MGM",
+  "채널톡",
   "대협팀활동",
 ];
 const TITLE_OPTIONS = ["본부장", "팀장", "팀원"];
+const MANUAL_GRADE_OPTIONS = ["챌린저", "마스터", "브론즈"];
 const UNREVIEWED_GRADE = "심사미진행";
 
 const EMPTY_FORM: FormState = {
@@ -128,6 +131,7 @@ const EMPTY_FORM: FormState = {
   intake_route: "",
   management_stage: "",
   company: "",
+  manual_customer_grade: "",
   memo: "",
 };
 
@@ -184,6 +188,7 @@ function badgeClass(value?: string | null) {
   if (value === "완판트럭") return "badge-warning";
   if (value === "분양라인") return "badge-cyan";
   if (value === "분양회MGM") return "badge-success";
+  if (value === "채널톡") return "badge-cyan";
   if (value === "대협팀활동") return "badge-info";
   if (value === "리드") return "badge-info";
   if (value === "프로스펙팅") return "badge-warning";
@@ -524,6 +529,11 @@ export default function ContactsPage() {
       intake_route: record.intake_route,
       management_stage: record.management_stage,
       company: record.company || "",
+      manual_customer_grade:
+        !hasGradeAssessmentInput(recordAssessment(record)) &&
+        MANUAL_GRADE_OPTIONS.includes(String(record.customer_grade || ""))
+          ? String(record.customer_grade || "")
+          : "",
       memo: stripGradeAssessmentBlock(record.memo),
     });
     setGradeAssessment(parseGradeAssessmentBlock(record.memo));
@@ -549,15 +559,21 @@ export default function ContactsPage() {
     }
 
     const now = new Date().toISOString();
+    const manualGrade = form.manual_customer_grade.trim();
+    const hasManualGrade = MANUAL_GRADE_OPTIONS.includes(manualGrade);
     const hasAssessment = hasGradeAssessmentInput(gradeAssessment);
     const gradeResult = calculateCustomerGrade(gradeAssessment, form.title);
-    const customerGrade = hasAssessment
-      ? gradeResult.customerGrade
-      : UNREVIEWED_GRADE;
+    const customerGrade = hasManualGrade
+      ? manualGrade
+      : hasAssessment
+        ? gradeResult.customerGrade
+        : UNREVIEWED_GRADE;
     const cleanMemo = stripGradeAssessmentBlock(form.memo);
-    const memoWithGrade = hasAssessment
-      ? appendGradeAssessmentBlock(cleanMemo, gradeAssessment, gradeResult)
-      : cleanMemo;
+    const memoWithGrade = hasManualGrade
+      ? cleanMemo
+      : hasAssessment
+        ? appendGradeAssessmentBlock(cleanMemo, gradeAssessment, gradeResult)
+        : cleanMemo;
 
     const payload = {
       name: form.name.trim(),
@@ -1294,6 +1310,15 @@ export default function ContactsPage() {
                     }
                     placeholder="소속회사명을 입력하세요"
                   />
+                  <FormSelect
+                    label="수동고객등급선택"
+                    value={form.manual_customer_grade}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, manual_customer_grade: value }))
+                    }
+                    options={MANUAL_GRADE_OPTIONS}
+                    placeholder="등급심사 없이 선택"
+                  />
                 </div>
 
                 <div className="mt-5">
@@ -1412,11 +1437,13 @@ function FormSelect({
   value,
   onChange,
   options,
+  placeholder = "선택",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
+  placeholder?: string;
 }) {
   return (
     <label className="block min-w-0">
@@ -1431,7 +1458,7 @@ function FormSelect({
           color: "var(--text)",
         }}
       >
-        <option value="">선택</option>
+        <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
