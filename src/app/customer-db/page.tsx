@@ -1092,6 +1092,7 @@ export default function CustomerDbPage() {
     if (customerDbUserInfo.isAdmin) setFilterAssigned("전체");
   };
   const [currentPage, setCurrentPage] = useState(1);
+  const [retmPage, setRetmPage] = useState(1);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState("");
   const [transferTarget, setTransferTarget] = useState<RawCustomerRecord | null>(null);
@@ -1310,7 +1311,7 @@ export default function CustomerDbPage() {
   }, [records, search, filterRoute, filterActivity, filterTitle, filterAssigned]);
 
   const PAGE_SIZE = 10;
-  const DISPLAY_SIZE = 7;
+  const RETM_PAGE_SIZE = 7;
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
   const pagedRecords = useMemo(() => {
     const safePage = Math.min(currentPage, totalPages);
@@ -1319,7 +1320,7 @@ export default function CustomerDbPage() {
   }, [filteredRecords, currentPage, totalPages]);
 
   // 재TM진행 고객 목록 (D+3 영업일 기준)
-  const retmRecords = useMemo(() => {
+  const retmAllRecords = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     return filteredRecords
       .filter((r) => r.sensitivity === "재TM진행")
@@ -1328,17 +1329,28 @@ export default function CustomerDbPage() {
         const retmDate = addBusinessDays(baseDate, 3);
         return { ...r, retmDate };
       })
-      .sort((a, b) => (a as any).retmDate.localeCompare((b as any).retmDate))
-      .slice(0, DISPLAY_SIZE);
+      .sort((a, b) => (a as any).retmDate.localeCompare((b as any).retmDate));
   }, [filteredRecords]);
+
+  const retmTotalPages = Math.max(1, Math.ceil(retmAllRecords.length / RETM_PAGE_SIZE));
+  const retmRecords = useMemo(() => {
+    const safePage = Math.min(retmPage, retmTotalPages);
+    const start = (safePage - 1) * RETM_PAGE_SIZE;
+    return retmAllRecords.slice(start, start + RETM_PAGE_SIZE);
+  }, [retmAllRecords, retmPage, retmTotalPages]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterRoute, filterActivity]);
+    setRetmPage(1);
+  }, [search, filterRoute, filterActivity, filterTitle, filterAssigned]);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (retmPage > retmTotalPages) setRetmPage(retmTotalPages);
+  }, [retmPage, retmTotalPages]);
 
 
   useEffect(() => {
@@ -2245,9 +2257,9 @@ export default function CustomerDbPage() {
           <div className="flex items-center gap-2">
             <span className="rounded-full px-2.5 py-1 text-[11px] font-[700]" style={{ background: "var(--warning-bg)", border: "1px solid var(--warning-border)", color: "var(--warning-text)" }}>재TM진행</span>
             <p className="text-[14px] font-[700]" style={{ color: "var(--text-strong)" }}>재TM진행 고객</p>
-            <span className="crm-tiny">{retmRecords.length}건</span>
+            <span className="crm-tiny">총 {retmAllRecords.length}건 · {Math.min(retmPage, retmTotalPages)} / {retmTotalPages}페이지</span>
           </div>
-          <p className="crm-tiny">최대 7건 표시 · 고객상세에서 감도 변경 가능</p>
+          <p className="crm-tiny">페이지당 7건 표시 · 고객상세에서 감도 변경 가능</p>
         </div>
         <div className="crm-table-wrap overflow-auto rounded-b-[18px]">
           <table className="crm-table customer-db-centered-table customer-db-force-center w-full table-fixed text-center">
@@ -2338,6 +2350,63 @@ export default function CustomerDbPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t px-4 py-3 md:flex-row md:items-center md:justify-between" style={{ borderColor: "var(--border)" }}>
+          <p className="crm-tiny">
+            총 {retmAllRecords.length}건 · 페이지 {Math.min(retmPage, retmTotalPages)} / {retmTotalPages}
+          </p>
+          <div className="flex items-center justify-center gap-1">
+            <button
+              type="button"
+              onClick={() => setRetmPage((page) => Math.max(1, page - 1))}
+              disabled={retmPage <= 1}
+              className="btn-premium btn-ghost h-8 px-2.5 text-[12px] disabled:opacity-40"
+            >
+              ‹
+            </button>
+            {Array.from({ length: retmTotalPages }, (_, i) => i + 1)
+              .filter((page) => {
+                if (retmTotalPages <= 7) return true;
+                if (page === 1 || page === retmTotalPages) return true;
+                if (Math.abs(page - retmPage) <= 2) return true;
+                return false;
+              })
+              .reduce((acc: (number | string)[], page, idx, arr) => {
+                if (idx > 0 && typeof arr[idx - 1] === "number" && (page as number) - (arr[idx - 1] as number) > 1) {
+                  acc.push("...");
+                }
+                acc.push(page);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === "..." ? (
+                  <span key={`retm-ellipsis-${idx}`} className="px-1 text-[12px]" style={{ color: "var(--text-faint)" }}>…</span>
+                ) : (
+                  <button
+                    key={`retm-page-${item}`}
+                    type="button"
+                    onClick={() => setRetmPage(item as number)}
+                    className="h-8 min-w-[32px] rounded-[8px] border px-2 text-[12px] font-[650] transition-colors"
+                    style={{
+                      background: retmPage === item ? "var(--warning-bg)" : "var(--surface-2)",
+                      borderColor: retmPage === item ? "var(--warning-border)" : "var(--border-subtle)",
+                      color: retmPage === item ? "var(--warning-text)" : "var(--text-muted)",
+                    }}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              type="button"
+              onClick={() => setRetmPage((page) => Math.min(retmTotalPages, page + 1))}
+              disabled={retmPage >= retmTotalPages}
+              className="btn-premium btn-ghost h-8 px-2.5 text-[12px] disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
         </div>
       </section>
 
