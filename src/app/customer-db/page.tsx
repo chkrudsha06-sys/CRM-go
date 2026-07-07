@@ -92,9 +92,26 @@ const VIP_DB_STORAGE_KEY = "crm_go_customer_db_local_v2";
 const CUSTOMER_DB_SOURCE = "customer_db";
 const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
+const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
+const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+
+function normalizeCrmPersonName(value?: string | null) {
+  return String(value || "")
+    .replace(/님|팀장|파트장|본부장|총괄본부장|대표|이사|실장/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function normalizeAssignedTo(value?: string | null) {
+  const normalized = normalizeCrmPersonName(value);
+  const matched = EXECUTION_PART_NAMES.find(
+    (name) => normalizeCrmPersonName(name) === normalized,
+  );
+  return matched || String(value || "").trim() || DEFAULT_ASSIGNED_TO;
+}
 
 function currentAssignedTo() {
-  return getCurrentUser()?.name || DEFAULT_ASSIGNED_TO;
+  return normalizeAssignedTo(getCurrentUser()?.name || DEFAULT_ASSIGNED_TO);
 }
 const INTAKE_ROUTES = [
   "분양의신DB",
@@ -471,7 +488,7 @@ function normalizeRawRecord(record: Partial<RawCustomerRecord>): RawCustomerReco
       ? String(record.intake_route)
       : INTAKE_ROUTES[0],
     company: String(record.company || ""),
-    assigned_to: String((record as any).assigned_to || currentAssignedTo()),
+    assigned_to: normalizeAssignedTo((record as any).assigned_to || currentAssignedTo()),
     activity_type:
       record.activity_type === "콜드톡" || record.activity_type === "TM"
         ? record.activity_type
@@ -1065,13 +1082,11 @@ export default function CustomerDbPage() {
       if (userRaw) {
         const u = JSON.parse(userRaw);
         const role = String(u?.role || "").toLowerCase();
-        const name = String(u?.name || "");
-        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
-        const execNames = ["조계현", "이세호", "기여운", "최연전"];
-        const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
-        const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
-        const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
-        return { isAdmin, isExec, name };
+        const rawName = String(u?.name || "");
+        const normName = normalizeCrmPersonName(rawName);
+        const isAdmin = role === "admin" || ADMIN_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+        const isExec = role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+        return { isAdmin, isExec, name: isExec ? normalizeAssignedTo(rawName) : rawName };
       }
     } catch {}
     return { isAdmin: false, isExec: false, name: "" };
@@ -1115,12 +1130,10 @@ export default function CustomerDbPage() {
           const u = JSON.parse(userRaw);
           const role = String(u?.role || "").toLowerCase();
           const name = String(u?.name || "");
-          const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
-          const execNames = ["조계현", "이세호", "기여운", "최연전"];
-          const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
-          const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
-          const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
-          if (isExec && !isAdmin) execName = name;
+          const normName = normalizeCrmPersonName(name);
+          const isAdmin = role === "admin" || ADMIN_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+          const isExec = role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+          if (isExec && !isAdmin) execName = normalizeAssignedTo(name);
         }
 
         let q = supabase
@@ -1191,12 +1204,10 @@ export default function CustomerDbPage() {
         const u = JSON.parse(userRaw);
         const role = String(u?.role || "").toLowerCase();
         const name = String(u?.name || "");
-        const adminNames = ["문시욱", "김정후", "김창완", "최웅"];
-        const execNames = ["조계현", "이세호", "기여운", "최연전"];
-        const normName = name.replace(/님|팀장|파트장|본부장|대표/g, "").trim();
-        const isAdmin = role === "admin" || adminNames.some((n) => n === normName);
-        const isExec = role === "exec" || role.includes("실행") || execNames.some((n) => n === normName);
-        if (isExec && !isAdmin) execName = name;
+        const normName = normalizeCrmPersonName(name);
+        const isAdmin = role === "admin" || ADMIN_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+        const isExec = role === "exec" || role.includes("실행") || EXECUTION_PART_NAMES.some((n) => normalizeCrmPersonName(n) === normName);
+        if (isExec && !isAdmin) execName = normalizeAssignedTo(name);
       }
       let q = supabase
         .from("contacts")
@@ -1667,13 +1678,18 @@ export default function CustomerDbPage() {
     window.localStorage.removeItem(VIP_DB_STORAGE_KEY);
 
     try {
-      const { data: existingVip, error: findError } = await supabase
+      const { data: existingRows, error: findError } = await supabase
         .from("contacts")
-        .select("id, created_at")
-        .eq("phone", transferTarget.phone)
-        .maybeSingle();
+        .select("id, phone, customer_phone, crm_db_source, created_at")
+        .or(`phone.eq.${transferTarget.phone},customer_phone.eq.${transferTarget.phone}`)
+        .limit(20);
 
       if (findError) throw findError;
+
+      const rows = Array.isArray(existingRows) ? existingRows : [];
+      const existingVip = rows.find((row: any) => String(row.crm_db_source || "") === VIP_DB_SOURCE)
+        || rows.find((row: any) => Number(row.id) === Number(transferTarget.id))
+        || rows.find((row: any) => normalizePhoneDigits(row.phone) === phoneDigits || normalizePhoneDigits(row.customer_phone) === phoneDigits);
 
       if (existingVip?.id) {
         const { error: updateError } = await supabase
