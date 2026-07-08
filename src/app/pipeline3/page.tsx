@@ -1310,7 +1310,7 @@ function RecentNoteSection({
                 )}
               </div>
               <p
-                className="line-clamp-4 whitespace-pre-wrap text-[13px] font-medium leading-relaxed"
+                className="max-h-[88px] overflow-y-auto whitespace-pre-wrap pr-2 text-[13px] font-medium leading-relaxed"
                 style={{ color: "var(--text-muted)" }}
               >
                 {note.content}
