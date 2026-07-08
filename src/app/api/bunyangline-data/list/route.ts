@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const BUNYANGLINE_START_DATE = process.env.BUNYANGLINE_START_DATE || '2026-07-01';
+
 type SupabaseErrorLike = {
   message?: string;
   details?: string;
@@ -95,9 +97,9 @@ function normalizeAdSection(value: unknown) {
   const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
   if (text.includes('unique') || text.includes('유니크')) return '유니크';
   if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('premium') || text.includes('프리미엄')) return '프리미엄';
   if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
-  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
-  return '일반';
+  return '일반구인글';
 }
 
 
@@ -357,7 +359,7 @@ function normalizeRows(rows: any[]) {
       manager_name: manager.manager_name,
       manager_phone: manager.manager_phone,
       agency_company: parseAgencyFromText(sourceText) || stripLabelNoise(row.agency_company) || '-',
-      apartment_fee: parseApartmentFeeFromText(sourceText) || stripLabelNoise(row.apartment_fee) || '-',
+      apartment_fee: parseApartmentFeeFromText(sourceText) || stripLabelNoise(row.apartment_fee) || null,
     };
   });
 
@@ -392,6 +394,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('bunyangline_data')
       .select('*')
+      .gte('posted_at', BUNYANGLINE_START_DATE)
       .order('posted_datetime', { ascending: false, nullsFirst: false })
       .order('posted_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
