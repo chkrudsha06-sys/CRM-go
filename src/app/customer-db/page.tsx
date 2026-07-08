@@ -94,6 +94,12 @@ const VIP_DB_SOURCE = "vip_activity";
 const DEFAULT_ASSIGNED_TO = "조계현";
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const EXECUTION_USER_OWNER_BY_ID: Record<string, string> = {
+  adperson4: "조계현",
+  adperson5: "이세호",
+  adperson6: "기여운",
+  adperson7: "최연전",
+};
 
 function normalizeCrmPersonName(value?: string | null) {
   return String(value || "")
@@ -111,7 +117,9 @@ function normalizeAssignedTo(value?: string | null) {
 }
 
 function currentAssignedTo() {
-  return normalizeAssignedTo(getCurrentUser()?.name || DEFAULT_ASSIGNED_TO);
+  const user = getCurrentUser();
+  const ownerById = EXECUTION_USER_OWNER_BY_ID[String(user?.id || "").trim()] || "";
+  return normalizeAssignedTo(ownerById || user?.name || DEFAULT_ASSIGNED_TO);
 }
 const INTAKE_ROUTES = [
   "분양의신DB",
@@ -1450,7 +1458,7 @@ export default function CustomerDbPage() {
         phone: form.phone.trim(),
         intake_route: form.intake_route,
         company: form.company.trim(),
-        assigned_to: editingRecord.assigned_to || currentAssignedTo(),
+        assigned_to: normalizeAssignedTo(editingRecord.assigned_to || currentAssignedTo()),
         activity_type: form.activity_type,
         memo: form.memo.trim(),
         notes: firstNote.length ? [...firstNote, ...editingRecord.notes] : editingRecord.notes,
