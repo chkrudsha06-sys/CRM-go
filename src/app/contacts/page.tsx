@@ -166,8 +166,8 @@ function mergeRecordsByPhone(
 
   return Array.from(merged.values()).sort(
     (a, b) =>
-      new Date(b.updated_at || b.created_at).getTime() -
-      new Date(a.updated_at || a.created_at).getTime(),
+      new Date(b.created_at || b.updated_at).getTime() -
+      new Date(a.created_at || a.updated_at).getTime(),
   );
 }
 
@@ -421,7 +421,7 @@ export default function ContactsPage() {
           .from("contacts")
           .select(VIP_SELECT_FIELDS)
           .eq("crm_db_source", VIP_DB_SOURCE)
-          .order("updated_at", { ascending: false });
+          .order("created_at", { ascending: false });
         if (execName) q = q.eq("assigned_to", execName) as typeof q;
 
         const { data, error } = await q;
@@ -507,36 +507,42 @@ export default function ContactsPage() {
 
   const filteredRecords = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    return records.filter((record) => {
-      const cleanMemo = stripGradeAssessmentBlock(record.memo);
-      const matchesKeyword = !keyword
-        ? true
-        : [
-            record.name,
-            record.title,
-            record.phone,
-            record.intake_route,
-            record.management_stage,
-            record.company,
-            displayCustomerGrade(record),
-            cleanMemo,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(keyword);
+    return records
+      .filter((record) => {
+        const cleanMemo = stripGradeAssessmentBlock(record.memo);
+        const matchesKeyword = !keyword
+          ? true
+          : [
+              record.name,
+              record.title,
+              record.phone,
+              record.intake_route,
+              record.management_stage,
+              record.company,
+              displayCustomerGrade(record),
+              cleanMemo,
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(keyword);
 
-      const matchesAssigned =
-        filterAssigned === "전체" ||
-        normalizeAssignedTo(record.assigned_to || DEFAULT_ASSIGNED_TO) === filterAssigned;
+        const matchesAssigned =
+          filterAssigned === "전체" ||
+          normalizeAssignedTo(record.assigned_to || DEFAULT_ASSIGNED_TO) === filterAssigned;
 
-      return (
-        matchesKeyword &&
-        (!filterRoute || record.intake_route === filterRoute) &&
-        (!filterStage || record.management_stage === filterStage) &&
-        (!filterGrade || displayCustomerGrade(record) === filterGrade) &&
-        matchesAssigned
+        return (
+          matchesKeyword &&
+          (!filterRoute || record.intake_route === filterRoute) &&
+          (!filterStage || record.management_stage === filterStage) &&
+          (!filterGrade || displayCustomerGrade(record) === filterGrade) &&
+          matchesAssigned
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || b.updated_at).getTime() -
+          new Date(a.created_at || a.updated_at).getTime(),
       );
-    });
   }, [records, search, filterRoute, filterStage, filterGrade, filterAssigned]);
 
   const resetForm = () => {
