@@ -57,10 +57,43 @@ type BunyanglineRow = {
 type ApiResponse = {
   ok?: boolean;
   count?: number;
-  data?: BunyanglineRow[];
+  data?: BunyanglineRow[] | { data?: BunyanglineRow[]; rows?: BunyanglineRow[]; items?: BunyanglineRow[] };
+  rows?: BunyanglineRow[];
+  items?: BunyanglineRow[];
+  result?: BunyanglineRow[];
+  records?: BunyanglineRow[];
   message?: string;
   error?: string;
+  [key: string]: unknown;
 };
+
+function pickRowsFromPayload(payload: unknown): BunyanglineRow[] {
+  if (Array.isArray(payload)) return payload as BunyanglineRow[];
+  if (!payload || typeof payload !== 'object') return [];
+
+  const record = payload as Record<string, unknown>;
+  const candidates = [
+    record.data,
+    record.rows,
+    record.items,
+    record.result,
+    record.records,
+    typeof record.data === 'object' && record.data ? (record.data as Record<string, unknown>).data : undefined,
+    typeof record.data === 'object' && record.data ? (record.data as Record<string, unknown>).rows : undefined,
+    typeof record.data === 'object' && record.data ? (record.data as Record<string, unknown>).items : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate as BunyanglineRow[];
+  }
+
+  return [];
+}
+
+function payloadKeys(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+  return Object.keys(payload as Record<string, unknown>);
+}
 
 function value(row: BunyanglineRow, ...keys: string[]) {
   for (const key of keys) {
@@ -104,6 +137,7 @@ export default function BunyanglineDataPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [lastLoadedAt, setLastLoadedAt] = useState('');
+  const [apiDebug, setApiDebug] = useState('');
   const [selectedRow, setSelectedRow] = useState<BunyanglineRow | null>(null);
 
   const fetchRows = useCallback(async (regionArg?: string, keywordArg?: string) => {
@@ -121,7 +155,8 @@ export default function BunyanglineDataPage() {
         _t: String(Date.now()),
       });
 
-      const response = await fetch(`/api/bunyangline-data/list?${params.toString()}`, {
+      const apiUrl = `/api/bunyangline-data/list?${params.toString()}`;
+      const response = await fetch(apiUrl, {
         method: 'GET',
         cache: 'no-store',
         headers: {
@@ -130,20 +165,45 @@ export default function BunyanglineDataPage() {
         },
       });
 
-      const result = (await response.json().catch(() => null)) as ApiResponse | null;
-      console.log('[분양라인데이터 조회결과]', result);
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || result?.message || `조회 실패 status=${response.status}`);
+      const rawText = await response.text();
+      let result: ApiResponse | BunyanglineRow[] | null = null;
+      try {
+        result = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        result = null;
       }
 
-      const nextRows = Array.isArray(result.data) ? result.data : [];
+      console.log('[분양라인데이터 조회결과]', {
+        apiUrl,
+        status: response.status,
+        responseOk: response.ok,
+        payloadKeys: payloadKeys(result),
+        payloadCount: result && typeof result === 'object' && !Array.isArray(result) ? (result as ApiResponse).count : undefined,
+        sample: pickRowsFromPayload(result)[0],
+        result,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          (result && typeof result === 'object' && !Array.isArray(result) && ((result as ApiResponse).error || (result as ApiResponse).message)) ||
+          rawText.slice(0, 300) ||
+          `조회 실패 status=${response.status}`,
+        );
+      }
+
+      if (result && typeof result === 'object' && !Array.isArray(result) && (result as ApiResponse).ok === false) {
+        throw new Error((result as ApiResponse).error || (result as ApiResponse).message || '조회 API가 ok=false를 반환했습니다.');
+      }
+
+      const nextRows = pickRowsFromPayload(result);
       setRows(nextRows);
+      setApiDebug(`API ${response.status} · keys=${payloadKeys(result).join(',') || '-'} · count=${result && typeof result === 'object' && !Array.isArray(result) ? ((result as ApiResponse).count ?? '-') : '-'} · rows=${nextRows.length}`);
       setLastLoadedAt(new Date().toLocaleString('ko-KR'));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[분양라인데이터 조회오류]', message);
       setErrorMessage(message);
+      setApiDebug(`조회 오류: ${message}`);
       setRows([]);
     } finally {
       setLoading(false);
@@ -339,6 +399,12 @@ export default function BunyanglineDataPage() {
         {errorMessage ? (
           <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm font-bold text-red-200">
             조회 오류: {errorMessage}
+          </div>
+        ) : null}
+
+        {apiDebug ? (
+          <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-3 text-xs font-bold text-blue-100">
+            조회 디버그: {apiDebug}
           </div>
         ) : null}
 
