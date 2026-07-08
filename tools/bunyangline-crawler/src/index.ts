@@ -19,6 +19,13 @@ const DETAIL_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.BUNYANGLIN
 const REQUEST_DELAY_MS = Math.max(0, Number(process.env.BUNYANGLINE_REQUEST_DELAY_MS || '150') || 150);
 const SEND_TO_CRM = process.env.SEND_TO_CRM !== 'false';
 
+// CRM 저장 API에서 413 Payload Too Large가 발생하지 않도록 전송 용량을 제한합니다.
+// 필요 시 GitHub Actions Variables/Secrets에서 조정 가능합니다.
+const CRM_BATCH_SIZE = Math.max(1, Number(process.env.BUNYANGLINE_CRM_BATCH_SIZE || '25') || 25);
+const CRM_MAX_DETAIL_TEXT_CHARS = Math.max(0, Number(process.env.BUNYANGLINE_MAX_DETAIL_TEXT_CHARS || '5000') || 5000);
+const CRM_MAX_RAW_TEXT_CHARS = Math.max(0, Number(process.env.BUNYANGLINE_MAX_RAW_TEXT_CHARS || '0') || 0);
+const CRM_RESPONSE_LOG_CHARS = 2000;
+
 const REGIONS = [
   { id: '0', name: '모든지역' },
   { id: '1', name: '서울' },
@@ -131,6 +138,13 @@ function normalizeMultiline(value: unknown) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function truncateText(value: unknown, maxChars: number) {
+  const text = normalizeMultiline(value);
+  if (!maxChars) return '';
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n... [${text.length - maxChars}자 생략]`;
 }
 
 function parseDateOnly(value: unknown) {
@@ -455,8 +469,8 @@ async function parseDetail(client: APIRequestContext, candidate: Candidate): Pro
     work_address: workAddress,
     category: normalizeText(basic['업종']) || null,
     list_date_group: candidate.list_date_group,
-    detail_text: detailText,
-    raw_text: rawText,
+    detail_text: truncateText(detailText, CRM_MAX_DETAIL_TEXT_CHARS),
+    raw_text: truncateText(rawText, CRM_MAX_RAW_TEXT_CHARS),
     crawled_at: new Date().toISOString(),
   };
 }
@@ -478,12 +492,18 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker:
   return results;
 }
 
-async function sendBatch(items: BunyanglineItem[], batchNo: number) {
-  if (!SEND_TO_CRM) {
-    console.log(`[CRM저장] SEND_TO_CRM=false → ${items.length}건 저장 생략`);
-    return;
-  }
-  if (!IMPORT_URL) throw new Error('CRM_BUNYANGLINE_IMPORT_URL 환경변수가 없습니다.');
+function compactItemsForRetry(items: BunyanglineItem[]) {
+  return items.map((item) => ({
+    ...item,
+    detail_text: truncateText(item.detail_text, Math.min(CRM_MAX_DETAIL_TEXT_CHARS || 1000, 1000)),
+    raw_text: '',
+  }));
+}
+
+async function postItemsToCrm(items: BunyanglineItem[], batchLabel: string) {
+  const body = JSON.stringify({ items });
+  const bodyBytes = Buffer.byteLength(body, 'utf8');
+  const bodyKb = (bodyBytes / 1024).toFixed(1);
 
   const response = await fetch(IMPORT_URL, {
     method: 'POST',
@@ -492,13 +512,63 @@ async function sendBatch(items: BunyanglineItem[], batchNo: number) {
       'x-import-secret': IMPORT_SECRET,
       Authorization: IMPORT_SECRET ? `Bearer ${IMPORT_SECRET}` : '',
     },
-    body: JSON.stringify({ items }),
+    body,
   });
-  const json = await response.json().catch(() => null);
-  if (!response.ok || !json?.ok) {
-    throw new Error(`[CRM저장] batch ${batchNo} 실패: status=${response.status} body=${JSON.stringify(json)}`);
+
+  const responseText = await response.text().catch(() => '');
+  let json: any = null;
+  try {
+    json = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    json = null;
   }
-  console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 전송 완료`);
+
+  if (!response.ok || !json?.ok) {
+    const error = new Error(
+      `[CRM저장] batch ${batchLabel} 실패: status=${response.status} payload=${bodyKb}KB body=${responseText.slice(0, CRM_RESPONSE_LOG_CHARS) || 'null'}`,
+    ) as Error & { status?: number; payloadKb?: string };
+    error.status = response.status;
+    error.payloadKb = bodyKb;
+    throw error;
+  }
+
+  console.log(`[CRM저장] batch ${batchLabel}: ${items.length}건 전송 완료 · payload ${bodyKb}KB`);
+}
+
+async function sendBatch(items: BunyanglineItem[], batchNo: number | string) {
+  if (!SEND_TO_CRM) {
+    console.log(`[CRM저장] SEND_TO_CRM=false → ${items.length}건 저장 생략`);
+    return;
+  }
+  if (!IMPORT_URL) throw new Error('CRM_BUNYANGLINE_IMPORT_URL 환경변수가 없습니다.');
+  if (!items.length) return;
+
+  const batchLabel = String(batchNo);
+
+  try {
+    await postItemsToCrm(items, batchLabel);
+    return;
+  } catch (error) {
+    const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
+
+    // 413은 요청 본문이 너무 큰 경우입니다. 배치를 자동으로 반으로 쪼개 재전송합니다.
+    if (status === 413 && items.length > 1) {
+      const middle = Math.ceil(items.length / 2);
+      console.warn(`[CRM저장] batch ${batchLabel}: 413 발생 → ${items.length}건을 ${middle}건 / ${items.length - middle}건으로 분할 재시도`);
+      await sendBatch(items.slice(0, middle), `${batchLabel}-1`);
+      await sendBatch(items.slice(middle), `${batchLabel}-2`);
+      return;
+    }
+
+    // 단일 건도 413이면 상세본문을 더 줄여 마지막으로 한 번 더 시도합니다.
+    if (status === 413 && items.length === 1 && (items[0].detail_text || items[0].raw_text)) {
+      console.warn(`[CRM저장] batch ${batchLabel}: 단일 데이터도 413 → detail_text 1000자, raw_text 제거 후 재시도`);
+      await postItemsToCrm(compactItemsForRetry(items), `${batchLabel}-compact`);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function main() {
@@ -516,6 +586,9 @@ async function main() {
   console.log(`- 대상: ${targetRegions.map((region) => `${region.name}(${region.id})`).join(', ')}`);
   console.log(`- 상세 동시 처리: ${DETAIL_CONCURRENCY}개`);
   console.log(`- CRM 전송: ${SEND_TO_CRM}`);
+  console.log(`- CRM 기본 batch size: ${CRM_BATCH_SIZE}건`);
+  console.log(`- CRM detail_text 최대: ${CRM_MAX_DETAIL_TEXT_CHARS}자`);
+  console.log(`- CRM raw_text 최대: ${CRM_MAX_RAW_TEXT_CHARS}자`);
 
   const client = await request.newContext({
     baseURL: BASE_URL,
@@ -563,9 +636,9 @@ async function main() {
     await saveJson(path.join(debugDir, 'collected-items.json'), items);
     await saveJson(path.join(debugDir, 'failures.json'), failures);
 
-    const batchSize = 100;
-    for (let start = 0, batchNo = 1; start < items.length; start += batchSize, batchNo += 1) {
-      await sendBatch(items.slice(start, start + batchSize), batchNo);
+    console.log(`[CRM저장] 기본 batch size: ${CRM_BATCH_SIZE}건 · detail_text 최대 ${CRM_MAX_DETAIL_TEXT_CHARS}자 · raw_text 최대 ${CRM_MAX_RAW_TEXT_CHARS}자`);
+    for (let start = 0, batchNo = 1; start < items.length; start += CRM_BATCH_SIZE, batchNo += 1) {
+      await sendBatch(items.slice(start, start + CRM_BATCH_SIZE), batchNo);
     }
 
     const sectionCounts = items.reduce<Record<string, number>>((acc, item) => {
