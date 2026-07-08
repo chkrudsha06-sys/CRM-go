@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const BUNYANGLINE_START_DATE = process.env.BUNYANGLINE_START_DATE || '2026-07-01';
+
 type ImportItem = Record<string, unknown>;
 
 type ExistingRow = {
@@ -102,9 +104,9 @@ function normalizeAdSection(value: unknown): string {
   const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
   if (text.includes('unique') || text.includes('유니크')) return '유니크';
   if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('premium') || text.includes('프리미엄')) return '프리미엄';
   if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
-  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
-  return '일반';
+  return '일반구인글';
 }
 
 
@@ -390,10 +392,10 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     manager_name: managerFields.managerName,
     manager_phone: managerFields.managerPhone,
     agency_company: scopedAgency || stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
-    apartment_fee: scopedApartmentFee || stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || '-',
+    apartment_fee: scopedApartmentFee || stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || null,
     move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
     assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
-    detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || '-',
+    detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || null,
     title: normalizeText(firstValue(row, ['title', 'post_title', 'postTitle'])) || null,
     summary: normalizeText(firstValue(row, ['summary', 'subtitle', 'description'])) || null,
     site_address: siteAddress,
@@ -468,7 +470,10 @@ export async function POST(request: NextRequest) {
         const sourceUrl = normalizeSourceUrl(firstValue(item, ['source_url', 'sourceUrl', 'source']));
         return buildDbRow(item, sourceUrl ? existingAssignedMap.get(sourceUrl) : null);
       })
-      .filter((row: ReturnType<typeof buildDbRow>): row is NonNullable<ReturnType<typeof buildDbRow>> => Boolean(row));
+      .filter(
+        (row: ReturnType<typeof buildDbRow>): row is NonNullable<ReturnType<typeof buildDbRow>> =>
+          Boolean(row?.posted_at && row.posted_at >= BUNYANGLINE_START_DATE)
+      );
 
     if (rows.length === 0) {
       return NextResponse.json({ ok: true, received: rawItems.length, insertedOrUpdated: 0, skipped: rawItems.length, message: '유효한 source_url 항목이 없습니다.' });
