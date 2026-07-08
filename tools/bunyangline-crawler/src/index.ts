@@ -1,17 +1,26 @@
-import { chromium, BrowserContext, Page, Response } from '@playwright/test';
+import { APIRequestContext, request } from '@playwright/test';
+import * as cheerio from 'cheerio';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const BASE_URL = 'https://www.bunyangline.com';
 const IMPORT_URL = process.env.CRM_BUNYANGLINE_IMPORT_URL || '';
 const IMPORT_SECRET = process.env.BUNYANGLINE_IMPORT_SECRET || '';
-const REGION_ARG = process.env.BUNYANGLINE_REGION_IDS || 'all';
-const SCROLL_ROUNDS = Math.max(1, Number(process.env.BUNYANGLINE_SCROLL_ROUNDS || '10') || 10);
-const HEADLESS = process.env.HEADLESS !== 'false';
+const REGION_ARG = process.env.BUNYANGLINE_REGION_IDS || '0';
+const DATA_START_DATE = parseDateOnly(process.env.BUNYANGLINE_START_DATE || '2026-07-01') || '2026-07-01';
+const CRAWL_MODE = process.env.BUNYANGLINE_CRAWL_MODE === 'incremental' ? 'incremental' : 'backfill';
+const LOOKBACK_DAYS = Math.max(1, Number(process.env.BUNYANGLINE_LOOKBACK_DAYS || '3') || 3);
+const START_DATE = CRAWL_MODE === 'incremental'
+  ? [DATA_START_DATE, kstDateDaysAgo(LOOKBACK_DAYS)].sort().at(-1) || DATA_START_DATE
+  : DATA_START_DATE;
+const MAX_PAGES = Math.max(1, Number(process.env.BUNYANGLINE_MAX_PAGES || '500') || 500);
+const MAX_DETAILS = Math.max(0, Number(process.env.BUNYANGLINE_MAX_DETAILS || '0') || 0);
+const DETAIL_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.BUNYANGLINE_DETAIL_CONCURRENCY || '4') || 4));
+const REQUEST_DELAY_MS = Math.max(0, Number(process.env.BUNYANGLINE_REQUEST_DELAY_MS || '150') || 150);
 const SEND_TO_CRM = process.env.SEND_TO_CRM !== 'false';
-const LOOKBACK_DAYS = Math.max(0, Number(process.env.BUNYANGLINE_LOOKBACK_DAYS || process.env.BUNYANGLINE_DAYS_BACK || '5') || 5);
 
 const REGIONS = [
+  { id: '0', name: '모든지역' },
   { id: '1', name: '서울' },
   { id: '2', name: '경기남부' },
   { id: '16', name: '경기북부' },
@@ -29,56 +38,54 @@ const REGIONS = [
   { id: '8', name: '제주도' },
 ] as const;
 
-type Region = (typeof REGIONS)[number];
+const REGION_NAME_BY_ID = new Map<string, string>(REGIONS.map((region) => [region.id, region.name]));
 
-type CandidateOrigin = 'api-json' | 'api-text' | 'html-link' | 'html-json' | 'static-ad-click';
+const FEATURED_SECTIONS = [
+  { key: 'uniques', name: '유니크' },
+  { key: 'superiors', name: '슈페리어' },
+  { key: 'allTopsPremium', name: '프리미엄' },
+  { key: 'allTopsBasic', name: '전국TOP' },
+] as const;
 
-type Candidate = {
-  source_url: string;
-  source_id: string;
-  title: string;
-  region_name: string;
-  list_region_name: string | null;
-  actual_region_name: string | null;
-  actual_region_source: string | null;
-  region_match_text: string | null;
-  ad_section: string;
-  list_date_group: string | null;
-  posted_at_hint: string | null;
-  posted_datetime_hint: string | null;
-  raw_text: string | null;
-  origin: CandidateOrigin;
-  confidence: number;
+const SECTION_RANK: Record<string, number> = {
+  유니크: 5,
+  슈페리어: 4,
+  프리미엄: 3,
+  전국TOP: 2,
+  일반구인글: 1,
 };
 
-type NetworkRecord = {
-  url: string;
-  status: number;
-  contentType: string;
-  bodyLength: number;
-  kind: string;
-  candidateCount: number;
-  sample: string;
+type Region = (typeof REGIONS)[number];
+type Listing = Record<string, unknown>;
+
+type Candidate = {
+  source_id: string;
+  source_url: string;
+  title: string;
+  summary: string | null;
+  list_region_name: string;
+  region_name_hint: string | null;
+  ad_section: string;
+  list_date_group: string | null;
+  registered_datetime_hint: string | null;
+  listing: Listing;
 };
 
 type BunyanglineItem = {
   region_name: string;
-  list_region_name: string | null;
-  actual_region_name: string | null;
-  actual_region_source: string | null;
-  region_match_text: string | null;
+  list_region_name: string;
   ad_section: string;
   site_name: string;
-  posted_at: string | null;
-  posted_datetime: string | null;
+  posted_at: string;
+  posted_datetime: string;
   manager_name: string;
   manager_phone: string;
   agency_company: string;
   apartment_fee: string;
   move_in_date: string;
   source_url: string;
-  source_id: string | null;
-  title: string | null;
+  source_id: string;
+  title: string;
   summary: string | null;
   site_address: string | null;
   work_address: string | null;
@@ -89,27 +96,143 @@ type BunyanglineItem = {
   crawled_at: string;
 };
 
+type PageSummary = {
+  region: string;
+  page: number;
+  itemCount: number;
+  detailCandidateCount: number;
+  lastDateTitle: string | null;
+  totalPage: number | null;
+};
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function kstDateDaysAgo(days: number) {
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const date = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate() - days));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
 function normalizeText(value: unknown) {
   return String(value ?? '')
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+function normalizeMultiline(value: unknown) {
+  return String(value ?? '')
+    .replace(/\r/g, '')
+    .replace(/\u00a0/g, ' ')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trimEnd())
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-function compactText(value: unknown, max = 200) {
-  return normalizeText(value).replace(/\s+/g, ' ').slice(0, max);
+function parseDateOnly(value: unknown) {
+  const match = normalizeText(value).match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})/);
+  if (!match) return null;
+  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }
 
-function safeFileName(value: string) {
-  return value
-    .replace(/[\\/:*?"<>|#%&{}$!`'@+=]/g, '_')
-    .replace(/\s+/g, '_')
-    .slice(0, 140);
+function parseDateTime(value: unknown) {
+  const text = normalizeText(value);
+  const match = text.match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})(?:[일\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!match) return { date: null, dateTime: null };
+
+  const date = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  const hh = (match[4] || '00').padStart(2, '0');
+  const mm = (match[5] || '00').padStart(2, '0');
+  const ss = (match[6] || '00').padStart(2, '0');
+  return { date, dateTime: `${date} ${hh}:${mm}:${ss}` };
+}
+
+function firstText(row: Listing, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && normalizeText(value)) return normalizeText(value);
+  }
+  return null;
+}
+
+function normalizePhone(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return '';
+  const match =
+    text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
+    text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0];
+  return (match || text).replace(/\D/g, '') || text;
+}
+
+function sourceUrlFromId(id: string) {
+  return `${BASE_URL}/recruit/view/${id}/?previousActiveNaviId=regional`;
+}
+
+function registrationValue(row: Listing) {
+  return firstText(row, ['registed_at', 'registered_at', 'registeredAt', 'created_at', 'createdAt']);
+}
+
+function listOrderDate(row: Listing) {
+  return parseDateOnly(firstText(row, ['seq_datetime', 'jumped_at', 'date', 'updated_at', 'registed_at']));
+}
+
+function regionHintFromListing(row: Listing, fallback: string) {
+  const ids = Array.isArray(row.work_address_master_ids)
+    ? row.work_address_master_ids.map((value) => String(value))
+    : [];
+  const names = ids.map((id) => REGION_NAME_BY_ID.get(id)).filter((name): name is string => Boolean(name && name !== '모든지역'));
+  return names.length === 1 ? names[0] || null : fallback === '모든지역' ? null : fallback;
+}
+
+function candidateFromListing(row: Listing, adSection: string, region: Region): Candidate | null {
+  const sourceId = normalizeText(row.id).replace(/\D/g, '');
+  if (!sourceId) return null;
+
+  // 목록 API의 registed_at은 최초 작성일이고, 상세 오른쪽 상단 날짜는
+  // seq_datetime(재노출 시각)과 일치하는 경우가 있습니다. 최종 기간 판정은
+  // 반드시 상세페이지의 .createdAt 값으로 수행합니다.
+  const displayedDateHint = parseDateTime(firstText(row, ['seq_datetime', 'jumped_at', 'registed_at', 'created_at']));
+
+  return {
+    source_id: sourceId,
+    source_url: sourceUrlFromId(sourceId),
+    title: firstText(row, ['title', 'field_name']) || `공고 ${sourceId}`,
+    summary: firstText(row, ['word_from_field']),
+    list_region_name: region.name,
+    region_name_hint: regionHintFromListing(row, region.name),
+    ad_section: adSection,
+    list_date_group: listOrderDate(row),
+    registered_datetime_hint: displayedDateHint.dateTime,
+    listing: row,
+  };
+}
+
+function mergeCandidates(candidates: Candidate[]) {
+  const byId = new Map<string, Candidate>();
+  for (const candidate of candidates) {
+    const existing = byId.get(candidate.source_id);
+    if (!existing) {
+      byId.set(candidate.source_id, candidate);
+      continue;
+    }
+
+    const existingRank = SECTION_RANK[existing.ad_section] || 0;
+    const candidateRank = SECTION_RANK[candidate.ad_section] || 0;
+    const preferred = candidateRank > existingRank ? candidate : existing;
+    const other = preferred === candidate ? existing : candidate;
+    byId.set(candidate.source_id, {
+      ...preferred,
+      region_name_hint: preferred.region_name_hint || other.region_name_hint,
+      list_date_group: preferred.list_date_group || other.list_date_group,
+      registered_datetime_hint: preferred.registered_datetime_hint || other.registered_datetime_hint,
+    });
+  }
+  return Array.from(byId.values());
 }
 
 async function ensureDebugDir() {
@@ -122,1100 +245,244 @@ async function saveJson(filePath: string, value: unknown) {
   await fs.writeFile(filePath, JSON.stringify(value, null, 2), 'utf8');
 }
 
-async function saveText(filePath: string, value: string) {
-  await fs.writeFile(filePath, value, 'utf8');
-}
-
-function currentKstDate() {
-  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const y = kst.getUTCFullYear();
-  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(kst.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function cutoffKstDate() {
-  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const cutoff = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate() - LOOKBACK_DAYS));
-  const y = cutoff.getUTCFullYear();
-  const m = String(cutoff.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(cutoff.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function parseDateOnly(value: string | null | undefined) {
-  const text = normalizeText(value);
-  const match = text.match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})/);
-  if (!match) return null;
-  return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-}
-
-function parseDateTime(value: string | null | undefined) {
-  const text = normalizeText(value);
-  const match = text.match(/(20\d{2})[-.\/년\s]+(\d{1,2})[-.\/월\s]+(\d{1,2})(?:[일\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!match) return { postedAt: null, postedDatetime: null };
-
-  const y = match[1];
-  const m = match[2].padStart(2, '0');
-  const d = match[3].padStart(2, '0');
-  const hh = (match[4] || '00').padStart(2, '0');
-  const mm = (match[5] || '00').padStart(2, '0');
-  const ss = (match[6] || '00').padStart(2, '0');
-
-  return {
-    postedAt: `${y}-${m}-${d}`,
-    postedDatetime: `${y}-${m}-${d} ${hh}:${mm}:${ss}`,
-  };
-}
-
-function isRecentDate(dateText: string | null | undefined) {
-  const date = parseDateOnly(dateText);
-  if (!date) return false;
-  return date >= cutoffKstDate() && date <= currentKstDate();
-}
-
-function isOlderThanCutoff(dateText: string | null | undefined) {
-  const date = parseDateOnly(dateText);
-  if (!date) return false;
-  return date < cutoffKstDate();
-}
-
-function hasOlderThanCutoffDate(text: string) {
-  const matches = collectRegexMatches(text, /20\d{2}-\d{2}-\d{2}/g).map((item) => item[0]);
-  return matches.some((date) => date < cutoffKstDate());
-}
-
-function normalizeSourceUrl(value: string) {
-  const url = new URL(value, BASE_URL);
-  url.hash = '';
-  if (!url.searchParams.get('previousActiveNaviId')) {
-    url.searchParams.set('previousActiveNaviId', 'regional');
+async function getWithRetry(client: APIRequestContext, url: string, attempts = 3) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await client.get(url, { timeout: 30000 });
+      if (response.ok()) return response;
+      throw new Error(`GET ${url} status=${response.status()}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await sleep(500 * attempt);
+    }
   }
-  return url.toString();
+  throw lastError;
 }
 
-function sourceUrlFromId(id: string | number) {
-  const clean = String(id).replace(/\D/g, '');
-  return normalizeSourceUrl(`${BASE_URL}/recruit/view/${clean}/?previousActiveNaviId=regional`);
-}
+async function postListPage(client: APIRequestContext, region: Region, page: number, htmlLastDateTitle: string) {
+  let lastError: unknown;
+  const url = `/recruit/list/${region.id}`;
 
-function extractSourceId(sourceUrl: string | null | undefined) {
-  return String(sourceUrl || '').match(/\/recruit\/view\/(\d+)/)?.[1] || null;
-}
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await client.post(url, {
+        timeout: 30000,
+        headers: {
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          Origin: BASE_URL,
+          Referer: `${BASE_URL}/recruit/regional/${region.id}`,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        form: {
+          page: String(page),
+          html: 'Y',
+          htmlLastDateTitle,
+        },
+      });
 
-function normalizePhone(value: string | null | undefined) {
-  const text = normalizeText(value);
-  if (!text) return '-';
-
-  const mobile = text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
-  if (mobile) return mobile.replace(/\D/g, '');
-
-  const tel = text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
-  if (tel) return tel.replace(/\D/g, '');
-
-  const service = text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0];
-  if (service) return service.replace(/\D/g, '');
-
-  const digits = text.replace(/\D/g, '');
-  return digits || text || '-';
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-
-function collectRegexMatches(text: string, regex: RegExp) {
-  const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
-  const safeRegex = new RegExp(regex.source, flags);
-  const matches: RegExpExecArray[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = safeRegex.exec(text)) !== null) {
-    matches.push(match);
-    if (match[0] === '') safeRegex.lastIndex += 1;
-  }
-
-  return matches;
-}
-
-function firstPhoneInText(value: string | null | undefined) {
-  const text = normalizeText(value);
-  if (!text) return null;
-
-  const match =
-    text.match(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
-    text.match(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0] ||
-    text.match(/\b\d{4}[-\s.]?\d{4}\b/)?.[0] ||
-    null;
-
-  return match ? normalizePhone(match) : null;
-}
-
-function cleanManagerName(value: string | null | undefined) {
-  let text = normalizeText(value);
-  if (!text) return '-';
-
-  text = text
-    .replace(/담당자\s*이름/g, ' ')
-    .replace(/담당자명/g, ' ')
-    .replace(/담당자\s*연락처.*$/g, ' ')
-    .replace(/연락처.*$/g, ' ')
-    .replace(/(?:010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
-    .replace(/(?:02|0[3-6]\d)[-\s.]?\d{3,4}[-\s.]?\d{4}/g, ' ')
-    .replace(/\b\d{4}[-\s.]?\d{4}\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return text || '-';
-}
-
-function stripLabelNoise(value: string | null | undefined) {
-  return normalizeText(value)
-    .replace(/^(시행사|시공사|신탁사|대행사|담당자\s*이름|담당자\s*연락처|형태|아파트\s*분양)\s*/g, '')
-    .replace(/\s+/g, ' ')
-    .trim() || '-';
-}
-
-function findJoinedLabelValue(joinedText: string, label: string, nextLabels: string[]) {
-  const next = nextLabels.map(escapeRegExp).join('|');
-  const pattern = new RegExp(`${escapeRegExp(label)}\\s*[:：]?\\s*(.+?)(?=\\s*(?:${next})\\s*[:：]?|$)`);
-  const match = joinedText.match(pattern);
-  return match?.[1] ? normalizeText(match[1]) : null;
-}
-
-function extractBusinessValue(lines: string[], labels: string[], nextLabels: string[]) {
-  const joined = lines.join(' ');
-  for (const label of labels) {
-    const value = findJoinedLabelValue(joined, label, nextLabels);
-    if (value) return value;
-  }
-
-  const direct = findLabelValue(lines, labels);
-  if (direct) return direct;
-
-  return null;
-}
-
-function compactLabel(value: string | null | undefined) {
-  return normalizeText(value).replace(/\s+/g, '');
-}
-
-function isAnyLabelLine(line: string, labels: string[]) {
-  const compact = compactLabel(line);
-  return labels.some((label) => compact === compactLabel(label));
-}
-
-function startsWithAnyLabel(line: string, labels: string[]) {
-  const compact = compactLabel(line);
-  return labels.some((label) => compact.startsWith(compactLabel(label)));
-}
-
-function sliceSectionLines(lines: string[], startLabels: string[], endLabels: string[]) {
-  let start = -1;
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    if (!line) continue;
-    const compact = compactLabel(line);
-    if (startLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
-      start = index + 1;
-      break;
+      if (!response.ok()) throw new Error(`POST ${url} status=${response.status()}`);
+      const json = (await response.json()) as { returnCode?: number; returnMsg?: string; extra?: Record<string, any> };
+      if (json.returnCode !== 200 || !json.extra) {
+        throw new Error(`목록 API 오류: code=${json.returnCode} message=${json.returnMsg || '-'}`);
+      }
+      return json.extra;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await sleep(700 * attempt);
     }
   }
 
-  if (start < 0) return [];
-
-  let end = lines.length;
-  for (let index = start; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    if (!line) continue;
-    const compact = compactLabel(line);
-    if (endLabels.some((label) => compact === compactLabel(label) || compact.includes(compactLabel(label)))) {
-      end = index;
-      break;
-    }
-  }
-
-  return lines.slice(start, end).map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
+  throw lastError;
 }
 
-function flexibleLabelPattern(label: string) {
-  return label.split(/\s+/).map(escapeRegExp).join('\\s*');
-}
+async function collectRegionCandidates(client: APIRequestContext, region: Region, pageSummaries: PageSummary[]) {
+  const regionalUrl = `/recruit/regional/${region.id}`;
+  await getWithRetry(client, regionalUrl);
 
-function removeLeadingLabel(line: string, label: string) {
-  const pattern = new RegExp(`^${flexibleLabelPattern(label)}\\s*[:：]?\\s*`);
-  return normalizeText(line.replace(pattern, ''));
-}
+  const candidates: Candidate[] = [];
+  let htmlLastDateTitle = '';
+  let totalPage: number | null = null;
 
-function extractScopedLabelValue(sectionLines: string[], labels: string[], allLabels: string[]) {
-  if (!sectionLines.length) return null;
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const extra = await postListPage(client, region, page, htmlLastDateTitle);
+    const recruits = Array.isArray(extra.recruits) ? (extra.recruits as Listing[]) : [];
 
-  const sectionHeadingLabels = [
-    '사업자 정보',
-    '사업자정보',
-    '급여정보',
-    '급여 정보',
-    '사업지 정보',
-    '사업지정보',
-    '상세정보',
-    '상세 정보',
-    '접수방법',
-    '접수 방법',
-  ];
-
-  for (let index = 0; index < sectionLines.length; index += 1) {
-    const line = normalizeText(sectionLines[index]);
-    if (!line) continue;
-
-    for (const label of labels) {
-      const compact = compactLabel(line);
-      const labelCompact = compactLabel(label);
-      if (compact === labelCompact || compact.startsWith(labelCompact)) {
-        const inlineValue = removeLeadingLabel(line, label);
-        if (inlineValue && !isAnyLabelLine(inlineValue, allLabels) && !startsWithAnyLabel(inlineValue, sectionHeadingLabels)) {
-          return inlineValue;
-        }
-
-        for (let cursor = index + 1; cursor < Math.min(index + 6, sectionLines.length); cursor += 1) {
-          const next = normalizeText(sectionLines[cursor]);
-          if (!next) continue;
-          if (isAnyLabelLine(next, allLabels) || startsWithAnyLabel(next, sectionHeadingLabels)) break;
-          return next;
+    if (page === 1) {
+      for (const section of FEATURED_SECTIONS) {
+        const rows = Array.isArray(extra[section.key]) ? (extra[section.key] as Listing[]) : [];
+        for (const row of rows) {
+          const candidate = candidateFromListing(row, section.name, region);
+          if (candidate) candidates.push(candidate);
         }
       }
     }
+
+    let detailCandidateCount = 0;
+    for (const row of recruits) {
+      const candidate = candidateFromListing(row, '일반구인글', region);
+      if (!candidate) continue;
+      candidates.push(candidate);
+      detailCandidateCount += 1;
+    }
+
+    totalPage = Number(extra.pagination?.totalPage || totalPage || 0) || null;
+    const responseLastDateTitle = parseDateOnly(extra.htmlLastDateTitle);
+    const orderDates = recruits.map(listOrderDate).filter((date): date is string => Boolean(date));
+    const oldestOrderDate = orderDates.length ? orderDates.sort()[0] : null;
+    const lastDateTitle = responseLastDateTitle || oldestOrderDate;
+
+    pageSummaries.push({
+      region: region.name,
+      page,
+      itemCount: recruits.length,
+      detailCandidateCount,
+      lastDateTitle,
+      totalPage,
+    });
+
+    console.log(
+      `[${region.name}] 목록 ${page}${totalPage ? `/${totalPage}` : ''}페이지 · ${recruits.length}건 · 상세검증 ${detailCandidateCount}건 · 마지막 목록일 ${lastDateTitle || '-'}`,
+    );
+
+    htmlLastDateTitle = normalizeText(extra.htmlLastDateTitle || htmlLastDateTitle);
+
+    if (recruits.length === 0) break;
+    if (lastDateTitle && lastDateTitle < START_DATE) break;
+    if (totalPage && page >= totalPage) break;
+    await sleep(REQUEST_DELAY_MS);
   }
 
-  const joined = sectionLines.join(' ');
-  for (const label of labels) {
-    const nextLabels = allLabels.filter((item) => compactLabel(item) !== compactLabel(label));
-    const value = findJoinedLabelValue(joined, label, [...nextLabels, ...sectionHeadingLabels]);
-    if (value && !isAnyLabelLine(value, allLabels)) return value;
-  }
-
-  return null;
+  return mergeCandidates(candidates);
 }
 
-function getBusinessSectionLines(lines: string[]) {
-  return sliceSectionLines(lines, ['사업자 정보', '사업자정보'], ['급여정보', '급여 정보', '사업지 정보', '사업지정보', '상세정보', '상세 정보', '접수방법', '접수 방법']);
+function sectionRows($: cheerio.CheerioAPI, title: string) {
+  const result: Record<string, string> = {};
+  const box = $('.cl_infoBoxBasic')
+    .toArray()
+    .find((element) => normalizeText($(element).find('.boxTitle').first().text()) === title);
+  if (!box) return result;
+
+  $(box)
+    .find('table tr')
+    .each((_, row) => {
+      const cells = $(row)
+        .children('th,td')
+        .toArray()
+        .map((cell) => normalizeText($(cell).text()));
+      for (let index = 0; index + 1 < cells.length; index += 2) {
+        if (cells[index]) result[cells[index]] = cells[index + 1] || '';
+      }
+    });
+
+  return result;
 }
 
-function getSalarySectionLines(lines: string[]) {
-  return sliceSectionLines(lines, ['급여정보', '급여 정보'], ['상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법', '기업정보', '사업자 정보', '사업자정보', '사업지 정보', '사업지정보']);
+function textWithBreaks($: cheerio.CheerioAPI, selection: cheerio.Cheerio<any>) {
+  if (!selection.length) return '';
+  const clone = selection.clone();
+  clone.find('br').replaceWith('\n');
+  clone.find('p,li').each((_, element) => {
+    $(element).append('\n');
+  });
+  return normalizeMultiline(clone.text());
 }
 
-const BUSINESS_TABLE_LABELS = ['시행사', '시공사', '신탁사', '대행사', '담당자 이름', '담당자명', '담당자 연락처', '담당자연락처', '연락처', '전화번호'];
-const SALARY_TABLE_LABELS = ['형태', '계약 수수료', '계약수수료', '아파트 분양', '아파트분양', '오피스텔 분양', '오피스텔분양', '상가 분양', '상가분양', '수수료'];
-
-function extractBusinessTableValue(lines: string[], labels: string[]) {
-  const businessLines = getBusinessSectionLines(lines);
-  return extractScopedLabelValue(businessLines, labels, BUSINESS_TABLE_LABELS);
-}
-
-function extractSalaryTableValue(lines: string[], labels: string[]) {
-  const salaryLines = getSalarySectionLines(lines);
-  return extractScopedLabelValue(salaryLines, labels, SALARY_TABLE_LABELS);
-}
-
-function splitManagerFields(managerNameRaw: string | null | undefined, managerPhoneRaw: string | null | undefined) {
-  const combined = normalizeText(`${managerNameRaw || ''} ${managerPhoneRaw || ''}`);
-  const phone = firstPhoneInText(combined) || normalizePhone(managerPhoneRaw || '') || '-';
-  const name = cleanManagerName(managerNameRaw || combined);
-  return { managerName: name, managerPhone: phone };
-}
-
-function normalizeSection(value: unknown) {
-  const text = normalizeText(value).replace(/\s+/g, '').toLowerCase();
-  if (text.includes('unique') || text.includes('유니크')) return '유니크';
-  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
-  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
-  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
-  return '일반';
-}
-
-
-function normalizeRegionByAddress(value: string | null | undefined): string | null {
-  const text = normalizeText(value);
+function inferRegionFromAddress(value: unknown) {
+  const text = normalizeText(value).replace(/\s+/g, '');
   if (!text) return null;
-  const compact = text.replace(/\s+/g, '');
-
-  if (/서울특별시|서울시|\b서울\b|서울/.test(compact)) return '서울';
-  if (/인천광역시|인천시|\b인천\b|인천/.test(compact)) return '인천';
-  if (/부산광역시|부산시|\b부산\b|부산/.test(compact)) return '부산';
-  if (/울산광역시|울산시|\b울산\b|울산/.test(compact)) return '울산';
-  if (/대구광역시|대구시|\b대구\b|대구/.test(compact)) return '대구';
-  if (/대전광역시|대전시|\b대전\b|대전/.test(compact)) return '대전';
-  if (/세종특별자치시|세종시|\b세종\b|세종/.test(compact)) return '세종';
-  if (/광주광역시|광주광역|\b광주광역시\b/.test(compact)) return '광주';
-  if (/강원특별자치도|강원도|\b강원\b|강릉|원주|춘천|속초|동해|삼척|태백|홍천|횡성|평창|정선|영월|인제|고성|양양|철원|화천|양구/.test(compact)) return '강원도';
-  if (/제주특별자치도|제주도|\b제주\b|서귀포/.test(compact)) return '제주도';
-  if (/충청북도|충청남도|충북|충남|\b충청\b|천안|아산|청주|충주|제천|공주|보령|서산|논산|계룡|당진|금산|부여|서천|청양|홍성|예산|태안|음성|진천|괴산|단양|옥천|영동|증평|보은/.test(compact)) return '충청도';
-  if (/전북특별자치도|전라북도|전라남도|전북|전남|\b전라\b|전주|군산|익산|정읍|남원|김제|완주|진안|무주|장수|임실|순창|고창|부안|목포|여수|순천|나주|광양|담양|곡성|구례|고흥|보성|화순|장흥|강진|해남|영암|무안|함평|영광|장성|완도|진도|신안/.test(compact)) return '전라도';
-  if (/경상북도|경상남도|경북|경남|\b경상\b|포항|경주|김천|안동|구미|영주|영천|상주|문경|경산|군위|의성|청송|영양|영덕|청도|고령|성주|칠곡|예천|봉화|울진|울릉|창원|진주|통영|사천|김해|밀양|거제|양산|의령|함안|창녕|고성|남해|하동|산청|함양|거창|합천/.test(compact)) return '경상도';
-
-  if (/경기도|\b경기\b|수원|용인|성남|화성|안산|안양|평택|시흥|광명|군포|오산|이천|안성|의왕|과천|여주|양평|하남|광주시|부천|고양|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) {
-    if (/고양|일산|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(compact)) return '경기북부';
+  if (/서울특별시|서울시|서울/.test(text)) return '서울';
+  if (/인천광역시|인천시|인천/.test(text)) return '인천';
+  if (/부산광역시|부산시|부산/.test(text)) return '부산';
+  if (/울산광역시|울산시|울산/.test(text)) return '울산';
+  if (/대구광역시|대구시|대구/.test(text)) return '대구';
+  if (/대전광역시|대전시|대전/.test(text)) return '대전';
+  if (/세종특별자치시|세종시|세종/.test(text)) return '세종';
+  if (/광주광역시|광주광역/.test(text)) return '광주';
+  if (/강원특별자치도|강원도|강릉|원주|춘천|속초|동해|삼척|태백|홍천|횡성|평창|정선|영월|인제|양양|철원|화천|양구/.test(text)) return '강원도';
+  if (/제주특별자치도|제주도|제주|서귀포/.test(text)) return '제주도';
+  if (/충청북도|충청남도|충북|충남|천안|아산|청주|충주|제천|공주|보령|서산|논산|계룡|당진|음성|진천/.test(text)) return '충청도';
+  if (/전북특별자치도|전라북도|전라남도|전북|전남|전주|군산|익산|정읍|남원|김제|목포|여수|순천|나주|광양/.test(text)) return '전라도';
+  if (/경상북도|경상남도|경북|경남|포항|경주|김천|안동|구미|창원|진주|통영|사천|김해|밀양|거제|양산/.test(text)) return '경상도';
+  if (/경기도|수원|용인|성남|화성|안산|안양|평택|시흥|광명|군포|오산|이천|안성|의왕|과천|여주|양평|하남|부천|고양|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(text)) {
+    if (/고양|일산|파주|의정부|양주|동두천|포천|연천|가평|남양주|구리|김포/.test(text)) return '경기북부';
     return '경기남부';
   }
-
-  if (/광주/.test(compact)) return '광주';
   return null;
 }
 
-function extractAddressCandidatesFromText(value: string | null | undefined): string[] {
-  const text = normalizeText(value);
-  if (!text) return [];
+async function parseDetail(client: APIRequestContext, candidate: Candidate): Promise<BunyanglineItem | null> {
+  const response = await getWithRetry(client, candidate.source_url);
+  const html = await response.text();
+  const $ = cheerio.load(html);
 
-  const candidates = new Set<string>();
-  const lines = text.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
+  const registered = parseDateTime($('.createdAt').first().text() || candidate.registered_datetime_hint || registrationValue(candidate.listing));
+  if (!registered.date || !registered.dateTime || registered.date < START_DATE) return null;
 
-  const strongLinePatterns = [
-    /(?:근무지\s*정보|근무지정보)[\s\S]{0,700}/g,
-    /(?:근무지\s*지역\s*주소|근무지역\s*주소|근무지\s*주소|근무주소|근무지역)\s*[:：]?\s*([^\n]{3,160})/g,
-    /(?:사업지\s*정보|사업지정보|현장\s*정보|현장정보)[\s\S]{0,700}/g,
-    /(?:사업지\s*주소|현장\s*주소|주소)\s*[:：]?\s*([^\n]{3,160})/g,
-  ];
-
-  for (const pattern of strongLinePatterns) {
-    for (const match of collectRegexMatches(text, pattern)) {
-      const found = normalizeText(match[1] || match[0]);
-      if (found) candidates.add(found.slice(0, 300));
-    }
-  }
-
-  const regionAddressLine = /(서울특별시|서울시|인천광역시|인천시|부산광역시|부산시|울산광역시|울산시|대구광역시|대구시|대전광역시|대전시|세종특별자치시|세종시|광주광역시|강원특별자치도|강원도|제주특별자치도|제주도|충청북도|충청남도|충북|충남|전북특별자치도|전라북도|전라남도|전북|전남|경상북도|경상남도|경북|경남|경기도)\s*[^\n]{0,120}/g;
-  for (const line of lines) {
-    for (const match of collectRegexMatches(line, regionAddressLine)) {
-      const found = normalizeText(match[0]);
-      if (found) candidates.add(found.slice(0, 300));
-    }
-  }
-
-  return Array.from(candidates).filter((candidate) => {
-    const compact = candidate.replace(/\s+/g, '');
-    if (compact.length < 3) return false;
-    if (/서울경기|경기인천|부산대구|광주대전|전국|지역현장|맞춤현장|지도현장|관심현장|서포터즈/.test(compact)) return false;
-    return true;
-  });
-}
-
-function inferRegionFromAddressText(value: string | null | undefined): { regionName: string | null; matchText: string | null } {
-  const direct = normalizeRegionByAddress(value);
-  if (direct) return { regionName: direct, matchText: normalizeText(value)?.slice(0, 300) || null };
-
-  for (const candidate of extractAddressCandidatesFromText(value)) {
-    const region = normalizeRegionByAddress(candidate);
-    if (region) return { regionName: region, matchText: candidate.slice(0, 300) };
-  }
-
-  return { regionName: null, matchText: null };
-}
-
-function extractAddressFromSectionText(rawText: string, sectionNames: string[], labelNames: string[]) {
-  const text = normalizeText(rawText);
-  if (!text) return null;
-
-  for (const sectionName of sectionNames) {
-    const sectionPattern = new RegExp(`${sectionName.replace(/\s+/g, '\\s*')}[\\s\\S]{0,900}`, 'i');
-    const sectionMatch = text.match(sectionPattern)?.[0];
-    if (!sectionMatch) continue;
-
-    const lines = sectionMatch.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const compact = compactLabel(line);
-      for (const label of labelNames) {
-        const labelCompact = compactLabel(label);
-        if (compact === labelCompact || compact.startsWith(labelCompact)) {
-          const inline = removeLeadingLabel(line, label);
-          if (inline && inline !== label) return inline;
-          const next = normalizeText(lines[index + 1] || '');
-          if (next) return next;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-function getWorkSectionLines(lines: string[]) {
-  return sliceSectionLines(lines, ['근무지 정보', '근무지정보', '근무 정보', '근무정보'], ['접수방법', '접수 방법', '상세정보', '상세 정보', '기업정보', '사업자 정보', '사업자정보', '급여정보', '급여 정보', '사업지 정보', '사업지정보']);
-}
-
-function getSiteSectionLines(lines: string[]) {
-  return sliceSectionLines(lines, ['사업지 정보', '사업지정보', '현장 정보', '현장정보'], ['사업자 정보', '사업자정보', '급여정보', '급여 정보', '상세정보', '상세 정보', '근무지 정보', '근무지정보', '접수방법', '접수 방법']);
-}
-
-const WORK_ADDRESS_LABELS = [
-  '근무지지역 주소',
-  '근무지 지역 주소',
-  '근무지역 주소',
-  '근무지 주소',
-  '근무주소',
-  '근무지역',
-  '주소',
-];
-
-const SITE_ADDRESS_LABELS = [
-  '사업지 주소',
-  '사업지주소',
-  '현장 주소',
-  '현장주소',
-  '사업지',
-  '주소',
-];
-
-function extractWorkAddress(lines: string[], rawText = '') {
-  const workLines = getWorkSectionLines(lines);
-  const scoped = extractScopedLabelValue(workLines, WORK_ADDRESS_LABELS, WORK_ADDRESS_LABELS);
-  if (scoped) return scoped;
-
-  const fromSection = extractAddressFromSectionText(rawText, ['근무지 정보', '근무지정보', '근무 정보', '근무정보'], WORK_ADDRESS_LABELS);
-  if (fromSection) return fromSection;
-
-  return findLabelValue(lines, ['근무지지역 주소', '근무지 지역 주소', '근무지역 주소', '근무지 주소', '근무주소', '근무지역']);
-}
-
-function extractSiteAddress(lines: string[], rawText = '') {
-  const siteLines = getSiteSectionLines(lines);
-  const scoped = extractScopedLabelValue(siteLines, SITE_ADDRESS_LABELS, SITE_ADDRESS_LABELS);
-  if (scoped) return scoped;
-
-  const fromSection = extractAddressFromSectionText(rawText, ['사업지 정보', '사업지정보', '현장 정보', '현장정보'], SITE_ADDRESS_LABELS);
-  if (fromSection) return fromSection;
-
-  return findLabelValue(lines, ['사업지 주소', '사업지주소', '현장 주소', '현장주소']);
-}
-
-function inferActualRegion(params: {
-  listRegionName: string;
-  workAddress: string | null | undefined;
-  siteAddress: string | null | undefined;
-  rawText: string;
-}) {
-  const candidates = [
-    { source: '근무지주소', text: params.workAddress },
-    { source: '사업지주소', text: params.siteAddress },
-    { source: '상세본문주소', text: params.rawText },
-  ];
-
-  for (const candidate of candidates) {
-    const inferred = inferRegionFromAddressText(candidate.text || '');
-    if (inferred.regionName) {
-      return {
-        regionName: inferred.regionName,
-        source: candidate.source,
-        matchText: inferred.matchText,
-      };
-    }
-  }
+  const work = sectionRows($, '근무지 정보');
+  const company = sectionRows($, '사업자 정보');
+  const project = sectionRows($, '사업지 정보');
+  const basic = sectionRows($, '기본요강');
+  const salary = sectionRows($, '급여정보');
+  const detailSelection = $('.detailInfo').first();
+  const detailText = textWithBreaks($, detailSelection) || normalizeMultiline(candidate.listing.content);
+  const rawText = textWithBreaks($, $('body').first()).slice(0, 50000);
+  const workAddress = normalizeText(work['근무지역 주소']) || null;
+  const siteAddress = normalizeText(project['사업지 주소']) || null;
+  const regionName =
+    inferRegionFromAddress(workAddress) ||
+    inferRegionFromAddress(siteAddress) ||
+    candidate.region_name_hint ||
+    candidate.list_region_name;
 
   return {
-    regionName: params.listRegionName,
-    source: '목록지역',
-    matchText: params.listRegionName,
+    region_name: regionName === '모든지역' ? '미지정' : regionName,
+    list_region_name: candidate.list_region_name,
+    ad_section: candidate.ad_section,
+    site_name: normalizeText(project['현장명'] || candidate.listing.field_name || candidate.title) || '-',
+    posted_at: registered.date,
+    posted_datetime: registered.dateTime,
+    manager_name: normalizeText(company['담당자 이름']) || '-',
+    manager_phone: normalizePhone(company['담당자 연락처']) || '-',
+    agency_company: normalizeText(company['대행사']) || '-',
+    apartment_fee: normalizeText(salary['아파트 분양']) || '',
+    move_in_date: normalizeText($('.jobStartDate').first().text()).replace(/^투입일\s*[:：]?\s*/, '') || '-',
+    source_url: candidate.source_url,
+    source_id: candidate.source_id,
+    title: normalizeText($('.mediaR .topArea .tit').first().text() || candidate.title) || candidate.title,
+    summary: normalizeText($('.mediaR .topArea .txt').first().text() || candidate.summary) || null,
+    site_address: siteAddress,
+    work_address: workAddress,
+    category: normalizeText(basic['업종']) || null,
+    list_date_group: candidate.list_date_group,
+    detail_text: detailText,
+    raw_text: rawText,
+    crawled_at: new Date().toISOString(),
   };
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T, index: number) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
 
-function firstText(obj: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = obj[key];
-    if (typeof value === 'string' || typeof value === 'number') {
-      const text = normalizeText(value);
-      if (text) return text;
-    }
-  }
-  return null;
-}
-
-function firstDateValue(obj: Record<string, unknown>) {
-  return firstText(obj, [
-    'created_at',
-    'createdAt',
-    'reg_date',
-    'regDate',
-    'registered_at',
-    'write_date',
-    'wdate',
-    'insert_date',
-    'posted_at',
-    'post_date',
-    'display_date',
-    'date',
-  ]);
-}
-
-function firstIdValue(obj: Record<string, unknown>) {
-  for (const key of ['idx', 'recruit_idx', 'recruit_id', 'site_idx', 'post_id', 'board_id', 'wr_id', 'id', 'seq', 'no']) {
-    const value = obj[key];
-    if (typeof value === 'number' || typeof value === 'string') {
-      const digits = String(value).match(/\d{4,}/)?.[0];
-      if (digits) return digits;
-    }
-  }
-  return null;
-}
-
-function findAnySourceUrl(obj: Record<string, unknown>) {
-  for (const key of ['source_url', 'url', 'href', 'link', 'view_url', 'viewUrl']) {
-    const value = obj[key];
-    if (typeof value === 'string' && value.includes('/recruit/view/')) {
-      return normalizeSourceUrl(value);
-    }
-  }
-  return null;
-}
-
-function inferSectionFromObject(obj: Record<string, unknown>, pathText: string) {
-  const direct = firstText(obj, [
-    'ad_section',
-    'section',
-    'section_name',
-    'service_name',
-    'serviceName',
-    'product_name',
-    'productName',
-    'goods_name',
-    'goodsName',
-    'display_type',
-    'displayType',
-    'grade_name',
-    'type_name',
-  ]);
-  const fromDirect = normalizeSection(direct || '');
-  if (fromDirect !== '일반구인글' || (direct && /일반|normal|basic/i.test(direct))) return fromDirect;
-  return normalizeSection(pathText) || '일반구인글';
-}
-
-function candidateFromObject(obj: Record<string, unknown>, regionName: string, origin: CandidateOrigin, pathText: string): Candidate | null {
-  const sourceUrl = findAnySourceUrl(obj);
-  const id = extractSourceId(sourceUrl || '') || firstIdValue(obj);
-  if (!id) return null;
-
-  const title =
-    firstText(obj, [
-      'title',
-      'subject',
-      'name',
-      'site_name',
-      'siteName',
-      'field_name',
-      'fieldName',
-      'recruit_title',
-      'article_title',
-      'workplace_name',
-      'company_name',
-    ]) || `공고 ${id}`;
-
-  // 너무 짧은 이름 또는 시스템 id 객체를 공고로 오인하는 것을 줄입니다.
-  const compactTitle = compactText(title, 160);
-  const textBlob = compactText(JSON.stringify(obj), 1000);
-  if (!/분양|아파트|오피스텔|상가|팀장|팀원|본부|수수료|계약|모집|현장|대행|부동산|레지던스|생활주택|지식산업/i.test(`${compactTitle} ${textBlob}`)) {
-    return null;
-  }
-
-  const dateText = firstDateValue(obj);
-  const dateInfo = parseDateTime(dateText || '');
-  const source = sourceUrl || sourceUrlFromId(id);
-
-  return {
-    source_url: source,
-    source_id: extractSourceId(source) || String(id),
-    title: compactTitle,
-    region_name: regionName,
-    ad_section: inferSectionFromObject(obj, pathText),
-    list_date_group: dateInfo.postedAt,
-    posted_at_hint: dateInfo.postedAt,
-    posted_datetime_hint: dateInfo.postedDatetime,
-    raw_text: textBlob,
-    origin,
-    confidence: compactTitle.startsWith('공고 ') ? 60 : 90,
-  };
-}
-
-function extractCandidatesFromJson(value: unknown, regionName: string, origin: CandidateOrigin, pathParts: string[] = [], out: Candidate[] = []) {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => extractCandidatesFromJson(item, regionName, origin, [...pathParts, String(index)], out));
-    return out;
-  }
-
-  if (!isPlainObject(value)) return out;
-
-  const pathText = pathParts.join('/');
-  const candidate = candidateFromObject(value, regionName, origin, pathText);
-  if (candidate) out.push(candidate);
-
-  for (const [key, child] of Object.entries(value)) {
-    if (child && typeof child === 'object') {
-      extractCandidatesFromJson(child, regionName, origin, [...pathParts, key], out);
-    } else if (typeof child === 'string' && child.includes('/recruit/view/')) {
-      out.push(...extractCandidatesFromText(child, regionName, origin));
+  async function runWorker() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
     }
   }
 
-  return out;
-}
-
-function extractCandidatesFromText(text: string, regionName: string, origin: CandidateOrigin): Candidate[] {
-  const out: Candidate[] = [];
-  const seen = new Set<string>();
-  const sourcePatterns = [
-    /https?:\/\/www\.bunyangline\.com\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
-    /\/recruit\/view\/(\d+)\/?[^"'\s<]*/g,
-  ];
-
-  for (const pattern of sourcePatterns) {
-    for (const match of collectRegexMatches(text, pattern)) {
-      const sourceUrl = normalizeSourceUrl(match[0].startsWith('http') ? match[0] : `${BASE_URL}${match[0]}`);
-      if (seen.has(sourceUrl)) continue;
-      seen.add(sourceUrl);
-      out.push({
-        source_url: sourceUrl,
-        source_id: match[1],
-        title: `공고 ${match[1]}`,
-        region_name: regionName,
-        ad_section: '일반',
-        list_date_group: null,
-        posted_at_hint: null,
-        posted_datetime_hint: null,
-        raw_text: `text-link:${match[0]}`,
-        origin,
-        confidence: 70,
-      });
-    }
-  }
-
-  // JSON 안에 문자열로만 포함된 idx 값 대응
-  for (const match of collectRegexMatches(text, /['"](?:idx|recruit_idx|recruit_id|post_id|id)['"]\s*:\s*['"]?(\d{4,})['"]?/g)) {
-    const id = match[1];
-    const sourceUrl = sourceUrlFromId(id);
-    if (seen.has(sourceUrl)) continue;
-    seen.add(sourceUrl);
-    out.push({
-      source_url: sourceUrl,
-      source_id: id,
-      title: `공고 ${id}`,
-      region_name: regionName,
-      ad_section: '일반',
-      list_date_group: null,
-      posted_at_hint: null,
-      posted_datetime_hint: null,
-      raw_text: `text-idx:${id}`,
-      origin,
-      confidence: 40,
-    });
-  }
-
-  return out;
-}
-
-function mergeCandidates(candidates: Candidate[]) {
-  const byUrl = new Map<string, Candidate>();
-
-  for (const candidate of candidates) {
-    if (!candidate.source_url) continue;
-    const existing = byUrl.get(candidate.source_url);
-    if (!existing) {
-      byUrl.set(candidate.source_url, candidate);
-      continue;
-    }
-
-    const betterTitle = existing.title.startsWith('공고 ') && !candidate.title.startsWith('공고 ') ? candidate.title : existing.title;
-    byUrl.set(candidate.source_url, {
-      ...existing,
-      ...candidate,
-      title: betterTitle,
-      ad_section: existing.ad_section !== '일반' ? existing.ad_section : candidate.ad_section,
-      list_date_group: existing.list_date_group || candidate.list_date_group,
-      posted_at_hint: existing.posted_at_hint || candidate.posted_at_hint,
-      posted_datetime_hint: existing.posted_datetime_hint || candidate.posted_datetime_hint,
-      raw_text: existing.raw_text || candidate.raw_text,
-      confidence: Math.max(existing.confidence, candidate.confidence),
-    });
-  }
-
-  return Array.from(byUrl.values());
-}
-
-async function getBodyText(page: Page) {
-  return normalizeText(await page.locator('body').innerText({ timeout: 10000 }).catch(() => ''));
-}
-
-async function getHtml(page: Page) {
-  return page.content().catch(() => '');
-}
-
-async function gotoList(page: Page, url: string) {
-  const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((error) => {
-    console.log(`[목록접속] page.goto 경고: ${error?.message || String(error)}`);
-    return null;
-  });
-
-  await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => undefined);
-  await sleep(1800);
-
-  return response?.status() || null;
-}
-
-async function maybeCollectResponse(response: Response, regionName: string): Promise<{ record: NetworkRecord; candidates: Candidate[] } | null> {
-  const url = response.url();
-  if (!url.includes('bunyangline.com')) return null;
-
-  const headers = response.headers();
-  const contentType = headers['content-type'] || '';
-  const likelyUseful =
-    contentType.includes('application/json') ||
-    /ajax|api|recruit|regional|list|view|supporters|search|load|more/i.test(url);
-
-  if (!likelyUseful) return null;
-
-  let text = '';
-  try {
-    text = await response.text();
-  } catch (error: any) {
-    return {
-      record: {
-        url,
-        status: response.status(),
-        contentType,
-        bodyLength: 0,
-        kind: 'read-failed',
-        candidateCount: 0,
-        sample: error?.message || String(error),
-      },
-      candidates: [],
-    };
-  }
-
-  if (!text || text.length > 3_000_000) {
-    return {
-      record: {
-        url,
-        status: response.status(),
-        contentType,
-        bodyLength: text.length,
-        kind: 'too-large-or-empty',
-        candidateCount: 0,
-        sample: text.slice(0, 300),
-      },
-      candidates: [],
-    };
-  }
-
-  let candidates: Candidate[] = [];
-  let kind = 'text';
-  const trimmed = text.trim();
-
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      const json = JSON.parse(trimmed);
-      kind = 'json';
-      candidates = extractCandidatesFromJson(json, regionName, 'api-json');
-    } catch {
-      kind = 'json-parse-failed';
-    }
-  }
-
-  candidates.push(...extractCandidatesFromText(text, regionName, kind === 'json' ? 'api-json' : 'api-text'));
-  candidates = mergeCandidates(candidates);
-
-  return {
-    record: {
-      url,
-      status: response.status(),
-      contentType,
-      bodyLength: text.length,
-      kind,
-      candidateCount: candidates.length,
-      sample: compactText(text, 700),
-    },
-    candidates,
-  };
-}
-
-async function collectRegionApiCandidates(page: Page, region: Region, debugDir: string) {
-  const listUrl = `${BASE_URL}/recruit/regional/${region.id}`;
-  const prefix = safeFileName(`${region.id}_${region.name}_${Date.now()}`);
-  const candidates: Candidate[] = [];
-  const networkRecords: NetworkRecord[] = [];
-  const responseJobs: Promise<void>[] = [];
-
-  const onResponse = (response: Response) => {
-    const job = maybeCollectResponse(response, region.name)
-      .then((result) => {
-        if (!result) return;
-        networkRecords.push(result.record);
-        if (result.candidates.length > 0) {
-          candidates.push(...result.candidates);
-          console.log(`[${region.name}] API 후보 ${result.candidates.length}건: ${result.record.url}`);
-        }
-      })
-      .catch(() => undefined);
-    responseJobs.push(job);
-  };
-
-  page.on('response', onResponse);
-
-  console.log('');
-  console.log('='.repeat(90));
-  console.log(`[${region.name}] 목록 접속: ${listUrl}`);
-
-  const status = await gotoList(page, listUrl);
-  console.log(`[${region.name}] 응답 status: ${status ?? '-'}`);
-
-  let lastCount = 0;
-  let stagnant = 0;
-  let olderSeen = false;
-
-  for (let round = 0; round <= SCROLL_ROUNDS; round += 1) {
-    await Promise.allSettled(responseJobs.splice(0));
-
-    const bodyText = await getBodyText(page);
-    const html = await getHtml(page);
-    olderSeen = olderSeen || hasOlderThanCutoffDate(bodyText);
-
-    // HTML 안에 포함된 API/템플릿/링크 후보도 함께 수집
-    candidates.push(...extractCandidatesFromText(html, region.name, 'html-link'));
-
-    const merged = mergeCandidates(candidates);
-    const currentCount = merged.length;
-
-    if (round === 0) {
-      console.log(`[${region.name}] body text 길이: ${bodyText.length.toLocaleString()}`);
-      console.log(`[${region.name}] 초기 API/HTML 후보: ${currentCount}건`);
-      await saveText(path.join(debugDir, `${prefix}_visible_text_initial.txt`), bodyText);
-      await saveText(path.join(debugDir, `${prefix}_html_initial.html`), html.slice(0, 500000));
-      await page.screenshot({ path: path.join(debugDir, `${prefix}_initial.png`), fullPage: true }).catch(() => undefined);
-    }
-
-    if (round > 0 && round % 5 === 0) {
-      const delta = currentCount - lastCount;
-      console.log(
-        `[${region.name}] 스크롤 ${round}/${SCROLL_ROUNDS}: API/URL 후보 ${currentCount}건 / 증가 ${delta >= 0 ? '+' : ''}${delta} / 오래된날짜 ${olderSeen ? 'Y' : 'N'}`,
-      );
-
-      if (olderSeen && delta <= 0) stagnant += 1;
-      else if (delta > 0) stagnant = 0;
-      lastCount = currentCount;
-
-      if (round >= 10 && olderSeen && stagnant >= 3) {
-        console.log(`[${region.name}] 최근 ${LOOKBACK_DAYS}일 이전 날짜 확인 + API 후보 증가 없음 ${stagnant}회 → 스크롤 종료`);
-        break;
-      }
-    }
-
-    if (round === SCROLL_ROUNDS) break;
-    await page.mouse.wheel(0, 2600).catch(() => undefined);
-    await sleep(500);
-  }
-
-  await Promise.allSettled(responseJobs);
-  page.off('response', onResponse);
-
-  const finalText = await getBodyText(page);
-  const finalHtml = await getHtml(page);
-  candidates.push(...extractCandidatesFromText(finalHtml, region.name, 'html-link'));
-
-  const finalCandidates = mergeCandidates(candidates).filter((candidate) => {
-    // API에 등록일 힌트가 있는 경우 여기서 1차 필터링합니다. 등록일이 없으면 상세페이지에서 최종 필터링합니다.
-    if (candidate.posted_at_hint) return isRecentDate(candidate.posted_at_hint);
-    if (candidate.list_date_group) return isRecentDate(candidate.list_date_group);
-    return true;
-  });
-
-  await saveText(path.join(debugDir, `${prefix}_visible_text_final.txt`), finalText);
-  await saveText(path.join(debugDir, `${prefix}_html_final.html`), finalHtml.slice(0, 800000));
-  await saveJson(path.join(debugDir, `${prefix}_network_records.json`), networkRecords);
-  await saveJson(path.join(debugDir, `${prefix}_api_candidates.json`), finalCandidates);
-  await page.screenshot({ path: path.join(debugDir, `${prefix}_final.png`), fullPage: true }).catch(() => undefined);
-
-  const usefulResponses = networkRecords.filter((record) => record.candidateCount > 0);
-  console.log(`[${region.name}] JSON/API 응답 ${networkRecords.length}개 감지 / 후보 포함 응답 ${usefulResponses.length}개`);
-  console.log(`[${region.name}] 상세 URL 후보 최종 ${finalCandidates.length}건`);
-
-  if (finalCandidates.length === 0) {
-    console.log(`[${region.name}] 후보 0건입니다. debug-output의 ${prefix}_network_records.json / html_final.html을 확인하세요.`);
-  }
-
-  return finalCandidates;
-}
-
-function findLabelValue(lines: string[], labels: string[]) {
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    if (!line) continue;
-
-    for (const label of labels) {
-      if (line === label) {
-        return normalizeText(lines[index + 1] || '') || null;
-      }
-
-      const direct = line.match(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[:：]?\\s*(.+)$`));
-      if (direct?.[1]) return normalizeText(direct[1]);
-    }
-  }
-
-  return null;
-}
-
-function extractDetailSection(lines: string[], startLabels: string[], endLabels: string[]) {
-  let start = -1;
-  for (let index = 0; index < lines.length; index += 1) {
-    if (startLabels.includes(lines[index])) {
-      start = index + 1;
-      break;
-    }
-  }
-  if (start < 0) return null;
-
-  let end = lines.length;
-  for (let index = start; index < lines.length; index += 1) {
-    if (endLabels.includes(lines[index])) {
-      end = index;
-      break;
-    }
-  }
-
-  return normalizeText(lines.slice(start, end).join('\n')) || null;
-}
-
-function extractApartmentFee(lines: string[]) {
-  const joined = lines.join(' ');
-  const joinedValue = findJoinedLabelValue(joined, '아파트 분양', ['오피스텔 분양', '상가 분양', '상세정보', '상세 정보', '근무지 정보', '사업자 정보', '접수방법']);
-  if (joinedValue && /\d|만|원|%|협의|지급/.test(joinedValue)) return stripLabelNoise(joinedValue);
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    if (/아파트\s*분양/.test(line)) {
-      const direct = line.replace(/.*아파트\s*분양\s*[:：]?\s*/, '').trim();
-      if (direct && direct !== line && /\d|만|원|%|협의|지급/.test(direct)) return stripLabelNoise(direct);
-
-      const next = normalizeText(lines[index + 1] || '');
-      if (next && /\d|만|원|%|협의|지급/.test(next)) return stripLabelNoise(next);
-      return '-';
-    }
-  }
-
-  return '-';
-}
-
-function extractMoveInDate(lines: string[]) {
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = normalizeText(lines[index]);
-    if (!line.includes('투입일')) continue;
-
-    const direct = line.match(/투입일\s*[:：]?\s*(.+)$/)?.[1];
-    if (direct && normalizeText(direct) !== '투입일') return normalizeText(direct);
-
-    const next = normalizeText(lines[index + 1] || '');
-    if (next) return next;
-  }
-
-  return '-';
-}
-
-async function bestTitleFromPage(page: Page, fallback: string) {
-  const selectors = ['h1', 'h2', 'h3', '.title', '.subject', '.view-title'];
-  for (const selector of selectors) {
-    const loc = page.locator(selector);
-    const count = await loc.count().catch(() => 0);
-    for (let index = 0; index < Math.min(count, 8); index += 1) {
-      const text = compactText(await loc.nth(index).innerText({ timeout: 500 }).catch(() => ''), 160);
-      if (text && text.length >= 5 && !/구인글 상세보기|지역현장|분양라인/.test(text)) return text;
-    }
-  }
-  return fallback;
-}
-
-async function parseDetail(context: BrowserContext, candidate: Candidate): Promise<BunyanglineItem | null> {
-  const page = await context.newPage();
-  try {
-    await page.goto(candidate.source_url, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((error) => {
-      console.log(`[상세] page.goto 경고: ${candidate.source_url} / ${error?.message || String(error)}`);
-      return null;
-    });
-    await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => undefined);
-    await sleep(900);
-
-    const rawText = await getBodyText(page);
-    const lines = rawText.split('\n').map((line) => normalizeText(line)).filter((line): line is string => Boolean(line));
-
-    // 상세페이지 오른쪽 상단 등록일시를 최우선으로 사용합니다.
-    const firstDateTime = rawText.match(/20\d{2}[-.\/]\d{1,2}[-.\/]\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/)?.[0] || candidate.posted_datetime_hint;
-    const dateInfo = parseDateTime(firstDateTime || candidate.posted_at_hint || candidate.list_date_group || '');
-
-    if (!dateInfo.postedAt || !isRecentDate(dateInfo.postedAt)) {
-      return null;
-    }
-
-    const title = await bestTitleFromPage(page, candidate.title);
-    const siteName = findLabelValue(lines, ['현장명', '사업지명', '현장 이름']) || title || '-';
-    const siteAddress = extractSiteAddress(lines, rawText);
-    const workAddress = extractWorkAddress(lines, rawText);
-    const actualRegion = inferActualRegion({
-      listRegionName: candidate.region_name,
-      workAddress,
-      siteAddress,
-      rawText,
-    });
-    const managerNameRaw =
-      extractBusinessTableValue(lines, ['담당자 이름', '담당자명']) ||
-      extractBusinessValue(lines, ['담당자 이름', '담당자명'], ['담당자 연락처', '연락처', '전화번호', '급여정보', '급여 정보', '상세정보', '사업자 정보']) ||
-      '-';
-    const managerPhoneRaw =
-      extractBusinessTableValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호']) ||
-      extractBusinessValue(lines, ['담당자 연락처', '담당자연락처', '연락처', '전화번호'], ['급여정보', '급여 정보', '상세정보', '상세 정보', '사업자 정보', '접수방법']) ||
-      '-';
-    const { managerName, managerPhone } = splitManagerFields(managerNameRaw, managerPhoneRaw);
-    const agencyCompany = stripLabelNoise(extractBusinessTableValue(lines, ['대행사']) || '-') || '-';
-    const category = findLabelValue(lines, ['업종', '상품유형', '분류', '카테고리']);
-    const detailText = extractDetailSection(lines, ['상세정보', '상세 정보'], ['접수방법', '접수 방법', '기업정보', '사업자 정보']) || rawText.slice(0, 3000) || '-';
-    const summary = lines.find((line) => line !== title && line.length >= 10 && line.length <= 140 && !line.includes('지역현장')) || candidate.raw_text || null;
-
-    return {
-      region_name: actualRegion.regionName,
-      list_region_name: candidate.region_name,
-      actual_region_name: actualRegion.regionName,
-      actual_region_source: actualRegion.source,
-      region_match_text: actualRegion.matchText,
-      ad_section: normalizeSection(candidate.ad_section),
-      site_name: siteName,
-      posted_at: dateInfo.postedAt,
-      posted_datetime: dateInfo.postedDatetime,
-      manager_name: managerName,
-      manager_phone: managerPhone,
-      agency_company: agencyCompany,
-      apartment_fee: stripLabelNoise(extractSalaryTableValue(lines, ['아파트 분양', '아파트분양']) || extractApartmentFee(getSalarySectionLines(lines)) || '-') || '-',
-      move_in_date: extractMoveInDate(lines),
-      source_url: normalizeSourceUrl(candidate.source_url),
-      source_id: extractSourceId(candidate.source_url),
-      title,
-      summary,
-      site_address: siteAddress,
-      work_address: workAddress,
-      category,
-      list_date_group: candidate.list_date_group || null,
-      detail_text: detailText,
-      raw_text: rawText.slice(0, 12000),
-      crawled_at: new Date().toISOString(),
-    };
-  } finally {
-    await page.close().catch(() => undefined);
-  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runWorker()));
+  return results;
 }
 
 async function sendBatch(items: BunyanglineItem[], batchNo: number) {
   if (!SEND_TO_CRM) {
     console.log(`[CRM저장] SEND_TO_CRM=false → ${items.length}건 저장 생략`);
-    return { ok: true, skipped: true };
+    return;
   }
-
   if (!IMPORT_URL) throw new Error('CRM_BUNYANGLINE_IMPORT_URL 환경변수가 없습니다.');
 
   const response = await fetch(IMPORT_URL, {
@@ -1227,110 +494,87 @@ async function sendBatch(items: BunyanglineItem[], batchNo: number) {
     },
     body: JSON.stringify({ items }),
   });
-
   const json = await response.json().catch(() => null);
   if (!response.ok || !json?.ok) {
     throw new Error(`[CRM저장] batch ${batchNo} 실패: status=${response.status} body=${JSON.stringify(json)}`);
   }
-
-  console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 전송 완료 / insertedOrUpdated=${json.insertedOrUpdated ?? '-'}`);
-  return json;
+  console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 전송 완료`);
 }
 
 async function main() {
   const debugDir = await ensureDebugDir();
-  const regionIds = REGION_ARG === 'all' ? null : new Set(REGION_ARG.split(',').map((item) => item.trim()).filter(Boolean));
-  const targetRegions = regionIds ? REGIONS.filter((region) => regionIds.has(region.id) || regionIds.has(region.name)) : REGIONS;
+  const selectedIds = REGION_ARG === 'all'
+    ? new Set(REGIONS.filter((region) => region.id !== '0').map((region) => region.id))
+    : new Set(REGION_ARG.split(',').map((value) => value.trim()).filter(Boolean));
+  const targetRegions = REGIONS.filter((region) => selectedIds.has(region.id) || selectedIds.has(region.name));
+  if (!targetRegions.length) throw new Error(`수집할 지역이 없습니다. BUNYANGLINE_REGION_IDS=${REGION_ARG}`);
 
-  if (targetRegions.length === 0) {
-    throw new Error(`수집할 지역이 없습니다. BUNYANGLINE_REGION_IDS=${REGION_ARG}`);
-  }
+  console.log('분양라인 직접 JSON 페이지 크롤러를 시작합니다.');
+  console.log(`- 실행 모드: ${CRAWL_MODE}`);
+  console.log(`- CRM 데이터 하한: ${DATA_START_DATE}`);
+  console.log(`- 이번 실행 상세 표시일 기준: ${START_DATE} 이후`);
+  console.log(`- 대상: ${targetRegions.map((region) => `${region.name}(${region.id})`).join(', ')}`);
+  console.log(`- 상세 동시 처리: ${DETAIL_CONCURRENCY}개`);
+  console.log(`- CRM 전송: ${SEND_TO_CRM}`);
 
-  console.log('분양라인 JSON/API 우선 크롤러를 시작합니다.');
-  console.log('- 수집 방식: 목록 JSON/API 응답에서 공고 idx 추출 → 상세페이지 직접 접근');
-  console.log('- 클릭 방식: 사용하지 않음');
-  console.log('- 중복 기준: source_url 단독');
-  console.log(`- 수집 기간: ${cutoffKstDate()} 이후 등록 공고`);
-  console.log(`- regionArg: ${REGION_ARG}`);
-  console.log(`- scrollRounds: ${SCROLL_ROUNDS}`);
-  console.log(`- headless: ${HEADLESS}`);
-  console.log(`- sendToCrm: ${SEND_TO_CRM}`);
-  console.log(`[지역목록] ${targetRegions.map((region) => `${region.name}(${region.id})`).join(', ')}`);
-
-  const browser = await chromium.launch({ headless: HEADLESS });
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 1400 },
-    locale: 'ko-KR',
-    timezoneId: 'Asia/Seoul',
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  const client = await request.newContext({
+    baseURL: BASE_URL,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36',
+    extraHTTPHeaders: { 'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.7' },
   });
 
-  const listPage = await context.newPage();
-  const allItems: BunyanglineItem[] = [];
-  const failures: Array<{ region: string; source_url?: string; title: string; reason: string }> = [];
-  let globalBatchNo = 1;
-  let totalSavedToCrm = 0;
+  const pageSummaries: PageSummary[] = [];
+  const failures: Array<{ source_id: string; source_url: string; reason: string }> = [];
 
   try {
+    const allCandidates: Candidate[] = [];
     for (const region of targetRegions) {
-      const candidates = await collectRegionApiCandidates(listPage, region, debugDir);
-      console.log(`[${region.name}] 상세 파싱 시작: ${candidates.length}건`);
-
-      let regionSaved = 0;
-      const regionItems: BunyanglineItem[] = [];
-
-      for (let index = 0; index < candidates.length; index += 1) {
-        const candidate = candidates[index];
-        if (index > 0 && index % 30 === 0) {
-          console.log(`[${region.name}] 상세 파싱 진행 ${index}/${candidates.length} / 저장대상 ${regionSaved}건`);
-        }
-
-        try {
-          const item = await parseDetail(context, candidate);
-          if (!item) continue;
-          regionItems.push(item);
-          allItems.push(item);
-          regionSaved += 1;
-        } catch (error: any) {
-          const reason = error?.message || String(error);
-          failures.push({ region: region.name, source_url: candidate.source_url, title: candidate.title, reason });
-          console.log(`[${region.name}] 상세 파싱 실패: ${candidate.source_url} / ${reason}`);
-        }
-      }
-
-      const regionDeduped = Array.from(new Map(regionItems.map((item) => [item.source_url, item])).values());
-      await saveJson(path.join(debugDir, `collected-items-${safeFileName(region.name)}.json`), regionDeduped);
-
-      console.log(`[${region.name}] 완료: 후보 ${candidates.length}건 / 최근 ${LOOKBACK_DAYS}일 저장대상 ${regionSaved}건 / 지역 중복제거 후 ${regionDeduped.length}건 / 실패 누적 ${failures.length}건`);
-
-      if (regionDeduped.length > 0) {
-        console.log(`[${region.name}] CRM 지역별 즉시 저장 시작: ${regionDeduped.length}건`);
-        const batchSize = 50;
-        for (let start = 0; start < regionDeduped.length; start += batchSize) {
-          const batch = regionDeduped.slice(start, start + batchSize);
-          await sendBatch(batch, globalBatchNo);
-          globalBatchNo += 1;
-          totalSavedToCrm += batch.length;
-        }
-        console.log(`[${region.name}] CRM 지역별 즉시 저장 완료: ${regionDeduped.length}건`);
-      } else {
-        console.log(`[${region.name}] CRM 저장 대상 없음`);
-      }
+      const candidates = await collectRegionCandidates(client, region, pageSummaries);
+      allCandidates.push(...candidates);
+      console.log(`[${region.name}] 상세 날짜 검증 후보 ${candidates.length}건`);
     }
 
-    const deduped = Array.from(new Map(allItems.map((item) => [item.source_url, item])).values());
-    await saveJson(path.join(debugDir, 'collected-items.json'), deduped);
+    const dedupedCandidates = mergeCandidates(allCandidates);
+    const limitedCandidates = MAX_DETAILS > 0 ? dedupedCandidates.slice(0, MAX_DETAILS) : dedupedCandidates;
+    console.log(`[상세] 중복 제거 후 ${dedupedCandidates.length}건${MAX_DETAILS > 0 ? ` · 테스트 제한 ${limitedCandidates.length}건` : ''}`);
+
+    let completed = 0;
+    const parsed = await mapWithConcurrency(limitedCandidates, DETAIL_CONCURRENCY, async (candidate) => {
+      try {
+        const item = await parseDetail(client, candidate);
+        completed += 1;
+        if (completed % 25 === 0 || completed === limitedCandidates.length) {
+          console.log(`[상세] ${completed}/${limitedCandidates.length} 완료`);
+        }
+        await sleep(REQUEST_DELAY_MS);
+        return item;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        failures.push({ source_id: candidate.source_id, source_url: candidate.source_url, reason });
+        completed += 1;
+        console.log(`[상세실패] ${candidate.source_id}: ${reason}`);
+        return null;
+      }
+    });
+
+    const items = parsed.filter((item): item is BunyanglineItem => Boolean(item));
+    await saveJson(path.join(debugDir, 'page-summaries.json'), pageSummaries);
+    await saveJson(path.join(debugDir, 'candidates.json'), dedupedCandidates);
+    await saveJson(path.join(debugDir, 'collected-items.json'), items);
     await saveJson(path.join(debugDir, 'failures.json'), failures);
 
-    console.log('');
-    console.log('='.repeat(90));
-    console.log(`[최종] 수집 대상: ${deduped.length}건 / CRM 전송 누적: ${totalSavedToCrm}건 / 실패: ${failures.length}건`);
-    console.log('[완료] 분양라인 크롤링이 완료되었습니다.');
+    const batchSize = 100;
+    for (let start = 0, batchNo = 1; start < items.length; start += batchSize, batchNo += 1) {
+      await sendBatch(items.slice(start, start + batchSize), batchNo);
+    }
+
+    const sectionCounts = items.reduce<Record<string, number>>((acc, item) => {
+      acc[item.ad_section] = (acc[item.ad_section] || 0) + 1;
+      return acc;
+    }, {});
+    console.log(`[완료] 저장대상 ${items.length}건 · 실패 ${failures.length}건 · 지면 ${JSON.stringify(sectionCounts)}`);
   } finally {
-    await listPage.close().catch(() => undefined);
-    await context.close().catch(() => undefined);
-    await browser.close().catch(() => undefined);
+    await client.dispose();
   }
 }
 
