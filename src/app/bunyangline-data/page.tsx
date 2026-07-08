@@ -23,7 +23,7 @@ const REGIONS = [
 ];
 
 const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
-const SECTION_NAMES = ['유니크', '슈페리어', '전국TOP', '지역TOP', '일반'] as const;
+const SECTION_NAMES = ['유니크', '슈페리어', '프리미엄', '전국TOP', '일반구인글'] as const;
 
 type BunyanglineRow = {
   id: number | string;
@@ -60,9 +60,9 @@ function normalizeAdSection(value: string | null | undefined) {
   const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
   if (text.includes('unique') || text.includes('유니크')) return '유니크';
   if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('premium') || text.includes('프리미엄')) return '프리미엄';
   if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
-  if (text.includes('지역top') || text.includes('지역탑') || text.includes('regionaltop')) return '지역TOP';
-  return '일반';
+  return '일반구인글';
 }
 
 function sectionSummaryText(counts: Record<string, number>) {
@@ -296,8 +296,8 @@ export default function BunyanglineDataPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div>
             <h1 style={titleStyle}>분양라인데이터</h1>
-            <p style={subtitleStyle}>분양라인 지역현장 구인공고를 최근 5일 기준으로 수집하고, 담당자 연락처 중복 여부를 확인합니다.</p>
-            <div style={noticeStyle}>수집 기준: 지역별 전체 지면 · 최근 5일 등록 공고 · 원본공고 링크 기준 누적 저장</div>
+            <p style={subtitleStyle}>분양라인 지역현장 구인공고 중 2026년 7월 1일 이후 실제 등록된 데이터를 누적하고, 담당자 연락처 중복 여부를 확인합니다.</p>
+            <div style={noticeStyle}>수집 기준: 2026.07.01 이후 · 유니크/슈페리어/프리미엄/전국TOP/일반구인글 · 원본공고 링크 기준 누적 저장</div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button type="button" onClick={() => downloadRowsAsExcel(rows, selectedRegion)} disabled={rows.length === 0 || loading} style={excelButtonStyle(rows.length === 0 || loading)}>
@@ -361,7 +361,7 @@ export default function BunyanglineDataPage() {
                 <Th>담당자이름</Th>
                 <Th>담당자 연락처</Th>
                 <Th>대행사</Th>
-                <Th>수수료</Th>
+                <Th>아파트 분양</Th>
                 <Th>투입일</Th>
                 <Th>원본공고링크</Th>
                 <Th>담당자</Th>
