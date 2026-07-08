@@ -1,7 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const REGIONS = [
   '모든지역',
@@ -22,489 +21,493 @@ const REGIONS = [
   '제주도',
 ];
 
-const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
-const SECTION_NAMES = ['유니크', '슈페리어', '프리미엄', '전국TOP', '일반구인글'] as const;
+const ASSIGNEES = ['', '조계현', '이세호', '기여운', '최연전'];
+
+const SECTION_ORDER = ['유니크', '슈페리어', '프리미엄', '전국TOP', '일반구인글'];
 
 type BunyanglineRow = {
-  id: number | string;
-  region_name: string | null;
-  ad_section: string | null;
-  site_name: string | null;
-  posted_at: string | null;
-  posted_datetime: string | null;
-  manager_name: string | null;
-  manager_phone: string | null;
-  manager_phone_duplicate_count?: number;
-  manager_phone_is_duplicate?: boolean;
-  agency_company: string | null;
-  apartment_fee: string | null;
-  move_in_date: string | null;
-  source_url: string | null;
-  assigned_to: string | null;
-  detail_text: string | null;
-  title: string | null;
-  summary: string | null;
-  site_address: string | null;
-  work_address: string | null;
-  category: string | null;
-  crawled_at: string | null;
-  created_at: string | null;
+  id?: string | number;
+  region_name?: string | null;
+  list_region_name?: string | null;
+  ad_section?: string | null;
+  site_name?: string | null;
+  posted_at?: string | null;
+  posted_datetime?: string | null;
+  manager_name?: string | null;
+  manager_phone?: string | null;
+  agency_company?: string | null;
+  apartment_fee?: string | null;
+  move_in_date?: string | null;
+  source_url?: string | null;
+  source_id?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  site_address?: string | null;
+  work_address?: string | null;
+  category?: string | null;
+  detail_text?: string | null;
+  raw_text?: string | null;
+  assigned_to?: string | null;
+  is_new?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
 };
 
-function emptyText(value: string | null | undefined) {
-  const text = String(value ?? '').trim();
+type ApiResponse = {
+  ok?: boolean;
+  count?: number;
+  data?: BunyanglineRow[];
+  message?: string;
+  error?: string;
+};
+
+function value(row: BunyanglineRow, ...keys: string[]) {
+  for (const key of keys) {
+    const raw = row[key];
+    if (raw === null || raw === undefined) continue;
+    const text = String(raw).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function formatDate(text: string) {
+  if (!text) return '-';
+  const normalized = text.replace('T', ' ').slice(0, 10);
+  return normalized || '-';
+}
+
+function formatPhone(text: string) {
+  const digits = text.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('010')) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10 && digits.startsWith('02')) {
+    return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
   return text || '-';
 }
 
-function normalizeAdSection(value: string | null | undefined) {
-  const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
-  if (text.includes('unique') || text.includes('유니크')) return '유니크';
-  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
-  if (text.includes('premium') || text.includes('프리미엄')) return '프리미엄';
-  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
-  return '일반구인글';
-}
-
-function sectionSummaryText(counts: Record<string, number>) {
-  return SECTION_NAMES.map((name) => `${name} ${Number(counts[name] || 0).toLocaleString()}개`).join(' · ');
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return '-';
-  const date = value.slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return value;
-  const [year, month, day] = date.split('-');
-  return `${year}.${month}.${day}`;
-}
-
-function formatPhone(value: string | null | undefined) {
-  const raw = String(value ?? '').trim();
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) return '-';
-
-  if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  if (digits.length === 11 && /^01[016789]/.test(digits)) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-  if (digits.length === 10 && /^01[016789]/.test(digits)) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  if (digits.length === 10 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
-  if (digits.length === 9 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
-  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-
-  return raw || '-';
-}
-
-function truncate(value: string | null | undefined, length = 28) {
-  const text = emptyText(value);
-  if (text === '-') return text;
-  return text.length > length ? `${text.slice(0, length)}...` : text;
-}
-
-function xmlEscape(value: string | null | undefined) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function normalizeExcelText(value: string | null | undefined) {
-  return String(value ?? '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .trim() || '-';
-}
-
-function excelCell(value: string | null | undefined, styleId = 'Text') {
-  return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${xmlEscape(normalizeExcelText(value))}</Data></Cell>`;
-}
-
-function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
-  const headers = ['지역', '게재지면', '현장명', '등록일', '담당자이름', '담당자 연락처', '대행사', '수수료', '투입일', '원본공고링크', '담당자', '상세정보'];
-  const columnWidths = [80, 90, 220, 90, 110, 130, 220, 190, 90, 260, 100, 360];
-
-  const headerRow = `<Row>${headers.map((header) => excelCell(header, 'Header')).join('')}</Row>`;
-  const bodyRows = rows
-    .map((row) => {
-      const cells = [
-        emptyText(row.region_name),
-        normalizeAdSection(row.ad_section),
-        emptyText(row.site_name),
-        formatDate(row.posted_at || row.posted_datetime),
-        emptyText(row.manager_name),
-        formatPhone(row.manager_phone),
-        emptyText(row.agency_company),
-        emptyText(row.apartment_fee),
-        emptyText(row.move_in_date),
-        emptyText(row.source_url),
-        emptyText(row.assigned_to),
-        emptyText(row.detail_text),
-      ];
-
-      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 11 ? 'Detail' : 'Text')).join('')}</Row>`;
-    })
-    .join('');
-
-  const worksheet = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:o="urn:schemas-microsoft-com:office:office"
-  xmlns:x="urn:schemas-microsoft-com:office:excel"
-  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:html="http://www.w3.org/TR/REC-html40">
-  <Styles>
-    <Style ss:ID="Header">
-      <Font ss:Bold="1"/>
-      <Interior ss:Color="#E5E7EB" ss:Pattern="Solid"/>
-      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Borders>
-        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-      </Borders>
-    </Style>
-    <Style ss:ID="Text">
-      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
-    </Style>
-    <Style ss:ID="Detail">
-      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
-    </Style>
-  </Styles>
-  <Worksheet ss:Name="분양라인데이터">
-    <Table>
-      ${columnWidths.map((width) => `<Column ss:Width="${width}"/>`).join('')}
-      ${headerRow}
-      ${bodyRows}
-    </Table>
-    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-      <FreezePanes/>
-      <FrozenNoSplit/>
-      <SplitHorizontal>1</SplitHorizontal>
-      <TopRowBottomPane>1</TopRowBottomPane>
-      <ActivePane>2</ActivePane>
-    </WorksheetOptions>
-  </Worksheet>
-</Workbook>`;
-
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  const safeRegion = selectedRegion.replace(/[\\/:*?"<>|]/g, '_');
-  const fileName = `분양라인데이터_${safeRegion}_${y}${m}${d}.xls`;
-  const blob = new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+function escapeCsv(value: unknown) {
+  const text = String(value ?? '').replace(/\r?\n/g, ' ');
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export default function BunyanglineDataPage() {
+  const [rows, setRows] = useState<BunyanglineRow[]>([]);
   const [selectedRegion, setSelectedRegion] = useState('모든지역');
   const [keyword, setKeyword] = useState('');
-  const [rows, setRows] = useState<BunyanglineRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [openedId, setOpenedId] = useState<string | number | null>(null);
-  const [assignSavingId, setAssignSavingId] = useState<string | number | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState('');
+  const [selectedRow, setSelectedRow] = useState<BunyanglineRow | null>(null);
 
-  const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '';
+  const fetchRows = useCallback(async (regionArg?: string, keywordArg?: string) => {
+    const nextRegion = regionArg ?? selectedRegion;
+    const nextKeyword = keywordArg ?? keyword;
 
-  const sectionCounts = useMemo(() => {
-    const base = SECTION_NAMES.reduce<Record<string, number>>((acc, name) => {
-      acc[name] = 0;
-      return acc;
-    }, {});
-
-    return rows.reduce<Record<string, number>>((acc, row) => {
-      const key = normalizeAdSection(row.ad_section);
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, base);
-  }, [rows]);
-
-  async function fetchRows(nextRegion = selectedRegion, nextKeyword = keyword) {
     setLoading(true);
     setErrorMessage('');
 
     try {
       const params = new URLSearchParams({
-        region: nextRegion,
-        keyword: nextKeyword,
+        region: nextRegion || '모든지역',
+        keyword: nextKeyword || '',
         limit: '5000',
+        _t: String(Date.now()),
       });
 
-      const response = await fetch(`/api/bunyangline-data/list?${params.toString()}`, { cache: 'no-store' });
-      const result = await response.json();
+      const response = await fetch(`/api/bunyangline-data/list?${params.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
+      });
 
-      if (!response.ok || !result.ok) {
-        throw new Error(result?.error || result?.message || '조회 실패');
+      const result = (await response.json().catch(() => null)) as ApiResponse | null;
+      console.log('[분양라인데이터 조회결과]', result);
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || result?.message || `조회 실패 status=${response.status}`);
       }
 
-      setRows(result.data ?? []);
+      const nextRows = Array.isArray(result.data) ? result.data : [];
+      setRows(nextRows);
+      setLastLoadedAt(new Date().toLocaleString('ko-KR'));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[분양라인데이터 조회오류]', message);
+      setErrorMessage(message);
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [keyword, selectedRegion]);
 
-  function resetFilters() {
-    setSelectedRegion('모든지역');
-    setKeyword('');
-    setOpenedId(null);
+  useEffect(() => {
     void fetchRows('모든지역', '');
+    // 최초 진입 시 무조건 전체 조회합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const sectionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      const section = value(row, 'ad_section') || '미지정';
+      counts[section] = (counts[section] || 0) + 1;
+    }
+    return counts;
+  }, [rows]);
+
+  const visibleRows = rows;
+
+  async function handleRegionClick(region: string) {
+    setSelectedRegion(region);
+    await fetchRows(region, keyword);
   }
 
-  async function updateAssignee(rowId: string | number, assignedTo: string) {
-    const previousRows = rows;
-    setAssignSavingId(rowId);
-    setErrorMessage('');
+  async function handleSearch() {
+    await fetchRows(selectedRegion, keyword);
+  }
 
-    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? { ...row, assigned_to: assignedTo || null } : row)));
+  async function resetFilters() {
+    setKeyword('');
+    setSelectedRegion('모든지역');
+    await fetchRows('모든지역', '');
+  }
+
+  async function updateAssignee(row: BunyanglineRow, assignedTo: string) {
+    const id = value(row, 'id');
+    if (!id) {
+      alert('저장할 데이터 ID가 없습니다.');
+      return;
+    }
+
+    const previousRows = rows;
+    setRows((current) => current.map((item) => String(item.id) === String(id) ? { ...item, assigned_to: assignedTo || null } : item));
 
     try {
       const response = await fetch('/api/bunyangline-data/assign', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ id: rowId, assigned_to: assignedTo || null }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, assigned_to: assignedTo }),
       });
-
       const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.ok) throw new Error(result?.error || result?.message || '담당자 저장 실패');
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || result?.message || '담당자 저장 실패');
+      }
     } catch (error) {
       setRows(previousRows);
-      const message = error instanceof Error ? error.message : String(error);
-      setErrorMessage(message);
-      alert(`담당자 저장 실패: ${message}`);
-    } finally {
-      setAssignSavingId(null);
+      alert(error instanceof Error ? error.message : String(error));
     }
   }
 
-  useEffect(() => {
-    void fetchRows(selectedRegion, keyword);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRegion]);
+  function downloadCsv() {
+    const headers = [
+      '지역',
+      '게재지면',
+      '현장명',
+      '등록일',
+      '담당자이름',
+      '담당자연락처',
+      '대행사',
+      '아파트분양',
+      '투입일',
+      '배정담당자',
+      '사업지주소',
+      '근무지주소',
+      '원본공고',
+    ];
+
+    const lines = [
+      headers.map(escapeCsv).join(','),
+      ...visibleRows.map((row) => [
+        value(row, 'region_name'),
+        value(row, 'ad_section'),
+        value(row, 'site_name', 'title'),
+        value(row, 'posted_at', 'posted_datetime'),
+        value(row, 'manager_name'),
+        value(row, 'manager_phone'),
+        value(row, 'agency_company'),
+        value(row, 'apartment_fee'),
+        value(row, 'move_in_date'),
+        value(row, 'assigned_to'),
+        value(row, 'site_address'),
+        value(row, 'work_address'),
+        value(row, 'source_url'),
+      ].map(escapeCsv).join(',')),
+    ];
+
+    const blob = new Blob([`\ufeff${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `분양라인데이터_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 
   return (
-    <main style={pageStyle}>
-      <section style={{ marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+    <main className="min-h-screen bg-[#0b0b0d] px-5 py-6 text-slate-100 md:px-8">
+      <section className="mx-auto max-w-[1800px] space-y-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 style={titleStyle}>분양라인데이터</h1>
-            <p style={subtitleStyle}>분양라인 지역현장 구인공고 중 2026년 7월 1일 이후 실제 등록된 데이터를 누적하고, 담당자 연락처 중복 여부를 확인합니다.</p>
-            <div style={noticeStyle}>수집 기준: 2026.07.01 이후 · 유니크/슈페리어/프리미엄/전국TOP/일반구인글 · 원본공고 링크 기준 누적 저장</div>
+            <h1 className="text-3xl font-black tracking-tight text-white">분양라인데이터</h1>
+            <p className="mt-2 text-sm font-semibold text-slate-300">
+              분양라인 지역별 구인공고 중 2026년 7월 1일 이후 실제 등록된 데이터를 누적하고, 담당자 연락처 중복 여부를 확인합니다.
+            </p>
+            <div className="mt-3 inline-flex rounded-full border border-violet-500/60 bg-violet-500/10 px-4 py-2 text-xs font-black text-violet-200">
+              수집 기준: 2026.07.01 이후 · 유니크/슈페리어/프리미엄/전국TOP/일반구인글 · 원본공고 링크 기준 누적 저장
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => downloadRowsAsExcel(rows, selectedRegion)} disabled={rows.length === 0 || loading} style={excelButtonStyle(rows.length === 0 || loading)}>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="rounded-xl border border-emerald-500/50 px-4 py-2 text-sm font-black text-emerald-200 hover:bg-emerald-500/10"
+            >
               엑셀 다운로드
             </button>
-            <button type="button" onClick={() => fetchRows()} disabled={loading} style={secondaryButtonStyle(loading)}>
-              {loading ? '불러오는 중...' : '새로고침'}
+            <button
+              type="button"
+              onClick={() => fetchRows(selectedRegion, keyword)}
+              className="rounded-xl border border-white/15 bg-white px-4 py-2 text-sm font-black text-slate-950 hover:bg-slate-200 disabled:opacity-50"
+              disabled={loading}
+            >
+              {loading ? '조회중' : '새로고침'}
             </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#141416] p-4 shadow-2xl shadow-black/30">
+          <div className="flex flex-wrap gap-2">
+            {REGIONS.map((region) => (
+              <button
+                key={region}
+                type="button"
+                onClick={() => handleRegionClick(region)}
+                className={`rounded-full border px-4 py-2 text-sm font-black transition ${
+                  selectedRegion === region
+                    ? 'border-violet-400 bg-violet-500 text-white shadow-lg shadow-violet-950/40'
+                    : 'border-white/15 bg-[#101012] text-slate-200 hover:border-violet-400/70 hover:bg-violet-500/10'
+                }`}
+              >
+                {region}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 md:flex-row">
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleSearch();
+              }}
+              placeholder="현장명 / 담당자 / 연락처 / 대행사 / 지면 / 배정담당자 검색"
+              className="h-11 flex-1 rounded-xl border border-white/10 bg-[#0c0c0e] px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="h-11 rounded-xl bg-violet-500 px-6 text-sm font-black text-white hover:bg-violet-400 disabled:opacity-50"
+              disabled={loading}
+            >
+              검색
+            </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-11 rounded-xl border border-white/15 px-5 text-sm font-black text-slate-300 hover:bg-white/5 disabled:opacity-50"
+              disabled={loading}
+            >
+              필터해제
+            </button>
+          </div>
+        </div>
+
+        {errorMessage ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm font-bold text-red-200">
+            조회 오류: {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-[#141416] p-5">
+            <p className="text-xs font-black text-slate-400">현재 출력건수</p>
+            <p className="mt-2 text-3xl font-black text-white">{visibleRows.length.toLocaleString('ko-KR')}건</p>
+            {lastLoadedAt ? <p className="mt-2 text-xs font-bold text-slate-500">마지막 조회: {lastLoadedAt}</p> : null}
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-[#141416] p-5">
+            <p className="text-xs font-black text-slate-400">선택 지역</p>
+            <p className="mt-2 text-2xl font-black text-white">{selectedRegion}</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-[#141416] p-5">
+            <p className="text-xs font-black text-slate-400">게재지면 현황</p>
+            <p className="mt-3 text-sm font-black text-white">
+              {SECTION_ORDER.map((section) => `${section} ${sectionCounts[section] || 0}개`).join(' · ')}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111113]">
+          <div className="max-h-[68vh] overflow-auto">
+            <table className="min-w-[1700px] w-full border-collapse text-center text-sm">
+              <thead className="sticky top-0 z-10 bg-[#1b1b1f] text-xs font-black text-blue-200">
+                <tr>
+                  <th className="px-3 py-3">지역</th>
+                  <th className="px-3 py-3">게재지면</th>
+                  <th className="px-3 py-3">현장명</th>
+                  <th className="px-3 py-3">등록일</th>
+                  <th className="px-3 py-3">담당자이름</th>
+                  <th className="px-3 py-3">담당자 연락처</th>
+                  <th className="px-3 py-3">대행사</th>
+                  <th className="px-3 py-3">아파트 분양</th>
+                  <th className="px-3 py-3">투입일</th>
+                  <th className="px-3 py-3">담당자</th>
+                  <th className="px-3 py-3">상세정보</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center font-bold text-slate-400">데이터를 불러오는 중입니다.</td>
+                  </tr>
+                ) : visibleRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center font-bold text-slate-400">표시할 데이터가 없습니다.</td>
+                  </tr>
+                ) : (
+                  visibleRows.map((row, index) => {
+                    const rowId = value(row, 'id') || `${value(row, 'source_url')}-${index}`;
+                    const siteName = value(row, 'site_name', 'title') || '-';
+                    const sourceUrl = value(row, 'source_url');
+                    const isNew = Boolean(row.is_new);
+
+                    return (
+                      <tr key={rowId} className="hover:bg-white/[0.035]">
+                        <td className="px-3 py-3 font-black text-slate-200">{value(row, 'region_name') || '-'}</td>
+                        <td className="px-3 py-3">
+                          <span className="inline-flex rounded-full border border-violet-400/40 bg-violet-500/10 px-2.5 py-1 text-xs font-black text-violet-200">
+                            {value(row, 'ad_section') || '-'}
+                          </span>
+                        </td>
+                        <td className="max-w-[320px] px-3 py-3 text-left font-black text-white">
+                          <div className="flex items-center gap-2">
+                            {isNew ? <span className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-white">NEW</span> : null}
+                            {sourceUrl ? (
+                              <a href={sourceUrl} target="_blank" rel="noreferrer" className="line-clamp-2 hover:text-violet-300 hover:underline">
+                                {siteName}
+                              </a>
+                            ) : (
+                              <span className="line-clamp-2">{siteName}</span>
+                            )}
+                          </div>
+                          <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">{value(row, 'site_address', 'work_address')}</p>
+                        </td>
+                        <td className="px-3 py-3 font-bold text-slate-300">{formatDate(value(row, 'posted_at', 'posted_datetime'))}</td>
+                        <td className="px-3 py-3 font-bold text-slate-200">{value(row, 'manager_name') || '-'}</td>
+                        <td className="px-3 py-3 font-mono text-xs font-bold text-slate-200">{formatPhone(value(row, 'manager_phone'))}</td>
+                        <td className="max-w-[180px] px-3 py-3 font-bold text-slate-300"><span className="line-clamp-2">{value(row, 'agency_company') || '-'}</span></td>
+                        <td className="max-w-[180px] px-3 py-3 font-bold text-slate-300"><span className="line-clamp-2">{value(row, 'apartment_fee') || '-'}</span></td>
+                        <td className="px-3 py-3 font-bold text-slate-300">{value(row, 'move_in_date') || '-'}</td>
+                        <td className="px-3 py-3">
+                          <select
+                            value={value(row, 'assigned_to')}
+                            onChange={(event) => updateAssignee(row, event.target.value)}
+                            className="h-9 rounded-lg border border-white/10 bg-[#0b0b0d] px-2 text-xs font-black text-white outline-none focus:border-violet-400"
+                          >
+                            {ASSIGNEES.map((name) => (
+                              <option key={name || 'empty'} value={name}>{name || '미배정'}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRow(row)}
+                            className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-black text-slate-200 hover:border-violet-400 hover:text-violet-200"
+                          >
+                            보기
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
 
-      <section style={panelStyle}>
-        <div style={regionWrapStyle}>
-          {REGIONS.map((region) => {
-            const active = selectedRegion === region;
-            return (
-              <button key={region} type="button" onClick={() => setSelectedRegion(region)} style={regionButtonStyle(active)}>
-                {region}
+      {selectedRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5">
+          <div className="max-h-[86vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-[#151518] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+              <div>
+                <p className="text-xs font-black text-violet-300">{value(selectedRow, 'ad_section')} · {value(selectedRow, 'region_name')}</p>
+                <h2 className="mt-1 text-xl font-black text-white">{value(selectedRow, 'site_name', 'title') || '-'}</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-400">{value(selectedRow, 'site_address', 'work_address')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRow(null)}
+                className="rounded-lg border border-white/15 px-3 py-2 text-sm font-black text-slate-200 hover:bg-white/5"
+              >
+                닫기
               </button>
-            );
-          })}
+            </div>
+            <div className="max-h-[68vh] overflow-auto p-5">
+              <div className="grid gap-3 text-sm md:grid-cols-2">
+                <Info label="등록일" value={formatDate(value(selectedRow, 'posted_at', 'posted_datetime'))} />
+                <Info label="담당자" value={`${value(selectedRow, 'manager_name') || '-'} / ${formatPhone(value(selectedRow, 'manager_phone'))}`} />
+                <Info label="대행사" value={value(selectedRow, 'agency_company') || '-'} />
+                <Info label="아파트 분양" value={value(selectedRow, 'apartment_fee') || '-'} />
+                <Info label="투입일" value={value(selectedRow, 'move_in_date') || '-'} />
+                <Info label="배정담당자" value={value(selectedRow, 'assigned_to') || '미배정'} />
+              </div>
+
+              {value(selectedRow, 'source_url') ? (
+                <a
+                  href={value(selectedRow, 'source_url')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex rounded-xl border border-violet-400/40 px-4 py-2 text-sm font-black text-violet-200 hover:bg-violet-500/10"
+                >
+                  원본공고 열기
+                </a>
+              ) : null}
+
+              <div className="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">
+                <p className="mb-3 text-sm font-black text-slate-300">상세정보</p>
+                <pre className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-200">
+                  {value(selectedRow, 'detail_text', 'summary', 'raw_text') || '상세정보가 없습니다.'}
+                </pre>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <div style={searchRowStyle}>
-          <input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void fetchRows(selectedRegion, keyword);
-            }}
-            placeholder="현장명 / 담당자 / 연락처 / 대행사 / 지면 / 배정담당자 검색"
-            style={searchInputStyle}
-          />
-          <button type="button" onClick={() => fetchRows(selectedRegion, keyword)} disabled={loading} style={primaryButtonStyle(loading)}>
-            검색
-          </button>
-          <button type="button" onClick={resetFilters} disabled={!filterActive && !loading} style={secondaryButtonStyle(!filterActive && !loading)}>
-            필터해제
-          </button>
-        </div>
-
-        {errorMessage ? <div style={errorStyle}>{errorMessage}</div> : null}
-      </section>
-
-      <section style={summaryGridStyle}>
-        <SummaryCard label="현재 출력건수" value={`${rows.length.toLocaleString()}건`} />
-        <SummaryCard label="선택 지역" value={selectedRegion} />
-        <SummaryCard label="게재지면 현황" value={sectionSummaryText(sectionCounts)} small />
-      </section>
-
-      <section style={tablePanelStyle}>
-        <div style={tableScrollStyle}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <Th>지역</Th>
-                <Th>게재지면</Th>
-                <Th>현장명</Th>
-                <Th>등록일</Th>
-                <Th>담당자이름</Th>
-                <Th>담당자 연락처</Th>
-                <Th>대행사</Th>
-                <Th>아파트 분양</Th>
-                <Th>투입일</Th>
-                <Th>원본공고링크</Th>
-                <Th>담당자</Th>
-                <Th>상세정보</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={12} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={12} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
-                </tr>
-              ) : (
-                rows.map((row) => {
-                  const opened = openedId === row.id;
-                  return (
-                    <Fragment key={row.id}>
-                      <tr style={opened ? openedRowStyle : undefined}>
-                        <Td>{emptyText(row.region_name)}</Td>
-                        <Td><span style={sectionBadgeStyle}>{normalizeAdSection(row.ad_section)}</span></Td>
-                        <Td title={emptyText(row.site_name)}><strong>{truncate(row.site_name, 24)}</strong></Td>
-                        <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
-                        <Td>{emptyText(row.manager_name)}</Td>
-                        <Td>
-                          <span style={phoneStyle(Boolean(row.manager_phone_is_duplicate))} title={row.manager_phone_is_duplicate ? `중복 연락처 ${row.manager_phone_duplicate_count}건` : ''}>
-                            {formatPhone(row.manager_phone)}
-                          </span>
-                        </Td>
-                        <Td title={emptyText(row.agency_company)}>{truncate(row.agency_company, 24)}</Td>
-                        <Td title={emptyText(row.apartment_fee)}>{truncate(row.apartment_fee, 20)}</Td>
-                        <Td>{emptyText(row.move_in_date)}</Td>
-                        <Td>
-                          {row.source_url ? (
-                            <a href={row.source_url} target="_blank" rel="noreferrer" style={linkButtonStyle}>원본공고</a>
-                          ) : '-'}
-                        </Td>
-                        <Td>
-                          <select
-                            value={row.assigned_to || ''}
-                            onChange={(event) => updateAssignee(row.id, event.target.value)}
-                            disabled={assignSavingId === row.id}
-                            style={selectStyle}
-                          >
-                            <option value="">담당자 선택</option>
-                            {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
-                          </select>
-                        </Td>
-                        <Td>
-                          <button type="button" onClick={() => setOpenedId(opened ? null : row.id)} style={detailButtonStyle}>
-                            {opened ? '닫기' : '보기'}
-                          </button>
-                        </Td>
-                      </tr>
-                      {opened ? (
-                        <tr>
-                          <td colSpan={12} style={detailRowCellStyle}>
-                            <div style={detailBoxStyle}>
-                              <div style={detailTitleStyle}>상세정보</div>
-                              <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
-                              <div style={metaGridStyle}>
-                                <Info label="제목" value={row.title} />
-                                <Info label="요약" value={row.summary} />
-                                <Info label="사업지 주소" value={row.site_address} />
-                                <Info label="근무지 주소" value={row.work_address} />
-                                <Info label="카테고리" value={row.category} />
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      ) : null}
     </main>
   );
 }
 
-function SummaryCard({ label, value, small = false }: { label: string; value: string; small?: boolean }) {
+function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div style={summaryCardStyle}>
-      <div style={summaryLabelStyle}>{label}</div>
-      <div style={small ? summarySmallValueStyle : summaryValueStyle}>{value}</div>
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <p className="text-xs font-black text-slate-500">{label}</p>
+      <p className="mt-1 font-bold text-slate-100">{value}</p>
     </div>
   );
 }
-
-function Info({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <span style={{ color: '#8aa0b9', marginRight: 8 }}>{label}</span>
-      <span>{emptyText(value)}</span>
-    </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th style={thStyle}>{children}</th>;
-}
-
-function Td({ children, title }: { children: React.ReactNode; title?: string }) {
-  return <td title={title} style={tdStyle}>{children}</td>;
-}
-
-const pageStyle: React.CSSProperties = { padding: '24px', color: '#f8fafc', background: '#0f0f10', minHeight: '100vh' };
-const titleStyle: React.CSSProperties = { margin: 0, fontSize: 28, lineHeight: 1.2, fontWeight: 900 };
-const subtitleStyle: React.CSSProperties = { margin: '8px 0 0', fontSize: 14, color: '#aab6c5' };
-const noticeStyle: React.CSSProperties = { display: 'inline-flex', marginTop: 14, padding: '8px 12px', border: '1px solid rgba(139, 92, 246, 0.55)', borderRadius: 999, color: '#d8ccff', fontSize: 13, fontWeight: 700, background: 'rgba(139, 92, 246, 0.12)' };
-const panelStyle: React.CSSProperties = { border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 18, background: '#151515', marginBottom: 18 };
-const regionWrapStyle: React.CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 };
-const regionButtonStyle = (active: boolean): React.CSSProperties => ({ padding: '10px 15px', borderRadius: 999, border: active ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.15)', color: active ? '#fff' : '#cbd5e1', background: active ? '#8b5cf6' : '#171717', cursor: 'pointer', fontWeight: 800 });
-const searchRowStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) auto auto', gap: 10, alignItems: 'center' };
-const searchInputStyle: React.CSSProperties = { height: 42, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: '#101010', color: '#fff', padding: '0 14px', outline: 'none' };
-const primaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 18px', border: 0, borderRadius: 10, color: '#fff', background: disabled ? '#4b5563' : '#8b5cf6', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
-const secondaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', color: disabled ? '#667085' : '#fff', background: '#171717', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 800 });
-const excelButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.35)', color: disabled ? '#667085' : '#dcfce7', background: disabled ? '#171717' : '#14532d', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
-const errorStyle: React.CSSProperties = { marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(127,29,29,0.25)', color: '#fecaca' };
-const summaryGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 16 };
-const summaryCardStyle: React.CSSProperties = { border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: 18, background: '#151515' };
-const summaryLabelStyle: React.CSSProperties = { fontSize: 13, color: '#93a4b7', marginBottom: 8, fontWeight: 800 };
-const summaryValueStyle: React.CSSProperties = { fontSize: 26, fontWeight: 900, color: '#fff' };
-const summarySmallValueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: '#e5e7eb', lineHeight: 1.6 };
-const tablePanelStyle: React.CSSProperties = { border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, overflow: 'hidden', background: '#151515' };
-const tableScrollStyle: React.CSSProperties = { overflowX: 'auto' };
-const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1500, borderCollapse: 'collapse' };
-const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 12, color: '#9db1c9', background: '#1b1b1d', borderBottom: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap' };
-const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.07)', color: '#f8fafc', verticalAlign: 'middle', whiteSpace: 'nowrap' };
-const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: '#94a3b8' };
-const openedRowStyle: React.CSSProperties = { background: 'rgba(139, 92, 246, 0.05)' };
-const detailRowCellStyle: React.CSSProperties = { padding: 0, borderBottom: '1px solid rgba(255,255,255,0.08)', background: '#101010' };
-const sectionBadgeStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 72, padding: '6px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.25)', fontWeight: 900 };
-const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? '#dcfce7' : '#f8fafc', background: duplicate ? '#14532d' : 'transparent', border: duplicate ? '1px solid rgba(34,197,94,0.5)' : 'none', fontWeight: 900 });
-const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: '#ddd6fe', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)', textDecoration: 'none', fontWeight: 900 };
-const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: '#101010', color: '#fff', padding: '0 8px', fontWeight: 800 };
-const detailButtonStyle: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.16)', background: '#171717', color: '#fff', cursor: 'pointer', fontWeight: 900 };
-const detailBoxStyle: React.CSSProperties = { margin: 14, padding: 18, borderRadius: 14, border: '1px solid rgba(255,255,255,0.15)', background: '#0f0f10', textAlign: 'left', whiteSpace: 'normal' };
-const detailTitleStyle: React.CSSProperties = { fontSize: 15, fontWeight: 900, marginBottom: 10, color: '#fff' };
-const detailPreStyle: React.CSSProperties = { maxHeight: 260, overflow: 'auto', margin: 0, padding: 14, borderRadius: 10, background: '#171717', color: '#e5e7eb', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' };
-const metaGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12, fontSize: 13, color: '#e5e7eb' };
