@@ -149,18 +149,11 @@ export default function BunyanglineDataPage() {
 
     try {
       const params = new URLSearchParams({
+        region: nextRegion || '모든지역',
+        keyword: nextKeyword || '',
         limit: '5000',
         _t: String(Date.now()),
       });
-
-      // 중요: '모든지역'은 실제 DB 값이 아니므로 API에 region 파라미터로 보내지 않습니다.
-      // 기존처럼 region=모든지역을 보내면 list API가 region_name='모든지역'으로 필터링해서 0건이 될 수 있습니다.
-      if (nextRegion && nextRegion !== '모든지역') {
-        params.set('region', nextRegion);
-      }
-      if (nextKeyword) {
-        params.set('keyword', nextKeyword);
-      }
 
       const apiUrl = `/api/bunyangline-data/list?${params.toString()}`;
       const response = await fetch(apiUrl, {
@@ -204,7 +197,7 @@ export default function BunyanglineDataPage() {
 
       const nextRows = pickRowsFromPayload(result);
       setRows(nextRows);
-      setApiDebug(`API ${response.status} · url=${apiUrl} · keys=${payloadKeys(result).join(',') || '-'} · count=${result && typeof result === 'object' && !Array.isArray(result) ? ((result as ApiResponse).count ?? '-') : '-'} · rows=${nextRows.length}`);
+      setApiDebug(`API ${response.status} · keys=${payloadKeys(result).join(',') || '-'} · count=${result && typeof result === 'object' && !Array.isArray(result) ? ((result as ApiResponse).count ?? '-') : '-'} · rows=${nextRows.length}`);
       setLastLoadedAt(new Date().toLocaleString('ko-KR'));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
