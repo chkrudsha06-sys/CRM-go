@@ -76,6 +76,12 @@ const CUSTOMER_DB_SOURCE = "customer_db";
 const DEFAULT_ASSIGNED_TO = "조계현";
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const EXECUTION_PART_NAMES = ["조계현", "이세호", "기여운", "최연전"];
+const EXECUTION_USER_OWNER_BY_ID: Record<string, string> = {
+  adperson4: "조계현",
+  adperson5: "이세호",
+  adperson6: "기여운",
+  adperson7: "최연전",
+};
 
 function normalizeCrmPersonName(value?: string | null) {
   return String(value || "")
@@ -101,12 +107,15 @@ function getCurrentCrmUserInfo() {
     if (!userRaw) return { isAdmin: false, isExec: false, name: "" };
     const user = JSON.parse(userRaw);
     const role = String(user?.role || "").toLowerCase();
-    const rawName = String(user?.name || "").trim();
+    const rawId = String(user?.id || "").trim();
+    const ownerById = EXECUTION_USER_OWNER_BY_ID[rawId] || "";
+    const rawName = ownerById || String(user?.name || "").trim();
     const normalizedName = normalizeCrmPersonName(rawName);
     const isAdmin =
       role === "admin" ||
       ADMIN_NAMES.some((name) => normalizeCrmPersonName(name) === normalizedName);
     const isExec =
+      Boolean(ownerById) ||
       role === "exec" ||
       role.includes("실행") ||
       EXECUTION_PART_NAMES.some((name) => normalizeCrmPersonName(name) === normalizedName);
@@ -121,7 +130,9 @@ function getCurrentCrmUserInfo() {
 }
 
 function currentAssignedTo() {
-  return normalizeAssignedTo(getCurrentCrmUserInfo().name || DEFAULT_ASSIGNED_TO);
+  const currentUser = getCurrentCrmUserInfo();
+  if (currentUser.isExec) return normalizeAssignedTo(currentUser.name);
+  return DEFAULT_ASSIGNED_TO;
 }
 
 const VIP_SELECT_FIELDS =
@@ -320,6 +331,7 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
     const storedGrade = String(record.customer_grade || "").trim();
     return {
       ...record,
+      assigned_to: normalizeAssignedTo(record.assigned_to || DEFAULT_ASSIGNED_TO),
       customer_grade:
         storedGrade && storedGrade !== "-" ? storedGrade : UNREVIEWED_GRADE,
       memo: cleanMemo,
@@ -331,6 +343,7 @@ function normalizeRecordGrade(record: CustomerDbRecord): CustomerDbRecord {
 
   return {
     ...record,
+    assigned_to: normalizeAssignedTo(record.assigned_to || DEFAULT_ASSIGNED_TO),
     customer_grade:
       storedGrade && storedGrade !== UNREVIEWED_GRADE
         ? storedGrade
@@ -514,7 +527,7 @@ export default function ContactsPage() {
 
       const matchesAssigned =
         filterAssigned === "전체" ||
-        String(record.assigned_to || "").trim() === filterAssigned;
+        normalizeAssignedTo(record.assigned_to || DEFAULT_ASSIGNED_TO) === filterAssigned;
 
       return (
         matchesKeyword &&
@@ -596,6 +609,13 @@ export default function ContactsPage() {
         ? appendGradeAssessmentBlock(cleanMemo, gradeAssessment, gradeResult)
         : cleanMemo;
 
+    const existingRecord = editId
+      ? records.find((record) => Number(record.id) === Number(editId))
+      : null;
+    const resolvedAssignedTo = editId
+      ? normalizeAssignedTo(existingRecord?.assigned_to || currentAssignedTo())
+      : currentAssignedTo();
+
     const payload = {
       name: form.name.trim(),
       title: form.title.trim(),
@@ -607,7 +627,7 @@ export default function ContactsPage() {
       memo: memoWithGrade,
       crm_db_source: VIP_DB_SOURCE,
       vip_transferred_at: now,
-      assigned_to: currentAssignedTo(),
+      assigned_to: resolvedAssignedTo,
       updated_at: now,
     };
 
