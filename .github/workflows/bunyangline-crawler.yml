@@ -2,6 +2,15 @@ name: Bunyangline Data Crawler
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'backfill은 7월 1일부터 전체 수집, incremental은 최근 3일만 갱신'
+        required: true
+        default: backfill
+        type: choice
+        options:
+          - backfill
+          - incremental
   schedule:
     - cron: '0 1,5,9 * * *'
 
@@ -23,20 +32,19 @@ jobs:
         working-directory: tools/bunyangline-crawler
         run: npm install
 
-      - name: Install Playwright browser
-        working-directory: tools/bunyangline-crawler
-        run: npm run install:browser
-
       - name: Run Bunyangline crawler
         working-directory: tools/bunyangline-crawler
         env:
           CRM_BUNYANGLINE_IMPORT_URL: ${{ secrets.CRM_BUNYANGLINE_IMPORT_URL }}
           BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
-          BUNYANGLINE_REGION_IDS: all
-          BUNYANGLINE_LOOKBACK_DAYS: '5'
-          BUNYANGLINE_SCROLL_ROUNDS: '10'
+          BUNYANGLINE_REGION_IDS: '0'
+          BUNYANGLINE_START_DATE: '2026-07-01'
+          BUNYANGLINE_CRAWL_MODE: ${{ github.event_name == 'schedule' && 'incremental' || inputs.mode }}
+          BUNYANGLINE_LOOKBACK_DAYS: '3'
+          BUNYANGLINE_MAX_PAGES: '500'
+          BUNYANGLINE_DETAIL_CONCURRENCY: '4'
+          BUNYANGLINE_REQUEST_DELAY_MS: '150'
           SEND_TO_CRM: 'true'
-          HEADLESS: 'true'
         run: npm run start
 
       - name: Upload Bunyangline debug output
