@@ -474,17 +474,10 @@ function Td({ children, title }: { children: React.ReactNode; title?: string }) 
 }
 
 const pageStyle: React.CSSProperties = {
-  width: '100%',
-  maxWidth: 'none',
-  minHeight: '100%',
-  height: '100%',
-  padding: 'clamp(16px, 1.1vw, 28px)',
+  padding: '24px',
   color: 'var(--text)',
-  background:
-    'radial-gradient(circle at 18% 0%, rgba(139, 124, 246, 0.09), transparent 30%), radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.06), transparent 28%), var(--bg)',
-  display: 'flex',
-  flexDirection: 'column',
-  overflow: 'hidden',
+  background: 'var(--bg)',
+  minHeight: '100vh',
 };
 const titleStyle: React.CSSProperties = { margin: 0, fontSize: 'var(--fs-page-title)', lineHeight: 1.2, fontWeight: 900, color: 'var(--text-strong)' };
 const subtitleStyle: React.CSSProperties = { margin: '8px 0 0', fontSize: 14, color: 'var(--text-muted)' };
@@ -503,10 +496,10 @@ const summaryCardStyle: React.CSSProperties = { border: '1px solid var(--border)
 const summaryLabelStyle: React.CSSProperties = { fontSize: 13, color: 'var(--text-subtle)', marginBottom: 8, fontWeight: 800 };
 const summaryValueStyle: React.CSSProperties = { fontSize: 26, fontWeight: 900, color: 'var(--text-strong)' };
 const summarySmallValueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: 'var(--text)', lineHeight: 1.6 };
-const tablePanelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--surface)', boxShadow: 'var(--shadow-xs)', flex: '1 1 auto', minHeight: 0 };
-const tableScrollStyle: React.CSSProperties = { width: '100%', height: '100%', overflow: 'auto' };
-const tableStyle: React.CSSProperties = { width: 'max(100%, 1500px)', borderCollapse: 'collapse' };
-const thStyle: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 2, padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+const tablePanelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--surface)', boxShadow: 'var(--shadow-xs)' };
+const tableScrollStyle: React.CSSProperties = { overflowX: 'auto' };
+const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1500, borderCollapse: 'collapse' };
+const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid var(--border-subtle)', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap' };
 const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: 'var(--text-subtle)' };
 const openedRowStyle: React.CSSProperties = { background: 'var(--accent-subtle)' };
