@@ -47,6 +47,27 @@ jobs:
           SEND_TO_CRM: 'true'
         run: npm run start
 
+      - name: Enrich Bunyangline site info from detail text
+        env:
+          CRM_BUNYANGLINE_IMPORT_URL: ${{ secrets.CRM_BUNYANGLINE_IMPORT_URL }}
+          CRM_BUNYANGLINE_ENRICH_URL: ${{ secrets.CRM_BUNYANGLINE_ENRICH_URL }}
+          BUNYANGLINE_IMPORT_SECRET: ${{ secrets.BUNYANGLINE_IMPORT_SECRET }}
+        run: |
+          if [ -n "$CRM_BUNYANGLINE_ENRICH_URL" ]; then
+            ENRICH_URL="$CRM_BUNYANGLINE_ENRICH_URL"
+          elif [ -n "$CRM_BUNYANGLINE_IMPORT_URL" ]; then
+            ENRICH_URL="${CRM_BUNYANGLINE_IMPORT_URL%/api/bunyangline-data/import}/api/bunyangline-data/enrich-site-info"
+          else
+            echo "CRM_BUNYANGLINE_IMPORT_URL이 없어 보강 작업을 건너뜁니다."
+            exit 0
+          fi
+
+          curl -fsS -X POST "$ENRICH_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-import-secret: $BUNYANGLINE_IMPORT_SECRET" \
+            --data '{"limit":2000}' \
+            | tee bunyangline-enrich-result.json
+
       - name: Upload Bunyangline debug output
         if: always()
         uses: actions/upload-artifact@v4
