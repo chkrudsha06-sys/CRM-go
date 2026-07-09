@@ -30,6 +30,11 @@ type BunyanglineRow = {
   region_name: string | null;
   ad_section: string | null;
   site_name: string | null;
+  resolved_site_name: string | null;
+  unit_count: string | null;
+  complex_count: string | null;
+  unit_count_source: string | null;
+  unit_count_confidence: number | null;
   posted_at: string | null;
   posted_datetime: string | null;
   manager_name: string | null;
@@ -120,8 +125,8 @@ function excelCell(value: string | null | undefined, styleId = 'Text') {
 }
 
 function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
-  const headers = ['지역', '게재지면', '현장명', '등록일', '담당자이름', '담당자 연락처', '대행사', '아파트 분양', '투입일', '원본공고링크', '담당자', '상세정보'];
-  const columnWidths = [80, 90, 220, 90, 110, 130, 220, 190, 90, 260, 100, 360];
+  const headers = ['지역', '게재지면', '현장명', '대표현장명', '세대수', '단지수', '등록일', '담당자이름', '담당자 연락처', '대행사', '아파트 분양', '투입일', '원본공고링크', '담당자', '상세정보'];
+  const columnWidths = [80, 90, 220, 220, 90, 90, 90, 110, 130, 220, 190, 90, 260, 100, 360];
 
   const headerRow = `<Row>${headers.map((header) => excelCell(header, 'Header')).join('')}</Row>`;
   const bodyRows = rows
@@ -130,6 +135,9 @@ function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
         emptyText(row.region_name),
         normalizeAdSection(row.ad_section),
         emptyText(row.site_name),
+        emptyText(row.resolved_site_name),
+        emptyText(row.unit_count),
+        emptyText(row.complex_count),
         formatDate(row.posted_at || row.posted_datetime),
         emptyText(row.manager_name),
         formatPhone(row.manager_phone),
@@ -141,7 +149,7 @@ function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
         emptyText(row.detail_text),
       ];
 
-      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 11 ? 'Detail' : 'Text')).join('')}</Row>`;
+      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 14 ? 'Detail' : 'Text')).join('')}</Row>`;
     })
     .join('');
 
@@ -381,12 +389,20 @@ export default function BunyanglineDataPage() {
                 rows.map((row) => {
                   const opened = openedId === row.id;
                   const sectionLabel = normalizeAdSection(row.ad_section);
+                  const displaySiteName = row.resolved_site_name || row.site_name;
+                  const siteNameTitle = row.resolved_site_name && row.site_name && row.resolved_site_name !== row.site_name
+                    ? `대표현장명: ${row.resolved_site_name}\n원본현장명: ${row.site_name}`
+                    : emptyText(displaySiteName);
                   return (
                     <Fragment key={row.id}>
                       <tr style={opened ? openedRowStyle : undefined}>
                         <Td>{emptyText(row.region_name)}</Td>
                         <Td><span style={sectionBadgeStyle(sectionLabel)}>{sectionLabel}</span></Td>
-                        <Td title={emptyText(row.site_name)}><strong>{truncate(row.site_name, 24)}</strong></Td>
+                        <Td title={siteNameTitle}>
+                          <strong>{truncate(displaySiteName, 24)}</strong>
+                          {row.unit_count ? <span style={unitCountBadgeStyle}>{row.unit_count}</span> : null}
+                          {row.complex_count ? <span style={complexCountBadgeStyle}>{row.complex_count}</span> : null}
+                        </Td>
                         <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
                         <Td>{emptyText(row.manager_name)}</Td>
                         <Td>
@@ -428,6 +444,8 @@ export default function BunyanglineDataPage() {
                               <div style={metaGridStyle}>
                                 <Info label="제목" value={row.title} />
                                 <Info label="요약" value={row.summary} />
+                                <Info label="대표 현장명" value={row.resolved_site_name} />
+                                <Info label="세대수/단지수" value={[row.unit_count, row.complex_count].filter(Boolean).join(' / ')} />
                                 <Info label="사업지 주소" value={row.site_address} />
                                 <Info label="근무지 주소" value={row.work_address} />
                                 <Info label="카테고리" value={row.category} />
@@ -522,6 +540,32 @@ const sectionBadgeStyle = (section: string): React.CSSProperties => ({
   fontWeight: 900,
   ...(sectionBadgeColorMap[section] || sectionBadgeColorMap['일반구인글']),
 });
+const unitCountBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  marginLeft: 8,
+  padding: '3px 7px',
+  borderRadius: 999,
+  background: 'var(--success-bg)',
+  color: 'var(--success-text)',
+  border: '1px solid var(--success-border)',
+  fontSize: 11,
+  fontWeight: 900,
+  verticalAlign: 'middle',
+};
+const complexCountBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  marginLeft: 6,
+  padding: '3px 7px',
+  borderRadius: 999,
+  background: 'var(--info-bg)',
+  color: 'var(--info-text)',
+  border: '1px solid var(--info-border)',
+  fontSize: 11,
+  fontWeight: 900,
+  verticalAlign: 'middle',
+};
 const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? 'var(--success-text)' : 'var(--text)', background: duplicate ? 'var(--success-bg)' : 'transparent', border: duplicate ? '1px solid var(--success-border)' : 'none', fontWeight: 900 });
 const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: 'var(--accent-text)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', textDecoration: 'none', fontWeight: 900 };
 const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 8px', fontWeight: 800 };
