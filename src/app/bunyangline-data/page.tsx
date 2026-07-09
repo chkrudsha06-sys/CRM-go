@@ -293,6 +293,27 @@ export default function BunyanglineDataPage() {
     }
   }
 
+  function openSourcePopup(sourceUrl: string | null | undefined) {
+    if (!sourceUrl) return;
+
+    const width = 1180;
+    const height = 860;
+    const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+    const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+    const popup = window.open(
+      sourceUrl,
+      'bunyangline-original-post',
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=yes,status=no,resizable=yes,scrollbars=yes`,
+    );
+
+    if (!popup) {
+      alert('팝업이 차단되었습니다. 브라우저 팝업 허용 후 다시 눌러주세요.');
+      return;
+    }
+
+    popup.focus();
+  }
+
   useEffect(() => {
     void fetchRows(selectedRegion, keyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,6 +386,7 @@ export default function BunyanglineDataPage() {
                 <Th>지역</Th>
                 <Th>게재지면</Th>
                 <Th>현장명</Th>
+                <Th>세대수</Th>
                 <Th>등록일</Th>
                 <Th>담당자이름</Th>
                 <Th>담당자 연락처</Th>
@@ -379,20 +401,26 @@ export default function BunyanglineDataPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={12} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
+                  <td colSpan={13} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
+                  <td colSpan={13} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
                 </tr>
               ) : (
                 rows.map((row) => {
                   const opened = openedId === row.id;
                   const sectionLabel = normalizeAdSection(row.ad_section);
-                  const displaySiteName = row.resolved_site_name || row.site_name;
+                  const displaySiteName = row.site_name;
                   const siteNameTitle = row.resolved_site_name && row.site_name && row.resolved_site_name !== row.site_name
-                    ? `대표현장명: ${row.resolved_site_name}\n원본현장명: ${row.site_name}`
+                    ? `원본현장명: ${row.site_name}\n추출현장명: ${row.resolved_site_name}`
                     : emptyText(displaySiteName);
+                  const unitCountTitle = [
+                    row.unit_count ? `세대수: ${row.unit_count}` : '',
+                    row.complex_count ? `단지수: ${row.complex_count}` : '',
+                    row.unit_count_source ? `출처: ${row.unit_count_source}` : '',
+                    row.unit_count_confidence ? `신뢰도: ${row.unit_count_confidence}` : '',
+                  ].filter(Boolean).join('\n');
                   return (
                     <Fragment key={row.id}>
                       <tr style={opened ? openedRowStyle : undefined}>
@@ -400,8 +428,11 @@ export default function BunyanglineDataPage() {
                         <Td><span style={sectionBadgeStyle(sectionLabel)}>{sectionLabel}</span></Td>
                         <Td title={siteNameTitle}>
                           <strong>{truncate(displaySiteName, 24)}</strong>
+                        </Td>
+                        <Td title={unitCountTitle || undefined}>
                           {row.unit_count ? <span style={unitCountBadgeStyle}>{row.unit_count}</span> : null}
                           {row.complex_count ? <span style={complexCountBadgeStyle}>{row.complex_count}</span> : null}
+                          {!row.unit_count && !row.complex_count ? '-' : null}
                         </Td>
                         <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
                         <Td>{emptyText(row.manager_name)}</Td>
@@ -415,7 +446,7 @@ export default function BunyanglineDataPage() {
                         <Td>{emptyText(row.move_in_date)}</Td>
                         <Td>
                           {row.source_url ? (
-                            <a href={row.source_url} target="_blank" rel="noreferrer" style={linkButtonStyle}>원본공고</a>
+                            <button type="button" onClick={() => openSourcePopup(row.source_url)} style={linkButtonStyle}>원본공고</button>
                           ) : '-'}
                         </Td>
                         <Td>
@@ -437,7 +468,7 @@ export default function BunyanglineDataPage() {
                       </tr>
                       {opened ? (
                         <tr>
-                          <td colSpan={12} style={detailRowCellStyle}>
+                          <td colSpan={13} style={detailRowCellStyle}>
                             <div style={detailBoxStyle}>
                               <div style={detailTitleStyle}>상세정보</div>
                               <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
@@ -517,7 +548,7 @@ const summaryValueStyle: React.CSSProperties = { fontSize: 26, fontWeight: 900, 
 const summarySmallValueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: 'var(--text)', lineHeight: 1.6 };
 const tablePanelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--surface)', boxShadow: 'var(--shadow-xs)' };
 const tableScrollStyle: React.CSSProperties = { overflowX: 'auto' };
-const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1500, borderCollapse: 'collapse' };
+const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1600, borderCollapse: 'collapse' };
 const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
 const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid var(--border-subtle)', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap' };
 const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: 'var(--text-subtle)' };
@@ -543,7 +574,7 @@ const sectionBadgeStyle = (section: string): React.CSSProperties => ({
 const unitCountBadgeStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  marginLeft: 8,
+  marginLeft: 0,
   padding: '3px 7px',
   borderRadius: 999,
   background: 'var(--success-bg)',
@@ -567,7 +598,7 @@ const complexCountBadgeStyle: React.CSSProperties = {
   verticalAlign: 'middle',
 };
 const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? 'var(--success-text)' : 'var(--text)', background: duplicate ? 'var(--success-bg)' : 'transparent', border: duplicate ? '1px solid var(--success-border)' : 'none', fontWeight: 900 });
-const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: 'var(--accent-text)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', textDecoration: 'none', fontWeight: 900 };
+const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: 'var(--accent-text)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', textDecoration: 'none', fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
 const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 8px', fontWeight: 800 };
 const detailButtonStyle: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', fontWeight: 900 };
 const detailBoxStyle: React.CSSProperties = { margin: 14, padding: 18, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', textAlign: 'left', whiteSpace: 'normal' };
