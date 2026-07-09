@@ -44,6 +44,9 @@ jobs:
           BUNYANGLINE_MAX_PAGES: '500'
           BUNYANGLINE_DETAIL_CONCURRENCY: '4'
           BUNYANGLINE_REQUEST_DELAY_MS: '150'
+          BUNYANGLINE_BATCH_SIZE: '20'
+          BUNYANGLINE_DETAIL_TEXT_MAX_LENGTH: '20000'
+          BUNYANGLINE_RAW_TEXT_MAX_LENGTH: '8000'
           SEND_TO_CRM: 'true'
         run: npm run start
 
