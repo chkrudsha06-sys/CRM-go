@@ -1,200 +1,533 @@
+'use client';
 
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}+09:00`;
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import type React from 'react';
+
+const REGIONS = [
+  '모든지역',
+  '서울',
+  '경기남부',
+  '경기북부',
+  '인천',
+  '부산',
+  '울산',
+  '대구',
+  '경상도',
+  '대전',
+  '세종',
+  '충청도',
+  '광주',
+  '전라도',
+  '강원도',
+  '제주도',
+];
+
+const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
+const SECTION_NAMES = ['유니크', '슈페리어', '프리미엄', '전국TOP', '일반구인글'] as const;
+
+type BunyanglineRow = {
+  id: number | string;
+  region_name: string | null;
+  ad_section: string | null;
+  site_name: string | null;
+  posted_at: string | null;
+  posted_datetime: string | null;
+  manager_name: string | null;
+  manager_phone: string | null;
+  manager_phone_duplicate_count?: number;
+  manager_phone_is_duplicate?: boolean;
+  agency_company: string | null;
+  apartment_fee: string | null;
+  move_in_date: string | null;
+  source_url: string | null;
+  assigned_to: string | null;
+  detail_text: string | null;
+  title: string | null;
+  summary: string | null;
+  site_address: string | null;
+  work_address: string | null;
+  category: string | null;
+  crawled_at: string | null;
+  created_at: string | null;
+};
+
+function emptyText(value: string | null | undefined) {
+  const text = String(value ?? '').trim();
+  return text || '-';
 }
 
-function normalizeAssignedTo(value: unknown): string | null {
-  const text = normalizeText(value);
-  if (!text) return null;
-
-  const allowed = ['조계현', '이세호', '기여운', '최연전'];
-  return allowed.includes(text) ? text : null;
+function normalizeAdSection(value: string | null | undefined) {
+  const text = String(value ?? '').replace(/\s+/g, '').toLowerCase();
+  if (text.includes('unique') || text.includes('유니크')) return '유니크';
+  if (text.includes('superior') || text.includes('슈페리어')) return '슈페리어';
+  if (text.includes('premium') || text.includes('프리미엄')) return '프리미엄';
+  if (text.includes('전국top') || text.includes('전국탑') || text.includes('nationaltop')) return '전국TOP';
+  return '일반구인글';
 }
 
-function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
-  const sourceUrl = normalizeSourceUrl(firstValue(row, ['source_url', 'sourceUrl', 'source']));
-  if (!sourceUrl) return null;
-
-  const postedDatetime = normalizeDateTime(firstValue(row, ['posted_datetime', 'postedDatetime', 'registered_datetime', 'registeredDatetime']));
-  const postedAt =
-    normalizeDate(firstValue(row, ['posted_at', 'postedAt', 'registered_date', 'registeredDate'])) ||
-    (postedDatetime ? postedDatetime.slice(0, 10) : null);
-
-  const managerFields = splitManagerFields(
-    firstValue(row, ['manager_name', 'managerName', 'contact_name', 'contactName']),
-    firstValue(row, ['manager_phone', 'managerPhone', 'contact_phone', 'contactPhone'])
-  );
-  const rawTextForSection = firstValue(row, ['raw_text', 'rawText']) || firstValue(row, ['detail_text', 'detailText', 'details']);
-  const scopedAgency = extractAgencyFromRawText(rawTextForSection);
-  const scopedApartmentFee = extractApartmentFeeFromRawText(rawTextForSection);
-  const listRegionName = normalizeText(firstValue(row, ['list_region_name', 'listRegionName', 'region_name', 'regionName', 'region'])) || '미지정';
-  const siteAddress = normalizeText(firstValue(row, ['site_address', 'siteAddress', 'business_address', 'businessAddress'])) || null;
-  const workAddress = normalizeText(firstValue(row, ['work_address', 'workAddress', 'address'])) || null;
-  const actualRegionName = inferActualRegionName({
-    listRegionName,
-    workAddress,
-    siteAddress,
-    rawText: rawTextForSection,
-  });
-
-  return {
-    source_url: sourceUrl,
-    source_id: normalizeText(firstValue(row, ['source_id', 'sourceId', 'post_id', 'postId'])) || null,
-    region_name: actualRegionName,
-    ad_section: normalizeAdSection(firstValue(row, ['ad_section', 'adSection', 'section', 'listing_section', 'listingSection'])),
-    site_name: normalizeText(firstValue(row, ['site_name', 'siteName', 'field_name', 'fieldName'])) || '-',
-    posted_at: postedAt,
-    posted_datetime: postedDatetime,
-    manager_name: managerFields.managerName,
-    manager_phone: managerFields.managerPhone,
-    agency_company: scopedAgency || stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
-    apartment_fee: scopedApartmentFee || stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || null,
-    move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
-    assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
-    detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || null,
-    title: normalizeText(firstValue(row, ['title', 'post_title', 'postTitle'])) || null,
-    summary: normalizeText(firstValue(row, ['summary', 'subtitle', 'description'])) || null,
-    site_address: siteAddress,
-    work_address: workAddress,
-    category: normalizeText(firstValue(row, ['category', 'product_type', 'productType'])) || null,
-    list_date_group: normalizeText(firstValue(row, ['list_date_group', 'listDateGroup'])) || null,
-    raw_text: normalizeText(firstValue(row, ['raw_text', 'rawText'])) || null,
-    crawled_at: normalizeDateTime(firstValue(row, ['crawled_at', 'crawledAt'])) || new Date().toISOString(),
-  };
+function sectionSummaryText(counts: Record<string, number>) {
+  return SECTION_NAMES.map((name) => `${name} ${Number(counts[name] || 0).toLocaleString()}개`).join(' · ');
 }
 
-function getSecretFromRequest(request: NextRequest, body: any) {
-  const auth = request.headers.get('authorization') ?? '';
-  const bearerSecret = auth.replace(/^Bearer\s+/i, '').trim();
-  const headerSecret = request.headers.get('x-import-secret') ?? '';
-  const querySecret = new URL(request.url).searchParams.get('secret') ?? '';
-  const bodySecret = typeof body?.secret === 'string' ? body.secret : '';
-
-  return bearerSecret || headerSecret || querySecret || bodySecret;
+function formatDate(value: string | null | undefined) {
+  if (!value) return '-';
+  const date = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return value;
+  const [year, month, day] = date.split('-');
+  return `${year}.${month}.${day}`;
 }
 
-function errorPayload(error: unknown) {
-  if (error instanceof Error) return { name: error.name, message: error.message };
-  if (typeof error === 'object' && error !== null) return error;
-  return { message: String(error) };
+function formatPhone(value: string | null | undefined) {
+  const raw = String(value ?? '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '-';
+
+  if (digits.length === 8) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  if (digits.length === 11 && /^01[016789]/.test(digits)) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  if (digits.length === 10 && /^01[016789]/.test(digits)) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 10 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 6)}-${digits.slice(6)}`;
+  if (digits.length === 9 && digits.startsWith('02')) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+
+  return raw || '-';
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json().catch(() => ({}));
-    const expectedSecret = process.env.BUNYANGLINE_IMPORT_SECRET;
-    const incomingSecret = getSecretFromRequest(request, body);
+function truncate(value: string | null | undefined, length = 28) {
+  const text = emptyText(value);
+  if (text === '-') return text;
+  return text.length > length ? `${text.slice(0, length)}...` : text;
+}
 
-    if (expectedSecret && incomingSecret !== expectedSecret) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: '분양라인 가져오기 비밀키가 일치하지 않습니다.',
-        },
-        { status: 401 }
-      );
-    }
+function xmlEscape(value: string | null | undefined) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
-    const rawItems = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
+function normalizeExcelText(value: string | null | undefined) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim() || '-';
+}
 
-    if (rawItems.length === 0) {
-      return NextResponse.json({ ok: true, received: 0, insertedOrUpdated: 0, skipped: 0, message: '저장할 항목이 없습니다.' });
-    }
+function excelCell(value: string | null | undefined, styleId = 'Text') {
+  return `<Cell ss:StyleID="${styleId}"><Data ss:Type="String">${xmlEscape(normalizeExcelText(value))}</Data></Cell>`;
+}
 
-    const supabase = getSupabaseAdmin();
-    const incomingSourceUrls = rawItems
-      .map((item: ImportItem) => normalizeSourceUrl(firstValue(item, ['source_url', 'sourceUrl', 'source'])))
-      .filter((value: string | null): value is string => Boolean(value));
+function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
+  const headers = ['지역', '게재지면', '현장명', '등록일', '담당자이름', '담당자 연락처', '대행사', '아파트 분양', '투입일', '원본공고링크', '담당자', '상세정보'];
+  const columnWidths = [80, 90, 220, 90, 110, 130, 220, 190, 90, 260, 100, 360];
 
-    const existingAssignedMap = new Map<string, string | null>();
+  const headerRow = `<Row>${headers.map((header) => excelCell(header, 'Header')).join('')}</Row>`;
+  const bodyRows = rows
+    .map((row) => {
+      const cells = [
+        emptyText(row.region_name),
+        normalizeAdSection(row.ad_section),
+        emptyText(row.site_name),
+        formatDate(row.posted_at || row.posted_datetime),
+        emptyText(row.manager_name),
+        formatPhone(row.manager_phone),
+        emptyText(row.agency_company),
+        emptyText(row.apartment_fee),
+        emptyText(row.move_in_date),
+        emptyText(row.source_url),
+        emptyText(row.assigned_to),
+        emptyText(row.detail_text),
+      ];
 
-    if (incomingSourceUrls.length > 0) {
-      const { data: existingRows, error: existingError } = await supabase
-        .from('bunyangline_data')
-        .select('id, source_url, assigned_to')
-        .in('source_url', Array.from(new Set(incomingSourceUrls)));
+      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 11 ? 'Detail' : 'Text')).join('')}</Row>`;
+    })
+    .join('');
 
-      if (existingError) throw existingError;
+  const worksheet = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:html="http://www.w3.org/TR/REC-html40">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1"/>
+      <Interior ss:Color="#E5E7EB" ss:Pattern="Solid"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Borders>
+        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
+      </Borders>
+    </Style>
+    <Style ss:ID="Text">
+      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
+    </Style>
+    <Style ss:ID="Detail">
+      <Alignment ss:Vertical="Top" ss:WrapText="1"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="분양라인데이터">
+    <Table>
+      ${columnWidths.map((width) => `<Column ss:Width="${width}"/>`).join('')}
+      ${headerRow}
+      ${bodyRows}
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>1</SplitHorizontal>
+      <TopRowBottomPane>1</TopRowBottomPane>
+      <ActivePane>2</ActivePane>
+    </WorksheetOptions>
+  </Worksheet>
+</Workbook>`;
 
-      (existingRows as ExistingRow[] | null)?.forEach((row) => {
-        if (row.source_url) existingAssignedMap.set(row.source_url, row.assigned_to || null);
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const safeRegion = selectedRegion.replace(/[\\/:*?"<>|]/g, '_');
+  const fileName = `분양라인데이터_${safeRegion}_${y}${m}${d}.xls`;
+  const blob = new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export default function BunyanglineDataPage() {
+  const [selectedRegion, setSelectedRegion] = useState('모든지역');
+  const [keyword, setKeyword] = useState('');
+  const [rows, setRows] = useState<BunyanglineRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [openedId, setOpenedId] = useState<string | number | null>(null);
+  const [assignSavingId, setAssignSavingId] = useState<string | number | null>(null);
+
+  const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '';
+
+  const sectionCounts = useMemo(() => {
+    const base = SECTION_NAMES.reduce<Record<string, number>>((acc, name) => {
+      acc[name] = 0;
+      return acc;
+    }, {});
+
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      const key = normalizeAdSection(row.ad_section);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, base);
+  }, [rows]);
+
+  async function fetchRows(nextRegion = selectedRegion, nextKeyword = keyword) {
+    setLoading(true);
+    setErrorMessage('');
+
+    try {
+      const params = new URLSearchParams({
+        region: nextRegion,
+        keyword: nextKeyword,
+        limit: '5000',
       });
+
+      const response = await fetch(`/api/bunyangline-data/list?${params.toString()}`, { cache: 'no-store' });
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result?.error || result?.message || '조회 실패');
+      }
+
+      setRows(result.data ?? []);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
     }
-
-    const normalizedRows = rawItems
-      .map((item: ImportItem) => {
-        const sourceUrl = normalizeSourceUrl(firstValue(item, ['source_url', 'sourceUrl', 'source']));
-        return buildDbRow(item, sourceUrl ? existingAssignedMap.get(sourceUrl) : null);
-      })
-      .filter(
-        (row: ReturnType<typeof buildDbRow>): row is NonNullable<ReturnType<typeof buildDbRow>> =>
-          Boolean(row?.posted_at && row.posted_at >= BUNYANGLINE_START_DATE)
-      );
-
-    if (normalizedRows.length === 0) {
-      return NextResponse.json({ ok: true, received: rawItems.length, insertedOrUpdated: 0, skipped: rawItems.length, message: '유효한 source_url 항목이 없습니다.' });
-    }
-
-    const incomingPhones = Array.from(
-      new Set<string>(
-        normalizedRows
-          .map((row: NonNullable<ReturnType<typeof buildDbRow>>) => phoneKey(row.manager_phone))
-          .filter((value: string | null): value is string => Boolean(value))
-      )
-    );
-    let existingPhoneRows: ExistingPhoneRow[] = [];
-
-    if (incomingPhones.length > 0) {
-      const { data: phoneRows, error: phoneRowsError } = await supabase
-        .from('bunyangline_data')
-        .select('source_url, manager_phone, ad_section, posted_at, posted_datetime, created_at')
-        .gte('posted_at', BUNYANGLINE_START_DATE)
-        .in('manager_phone', incomingPhones);
-
-      if (phoneRowsError) throw phoneRowsError;
-      existingPhoneRows = (phoneRows as ExistingPhoneRow[] | null) || [];
-    }
-
-    const filtered = filterGeneralPhoneDuplicates(normalizedRows, existingPhoneRows);
-    const rows = filtered.rows;
-
-    if (rows.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        received: rawItems.length,
-        insertedOrUpdated: 0,
-        skipped: rawItems.length,
-        skippedGeneralDuplicateCount: filtered.skippedGeneralDuplicateCount,
-        message: '상위 지면 또는 기존 일반구인글과 연락처가 중복된 일반구인글만 있어 저장하지 않았습니다.',
-      });
-    }
-
-    const { data, error } = await supabase
-      .from('bunyangline_data')
-      .upsert(rows, { onConflict: 'source_url' })
-      .select('id, source_url');
-
-    if (error) throw error;
-
-    return NextResponse.json({
-      ok: true,
-      received: rawItems.length,
-      insertedOrUpdated: data?.length ?? rows.length,
-      skipped: rawItems.length - rows.length,
-      skippedGeneralDuplicateCount: filtered.skippedGeneralDuplicateCount,
-      preservedAssignedCount: Array.from(existingAssignedMap.values()).filter(Boolean).length,
-    });
-  } catch (error) {
-    const payload = errorPayload(error);
-    console.error('[bunyangline-data/import] 오류:', payload);
-
-    return NextResponse.json(
-      {
-        ok: false,
-        message: '분양라인 데이터 저장 중 오류가 발생했습니다.',
-        error: typeof payload === 'object' && payload && 'message' in payload ? (payload as any).message : String(payload),
-        errorDetails: payload,
-      },
-      { status: 500 }
-    );
   }
+
+  function resetFilters() {
+    setSelectedRegion('모든지역');
+    setKeyword('');
+    setOpenedId(null);
+    void fetchRows('모든지역', '');
+  }
+
+  async function updateAssignee(rowId: string | number, assignedTo: string) {
+    const previousRows = rows;
+    setAssignSavingId(rowId);
+    setErrorMessage('');
+
+    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? { ...row, assigned_to: assignedTo || null } : row)));
+
+    try {
+      const response = await fetch('/api/bunyangline-data/assign', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ id: rowId, assigned_to: assignedTo || null }),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok) throw new Error(result?.error || result?.message || '담당자 저장 실패');
+    } catch (error) {
+      setRows(previousRows);
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorMessage(message);
+      alert(`담당자 저장 실패: ${message}`);
+    } finally {
+      setAssignSavingId(null);
+    }
+  }
+
+  useEffect(() => {
+    void fetchRows(selectedRegion, keyword);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRegion]);
+
+  return (
+    <main style={pageStyle}>
+      <section style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={titleStyle}>분양라인데이터</h1>
+            <p style={subtitleStyle}>분양라인 지역현장 구인공고 중 2026년 7월 1일 이후 실제 등록된 데이터를 누적하고, 담당자 연락처 중복 여부를 확인합니다.</p>
+            <div style={noticeStyle}>수집 기준: 2026.07.01 이후 · 유니크/슈페리어/프리미엄/전국TOP/일반구인글 · 원본공고 링크 기준 누적 저장</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => downloadRowsAsExcel(rows, selectedRegion)} disabled={rows.length === 0 || loading} style={excelButtonStyle(rows.length === 0 || loading)}>
+              엑셀 다운로드
+            </button>
+            <button type="button" onClick={() => fetchRows()} disabled={loading} style={secondaryButtonStyle(loading)}>
+              {loading ? '불러오는 중...' : '새로고침'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section style={panelStyle}>
+        <div style={regionWrapStyle}>
+          {REGIONS.map((region) => {
+            const active = selectedRegion === region;
+            return (
+              <button key={region} type="button" onClick={() => setSelectedRegion(region)} style={regionButtonStyle(active)}>
+                {region}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={searchRowStyle}>
+          <input
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void fetchRows(selectedRegion, keyword);
+            }}
+            placeholder="현장명 / 담당자 / 연락처 / 대행사 / 지면 / 배정담당자 검색"
+            style={searchInputStyle}
+          />
+          <button type="button" onClick={() => fetchRows(selectedRegion, keyword)} disabled={loading} style={primaryButtonStyle(loading)}>
+            검색
+          </button>
+          <button type="button" onClick={resetFilters} disabled={!filterActive && !loading} style={secondaryButtonStyle(!filterActive && !loading)}>
+            필터해제
+          </button>
+        </div>
+
+        {errorMessage ? <div style={errorStyle}>{errorMessage}</div> : null}
+      </section>
+
+      <section style={summaryGridStyle}>
+        <SummaryCard label="현재 출력건수" value={`${rows.length.toLocaleString()}건`} />
+        <SummaryCard label="선택 지역" value={selectedRegion} />
+        <SummaryCard label="게재지면 현황" value={sectionSummaryText(sectionCounts)} small />
+      </section>
+
+      <section style={tablePanelStyle}>
+        <div style={tableScrollStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <Th>지역</Th>
+                <Th>게재지면</Th>
+                <Th>현장명</Th>
+                <Th>등록일</Th>
+                <Th>담당자이름</Th>
+                <Th>담당자 연락처</Th>
+                <Th>대행사</Th>
+                <Th>아파트 분양</Th>
+                <Th>투입일</Th>
+                <Th>원본공고링크</Th>
+                <Th>담당자</Th>
+                <Th>상세정보</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={12} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={12} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
+                </tr>
+              ) : (
+                rows.map((row) => {
+                  const opened = openedId === row.id;
+                  const sectionLabel = normalizeAdSection(row.ad_section);
+                  return (
+                    <Fragment key={row.id}>
+                      <tr style={opened ? openedRowStyle : undefined}>
+                        <Td>{emptyText(row.region_name)}</Td>
+                        <Td><span style={sectionBadgeStyle(sectionLabel)}>{sectionLabel}</span></Td>
+                        <Td title={emptyText(row.site_name)}><strong>{truncate(row.site_name, 24)}</strong></Td>
+                        <Td>{formatDate(row.posted_at || row.posted_datetime)}</Td>
+                        <Td>{emptyText(row.manager_name)}</Td>
+                        <Td>
+                          <span style={phoneStyle(Boolean(row.manager_phone_is_duplicate))} title={row.manager_phone_is_duplicate ? `중복 연락처 ${row.manager_phone_duplicate_count}건` : ''}>
+                            {formatPhone(row.manager_phone)}
+                          </span>
+                        </Td>
+                        <Td title={emptyText(row.agency_company)}>{truncate(row.agency_company, 24)}</Td>
+                        <Td title={emptyText(row.apartment_fee)}>{truncate(row.apartment_fee, 20)}</Td>
+                        <Td>{emptyText(row.move_in_date)}</Td>
+                        <Td>
+                          {row.source_url ? (
+                            <a href={row.source_url} target="_blank" rel="noreferrer" style={linkButtonStyle}>원본공고</a>
+                          ) : '-'}
+                        </Td>
+                        <Td>
+                          <select
+                            value={row.assigned_to || ''}
+                            onChange={(event) => updateAssignee(row.id, event.target.value)}
+                            disabled={assignSavingId === row.id}
+                            style={selectStyle}
+                          >
+                            <option value="">담당자 선택</option>
+                            {ASSIGNEES.map((name) => <option key={name} value={name}>{name}</option>)}
+                          </select>
+                        </Td>
+                        <Td>
+                          <button type="button" onClick={() => setOpenedId(opened ? null : row.id)} style={detailButtonStyle}>
+                            {opened ? '닫기' : '보기'}
+                          </button>
+                        </Td>
+                      </tr>
+                      {opened ? (
+                        <tr>
+                          <td colSpan={12} style={detailRowCellStyle}>
+                            <div style={detailBoxStyle}>
+                              <div style={detailTitleStyle}>상세정보</div>
+                              <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
+                              <div style={metaGridStyle}>
+                                <Info label="제목" value={row.title} />
+                                <Info label="요약" value={row.summary} />
+                                <Info label="사업지 주소" value={row.site_address} />
+                                <Info label="근무지 주소" value={row.work_address} />
+                                <Info label="카테고리" value={row.category} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
 }
+
+function SummaryCard({ label, value, small = false }: { label: string; value: string; small?: boolean }) {
+  return (
+    <div style={summaryCardStyle}>
+      <div style={summaryLabelStyle}>{label}</div>
+      <div style={small ? summarySmallValueStyle : summaryValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <span style={infoLabelStyle}>{label}</span>
+      <span>{emptyText(value)}</span>
+    </div>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th style={thStyle}>{children}</th>;
+}
+
+function Td({ children, title }: { children: React.ReactNode; title?: string }) {
+  return <td title={title} style={tdStyle}>{children}</td>;
+}
+
+const pageStyle: React.CSSProperties = {
+  padding: '24px',
+  color: 'var(--text)',
+  background: 'var(--bg)',
+  minHeight: '100vh',
+};
+const titleStyle: React.CSSProperties = { margin: 0, fontSize: 'var(--fs-page-title)', lineHeight: 1.2, fontWeight: 900, color: 'var(--text-strong)' };
+const subtitleStyle: React.CSSProperties = { margin: '8px 0 0', fontSize: 14, color: 'var(--text-muted)' };
+const noticeStyle: React.CSSProperties = { display: 'inline-flex', marginTop: 14, padding: '8px 12px', border: '1px solid var(--accent-border)', borderRadius: 999, color: 'var(--accent-text)', fontSize: 13, fontWeight: 700, background: 'var(--accent-subtle)' };
+const panelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, padding: 18, background: 'var(--surface)', boxShadow: 'var(--shadow-xs)', marginBottom: 18 };
+const regionWrapStyle: React.CSSProperties = { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 };
+const regionButtonStyle = (active: boolean): React.CSSProperties => ({ padding: '10px 15px', borderRadius: 999, border: active ? '1px solid var(--accent-border)' : '1px solid var(--border)', color: active ? '#fff' : 'var(--text-muted)', background: active ? 'var(--accent)' : 'var(--surface-2)', cursor: 'pointer', fontWeight: 800 });
+const searchRowStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) auto auto', gap: 10, alignItems: 'center' };
+const searchInputStyle: React.CSSProperties = { height: 42, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 14px', outline: 'none' };
+const primaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 18px', border: 0, borderRadius: 10, color: '#fff', background: disabled ? 'var(--text-disabled)' : 'var(--accent)', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
+const secondaryButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid var(--border)', color: disabled ? 'var(--text-disabled)' : 'var(--text)', background: 'var(--surface-2)', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 800 });
+const excelButtonStyle = (disabled: boolean): React.CSSProperties => ({ height: 42, padding: '0 16px', borderRadius: 10, border: '1px solid var(--success-border)', color: disabled ? 'var(--text-disabled)' : 'var(--success-text)', background: disabled ? 'var(--surface-2)' : 'var(--success-bg)', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 900 });
+const errorStyle: React.CSSProperties = { marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid var(--danger-border)', background: 'var(--danger-bg)', color: 'var(--danger-text)' };
+const summaryGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 16 };
+const summaryCardStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 14, padding: 18, background: 'var(--surface)', boxShadow: 'var(--shadow-xs)' };
+const summaryLabelStyle: React.CSSProperties = { fontSize: 13, color: 'var(--text-subtle)', marginBottom: 8, fontWeight: 800 };
+const summaryValueStyle: React.CSSProperties = { fontSize: 26, fontWeight: 900, color: 'var(--text-strong)' };
+const summarySmallValueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: 'var(--text)', lineHeight: 1.6 };
+const tablePanelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--surface)', boxShadow: 'var(--shadow-xs)' };
+const tableScrollStyle: React.CSSProperties = { overflowX: 'auto' };
+const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1500, borderCollapse: 'collapse' };
+const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid var(--border-subtle)', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap' };
+const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: 'var(--text-subtle)' };
+const openedRowStyle: React.CSSProperties = { background: 'var(--accent-subtle)' };
+const detailRowCellStyle: React.CSSProperties = { padding: 0, borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' };
+const sectionBadgeColorMap: Record<string, Pick<React.CSSProperties, 'background' | 'color' | 'border'>> = {
+  유니크: { background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' },
+  슈페리어: { background: 'var(--purple-bg)', color: 'var(--purple-text)', border: '1px solid var(--purple-border)' },
+  프리미엄: { background: 'var(--info-bg)', color: 'var(--info-text)', border: '1px solid var(--info-border)' },
+  전국TOP: { background: 'var(--success-bg)', color: 'var(--success-text)', border: '1px solid var(--success-border)' },
+  일반구인글: { background: 'var(--accent-subtle)', color: 'var(--accent-text)', border: '1px solid var(--accent-border)' },
+};
+const sectionBadgeStyle = (section: string): React.CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 72,
+  padding: '6px 9px',
+  borderRadius: 999,
+  fontWeight: 900,
+  ...(sectionBadgeColorMap[section] || sectionBadgeColorMap['일반구인글']),
+});
+const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? 'var(--success-text)' : 'var(--text)', background: duplicate ? 'var(--success-bg)' : 'transparent', border: duplicate ? '1px solid var(--success-border)' : 'none', fontWeight: 900 });
+const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: 'var(--accent-text)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', textDecoration: 'none', fontWeight: 900 };
+const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 8px', fontWeight: 800 };
+const detailButtonStyle: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', fontWeight: 900 };
+const detailBoxStyle: React.CSSProperties = { margin: 14, padding: 18, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', textAlign: 'left', whiteSpace: 'normal' };
+const detailTitleStyle: React.CSSProperties = { fontSize: 15, fontWeight: 900, marginBottom: 10, color: 'var(--text-strong)' };
+const detailPreStyle: React.CSSProperties = { maxHeight: 260, overflow: 'auto', margin: 0, padding: 14, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' };
+const metaGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12, fontSize: 13, color: 'var(--text)' };
+const infoLabelStyle: React.CSSProperties = { color: 'var(--text-muted)', marginRight: 8 };
