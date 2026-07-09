@@ -17,6 +17,9 @@ const MAX_PAGES = Math.max(1, Number(process.env.BUNYANGLINE_MAX_PAGES || '500')
 const MAX_DETAILS = Math.max(0, Number(process.env.BUNYANGLINE_MAX_DETAILS || '0') || 0);
 const DETAIL_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.BUNYANGLINE_DETAIL_CONCURRENCY || '4') || 4));
 const REQUEST_DELAY_MS = Math.max(0, Number(process.env.BUNYANGLINE_REQUEST_DELAY_MS || '150') || 150);
+const BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.BUNYANGLINE_BATCH_SIZE || '20') || 20));
+const DETAIL_TEXT_MAX_LENGTH = Math.max(1000, Number(process.env.BUNYANGLINE_DETAIL_TEXT_MAX_LENGTH || '20000') || 20000);
+const RAW_TEXT_MAX_LENGTH = Math.max(1000, Number(process.env.BUNYANGLINE_RAW_TEXT_MAX_LENGTH || '8000') || 8000);
 const SEND_TO_CRM = process.env.SEND_TO_CRM !== 'false';
 
 const REGIONS = [
@@ -139,6 +142,12 @@ function normalizeMultiline(value: unknown) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function limitText(value: unknown, maxLength: number) {
+  const text = normalizeMultiline(value);
+  if (!text) return '';
+  return text.length > maxLength ? text.slice(0, maxLength).trim() : text;
 }
 
 function parseDateOnly(value: unknown) {
@@ -433,8 +442,8 @@ async function parseDetail(client: APIRequestContext, candidate: Candidate): Pro
   const basic = sectionRows($, '기본요강');
   const salary = sectionRows($, '급여정보');
   const detailSelection = $('.detailInfo').first();
-  const detailText = textWithBreaks($, detailSelection) || normalizeMultiline(candidate.listing.content);
-  const rawText = textWithBreaks($, $('body').first()).slice(0, 50000);
+  const detailText = limitText(textWithBreaks($, detailSelection) || normalizeMultiline(candidate.listing.content), DETAIL_TEXT_MAX_LENGTH);
+  const rawText = limitText(textWithBreaks($, $('body').first()), RAW_TEXT_MAX_LENGTH);
   const workAddress = normalizeText(work['근무지역 주소']) || null;
   const siteAddress = normalizeText(project['사업지 주소']) || null;
   const regionName =
@@ -549,6 +558,7 @@ async function sendBatch(items: BunyanglineItem[], batchNo: number) {
   }
   if (!IMPORT_URL) throw new Error('CRM_BUNYANGLINE_IMPORT_URL 환경변수가 없습니다.');
 
+  const payload = JSON.stringify({ items });
   const response = await fetch(IMPORT_URL, {
     method: 'POST',
     headers: {
@@ -556,13 +566,22 @@ async function sendBatch(items: BunyanglineItem[], batchNo: number) {
       'x-import-secret': IMPORT_SECRET,
       Authorization: IMPORT_SECRET ? `Bearer ${IMPORT_SECRET}` : '',
     },
-    body: JSON.stringify({ items }),
+    body: payload,
   });
   const json = await response.json().catch(() => null);
-  if (!response.ok || !json?.ok) {
-    throw new Error(`[CRM저장] batch ${batchNo} 실패: status=${response.status} body=${JSON.stringify(json)}`);
+
+  if (response.status === 413 && items.length > 1) {
+    const half = Math.ceil(items.length / 2);
+    console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 payload ${(payload.length / 1024 / 1024).toFixed(2)}MB → 413, ${half}/${items.length - half}건으로 분할 재전송`);
+    await sendBatch(items.slice(0, half), Number(`${batchNo}1`));
+    await sendBatch(items.slice(half), Number(`${batchNo}2`));
+    return;
   }
-  console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 전송 완료`);
+
+  if (!response.ok || !json?.ok) {
+    throw new Error(`[CRM저장] batch ${batchNo} 실패: status=${response.status} payloadMB=${(payload.length / 1024 / 1024).toFixed(2)} body=${JSON.stringify(json)}`);
+  }
+  console.log(`[CRM저장] batch ${batchNo}: ${items.length}건 전송 완료 · payload ${(payload.length / 1024 / 1024).toFixed(2)}MB`);
 }
 
 async function main() {
@@ -579,6 +598,9 @@ async function main() {
   console.log(`- 이번 실행 상세 표시일 기준: ${START_DATE} 이후`);
   console.log(`- 대상: ${targetRegions.map((region) => `${region.name}(${region.id})`).join(', ')}`);
   console.log(`- 상세 동시 처리: ${DETAIL_CONCURRENCY}개`);
+  console.log(`- CRM 배치 크기: ${BATCH_SIZE}건`);
+  console.log(`- detail_text 최대 길이: ${DETAIL_TEXT_MAX_LENGTH.toLocaleString()}자`);
+  console.log(`- raw_text 최대 길이: ${RAW_TEXT_MAX_LENGTH.toLocaleString()}자`);
   console.log(`- CRM 전송: ${SEND_TO_CRM}`);
 
   const client = await request.newContext({
@@ -631,9 +653,8 @@ async function main() {
     await saveJson(path.join(debugDir, 'skipped-general-duplicate-phones.json'), filteredItems.skippedGeneralDuplicates);
     await saveJson(path.join(debugDir, 'failures.json'), failures);
 
-    const batchSize = 100;
-    for (let start = 0, batchNo = 1; start < items.length; start += batchSize, batchNo += 1) {
-      await sendBatch(items.slice(start, start + batchSize), batchNo);
+    for (let start = 0, batchNo = 1; start < items.length; start += BATCH_SIZE, batchNo += 1) {
+      await sendBatch(items.slice(start, start + BATCH_SIZE), batchNo);
     }
 
     const sectionCounts = items.reduce<Record<string, number>>((acc, item) => {
