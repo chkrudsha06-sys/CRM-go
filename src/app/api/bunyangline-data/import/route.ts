@@ -425,6 +425,315 @@ function splitManagerFields(nameValue: unknown, phoneValue: unknown) {
   };
 }
 
+const GENERIC_SITE_NAME_PATTERNS = [
+  /현장\s*사무실/,
+  /분양\s*사무실/,
+  /모델\s*하우스/,
+  /홍보관/,
+  /상담\s*사무실/,
+  /분양\s*홍보관/,
+  /^현장$/,
+  /^사무실$/,
+  /^본부$/,
+  /^모집$/,
+  /팀장\s*모집/,
+  /팀원\s*모집/,
+  /직원\s*모집/,
+  /사이드\s*모집/,
+  /분양\s*영업\s*팀/,
+];
+
+const SITE_NAME_KEYWORDS = [
+  '힐스테이트',
+  '자이',
+  '푸르지오',
+  '롯데캐슬',
+  '래미안',
+  '아이파크',
+  '더샵',
+  '포레나',
+  '디에트르',
+  '우미린',
+  '중흥',
+  'S클래스',
+  'e편한세상',
+  '이편한세상',
+  '월드메르디앙',
+  '센트럴',
+  '파크',
+  '시티',
+  '레이크',
+  '타워',
+  '리버',
+  '스카이',
+  '프라자',
+  '오피스텔',
+  '아파트',
+  '지식산업센터',
+  '생활숙박',
+  '빌리지',
+  '레지던스',
+  '더하이브',
+  '브릿지',
+];
+
+type SiteNameCandidate = {
+  name: string;
+  score: number;
+  source: string;
+};
+
+type UnitCandidate = {
+  unitCount: string | null;
+  complexCount: string | null;
+  source: string | null;
+  confidence: number | null;
+};
+
+function compactForCompare(value: unknown) {
+  return String(value ?? '').replace(/[\s·ㆍ\-_()[\]{}'"“”‘’《》〈〉<>]/g, '').toLowerCase();
+}
+
+function isGenericSiteName(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, '');
+  return GENERIC_SITE_NAME_PATTERNS.some((pattern) => pattern.test(text) || pattern.test(compact));
+}
+
+function stripSiteNameDecorations(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const cleaned = text
+    .replace(/^[\s■◆◇●○★☆▶▷▸※ㆍ·\-[\]【】《》〈〉<>"'“”‘’]+/g, '')
+    .replace(/[\s■◆◇●○★☆▶▷▸※ㆍ·\-[\]【】《》〈〉<>"'“”‘’]+$/g, '')
+    .replace(/^(현장명|사업지명|사업지|현장)\s*[:：]\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned || null;
+}
+
+function isLikelySiteName(value: unknown) {
+  const text = stripSiteNameDecorations(value);
+  if (!text) return false;
+  if (text.length < 3 || text.length > 42) return false;
+  if (isGenericSiteName(text)) return false;
+  if (/(010|011|016|017|018|019)[-\s.]?\d{3,4}[-\s.]?\d{4}/.test(text)) return false;
+  if (/\d+\s*(만|만원|억|%|평|개월|월|일|호선)/.test(text)) return false;
+  if (/(계약|수수료|광고|지원|모집|팀장|팀원|직원|담당자|연락처|조건|변경|내용|급구|채용|문의|상담)/.test(text) && !SITE_NAME_KEYWORDS.some((keyword) => text.includes(keyword))) {
+    return false;
+  }
+  return /[가-힣A-Za-z]/.test(text);
+}
+
+function pushSiteNameCandidate(candidates: SiteNameCandidate[], value: unknown, score: number, source: string) {
+  const name = stripSiteNameDecorations(value);
+  if (!isLikelySiteName(name)) return;
+
+  const keywordBonus = SITE_NAME_KEYWORDS.some((keyword) => String(name).includes(keyword)) ? 16 : 0;
+  const existing = candidates.find((candidate) => compactForCompare(candidate.name) === compactForCompare(name));
+  if (existing) {
+    existing.score = Math.max(existing.score, score + keywordBonus);
+    existing.source = `${existing.source},${source}`;
+    return;
+  }
+
+  candidates.push({ name: name as string, score: score + keywordBonus, source });
+}
+
+function extractBracketedSiteNameCandidates(textValue: unknown) {
+  const text = normalizeText(textValue);
+  if (!text) return [];
+
+  const candidates: string[] = [];
+  const patterns = [
+    /[■◆◇●○★☆▶▷▸]\s*([^■◆◇●○★☆▶▷▸\n]{3,42})\s*[■◆◇●○★☆▶▷▸]/g,
+    /[【\[]\s*([^\]】\n]{3,42})\s*[\]】]/g,
+    /[《〈]\s*([^》〉\n]{3,42})\s*[》〉]/g,
+    /["“']\s*([^"”'\n]{3,42})\s*["”']/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of collectRegexMatches(text, pattern)) {
+      if (match[1]) candidates.push(match[1]);
+    }
+  }
+
+  return candidates;
+}
+
+function extractLabeledSiteNameCandidates(textValue: unknown) {
+  const text = normalizeText(textValue);
+  if (!text) return [];
+
+  const candidates: string[] = [];
+  const patterns = [
+    /(?:현장명|사업지명|사업지\s*현장명|사업지|프로젝트명)\s*[:：]\s*([^\n]{3,60})/g,
+    /(?:현장명|사업지명|프로젝트명)\s+([^\n]{3,60})/g,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of collectRegexMatches(text, pattern)) {
+      if (match[1]) candidates.push(match[1]);
+    }
+  }
+
+  return candidates;
+}
+
+function extractProminentLineSiteCandidates(textValue: unknown) {
+  const text = normalizeText(textValue);
+  if (!text) return [];
+
+  return text
+    .split('\n')
+    .slice(0, 35)
+    .map((line) => stripSiteNameDecorations(line))
+    .filter((line): line is string => Boolean(line && SITE_NAME_KEYWORDS.some((keyword) => line.includes(keyword))));
+}
+
+function resolveSiteName(params: {
+  siteName: unknown;
+  title: unknown;
+  summary: unknown;
+  detailText: unknown;
+  rawText: unknown;
+}) {
+  const candidates: SiteNameCandidate[] = [];
+
+  for (const value of extractBracketedSiteNameCandidates(params.detailText)) pushSiteNameCandidate(candidates, value, 70, 'detail_bracket');
+  for (const value of extractLabeledSiteNameCandidates(params.detailText)) pushSiteNameCandidate(candidates, value, 68, 'detail_label');
+  for (const value of extractProminentLineSiteCandidates(params.detailText)) pushSiteNameCandidate(candidates, value, 55, 'detail_line');
+  for (const value of extractBracketedSiteNameCandidates(params.rawText)) pushSiteNameCandidate(candidates, value, 48, 'raw_bracket');
+  for (const value of extractLabeledSiteNameCandidates(params.rawText)) pushSiteNameCandidate(candidates, value, 45, 'raw_label');
+  pushSiteNameCandidate(candidates, params.title, 38, 'title');
+  pushSiteNameCandidate(candidates, params.summary, 28, 'summary');
+  pushSiteNameCandidate(candidates, params.siteName, isGenericSiteName(params.siteName) ? 8 : 42, 'site_name');
+
+  const sorted = candidates.sort((a, b) => b.score - a.score || a.name.length - b.name.length);
+  const best = sorted[0];
+  if (best && best.score >= 42) return best.name;
+
+  const fallback = stripSiteNameDecorations(params.siteName);
+  return fallback && !isGenericSiteName(fallback) ? fallback : null;
+}
+
+function formatUnitCount(value: number, suffix = '세대') {
+  return `${value.toLocaleString('ko-KR')}${suffix}`;
+}
+
+function parseCountNumber(value: string) {
+  const number = Number(value.replace(/[^\d]/g, ''));
+  if (!Number.isFinite(number)) return null;
+  return number;
+}
+
+function extractUnitCountFromText(textValue: unknown, source: string): UnitCandidate {
+  const text = normalizeText(textValue);
+  if (!text) return { unitCount: null, complexCount: null, source: null, confidence: null };
+
+  let unitCount: string | null = null;
+  let complexCount: string | null = null;
+  let confidence = 0;
+
+  const unitPatterns = [
+    /(?:총|전체|규모|세대수|공급규모|공급\s*세대)\s*[:：]?\s*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{2,5})\s*(세대|가구)/g,
+    /([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{3,5})\s*(세대|가구)/g,
+  ];
+
+  for (const pattern of unitPatterns) {
+    for (const match of collectRegexMatches(text, pattern)) {
+      const count = parseCountNumber(match[1]);
+      if (!count || count < 20 || count > 30000) continue;
+
+      const start = Math.max(0, match.index - 18);
+      const end = Math.min(text.length, match.index + match[0].length + 18);
+      const context = text.slice(start, end);
+      if (/(만원|억|%|평|개월|호선|년|월|일)/.test(context.replace(match[0], ''))) continue;
+
+      const candidateConfidence =
+        (source === 'detail_text' ? 86 : source === 'raw_text' ? 78 : 70) +
+        (/총|전체|규모|세대수|공급/.test(match[0]) ? 8 : 0);
+
+      if (candidateConfidence > confidence) {
+        unitCount = formatUnitCount(count, match[2] === '가구' ? '가구' : '세대');
+        confidence = candidateConfidence;
+      }
+    }
+  }
+
+  const complexPatterns = [
+    /(?:총|전체|규모)?\s*([0-9]{1,2})\s*개\s*단지/g,
+    /([0-9]{1,2})\s*개\s*블록/g,
+  ];
+
+  for (const pattern of complexPatterns) {
+    for (const match of collectRegexMatches(text, pattern)) {
+      const count = parseCountNumber(match[1]);
+      if (!count || count < 1 || count > 50) continue;
+      complexCount = pattern.source.includes('블록') ? `${count}개 블록` : `${count}개 단지`;
+      break;
+    }
+    if (complexCount) break;
+  }
+
+  return {
+    unitCount,
+    complexCount,
+    source: unitCount || complexCount ? source : null,
+    confidence: unitCount ? Math.min(confidence, 99) : complexCount ? 62 : null,
+  };
+}
+
+function pickBestUnitCandidate(candidates: UnitCandidate[]) {
+  const found = candidates
+    .filter((candidate) => candidate.unitCount || candidate.complexCount)
+    .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+  const best = found[0] || { unitCount: null, complexCount: null, source: null, confidence: null };
+  const complex = best.complexCount || found.find((candidate) => candidate.complexCount)?.complexCount || null;
+
+  return {
+    ...best,
+    complexCount: complex,
+  };
+}
+
+function enrichFromInternalText(params: {
+  siteName: unknown;
+  title: unknown;
+  summary: unknown;
+  detailText: unknown;
+  rawText: unknown;
+  sourceUrl?: unknown;
+}) {
+  const resolvedSiteName = resolveSiteName({
+    siteName: params.siteName,
+    title: params.title,
+    summary: params.summary,
+    detailText: params.detailText,
+    rawText: params.rawText,
+  });
+
+  const bestCount = pickBestUnitCandidate([
+    extractUnitCountFromText(params.detailText, 'detail_text'),
+    extractUnitCountFromText(`${params.title ?? ''}\n${params.summary ?? ''}`, 'title_summary'),
+    extractUnitCountFromText(params.rawText, 'raw_text'),
+  ]);
+
+  return {
+    resolved_site_name: resolvedSiteName,
+    unit_count: bestCount.unitCount,
+    complex_count: bestCount.complexCount,
+    unit_count_source: bestCount.source,
+    unit_count_source_url: bestCount.source ? normalizeSourceUrl(params.sourceUrl) : null,
+    unit_count_confidence: bestCount.confidence,
+    unit_count_checked_at: new Date().toISOString(),
+  };
+}
+
 function normalizeDate(value: unknown): string | null {
   const text = normalizeText(value);
   if (!text) return null;
@@ -479,11 +788,24 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
   const listRegionName = normalizeText(firstValue(row, ['list_region_name', 'listRegionName', 'region_name', 'regionName', 'region'])) || '미지정';
   const siteAddress = normalizeText(firstValue(row, ['site_address', 'siteAddress', 'business_address', 'businessAddress'])) || null;
   const workAddress = normalizeText(firstValue(row, ['work_address', 'workAddress', 'address'])) || null;
+  const siteName = normalizeText(firstValue(row, ['site_name', 'siteName', 'field_name', 'fieldName'])) || '-';
+  const title = normalizeText(firstValue(row, ['title', 'post_title', 'postTitle'])) || null;
+  const summary = normalizeText(firstValue(row, ['summary', 'subtitle', 'description'])) || null;
+  const detailText = normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || null;
+  const rawText = normalizeText(firstValue(row, ['raw_text', 'rawText'])) || null;
   const actualRegionName = inferActualRegionName({
     listRegionName,
     workAddress,
     siteAddress,
     rawText: rawTextForSection,
+  });
+  const enrichment = enrichFromInternalText({
+    siteName,
+    title,
+    summary,
+    detailText,
+    rawText,
+    sourceUrl,
   });
 
   return {
@@ -491,23 +813,30 @@ function buildDbRow(row: ImportItem, existingAssignedTo?: string | null) {
     source_id: normalizeText(firstValue(row, ['source_id', 'sourceId', 'post_id', 'postId'])) || null,
     region_name: actualRegionName,
     ad_section: normalizeAdSection(firstValue(row, ['ad_section', 'adSection', 'section', 'listing_section', 'listingSection'])),
-    site_name: normalizeText(firstValue(row, ['site_name', 'siteName', 'field_name', 'fieldName'])) || '-',
+    site_name: siteName,
+    resolved_site_name: enrichment.resolved_site_name,
     posted_at: postedAt,
     posted_datetime: postedDatetime,
     manager_name: managerFields.managerName,
     manager_phone: managerFields.managerPhone,
     agency_company: scopedAgency || stripLabelNoise(firstValue(row, ['agency_company', 'agencyCompany', 'agency'])) || '-',
     apartment_fee: scopedApartmentFee || stripLabelNoise(firstValue(row, ['apartment_fee', 'apartmentFee', 'commission', 'fee'])) || null,
+    unit_count: enrichment.unit_count,
+    complex_count: enrichment.complex_count,
+    unit_count_source: enrichment.unit_count_source,
+    unit_count_source_url: enrichment.unit_count_source_url,
+    unit_count_confidence: enrichment.unit_count_confidence,
+    unit_count_checked_at: enrichment.unit_count_checked_at,
     move_in_date: normalizeText(firstValue(row, ['move_in_date', 'moveInDate', 'start_date', 'startDate'])) || '-',
     assigned_to: existingAssignedTo || normalizeAssignedTo(firstValue(row, ['assigned_to', 'assignedTo'])) || null,
-    detail_text: normalizeText(firstValue(row, ['detail_text', 'detailText', 'details'])) || null,
-    title: normalizeText(firstValue(row, ['title', 'post_title', 'postTitle'])) || null,
-    summary: normalizeText(firstValue(row, ['summary', 'subtitle', 'description'])) || null,
+    detail_text: detailText,
+    title,
+    summary,
     site_address: siteAddress,
     work_address: workAddress,
     category: normalizeText(firstValue(row, ['category', 'product_type', 'productType'])) || null,
     list_date_group: normalizeText(firstValue(row, ['list_date_group', 'listDateGroup'])) || null,
-    raw_text: normalizeText(firstValue(row, ['raw_text', 'rawText'])) || null,
+    raw_text: rawText,
     crawled_at: normalizeDateTime(firstValue(row, ['crawled_at', 'crawledAt'])) || new Date().toISOString(),
   };
 }
