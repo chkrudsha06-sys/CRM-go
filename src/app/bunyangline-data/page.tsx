@@ -2,6 +2,15 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
+import CustomerGradeAssessment from '@/components/CustomerGradeAssessment';
+import {
+  appendGradeAssessmentBlock,
+  calculateCustomerGrade,
+  EMPTY_GRADE_ASSESSMENT,
+  MANAGEMENT_STAGE_OPTIONS,
+  hasGradeAssessmentInput,
+  type GradeAssessmentForm,
+} from '@/lib/customerGrade';
 
 const REGIONS = [
   '모든지역',
@@ -24,6 +33,11 @@ const REGIONS = [
 
 const ASSIGNEES = ['조계현', '이세호', '기여운', '최연전'];
 const SECTION_NAMES = ['유니크', '슈페리어', '프리미엄', '전국TOP', '일반구인글'] as const;
+const INTAKE_ROUTES = ['분양의신DB', '컨설턴트VIP DB', '완판트럭', '분양라인', '분양회MGM', '채널톡', '대협팀활동'];
+const TITLE_OPTIONS = ['본부장', '팀장', '팀원'];
+const MANUAL_GRADE_OPTIONS = ['챌린저', '마스터', '브론즈'];
+const UNREVIEWED_GRADE = '심사미진행';
+const DEFAULT_ASSIGNED_TO = '조계현';
 
 type BunyanglineRow = {
   id: number | string;
@@ -54,6 +68,21 @@ type BunyanglineRow = {
   category: string | null;
   crawled_at: string | null;
   created_at: string | null;
+  vip_contact_id: number | string | null;
+  vip_transferred_at: string | null;
+  vip_transfer_status: string | null;
+};
+
+type VipTransferFormState = {
+  name: string;
+  title: string;
+  phone: string;
+  intake_route: string;
+  management_stage: string;
+  company: string;
+  manual_customer_grade: string;
+  assigned_to: string;
+  memo: string;
 };
 
 function emptyText(value: string | null | undefined) {
@@ -98,6 +127,27 @@ function formatPhone(value: string | null | undefined) {
   return raw || '-';
 }
 
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
+function normalizeAssignedTo(value: string | null | undefined) {
+  const text = String(value ?? '').trim();
+  return ASSIGNEES.includes(text) ? text : DEFAULT_ASSIGNED_TO;
+}
+
+function cleanFormValue(value: string | null | undefined) {
+  const text = String(value ?? '').trim();
+  return text && text !== '-' ? text : '';
+}
+
+function isVipTransferred(row: BunyanglineRow) {
+  return Boolean(row.vip_contact_id || row.vip_transferred_at || row.vip_transfer_status === 'transferred');
+}
+
 function truncate(value: string | null | undefined, length = 28) {
   const text = emptyText(value);
   if (text === '-') return text;
@@ -125,8 +175,8 @@ function excelCell(value: string | null | undefined, styleId = 'Text') {
 }
 
 function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
-  const headers = ['지역', '게재지면', '현장명', '대표현장명', '세대수', '단지수', '등록일', '담당자이름', '담당자 연락처', '대행사', '아파트 분양', '투입일', '원본공고링크', '담당자', '상세정보'];
-  const columnWidths = [80, 90, 220, 220, 90, 90, 90, 110, 130, 220, 190, 90, 260, 100, 360];
+  const headers = ['지역', '게재지면', '현장명', '대표현장명', '세대수', '단지수', '등록일', '담당자이름', '담당자 연락처', '대행사', '아파트 분양', '투입일', '원본공고링크', '담당자', 'VIP활동DB 이관일', '관리여부', '상세정보'];
+  const columnWidths = [80, 90, 220, 220, 90, 90, 90, 110, 130, 220, 190, 90, 260, 100, 140, 90, 360];
 
   const headerRow = `<Row>${headers.map((header) => excelCell(header, 'Header')).join('')}</Row>`;
   const bodyRows = rows
@@ -146,10 +196,12 @@ function downloadRowsAsExcel(rows: BunyanglineRow[], selectedRegion: string) {
         emptyText(row.move_in_date),
         emptyText(row.source_url),
         emptyText(row.assigned_to),
+        formatDate(row.vip_transferred_at),
+        isVipTransferred(row) ? '이관완료' : '미이관',
         emptyText(row.detail_text),
       ];
 
-      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 14 ? 'Detail' : 'Text')).join('')}</Row>`;
+      return `<Row>${cells.map((cell, index) => excelCell(cell, index === 16 ? 'Detail' : 'Text')).join('')}</Row>`;
     })
     .join('');
 
@@ -217,6 +269,21 @@ export default function BunyanglineDataPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [openedId, setOpenedId] = useState<string | number | null>(null);
   const [assignSavingId, setAssignSavingId] = useState<string | number | null>(null);
+  const [vipTransferRow, setVipTransferRow] = useState<BunyanglineRow | null>(null);
+  const [vipTransferSaving, setVipTransferSaving] = useState(false);
+  const [vipTransferError, setVipTransferError] = useState('');
+  const [vipGradeAssessment, setVipGradeAssessment] = useState<GradeAssessmentForm>({ ...EMPTY_GRADE_ASSESSMENT });
+  const [vipTransferForm, setVipTransferForm] = useState<VipTransferFormState>({
+    name: '',
+    title: '',
+    phone: '',
+    intake_route: '분양라인',
+    management_stage: '리드',
+    company: '',
+    manual_customer_grade: '',
+    assigned_to: DEFAULT_ASSIGNED_TO,
+    memo: '',
+  });
 
   const filterActive = selectedRegion !== '모든지역' || keyword.trim() !== '';
 
@@ -314,6 +381,129 @@ export default function BunyanglineDataPage() {
     popup.focus();
   }
 
+  function closeVipTransferModal() {
+    if (vipTransferSaving) return;
+    setVipTransferRow(null);
+    setVipTransferError('');
+    setVipGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+  }
+
+  function buildVipTransferMemo(row: BunyanglineRow) {
+    return [
+      '[분양라인 이관]',
+      `현장명: ${emptyText(row.site_name)}`,
+      `게재지면: ${normalizeAdSection(row.ad_section)}`,
+      `지역: ${emptyText(row.region_name)}`,
+      `대행사: ${emptyText(row.agency_company)}`,
+      `아파트 분양: ${emptyText(row.apartment_fee)}`,
+      `원본공고: ${emptyText(row.source_url)}`,
+    ].join('\n');
+  }
+
+  function openVipTransferModal(row: BunyanglineRow) {
+    setVipTransferRow(row);
+    setVipTransferError('');
+    setVipGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+    setVipTransferForm({
+      name: cleanFormValue(row.manager_name),
+      title: '',
+      phone: formatPhoneInput(formatPhone(row.manager_phone)),
+      intake_route: '분양라인',
+      management_stage: '리드',
+      company: cleanFormValue(row.agency_company),
+      manual_customer_grade: '',
+      assigned_to: normalizeAssignedTo(row.assigned_to),
+      memo: buildVipTransferMemo(row),
+    });
+  }
+
+  async function saveVipTransfer() {
+    if (!vipTransferRow) return;
+
+    setVipTransferError('');
+
+    if (!vipTransferForm.name.trim()) {
+      setVipTransferError('고객명을 입력해주세요.');
+      return;
+    }
+
+    if (!vipTransferForm.phone.trim()) {
+      setVipTransferError('연락처를 입력해주세요.');
+      return;
+    }
+
+    const manualGrade = vipTransferForm.manual_customer_grade.trim();
+    const hasManualGrade = MANUAL_GRADE_OPTIONS.includes(manualGrade);
+    const hasAssessment = hasGradeAssessmentInput(vipGradeAssessment);
+    const gradeResult = calculateCustomerGrade(vipGradeAssessment, vipTransferForm.title);
+    const customerGrade = hasManualGrade
+      ? manualGrade
+      : hasAssessment
+        ? gradeResult.customerGrade
+        : UNREVIEWED_GRADE;
+    const memo = hasManualGrade
+      ? vipTransferForm.memo.trim()
+      : hasAssessment
+        ? appendGradeAssessmentBlock(vipTransferForm.memo.trim(), vipGradeAssessment, gradeResult)
+        : vipTransferForm.memo.trim();
+
+    setVipTransferSaving(true);
+
+    try {
+      const response = await fetch('/api/bunyangline-data/transfer-vip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          row_id: vipTransferRow.id,
+          contact: {
+            name: vipTransferForm.name.trim(),
+            title: vipTransferForm.title.trim(),
+            phone: formatPhoneInput(vipTransferForm.phone),
+            intake_route: vipTransferForm.intake_route || '분양라인',
+            management_stage: vipTransferForm.management_stage || '리드',
+            company: vipTransferForm.company.trim() || '-',
+            customer_grade: customerGrade,
+            memo,
+            assigned_to: normalizeAssignedTo(vipTransferForm.assigned_to),
+          },
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.message || result?.error || 'VIP활동DB 이관 실패');
+      }
+
+      const transferredAt = result?.bunyangline?.vip_transferred_at || new Date().toISOString();
+      const contactId = result?.contact?.id || result?.bunyangline?.vip_contact_id || null;
+
+      setRows((currentRows) =>
+        currentRows.map((row) =>
+          row.id === vipTransferRow.id
+            ? {
+                ...row,
+                assigned_to: normalizeAssignedTo(vipTransferForm.assigned_to),
+                vip_contact_id: contactId,
+                vip_transferred_at: transferredAt,
+                vip_transfer_status: 'transferred',
+              }
+            : row,
+        ),
+      );
+
+      setVipTransferRow(null);
+      setVipGradeAssessment({ ...EMPTY_GRADE_ASSESSMENT });
+      alert('VIP활동DB로 이관되었습니다.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setVipTransferError(message);
+      alert(`VIP활동DB 이관 실패: ${message}`);
+    } finally {
+      setVipTransferSaving(false);
+    }
+  }
+
   useEffect(() => {
     void fetchRows(selectedRegion, keyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,21 +586,24 @@ export default function BunyanglineDataPage() {
                 <Th>원본공고링크</Th>
                 <Th>담당자</Th>
                 <Th>상세정보</Th>
+                <Th>VIP활동DB 이관</Th>
+                <Th>관리여부</Th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={13} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
+                  <td colSpan={15} style={emptyCellStyle}>데이터를 불러오는 중입니다.</td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
+                  <td colSpan={15} style={emptyCellStyle}>표시할 데이터가 없습니다.</td>
                 </tr>
               ) : (
                 rows.map((row) => {
                   const opened = openedId === row.id;
                   const sectionLabel = normalizeAdSection(row.ad_section);
+                  const transferred = isVipTransferred(row);
                   const displaySiteName = row.site_name;
                   const siteNameTitle = row.resolved_site_name && row.site_name && row.resolved_site_name !== row.site_name
                     ? `원본현장명: ${row.site_name}\n추출현장명: ${row.resolved_site_name}`
@@ -465,10 +658,27 @@ export default function BunyanglineDataPage() {
                             {opened ? '닫기' : '보기'}
                           </button>
                         </Td>
+                        <Td>
+                          <button
+                            type="button"
+                            onClick={() => openVipTransferModal(row)}
+                            disabled={transferred}
+                            style={vipTransferButtonStyle(transferred)}
+                          >
+                            {transferred ? '이관완료' : 'VIP 이관'}
+                          </button>
+                        </Td>
+                        <Td>
+                          {transferred ? (
+                            <span style={managedCheckStyle} title={`VIP활동DB 이관일: ${formatDate(row.vip_transferred_at)}`}>✓</span>
+                          ) : (
+                            <span style={unmanagedTextStyle}>미이관</span>
+                          )}
+                        </Td>
                       </tr>
                       {opened ? (
                         <tr>
-                          <td colSpan={13} style={detailRowCellStyle}>
+                          <td colSpan={15} style={detailRowCellStyle}>
                             <div style={detailBoxStyle}>
                               <div style={detailTitleStyle}>상세정보</div>
                               <pre style={detailPreStyle}>{emptyText(row.detail_text)}</pre>
@@ -493,6 +703,101 @@ export default function BunyanglineDataPage() {
           </table>
         </div>
       </section>
+
+      {vipTransferRow ? (
+        <div style={modalOverlayStyle}>
+          <div style={vipModalStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={modalTitleStyle}>신규고객등록</h2>
+                <p style={modalSubtitleStyle}>분양라인데이터의 담당자 정보를 VIP활동DB로 이관합니다.</p>
+              </div>
+              <button type="button" onClick={closeVipTransferModal} disabled={vipTransferSaving} style={modalCloseButtonStyle}>×</button>
+            </div>
+
+            <div style={modalBodyStyle}>
+              <div style={formGridStyle}>
+                <TransferInput
+                  label="고객명 *"
+                  value={vipTransferForm.name}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, name: value }))}
+                  placeholder="홍길동"
+                />
+                <TransferSelect
+                  label="직급"
+                  value={vipTransferForm.title}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, title: value }))}
+                  options={TITLE_OPTIONS}
+                />
+                <TransferInput
+                  label="연락처 *"
+                  value={vipTransferForm.phone}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, phone: formatPhoneInput(value) }))}
+                  placeholder="010-1234-5678"
+                />
+                <TransferSelect
+                  label="유입경로"
+                  value={vipTransferForm.intake_route}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, intake_route: value }))}
+                  options={INTAKE_ROUTES}
+                />
+                <TransferInput
+                  label="소속회사"
+                  value={vipTransferForm.company}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, company: value }))}
+                  placeholder="소속회사명을 입력하세요"
+                />
+                <TransferSelect
+                  label="관리 담당자"
+                  value={vipTransferForm.assigned_to}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, assigned_to: normalizeAssignedTo(value) }))}
+                  options={ASSIGNEES}
+                />
+                <TransferSelect
+                  label="수동고객등급선택"
+                  value={vipTransferForm.manual_customer_grade}
+                  onChange={(value) => setVipTransferForm((prev) => ({ ...prev, manual_customer_grade: value }))}
+                  options={MANUAL_GRADE_OPTIONS}
+                  placeholder="등급심사 없이 선택"
+                />
+              </div>
+
+              <div style={{ marginTop: 20 }}>
+                <CustomerGradeAssessment
+                  value={vipGradeAssessment}
+                  title={vipTransferForm.title}
+                  onChange={setVipGradeAssessment}
+                  managementStage={vipTransferForm.management_stage || '리드'}
+                  onManagementStageChange={(value) => setVipTransferForm((prev) => ({ ...prev, management_stage: value }))}
+                  managementStageOptions={MANAGEMENT_STAGE_OPTIONS}
+                />
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <label style={transferLabelStyle}>메모</label>
+                <textarea
+                  value={vipTransferForm.memo}
+                  onChange={(event) => setVipTransferForm((prev) => ({ ...prev, memo: event.target.value }))}
+                  rows={5}
+                  placeholder="고객 특이사항, 상담 메모, 다음 액션 등을 입력하세요."
+                  style={transferTextareaStyle}
+                />
+              </div>
+
+              {vipTransferError ? <div style={modalErrorStyle}>{vipTransferError}</div> : null}
+            </div>
+
+            <div style={modalFooterStyle}>
+              <button type="button" onClick={closeVipTransferModal} disabled={vipTransferSaving} style={secondaryButtonStyle(vipTransferSaving)}>
+                취소
+              </button>
+              <button type="button" onClick={saveVipTransfer} disabled={vipTransferSaving} style={primaryButtonStyle(vipTransferSaving)}>
+                {vipTransferSaving ? '이관 중...' : '등록 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -503,6 +808,54 @@ function SummaryCard({ label, value, small = false }: { label: string; value: st
       <div style={summaryLabelStyle}>{label}</div>
       <div style={small ? summarySmallValueStyle : summaryValueStyle}>{value}</div>
     </div>
+  );
+}
+
+function TransferInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label style={transferFieldStyle}>
+      <span style={transferLabelStyle}>{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        style={transferInputStyle}
+      />
+    </label>
+  );
+}
+
+function TransferSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = '선택',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  placeholder?: string;
+}) {
+  return (
+    <label style={transferFieldStyle}>
+      <span style={transferLabelStyle}>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} style={transferInputStyle}>
+        <option value="">{placeholder}</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
   );
 }
 
@@ -547,9 +900,9 @@ const summaryLabelStyle: React.CSSProperties = { fontSize: 13, color: 'var(--tex
 const summaryValueStyle: React.CSSProperties = { fontSize: 26, fontWeight: 900, color: 'var(--text-strong)' };
 const summarySmallValueStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, color: 'var(--text)', lineHeight: 1.6 };
 const tablePanelStyle: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--surface)', boxShadow: 'var(--shadow-xs)' };
-const tableScrollStyle: React.CSSProperties = { overflowX: 'auto' };
-const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1600, borderCollapse: 'collapse' };
-const thStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+const tableScrollStyle: React.CSSProperties = { overflow: 'auto', maxHeight: 'calc(100vh - 360px)' };
+const tableStyle: React.CSSProperties = { width: '100%', minWidth: 1840, borderCollapse: 'collapse' };
+const thStyle: React.CSSProperties = { position: 'sticky', top: 0, zIndex: 5, padding: '14px 12px', textAlign: 'center', fontSize: 12, color: 'var(--text-faint)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', boxShadow: '0 1px 0 var(--border)' };
 const tdStyle: React.CSSProperties = { padding: '14px 12px', textAlign: 'center', fontSize: 13, borderBottom: '1px solid var(--border-subtle)', color: 'var(--text)', verticalAlign: 'middle', whiteSpace: 'nowrap' };
 const emptyCellStyle: React.CSSProperties = { ...tdStyle, padding: 40, color: 'var(--text-subtle)' };
 const openedRowStyle: React.CSSProperties = { background: 'var(--accent-subtle)' };
@@ -599,6 +952,37 @@ const complexCountBadgeStyle: React.CSSProperties = {
 };
 const phoneStyle = (duplicate: boolean): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: duplicate ? '6px 10px' : 0, borderRadius: duplicate ? 999 : 0, color: duplicate ? 'var(--success-text)' : 'var(--text)', background: duplicate ? 'var(--success-bg)' : 'transparent', border: duplicate ? '1px solid var(--success-border)' : 'none', fontWeight: 900 });
 const linkButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: 8, color: 'var(--accent-text)', background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)', textDecoration: 'none', fontWeight: 900, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
+const vipTransferButtonStyle = (transferred: boolean): React.CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 92,
+  height: 34,
+  padding: '0 12px',
+  borderRadius: 8,
+  color: transferred ? 'var(--success-text)' : '#fff',
+  background: transferred ? 'var(--success-bg)' : 'var(--accent)',
+  border: transferred ? '1px solid var(--success-border)' : '1px solid var(--accent)',
+  fontWeight: 900,
+  cursor: transferred ? 'not-allowed' : 'pointer',
+  fontFamily: 'inherit',
+  whiteSpace: 'nowrap',
+  opacity: transferred ? 0.86 : 1,
+});
+const managedCheckStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 30,
+  height: 30,
+  borderRadius: 999,
+  background: 'var(--success-bg)',
+  color: 'var(--success-text)',
+  border: '1px solid var(--success-border)',
+  fontSize: 18,
+  fontWeight: 950,
+};
+const unmanagedTextStyle: React.CSSProperties = { color: 'var(--text-subtle)', fontSize: 12, fontWeight: 800 };
 const selectStyle: React.CSSProperties = { minWidth: 118, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 8px', fontWeight: 800 };
 const detailButtonStyle: React.CSSProperties = { height: 34, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', fontWeight: 900 };
 const detailBoxStyle: React.CSSProperties = { margin: 14, padding: 18, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', textAlign: 'left', whiteSpace: 'normal' };
@@ -606,3 +990,17 @@ const detailTitleStyle: React.CSSProperties = { fontSize: 15, fontWeight: 900, m
 const detailPreStyle: React.CSSProperties = { maxHeight: 260, overflow: 'auto', margin: 0, padding: 14, borderRadius: 10, background: 'var(--surface-2)', color: 'var(--text)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap' };
 const metaGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12, fontSize: 13, color: 'var(--text)' };
 const infoLabelStyle: React.CSSProperties = { color: 'var(--text-muted)', marginRight: 8 };
+const modalOverlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(15, 23, 42, 0.48)', backdropFilter: 'blur(5px)' };
+const vipModalStyle: React.CSSProperties = { width: 'min(1180px, calc(100vw - 32px))', maxHeight: '94vh', display: 'flex', flexDirection: 'column', borderRadius: 22, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', boxShadow: '0 24px 70px rgba(15,23,42,0.24)', overflow: 'hidden' };
+const modalHeaderStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' };
+const modalTitleStyle: React.CSSProperties = { margin: 0, fontSize: 22, fontWeight: 950, color: 'var(--text-strong)', letterSpacing: '-0.04em' };
+const modalSubtitleStyle: React.CSSProperties = { margin: '5px 0 0', fontSize: 13, color: 'var(--text-muted)', fontWeight: 700 };
+const modalCloseButtonStyle: React.CSSProperties = { width: 40, height: 40, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', fontSize: 24, lineHeight: 1, fontWeight: 800 };
+const modalBodyStyle: React.CSSProperties = { minHeight: 0, flex: 1, overflowY: 'auto', padding: 24 };
+const modalFooterStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--surface)' };
+const formGridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 };
+const transferFieldStyle: React.CSSProperties = { display: 'block', minWidth: 0 };
+const transferLabelStyle: React.CSSProperties = { display: 'block', marginBottom: 8, color: 'var(--text-muted)', fontSize: 12, fontWeight: 850 };
+const transferInputStyle: React.CSSProperties = { width: '100%', height: 42, borderRadius: 13, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '0 12px', outline: 'none', fontSize: 13, fontWeight: 750 };
+const transferTextareaStyle: React.CSSProperties = { width: '100%', resize: 'none', borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', padding: '12px 14px', outline: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 650, lineHeight: 1.6 };
+const modalErrorStyle: React.CSSProperties = { marginTop: 18, padding: '12px 14px', borderRadius: 14, border: '1px solid var(--danger-border)', background: 'var(--danger-bg)', color: 'var(--danger-text)', fontSize: 13, fontWeight: 850 };
