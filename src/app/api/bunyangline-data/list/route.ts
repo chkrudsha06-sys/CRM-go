@@ -460,7 +460,42 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('bunyangline_data')
-      .select('*')
+      .select(
+        [
+          'id',
+          'source_url',
+          'source_id',
+          'region_name',
+          'ad_section',
+          'site_name',
+          'resolved_site_name',
+          'unit_count',
+          'complex_count',
+          'unit_count_source',
+          'unit_count_source_url',
+          'unit_count_confidence',
+          'posted_at',
+          'posted_datetime',
+          'manager_name',
+          'manager_phone',
+          'agency_company',
+          'apartment_fee',
+          'move_in_date',
+          'assigned_to',
+          'detail_text',
+          'title',
+          'summary',
+          'site_address',
+          'work_address',
+          'category',
+          'list_date_group',
+          'crawled_at',
+          'created_at',
+          'vip_contact_id',
+          'vip_transferred_at',
+          'vip_transfer_status',
+        ].join(',')
+      )
       .gte('posted_at', BUNYANGLINE_START_DATE)
       .order('posted_datetime', { ascending: false, nullsFirst: false })
       .order('posted_at', { ascending: false, nullsFirst: false })
