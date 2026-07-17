@@ -1244,25 +1244,8 @@ export default function DailyActivityPage() {
       return;
     }
 
-    // 카카오워크 이벤트 알림방으로 활동목표 발송 (실패해도 저장에는 영향 없음)
-    fetch("/api/kakaowork/notify-event", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event: "daily_activity_saved",
-        data: {
-          owner_name: currentMember.name,
-          owner_title: currentMember.title,
-          work_date: date,
-          goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
-          goal_coldtalk: 0,
-          goal_consultant_db: isOutsideMeeting ? 0 : goal.consultant_db,
-          goal_second_touch: isOutsideMeeting ? 0 : goal.second_touch,
-          is_outside_meeting: isOutsideMeeting,
-          work_items: isOutsideMeeting ? [] : activeWorkItems(workItems),
-        },
-      }),
-    }).catch(() => {});
+    // 일별활동기록 저장 후 카카오워크 자동 발송은 임시 중단합니다.
+    // 다시 켤 때는 /api/kakaowork/notify-event 호출을 복구하면 됩니다.
 
     showToast("일별 활동기록이 저장되었습니다");
     fetchRows();
