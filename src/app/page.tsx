@@ -783,6 +783,57 @@ function ProgressBar({ value, total, tone = "info" }: { value: number; total: nu
   );
 }
 
+function ConversionProgressRow({
+  label,
+  totalTm,
+  meetings,
+  vip,
+  tone = "info",
+}: {
+  label: string;
+  totalTm: number;
+  meetings: number;
+  vip: number;
+  tone?: ToneName;
+}) {
+  const meetingRate = percent(meetings, totalTm);
+  const vipRate = percent(vip, totalTm);
+  const toneColor = toneStyle(tone);
+
+  return (
+    <div className="grid gap-3 border-b px-3 py-3 last:border-b-0 md:grid-cols-[150px_minmax(0,1fr)]" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="flex items-center justify-between gap-3 md:block">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: toneColor.dot }} />
+          <p className="truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{label}</p>
+        </div>
+        <p className="shrink-0 text-[12px] md:mt-1 md:pl-4" style={{ color: "var(--text-subtle)" }}>전체 TM {totalTm.toLocaleString()}건</p>
+      </div>
+
+      <div className="min-w-0">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[12px] font-semibold">
+          <span style={{ color: "var(--cyan-text)" }}>미팅확보 {meetings.toLocaleString()}건 · {meetingRate}%</span>
+          <span style={{ color: "var(--purple-text)" }}>VIP등록 {vip.toLocaleString()}건 · {vipRate}%</span>
+        </div>
+        <div className="relative h-2.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
+          <div
+            className="absolute inset-y-0 left-0 rounded-full transition-all"
+            style={{ width: `${Math.min(100, meetingRate)}%`, background: "var(--cyan-border)" }}
+          />
+          <div
+            className="absolute inset-y-0 left-0 rounded-full transition-all"
+            style={{ width: `${Math.min(100, vipRate)}%`, background: "var(--purple-border)" }}
+          />
+        </div>
+        <div className="mt-1.5 flex items-center gap-4 text-[11px]" style={{ color: "var(--text-faint)" }}>
+          <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--cyan-border)" }} />미팅확보 / 전체 TM</span>
+          <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--purple-border)" }} />VIP등록 / 전체 TM</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyBlock({ title, desc }: { title: string; desc: string }) {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center p-5 text-center">
@@ -1384,40 +1435,44 @@ export default function HomePage() {
     });
   }, [contacts, rangeEnd, rangeStart, sales, salesOwnerLookup]);
 
-  /* 지정된 5개 유입경로별 DB → 미팅 → VIP 전환 */
+  /* 지정된 5개 유입경로별 전체 TM → 미팅 → VIP 전환 */
   const intakeRows = useMemo(() => {
     return DASHBOARD_INTAKE_ROUTES.map((route) => {
-      const rows = monthContacts.filter((contact) => dashboardIntakeRoute(contact.intake_route) === route);
+      const rows = visibleContacts.filter(
+        (contact) => dashboardIntakeRoute(contact.intake_route) === route && isTmCreatedInRange(contact, rangeStart, rangeEnd)
+      );
       const meetings = rows.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
       const vip = rows.filter((contact) => isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
       return {
         route,
-        total: rows.length,
+        totalTm: rows.length,
         meetings,
         vip,
         meetingRate: percent(meetings, rows.length),
-        vipRate: percent(vip, meetings),
+        vipRate: percent(vip, rows.length),
       };
     });
-  }, [monthContacts, rangeEnd, rangeStart]);
+  }, [rangeEnd, rangeStart, visibleContacts]);
 
-  /* 직급별 DB → 미팅 → VIP 전환 */
+  /* 직급별 전체 TM → 미팅 → VIP 전환 */
   const titleVipRows = useMemo(() => {
     return DASHBOARD_JOB_TITLES.map((title, index) => {
-      const rows = monthContacts.filter((contact) => dashboardJobTitle(contact.title) === title);
+      const rows = visibleContacts.filter(
+        (contact) => dashboardJobTitle(contact.title) === title && isTmCreatedInRange(contact, rangeStart, rangeEnd)
+      );
       const meetings = rows.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
       const vip = rows.filter((contact) => isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
       return {
         title,
-        total: rows.length,
+        totalTm: rows.length,
         meetings,
         vip,
         meetingRate: percent(meetings, rows.length),
-        vipRate: percent(vip, meetings),
+        vipRate: percent(vip, rows.length),
         tone: (["warning", "purple", "success"] as ToneName[])[index],
       };
     });
-  }, [monthContacts, rangeEnd, rangeStart]);
+  }, [rangeEnd, rangeStart, visibleContacts]);
 
   const kpiPanelDesc = useMemo(() => {
     if (isDashboardAllAccessUser(me)) return "실행파트 전체목표 · 운영파트 전체목표";
@@ -1609,14 +1664,14 @@ export default function HomePage() {
 
     const intakeHtml = intakeRows.map((row) => `<tr>
       <td style="padding:8px 6px;font-weight:600;">${row.route}</td>
-      <td style="padding:8px 6px;text-align:center;">${row.total}건</td>
+      <td style="padding:8px 6px;text-align:center;">${row.totalTm}건</td>
       <td style="padding:8px 6px;text-align:center;">${row.meetings}건 · ${row.meetingRate}%</td>
       <td style="padding:8px 6px;text-align:center;color:#6b21a8;font-weight:600;">${row.vip}건 · ${row.vipRate}%</td>
     </tr>`).join("");
 
     const titleHtml = titleVipRows.map((row) => `<tr>
       <td style="padding:8px 6px;font-weight:600;">${row.title}</td>
-      <td style="padding:8px 6px;text-align:center;">${row.total}건</td>
+      <td style="padding:8px 6px;text-align:center;">${row.totalTm}건</td>
       <td style="padding:8px 6px;text-align:center;">${row.meetings}건 · ${row.meetingRate}%</td>
       <td style="padding:8px 6px;text-align:center;color:#6b21a8;font-weight:600;">${row.vip}건 · ${row.vipRate}%</td>
     </tr>`).join("");
@@ -1851,50 +1906,38 @@ export default function HomePage() {
                 {/* 유입경로별 전환율 + 직급별 VIP전환율 */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="h-full">
-                    <PanelTitle icon={TrendingUp} tone="success" title={`${periodPrefix} 유입경로별 전환율`} desc="경로별 DB → 미팅확보 → VIP등록" />
-                    <div className="space-y-2 p-4">
-                      {intakeRows.map((row) => (
-                        <div key={row.route} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                            <Badge tone="muted">유입 {row.total}건</Badge>
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
-                              <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>미팅확보건</p>
-                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.meetings}건 <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>{row.meetingRate}%</span></p>
-                            </div>
-                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--purple-bg)", borderColor: "var(--purple-border)" }}>
-                              <p className="text-[12px]" style={{ color: "var(--purple-text)" }}>VIP등록건</p>
-                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.vip}건 <span className="text-[12px]" style={{ color: "var(--purple-text)" }}>{row.vipRate}%</span></p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <PanelTitle icon={TrendingUp} tone="success" title={`${periodPrefix} 유입경로별 전환율`} desc="전체 TM 기준 미팅확보 · VIP등록 비중" />
+                    <div className="p-3">
+                      <div className="overflow-hidden rounded-[12px] border" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        {intakeRows.map((row) => (
+                          <ConversionProgressRow
+                            key={row.route}
+                            label={row.route}
+                            totalTm={row.totalTm}
+                            meetings={row.meetings}
+                            vip={row.vip}
+                            tone="success"
+                          />
+                        ))}
+                      </div>
                     </div>
                   </Panel>
 
                   <Panel className="h-full">
-                    <PanelTitle icon={Activity} tone="purple" title={`${periodPrefix} 직급별 VIP전환율`} desc="총괄본부장 · 본부장 · 팀장 미팅확보 및 VIP등록" />
-                    <div className="space-y-2.5 p-4">
-                      {titleVipRows.map((row) => (
-                        <div key={row.title} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <div className="flex items-center justify-between gap-3">
-                            <Badge tone={row.tone}>{row.title}</Badge>
-                            <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>대상 {row.total}건</span>
-                          </div>
-                          <div className="mt-2.5 grid grid-cols-2 gap-2">
-                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
-                              <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>미팅확보건</p>
-                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.meetings}건 <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>{row.meetingRate}%</span></p>
-                            </div>
-                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--purple-bg)", borderColor: "var(--purple-border)" }}>
-                              <p className="text-[12px]" style={{ color: "var(--purple-text)" }}>VIP등록건</p>
-                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.vip}건 <span className="text-[12px]" style={{ color: "var(--purple-text)" }}>{row.vipRate}%</span></p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <PanelTitle icon={Activity} tone="purple" title={`${periodPrefix} 직급별 VIP전환율`} desc="전체 TM 기준 직급별 미팅확보 · VIP등록 비중" />
+                    <div className="p-3">
+                      <div className="overflow-hidden rounded-[12px] border" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                        {titleVipRows.map((row) => (
+                          <ConversionProgressRow
+                            key={row.title}
+                            label={row.title}
+                            totalTm={row.totalTm}
+                            meetings={row.meetings}
+                            vip={row.vip}
+                            tone={row.tone}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </Panel>
                 </div>
