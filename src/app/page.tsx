@@ -3,7 +3,7 @@
 import { supabase } from "@/lib/supabase";
 import { getCurrentUser } from "@/lib/auth";
 import type { ElementType, ReactNode } from "react";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -56,6 +56,8 @@ type ContactRow = Record<string, any> & {
   activity_type?: string | null;
   has_tm?: boolean | null;
   tm_date?: string | null;
+  meeting_date?: string | null;
+  meeting_date_text?: string | null;
   meeting_result?: string | null;
   management_stage?: string | null;
   customer_grade?: string | null;
@@ -130,6 +132,8 @@ type ToneName = "info" | "success" | "warning" | "danger" | "purple" | "cyan" | 
 type FunnelRow = {
   label: string;
   value: number;
+  displayValue?: string;
+  unit?: string;
   sub: string;
   tone: ToneName;
 };
@@ -144,6 +148,17 @@ const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 const PIPELINE_STAGES = ["리드", "프로스펙팅", "딜클로징", "리텐션", "이탈/탈퇴"];
 const HIGH_VALUE_GRADES = ["마스터", "챌린저", "1%", "상위"];
 const CORE_VIP_GRADES = ["마스터", "챌린저", "브론즈"];
+const DASHBOARD_INTAKE_ROUTES = ["분양회DB", "분양라인", "완판트럭", "미관리DB", "대협팀활동"] as const;
+const DASHBOARD_JOB_TITLES = ["총괄본부장", "본부장", "팀장"] as const;
+const DASHBOARD_SALES_CATEGORIES = [
+  { key: "하이타겟", label: "하이타겟", tone: "cyan" as ToneName },
+  { key: "LMS", label: "LMS", tone: "info" as ToneName },
+  { key: "호갱노노", label: "호갱노노", tone: "purple" as ToneName },
+  { key: "브랜드검색광고", label: "브랜드검색광고", tone: "warning" as ToneName },
+  { key: "롤링보드", label: "롤링보드", tone: "success" as ToneName },
+  { key: "홈페이지", label: "홈페이지", tone: "muted" as ToneName },
+  { key: "영상", label: "영상", tone: "danger" as ToneName },
+] as const;
 const PAYMENT_CHANNEL_OPTIONS = ["자동이체 (효성CMS)", "카드 (사이다페이)", "기타 (별도입금)"];
 const PAYMENT_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
 const MONTH_LABEL_FORMAT = new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit" });
@@ -503,6 +518,97 @@ function isContractedInMonth(contact: ContactRow, start: Date, end: Date) {
   return normalizeText(contact.management_stage) === normalizeText("리텐션") && isInRange(contact.contract_date, start, end);
 }
 
+function isMeetingSecuredInRange(contact: ContactRow, start: Date, end: Date) {
+  return isInRange(contact.meeting_date, start, end);
+}
+
+function isTmCreatedInRange(contact: ContactRow, start: Date, end: Date) {
+  return normalizeText(contact.activity_type) === normalizeText("TM") && isInRange(contact.created_at, start, end);
+}
+
+function dashboardIntakeRoute(value?: string | null): typeof DASHBOARD_INTAKE_ROUTES[number] {
+  const route = normalizeText(value);
+  if (route.includes("분양라인")) return "분양라인";
+  if (route.includes("완판트럭")) return "완판트럭";
+  if (route.includes("대협팀활동")) return "대협팀활동";
+  if (route.includes("미관리")) return "미관리DB";
+  if (
+    route.includes("분양회DB") ||
+    route.includes("분양의신DB") ||
+    route.includes("컨설턴트VIPDB") ||
+    route.includes("분양회MGM")
+  ) return "분양회DB";
+  return "미관리DB";
+}
+
+function dashboardJobTitle(value?: string | null): typeof DASHBOARD_JOB_TITLES[number] | null {
+  const title = normalizeText(value);
+  if (title.includes("총괄본부장") || title === "총괄") return "총괄본부장";
+  if (title.includes("본부장")) return "본부장";
+  if (title.includes("팀장")) return "팀장";
+  return null;
+}
+
+function parseMemoFields(memo?: string | null) {
+  const fields: Record<string, string> = {};
+  String(memo || "").split(/\r?\n/).forEach((rawLine) => {
+    const line = rawLine.trim();
+    const index = line.indexOf(":");
+    if (index < 0) return;
+    const key = line.slice(0, index).replace(/^[#▶●\s]+/g, "").trim();
+    const value = line.slice(index + 1).trim();
+    if (key) fields[key] = value;
+  });
+  return fields;
+}
+
+function parseSalesAmount(value?: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw || /^x$/i.test(raw) || raw.includes("미입력")) return 0;
+  if (raw.includes("%") && !raw.includes(",") && !raw.includes("원")) return 0;
+  const matches = raw.match(/-?\d[\d,]*/g) || [];
+  const values = matches
+    .map((token) => Number(token.replace(/,/g, "")))
+    .filter((number) => Number.isFinite(number));
+  return values.length ? values[values.length - 1] : 0;
+}
+
+function grossSalesAmount(row: SalesRow) {
+  const fields = parseMemoFields(row.memo);
+  const memoTotal = parseSalesAmount(fields["총결제금액(A+B)"]);
+  return memoTotal || Number(row.execution_amount || 0);
+}
+
+function recognizedSalesAmount(row: SalesRow) {
+  const fields = parseMemoFields(row.memo);
+  return (
+    parseSalesAmount(fields["총인정매출(A+C)"]) ||
+    parseSalesAmount(fields["인정매출(C)(30%/100%)"]) ||
+    0
+  );
+}
+
+function dashboardSalesCategory(row: SalesRow): typeof DASHBOARD_SALES_CATEGORIES[number]["key"] | null {
+  const fields = parseMemoFields(row.memo);
+  const text = normalizeText([
+    row.contract_route,
+    row.channel,
+    row.payment_item,
+    row.payment_type,
+    row.item_name,
+    fields["품목"],
+  ].filter(Boolean).join(" "));
+
+  if (text.includes("하이타겟")) return "하이타겟";
+  if (text.includes("LMS")) return "LMS";
+  if (text.includes("호갱노노")) return "호갱노노";
+  if (text.includes("브랜드검색")) return "브랜드검색광고";
+  if (text.includes("롤링보드")) return "롤링보드";
+  if (text.includes("홈페이지")) return "홈페이지";
+  if (text.includes("영상") || text.includes("유튜브")) return "영상";
+  return null;
+}
+
 function touchedInMonth(contact: ContactRow, start: Date, end: Date) {
   return isInRange(contact.vip_transferred_at, start, end) || isInRange(contact.updated_at, start, end) || isInRange(contact.created_at, start, end);
 }
@@ -690,7 +796,7 @@ function EmptyBlock({ title, desc }: { title: string; desc: string }) {
 }
 
 /** 퍼널 박스 (전체 폭 균등 분배 · 세로 확장 · 텍스트 확대) */
-function FunnelBox({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: ToneName }) {
+function FunnelBox({ label, value, displayValue, unit = "건", sub, tone }: FunnelRow) {
   const c = toneStyle(tone);
   return (
     <div className="min-w-0 flex-1 rounded-[12px] border px-4 py-4" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
@@ -698,28 +804,11 @@ function FunnelBox({ label, value, sub, tone }: { label: string; value: number; 
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
         <p className="truncate text-[13px] font-normal tracking-[-0.01em]" style={{ color: c.text }}>{label}</p>
       </div>
-      <p className="mt-2.5 text-[26px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
-        {value.toLocaleString()}<span className="ml-0.5 text-[14px] font-semibold" style={{ color: "var(--text-subtle)" }}>건</span>
+      <p className="mt-2.5 truncate text-[26px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+        {displayValue || value.toLocaleString()}
+        {!displayValue && <span className="ml-0.5 text-[14px] font-semibold" style={{ color: "var(--text-subtle)" }}>{unit}</span>}
       </p>
       <p className="mt-2 truncate text-[13px] font-medium tracking-[-0.01em]" style={{ color: "var(--text-muted)" }}>{sub}</p>
-    </div>
-  );
-}
-
-/** 퍼널 커넥터 (고정 폭 + 양쪽 마진으로 박스와 간격 확보) */
-function FunnelConnector({ rate }: { rate: number | null | undefined }) {
-  return (
-    <div className="mx-3 flex w-[66px] shrink-0 items-center justify-center">
-      {rate !== null && rate !== undefined ? (
-        <span
-          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-bold tabular-nums tracking-[-0.01em]"
-          style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", border: "1px solid var(--accent-border)" }}
-        >
-          {rate}%<ArrowRight size={12} />
-        </span>
-      ) : (
-        <ArrowRight size={14} style={{ color: "var(--text-faint)" }} />
-      )}
     </div>
   );
 }
@@ -754,6 +843,7 @@ export default function HomePage() {
     id: number;
     owner_name: string;
     goal_new_tm: number; result_new_tm: number;
+    goal_meeting_confirmed: number; result_meeting_confirmed: number;
     goal_consultant_db: number; result_consultant_db: number;
     goal_second_touch: number; result_second_touch: number;
     goal_work_items: { id: string; text: string; done: boolean }[] | null;
@@ -1055,28 +1145,19 @@ export default function HomePage() {
   }, [vipContacts, rangeStart, rangeEnd]);
 
   const stats = useMemo(() => {
-    /* 고객DB 기반 (기간 내 신규 업로드) */
-    const firstTouch = monthCustomerDb.filter((contact) => hasFirstTouch(contact, notesByContact, rangeStart, rangeEnd)).length;
-    const tmCount = monthCustomerDb.filter((contact) => {
-      const activity = normalizeText(contact.activity_type);
-      return activity.includes("TM") || Boolean(contact.has_tm) || isInRange(contact.tm_date, rangeStart, rangeEnd);
-    }).length;
-    const coldTalkCount = monthCustomerDb.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
+    const firstTouch = monthContacts.filter((contact) => hasFirstTouch(contact, notesByContact, rangeStart, rangeEnd)).length;
+    const tmCount = monthContacts.filter((contact) => isTmCreatedInRange(contact, rangeStart, rangeEnd)).length;
+    const coldTalkCount = monthContacts.filter((contact) => normalizeText(contact.activity_type).includes("콜드톡")).length;
+    const meetingSecured = visibleContacts.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
 
-    /* VIP 기반 — 기간 내 이관 기준 (vip_transferred_at) */
     const vipTransferred = periodVipContacts.length;
     const master = periodVipContacts.filter((contact) => isGradeContact(contact, "마스터")).length;
     const challenger = periodVipContacts.filter((contact) => isGradeContact(contact, "챌린저")).length;
     const bronze = periodVipContacts.filter((contact) => isGradeContact(contact, "브론즈")).length;
     const graded = master + challenger + bronze;
-    const masterThisMonth = master;
-    const challengerThisMonth = challenger;
-    const bronzeThisMonth = bronze;
-    // 계약·리텐션은 VIP 이관일이 아니라 파이프라인 리텐션 구간 + 계약완료일 기준으로 집계합니다.
     const periodContractedRetention = vipContacts.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd));
     const contracts = periodContractedRetention.length;
 
-    /* 매출 (기간 내) */
     const membershipSales = monthSales.filter((row) => salesCategory(row) === "membership").reduce((sum, row) => sum + effectiveSales(row), 0);
     const lmsSales = monthSales.filter((row) => salesCategory(row) === "lms").reduce((sum, row) => sum + effectiveSales(row), 0);
     const hogangSales = monthSales.filter((row) => salesCategory(row) === "hogang").reduce((sum, row) => sum + effectiveSales(row), 0);
@@ -1084,13 +1165,11 @@ export default function HomePage() {
     const refund = monthSales.reduce((sum, row) => sum + refundSales(row), 0);
     const totalSales = monthSales.reduce((sum, row) => sum + effectiveSales(row), 0);
 
-    /* 파이프라인 단계별 — 누적 기준 (전체 vipContacts) */
     const stageCounts = PIPELINE_STAGES.reduce((acc, stage) => {
       acc[stage] = vipContacts.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
       return acc;
     }, {} as Record<string, number>);
 
-    // 계약·리텐션 — 파이프라인 리텐션 구간 + 고객 상세패널 계약완료일 기준
     const retention = periodContractedRetention.length;
     const churnCount = periodVipContacts.filter((contact) =>
       normalizeText(contact.management_stage).includes("이탈") ||
@@ -1101,25 +1180,35 @@ export default function HomePage() {
     const contractRate = percent(retention, Math.max(periodVipContacts.length, 1));
 
     return {
-      firstTouch, tmCount, coldTalkCount, vipTransferred, graded,
+      firstTouch, tmCount, coldTalkCount, meetingSecured, vipTransferred, graded,
       master, challenger, bronze,
-      masterThisMonth, challengerThisMonth, bronzeThisMonth,
+      masterThisMonth: master, challengerThisMonth: challenger, bronzeThisMonth: bronze,
       contracts, churnCount, churnRate,
       membershipSales, lmsSales, hogangSales, linkedSales, refund, totalSales,
       stageCounts, retention, activePipeline, contractRate,
       vipTotal: periodVipContacts.length,
     };
-  }, [monthCustomerDb, monthSales, notesByContact, periodVipContacts, rangeStart, rangeEnd, vipContacts]);
+  }, [monthContacts, monthSales, notesByContact, periodVipContacts, rangeStart, rangeEnd, vipContacts, visibleContacts]);
 
-  /* 당월 영업 퍼널: 4단계 */
-  const funnelStages = useMemo(() => {
-    return [
-      { label: "고객DB 신규", value: monthCustomerDb.length, sub: "기간 내 업로드 DB", tone: "info" as ToneName, rate: percent(stats.firstTouch, monthCustomerDb.length) },
-      { label: "첫접촉 완료", value: stats.firstTouch, sub: `TM ${stats.tmCount} · 콜드톡 ${stats.coldTalkCount}`, tone: "cyan" as ToneName, rate: percent(stats.vipTransferred, Math.max(stats.firstTouch, 1)) },
-      { label: "VIP 전체", value: stats.vipTotal, sub: `마스터 ${stats.master} · 챌린저 ${stats.challenger} · 브론즈 ${stats.bronze}`, tone: "purple" as ToneName, rate: percent(stats.graded, Math.max(stats.vipTotal, 1)) },
-      { label: "계약 · 리텐션", value: stats.retention, sub: `기간 내 신규계약 ${stats.contracts}건`, tone: "success" as ToneName, rate: null, isLast: true },
-    ];
-  }, [monthCustomerDb.length, stats]);
+  const dashboardSalesActualTotal = useMemo(() => {
+    return monthSales
+      .filter((row) => dashboardSalesCategory(row))
+      .reduce((sum, row) => sum + effectiveSales(row), 0);
+  }, [monthSales]);
+
+  /* 영업 흐름 핵심 4단계 */
+  const funnelStages = useMemo<FunnelRow[]>(() => ([
+    { label: "고객DB", value: monthContacts.length, sub: "기간 내 신규 등록 고객", tone: "info" },
+    { label: "미팅확보", value: stats.meetingSecured, sub: "미팅일 확정 기준", tone: "cyan" },
+    { label: "VIP고객확보", value: stats.vipTransferred, sub: "VIP활동DB 이관 기준", tone: "purple" },
+    { label: "매출", value: dashboardSalesActualTotal, displayValue: money(dashboardSalesActualTotal), sub: "선택 기간 실매출", tone: "success" },
+  ]), [dashboardSalesActualTotal, monthContacts.length, stats.meetingSecured, stats.vipTransferred]);
+
+  const topActivityRows = useMemo(() => ([
+    { label: "총 TM수", value: stats.tmCount, tone: "info" as ToneName },
+    { label: "미팅확보건", value: stats.meetingSecured, tone: "purple" as ToneName },
+    { label: "계약창출", value: stats.contracts, tone: "success" as ToneName },
+  ]), [stats.contracts, stats.meetingSecured, stats.tmCount]);
 
   /* 오늘 챙겨야 할 고객 (크리티컬 통합 리스트) */
   const { actionItems, criticalCounts } = useMemo(() => {
@@ -1276,102 +1365,59 @@ export default function HomePage() {
   const teamRows = useMemo(() => {
     return EXECUTION_PART_NAMES.map((owner) => {
       const ownerAll = contacts.filter((contact) => rowMatchesOwner(contact, owner));
-      const ownerCustomerDb = ownerAll.filter((contact) => normalizeText(contact.crm_db_source) === "customer_db");
-      const ownerVip = ownerAll.filter(isVipContact);
-      // 기간 내 이관된 VIP (vip_transferred_at 기준)
-      const ownerPeriodVip = ownerVip.filter((contact) => isInRange(contact.vip_transferred_at, rangeStart, rangeEnd));
-      const ownerMonthDb = ownerCustomerDb.filter((contact) => isInRange(contact.created_at, rangeStart, rangeEnd));
-      const ownerMembershipSales = sales.filter((row) =>
-        salesMatchesOwner(row, owner, salesOwnerLookup) &&
-        isInRange(row.payment_date, rangeStart, rangeEnd) &&
-        isMembershipFeeSales(row)
-      );
-      const ownerContracts = ownerVip.filter((contact) => isContractedInMonth(contact, rangeStart, rangeEnd));
-      // 파이프라인 단계별: 기간 내 이관 VIP 기준
-      const ownerStage = (stage: string) => ownerPeriodVip.filter((contact) => normalizeText(contact.management_stage) === normalizeText(stage)).length;
+      const ownerTm = ownerAll.filter((contact) => isTmCreatedInRange(contact, rangeStart, rangeEnd)).length;
+      const ownerMeetings = ownerAll.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
+      const ownerVip = ownerAll.filter((contact) => isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
+      const ownerSales = sales
+        .filter((row) => salesMatchesOwner(row, owner, salesOwnerLookup) && isInRange(row.payment_date, rangeStart, rangeEnd))
+        .reduce((sum, row) => sum + effectiveSales(row), 0);
+
       return {
         owner,
-        db: ownerMonthDb.length,
-        masterChallenger: ownerPeriodVip.filter((contact) => isGradeContact(contact, "마스터") || isGradeContact(contact, "챌린저")).length,
-        bronze: ownerPeriodVip.filter((contact) => isGradeContact(contact, "브론즈")).length,
-        lead: ownerStage("리드"),
-        prospect: ownerStage("프로스펙팅"),
-        closing: ownerStage("딜클로징"),
-        contracts: ownerContracts.length,
-        churn: ownerStage("이탈/탈퇴"),
-        sales: ownerMembershipSales.reduce((sum, row) => sum + pipelineMembershipSalesAmount(row), 0),
+        tm: ownerTm,
+        meetings: ownerMeetings,
+        vip: ownerVip,
+        meetingRate: percent(ownerMeetings, ownerTm),
+        vipRate: percent(ownerVip, ownerMeetings),
+        sales: ownerSales,
       };
     });
-  }, [contacts, sales, salesOwnerLookup, rangeStart, rangeEnd]);
+  }, [contacts, rangeEnd, rangeStart, sales, salesOwnerLookup]);
 
-  /* 유입경로별 성과: DB → 접촉 → VIP 확보 흐름이 핵심 */
+  /* 지정된 5개 유입경로별 DB → 미팅 → VIP 전환 */
   const intakeRows = useMemo(() => {
-    // 기간 내 고객DB 신규등록 contacts 기준으로 집계
-    const periodContacts = visibleContacts.filter((contact) =>
-      isInRange(contact.created_at, rangeStart, rangeEnd)
-    );
-    const groups = new Map<string, ContactRow[]>();
-    periodContacts.forEach((contact) => {
-      const key = contact.intake_route || "유입경로 미지정";
-      const list = groups.get(key) || [];
-      list.push(contact);
-      groups.set(key, list);
-    });
-    return Array.from(groups.entries())
-      .map(([route, rows]) => {
-        // 기간 내 VIP 이관된 건 (vip_transferred_at 기준)
-        const vip = rows.filter((contact) =>
-          isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)
-        ).length;
-        // 기간 내 계약 전환된 건 (contract_date 기준)
-        const contract = rows.filter((contact) =>
-          isContractedInMonth(contact, rangeStart, rangeEnd)
-        ).length;
-        const firstTouch = rows.filter((row) =>
-          hasFirstTouch(row, notesByContact, rangeStart, rangeEnd)
-        ).length;
-        return {
-          route,
-          total: rows.length,
-          firstTouch,
-          vip,
-          contract,
-          touchRate: percent(firstTouch, rows.length),
-          vipRate: percent(vip, Math.max(rows.length, 1)),
-        };
-      })
-      .sort((a, b) => b.vip - a.vip || b.vipRate - a.vipRate || b.total - a.total)
-      .slice(0, 7);
-  }, [notesByContact, rangeStart, rangeEnd, visibleContacts]);
-
-  /* 등급별 계약전환율: 마스터·챌린저·브론즈 계약건수 + 계약 유입경로 */
-  const gradeContractRows = useMemo(() => {
-    return CORE_VIP_GRADES.map((grade) => {
-      // 기간 내 VIP 이관된 해당 등급 고객 (vip_transferred_at 기준)
-      const rows = vipContacts.filter((contact) =>
-        isGradeContact(contact, grade) &&
-        isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)
-      );
-      // 기간 내 계약 전환된 건 (contract_date 기준)
-      const contracted = rows.filter((contact) =>
-        isContractedInMonth(contact, rangeStart, rangeEnd)
-      );
-      const routeCounts = new Map<string, number>();
-      contracted.forEach((contact) => {
-        const key = contact.intake_route || "경로 미지정";
-        routeCounts.set(key, (routeCounts.get(key) || 0) + 1);
-      });
-      const routes = Array.from(routeCounts.entries()).sort((a, b) => b[1] - a[1]);
+    return DASHBOARD_INTAKE_ROUTES.map((route) => {
+      const rows = monthContacts.filter((contact) => dashboardIntakeRoute(contact.intake_route) === route);
+      const meetings = rows.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
+      const vip = rows.filter((contact) => isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
       return {
-        grade,
-        count: rows.length,
-        contracts: contracted.length,
-        rate: percent(contracted.length, Math.max(rows.length, 1)),
-        routes,
-        tone: (grade === "마스터" ? "warning" : grade === "챌린저" ? "purple" : "success") as ToneName,
+        route,
+        total: rows.length,
+        meetings,
+        vip,
+        meetingRate: percent(meetings, rows.length),
+        vipRate: percent(vip, meetings),
       };
     });
-  }, [vipContacts, rangeStart, rangeEnd]);
+  }, [monthContacts, rangeEnd, rangeStart]);
+
+  /* 직급별 DB → 미팅 → VIP 전환 */
+  const titleVipRows = useMemo(() => {
+    return DASHBOARD_JOB_TITLES.map((title, index) => {
+      const rows = monthContacts.filter((contact) => dashboardJobTitle(contact.title) === title);
+      const meetings = rows.filter((contact) => isMeetingSecuredInRange(contact, rangeStart, rangeEnd)).length;
+      const vip = rows.filter((contact) => isVipContact(contact) && isInRange(contact.vip_transferred_at, rangeStart, rangeEnd)).length;
+      return {
+        title,
+        total: rows.length,
+        meetings,
+        vip,
+        meetingRate: percent(meetings, rows.length),
+        vipRate: percent(vip, meetings),
+        tone: (["warning", "purple", "success"] as ToneName[])[index],
+      };
+    });
+  }, [monthContacts, rangeEnd, rangeStart]);
 
   const kpiPanelDesc = useMemo(() => {
     if (isDashboardAllAccessUser(me)) return "실행파트 전체목표 · 운영파트 전체목표";
@@ -1462,15 +1508,27 @@ export default function HomePage() {
     ];
   }, [activeOwner, contacts, kpis, me, rangeEnd, rangeStart, sales, salesOwnerLookup, stats.hogangSales, stats.lmsSales, stats.membershipSales, visibleContacts]);
 
-  /* 매출 구성: 분양회 월회비 · LMS · 호갱노노 · 하이타겟 */
-  const salesBreakdown = useMemo(() => ([
-    { label: "분양회 월회비", value: stats.membershipSales, tone: "warning" as ToneName },
-    { label: "LMS", value: stats.lmsSales, tone: "info" as ToneName },
-    { label: "호갱노노", value: stats.hogangSales, tone: "purple" as ToneName },
-    { label: "하이타겟", value: stats.linkedSales, tone: "cyan" as ToneName },
-  ]), [stats.hogangSales, stats.linkedSales, stats.lmsSales, stats.membershipSales]);
+  /* 매출 구성: 요청된 7개 항목별 총매출액 · 인정매출액 · 실매출 */
+  const salesBreakdown = useMemo(() => {
+    return DASHBOARD_SALES_CATEGORIES.map((category) => {
+      const rows = monthSales.filter((row) => dashboardSalesCategory(row) === category.key);
+      return {
+        ...category,
+        gross: rows.reduce((sum, row) => sum + grossSalesAmount(row), 0),
+        recognized: rows.reduce((sum, row) => sum + recognizedSalesAmount(row), 0),
+        actual: rows.reduce((sum, row) => sum + effectiveSales(row), 0),
+      };
+    });
+  }, [monthSales]);
 
-  const coreSalesTotal = stats.membershipSales + stats.lmsSales + stats.hogangSales + stats.linkedSales;
+  const salesTotals = useMemo(() => salesBreakdown.reduce(
+    (acc, row) => ({
+      gross: acc.gross + row.gross,
+      recognized: acc.recognized + row.recognized,
+      actual: acc.actual + row.actual,
+    }),
+    { gross: 0, recognized: 0, actual: 0 },
+  ), [salesBreakdown]);
 
   const periodPrefix = filterMode === "daily" ? "당일" : filterMode === "weekly" ? "주간" : "당월";
   const filterLabel = filterMode === "daily"
@@ -1481,11 +1539,6 @@ export default function HomePage() {
   const dashboardScopeLabel = activeOwner === "전체" ? "팀 전체" : `${activeOwner} 담당자`;
   const totalCritical = criticalCounts.payment + criticalCounts.missing + criticalCounts.inactive + criticalCounts.closing;
 
-  const gradeJoinRows = [
-    { label: "마스터", value: stats.masterThisMonth, tone: "warning" as ToneName },
-    { label: "챌린저", value: stats.challengerThisMonth, tone: "purple" as ToneName },
-    { label: "브론즈", value: stats.bronzeThisMonth, tone: "success" as ToneName },
-  ];
 
   const toggleWorkItem = useCallback(async (itemId: string) => {
     if (!dailyGoal) return;
@@ -1514,185 +1567,111 @@ export default function HomePage() {
     } catch (e) { console.warn("멤버 work item toggle 실패", e); }
   }, [allDailyGoals]);
 
-  const dailyActivityFields = useMemo(() => {
-    if (!dailyGoal) return [];
-    return [
-      { label: "당일 TM", goal: dailyGoal.goal_new_tm, result: dailyGoal.result_new_tm, unit: "건" },
-      { label: "브론즈 DB 확보", goal: dailyGoal.goal_consultant_db, result: dailyGoal.result_consultant_db, unit: "개" },
-      { label: "1% DB 확보", goal: dailyGoal.goal_second_touch, result: dailyGoal.result_second_touch, unit: "개" },
-    ];
-  }, [dailyGoal]);
-
   const dailyWorkItems = useMemo(() => {
     return (dailyGoal?.goal_work_items || []).filter((item) => item.text.trim().length > 0);
   }, [dailyGoal]);
+
+  const dailyActivityFields = useMemo(() => {
+    if (!dailyGoal) return [];
+    const specialGoal = dailyWorkItems.length;
+    const specialResult = dailyWorkItems.filter((item) => item.done).length;
+    return [
+      { label: "당일 TM", goal: dailyGoal.goal_new_tm, result: dailyGoal.result_new_tm, unit: "건" },
+      { label: "미팅확정", goal: dailyGoal.goal_meeting_confirmed, result: dailyGoal.result_meeting_confirmed, unit: "건" },
+      { label: "특발성 목표", goal: specialGoal, result: specialResult, unit: "건" },
+    ];
+  }, [dailyGoal, dailyWorkItems]);
 
   const handlePdfSave = useCallback(() => {
     const d = (n: number) => String(n).padStart(2, "0");
     const now = new Date();
     const printDate = `${now.getFullYear()}.${d(now.getMonth() + 1)}.${d(now.getDate())} ${d(now.getHours())}:${d(now.getMinutes())}`;
 
-    const funnelHtml = funnelStages.map((s, i) => {
-      const arrow = !s.isLast && s.rate !== null && s.rate !== undefined ? `<td style="text-align:center;color:#6b21a8;font-weight:600;font-size:13px;width:60px;">${s.rate}% →</td>` : (!s.isLast ? `<td style="text-align:center;color:#94a3b8;width:40px;">→</td>` : "");
-      return `<td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;vertical-align:top;">
-        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">${s.label}</div>
-        <div style="font-size:24px;font-weight:600;color:#0f172a;">${s.value.toLocaleString()}<span style="font-size:13px;color:#64748b;margin-left:2px;">건</span></div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${s.sub}</div>
-      </td>${arrow}`;
-    }).join("");
+    const funnelHtml = funnelStages.map((stage) => `<td style="width:25%;padding:5px;vertical-align:top;">
+      <div style="height:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;">
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">${stage.label}</div>
+        <div style="font-size:22px;font-weight:700;color:#0f172a;">${stage.displayValue || `${stage.value.toLocaleString()}${stage.unit || "건"}`}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${stage.sub}</div>
+      </div>
+    </td>`).join("");
 
-    const gradeJoinHtml = gradeJoinRows.map((g) => `<span style="display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;margin-right:8px;font-size:13px;"><strong>${g.label}</strong> ${g.value}건</span>`).join("");
+    const activityHtml = topActivityRows.map((row) => `<span style="display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;margin-right:8px;font-size:13px;"><strong>${row.label}</strong> ${row.value.toLocaleString()}건</span>`).join("");
 
-    const teamHeader = ["담당자","DB입력","마스터·챌린저DB","브론즈DB","리드","프로스펙팅","클로징","계약","이탈","매출"];
-    const teamTh = teamHeader.map((h, i) => {
-      const borderR = i === 3 ? "border-right:2px solid #cbd5e1;" : "";
-      const color = h === "계약" ? "#047857" : h === "이탈" ? "#be123c" : h === "매출" ? "#0e7490" : "#64748b";
-      return `<th style="padding:8px 6px;font-size:11px;font-weight:400;color:${color};text-align:center;border-bottom:1px solid #e2e8f0;${borderR}">${h}</th>`;
-    }).join("");
-    const teamTr = teamRows.map((r) => {
-      const vals = [r.db, r.masterChallenger, r.bronze, r.lead, r.prospect, r.closing, r.contracts, r.churn, money(r.sales)];
-      const tds = vals.map((v, i) => {
-        const borderR = i === 2 ? "border-right:2px solid #e2e8f0;" : "";
-        const color = i === 6 ? "#047857" : i === 7 && Number(v) > 0 ? "#be123c" : i === 8 ? "#0e7490" : "#1e293b";
-        return `<td style="padding:10px 6px;text-align:center;font-size:13px;color:${color};${borderR}">${v}</td>`;
-      }).join("");
-      return `<tr><td style="padding:10px 6px;font-size:12px;font-weight:500;color:#0f172a;">${r.owner}</td>${tds}</tr>`;
-    }).join("");
-
-    const intakeHtml = intakeRows.map((r) => `<tr>
-      <td style="padding:8px 6px;font-size:13px;color:#0f172a;">${r.route}</td>
-      <td style="padding:8px 6px;text-align:center;font-size:13px;">${r.total}건</td>
-      <td style="padding:8px 6px;text-align:center;font-size:13px;color:#6b21a8;">${r.vip}건</td>
-      <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;color:#047857;">${r.vipRate}%</td>
+    const teamHtml = teamRows.map((row) => `<tr>
+      <td style="padding:9px 6px;font-weight:600;">${row.owner}</td>
+      <td style="padding:9px 6px;text-align:center;">${row.tm}</td>
+      <td style="padding:9px 6px;text-align:center;">${row.meetings}</td>
+      <td style="padding:9px 6px;text-align:center;border-right:2px solid #e2e8f0;">${row.vip}</td>
+      <td style="padding:9px 6px;text-align:center;">${row.meetingRate}%</td>
+      <td style="padding:9px 6px;text-align:center;">${row.vipRate}%</td>
+      <td style="padding:9px 6px;text-align:right;color:#0e7490;font-weight:600;">${moneyFull(row.sales)}</td>
     </tr>`).join("");
 
-    const gradeHtml = gradeContractRows.map((r) => {
-      const routes = r.routes.length ? r.routes.map(([route, count]) => `${route} ${count}건`).join(", ") : "—";
-      return `<tr>
-        <td style="padding:8px 6px;font-size:13px;font-weight:500;color:#0f172a;">${r.grade}</td>
-        <td style="padding:8px 6px;text-align:center;font-size:13px;">${r.count}건</td>
-        <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;color:#047857;">${r.contracts}건</td>
-        <td style="padding:8px 6px;text-align:center;font-size:13px;font-weight:600;">${r.rate}%</td>
-        <td style="padding:8px 6px;font-size:11px;color:#64748b;">${routes}</td>
-      </tr>`;
-    }).join("");
+    const intakeHtml = intakeRows.map((row) => `<tr>
+      <td style="padding:8px 6px;font-weight:600;">${row.route}</td>
+      <td style="padding:8px 6px;text-align:center;">${row.total}건</td>
+      <td style="padding:8px 6px;text-align:center;">${row.meetings}건 · ${row.meetingRate}%</td>
+      <td style="padding:8px 6px;text-align:center;color:#6b21a8;font-weight:600;">${row.vip}건 · ${row.vipRate}%</td>
+    </tr>`).join("");
 
-    const criticalHtml = actionItems.length === 0
-      ? `<p style="text-align:center;color:#94a3b8;padding:16px 0;">긴급 관리 대상 고객 없음</p>`
-      : actionItems.slice(0, 12).map((item) => {
-          const target = contacts.find((c) => Number(c.id) === item.contactId);
-          return `<tr>
-            <td style="padding:6px;font-size:12px;color:#be123c;font-weight:500;">${item.type}</td>
-            <td style="padding:6px;font-size:12px;color:#0f172a;">${item.title}${target?.title ? ` · ${target.title}` : ""}</td>
-            <td style="padding:6px;font-size:11px;color:#64748b;">${item.desc}</td>
-          </tr>`;
-        }).join("");
+    const titleHtml = titleVipRows.map((row) => `<tr>
+      <td style="padding:8px 6px;font-weight:600;">${row.title}</td>
+      <td style="padding:8px 6px;text-align:center;">${row.total}건</td>
+      <td style="padding:8px 6px;text-align:center;">${row.meetings}건 · ${row.meetingRate}%</td>
+      <td style="padding:8px 6px;text-align:center;color:#6b21a8;font-weight:600;">${row.vip}건 · ${row.vipRate}%</td>
+    </tr>`).join("");
 
-    const kpiHtml = kpiRows.map((r) => {
-      const hasGoal = r.goal > 0;
-      return `<tr>
-        <td style="padding:8px 6px;font-size:13px;">${r.label}</td>
-        <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${r.money ? moneyFull(r.value) : `${r.value.toLocaleString()}${r.unit}`}</td>
-        <td style="padding:8px 6px;text-align:right;font-size:13px;color:#64748b;">${hasGoal ? (r.money ? moneyFull(r.goal) : `${r.goal.toLocaleString()}${r.unit}`) : "—"}</td>
-        <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;color:#047857;">${hasGoal ? `${percent(r.value, r.goal)}%` : "—"}</td>
-      </tr>`;
-    }).join("");
-
-    const salesHtml = salesBreakdown.map((s) => `<tr>
-      <td style="padding:8px 6px;font-size:13px;">${s.label}</td>
-      <td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${moneyFull(s.value)}</td>
-      <td style="padding:8px 6px;text-align:right;font-size:13px;color:#64748b;">${percent(s.value, Math.max(coreSalesTotal, 1))}%</td>
+    const salesHtml = salesBreakdown.map((row) => `<tr>
+      <td style="padding:8px 6px;font-weight:600;">${row.label}</td>
+      <td style="padding:8px 6px;text-align:right;">${moneyFull(row.gross)}</td>
+      <td style="padding:8px 6px;text-align:right;">${moneyFull(row.recognized)}</td>
+      <td style="padding:8px 6px;text-align:right;color:#047857;font-weight:600;">${moneyFull(row.actual)}</td>
     </tr>`).join("");
 
     const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/>
     <title>분양회 CRM 대시보드 리포트</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
     <style>
-      @page { size: A4; margin: 12mm 10mm; }
-      * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; }
-      body { padding: 0; color: #1e293b; font-size: 13px; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.04em; color: #0f172a; }
-      h2 { font-size: 14px; font-weight: 600; color: #0f172a; margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 2px solid #0f172a; letter-spacing: -0.02em; }
-      table { width: 100%; border-collapse: collapse; }
-      .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
-      .header-right { text-align: right; font-size: 12px; color: #64748b; }
-      .section { margin-bottom: 14px; page-break-inside: avoid; }
-      .footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8; }
+      @page { size:A4; margin:11mm 9mm; }
+      * { box-sizing:border-box; }
+      body { margin:0; color:#1e293b; font-family:Arial,'Malgun Gothic',sans-serif; font-size:12px; line-height:1.45; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      h1 { margin:0; font-size:20px; color:#0f172a; }
+      h2 { margin:18px 0 7px; padding-bottom:5px; border-bottom:2px solid #0f172a; font-size:14px; color:#0f172a; }
+      table { width:100%; border-collapse:collapse; }
+      th { padding:7px 6px; border-bottom:1px solid #cbd5e1; color:#64748b; font-size:11px; font-weight:600; }
+      td { border-bottom:1px solid #f1f5f9; }
+      .header { display:flex; align-items:flex-end; justify-content:space-between; padding-bottom:10px; border-bottom:1px solid #e2e8f0; }
+      .section { page-break-inside:avoid; }
+      .footer { margin-top:18px; padding-top:8px; border-top:1px solid #e2e8f0; text-align:center; color:#94a3b8; font-size:10px; }
     </style></head><body>
-
-    <div class="header">
-      <div>
-        <h1>분양회 CRM 대시보드 리포트</h1>
-        <p style="margin-top:4px;font-size:12px;color:#64748b;">광고인㈜ 대외협력팀 · ${dashboardScopeLabel}</p>
+      <div class="header">
+        <div><h1>분양회 CRM 대시보드 리포트</h1><div style="margin-top:4px;color:#64748b;">광고인㈜ 대외협력팀 · ${dashboardScopeLabel}</div></div>
+        <div style="text-align:right;color:#64748b;"><div><strong>조회:</strong> ${filterLabel}</div><div><strong>출력:</strong> ${printDate}</div></div>
       </div>
-      <div class="header-right">
-        <p><strong>조회 기간:</strong> ${filterLabel}</p>
-        <p><strong>출력 일시:</strong> ${printDate}</p>
+
+      <div class="section"><h2>영업 퍼널</h2><table style="table-layout:fixed;"><tr>${funnelHtml}</tr></table><div style="margin-top:8px;">${activityHtml}</div></div>
+
+      <div class="section"><h2>담당자별 파이프라인 현황</h2><table>
+        <thead><tr><th>담당자</th><th>총 TM수</th><th>미팅확보</th><th style="border-right:2px solid #cbd5e1;">VIP고객확보</th><th>미팅확보율</th><th>VIP고객전환율</th><th style="text-align:right;">매출</th></tr></thead>
+        <tbody>${teamHtml}</tbody></table></div>
+
+      <div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div><h2>유입경로별 전환율</h2><table><thead><tr><th style="text-align:left;">경로</th><th>DB</th><th>미팅확보</th><th>VIP등록</th></tr></thead><tbody>${intakeHtml}</tbody></table></div>
+        <div><h2>직급별 VIP전환율</h2><table><thead><tr><th style="text-align:left;">직급</th><th>DB</th><th>미팅확보</th><th>VIP등록</th></tr></thead><tbody>${titleHtml}</tbody></table></div>
       </div>
-    </div>
 
-    <div class="section">
-      <h2>영업 퍼널</h2>
-      <table style="table-layout:auto;"><tr>${funnelHtml}</tr></table>
-      <div style="margin-top:8px;">${gradeJoinHtml}</div>
-    </div>
+      <div class="section"><h2>매출 구성</h2><table>
+        <thead><tr><th style="text-align:left;">항목</th><th style="text-align:right;">총매출액</th><th style="text-align:right;">인정매출액</th><th style="text-align:right;">실매출</th></tr></thead>
+        <tbody>${salesHtml}</tbody>
+        <tfoot><tr><td style="padding:9px 6px;font-weight:700;">합계</td><td style="padding:9px 6px;text-align:right;font-weight:700;">${moneyFull(salesTotals.gross)}</td><td style="padding:9px 6px;text-align:right;font-weight:700;">${moneyFull(salesTotals.recognized)}</td><td style="padding:9px 6px;text-align:right;font-weight:700;color:#047857;">${moneyFull(salesTotals.actual)}</td></tr></tfoot>
+      </table></div>
 
-    <div class="section">
-      <h2>담당자별 파이프라인 현황</h2>
-      <table><thead><tr>${teamTh}</tr></thead><tbody>${teamTr}</tbody></table>
-    </div>
-
-    <div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div>
-        <h2>유입경로별 성과</h2>
-        <table>
-          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">유입경로</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">DB입력</th><th style="text-align:center;padding:6px;font-size:11px;color:#6b21a8;border-bottom:1px solid #e2e8f0;">VIP전환</th><th style="text-align:center;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">전환율</th></tr></thead>
-          <tbody>${intakeHtml}</tbody>
-        </table>
-      </div>
-      <div>
-        <h2>등급별 계약전환율</h2>
-        <table>
-          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">등급</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">보유</th><th style="text-align:center;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">계약</th><th style="text-align:center;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">전환율</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">계약 유입경로</th></tr></thead>
-          <tbody>${gradeHtml}</tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="section" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div>
-        <h2>KPI 달성률</h2>
-        <table>
-          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">항목</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">실적</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">목표</th><th style="text-align:right;padding:6px;font-size:11px;color:#047857;border-bottom:1px solid #e2e8f0;">달성률</th></tr></thead>
-          <tbody>${kpiHtml}</tbody>
-        </table>
-      </div>
-      <div>
-        <h2>매출 구성</h2>
-        <table>
-          <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">항목</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">금액</th><th style="text-align:right;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">비중</th></tr></thead>
-          <tbody>${salesHtml}</tbody>
-          <tfoot><tr style="border-top:1px solid #e2e8f0;"><td style="padding:8px 6px;font-size:13px;font-weight:600;">합계</td><td style="padding:8px 6px;text-align:right;font-size:13px;font-weight:600;">${moneyFull(coreSalesTotal)}</td><td></td></tr></tfoot>
-        </table>
-      </div>
-    </div>
-
-    ${actionItems.length > 0 ? `<div class="section">
-      <h2>긴급 관리 대상 (${actionItems.length}건)</h2>
-      <table>
-        <thead><tr><th style="text-align:left;padding:6px;font-size:11px;color:#be123c;border-bottom:1px solid #e2e8f0;width:90px;">유형</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;width:140px;">고객</th><th style="text-align:left;padding:6px;font-size:11px;color:#64748b;border-bottom:1px solid #e2e8f0;">상세</th></tr></thead>
-        <tbody>${criticalHtml}</tbody>
-      </table>
-    </div>` : ""}
-
-    <div class="footer">분양회 CRM · 광고인㈜ 대외협력팀 · ${printDate} 출력</div>
-
-    <script>window.onload = function() { setTimeout(function() { window.print(); }, 400); }<\/script>
+      <div class="footer">분양회 CRM · 광고인㈜ 대외협력팀 · ${printDate}</div>
+      <script>window.onload=function(){setTimeout(function(){window.print();},400);}<\/script>
     </body></html>`;
 
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); }
-  }, [actionItems, contacts, coreSalesTotal, dashboardScopeLabel, filterLabel, funnelStages, gradeContractRows, gradeJoinRows, intakeRows, kpiRows, salesBreakdown, teamRows]);
+  }, [dashboardScopeLabel, filterLabel, funnelStages, intakeRows, salesBreakdown, salesTotals, teamRows, titleVipRows, topActivityRows]);
 
   return (
     <div className="premium-page h-full overflow-y-auto">
@@ -1706,7 +1685,6 @@ export default function HomePage() {
               <Badge tone={fixedOwner ? "success" : "info"} icon={UserCheck}>{dashboardScopeLabel}</Badge>
               <Badge tone="muted" icon={CalendarDays}>{filterLabel}</Badge>
             </div>
-            <p className="crm-subtitle mt-1">고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션 → 매출까지 영업 흐름을 한 화면에서 봅니다.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 print:hidden">
@@ -1785,98 +1763,81 @@ export default function HomePage() {
         ) : (
           <div className="space-y-4">
 
-            {/* ── ① 최상단: 당월 영업 퍼널(좌) + 당월 등급 가입 현황(우) ── */}
+            {/* ── ① 최상단: 영업 퍼널 + 핵심 성과 ── */}
             <div className="grid items-stretch gap-4 2xl:grid-cols-[1fr_300px]">
               <Panel className="h-full">
                 <PanelTitle
                   icon={LineChart}
                   tone="info"
                   title={`${periodPrefix} 영업 퍼널`}
-                  desc="고객DB → 첫접촉 → VIP 이관·등급심사 → 계약·리텐션"
-                  right={<Badge tone="danger" icon={TrendingDown}>이탈 {stats.churnCount}건 · {stats.churnRate}%</Badge>}
+                  desc="고객DB · 미팅확보 · VIP고객확보 · 매출"
                 />
                 <div className="p-4">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                     {funnelStages.map((stage) => (
-                      <Fragment key={stage.label}>
-                        <FunnelBox label={stage.label} value={stage.value} sub={stage.sub} tone={stage.tone} />
-                        {!stage.isLast && <FunnelConnector rate={stage.rate} />}
-                      </Fragment>
+                      <FunnelBox key={stage.label} {...stage} />
                     ))}
                   </div>
                 </div>
               </Panel>
 
               <Panel className="flex h-full flex-col">
-                <PanelTitle icon={BadgeCheck} tone="warning" title={`${periodPrefix} 등급별 가입현황`} desc="등급별 가입현황 실시간 집계" right={<Badge tone="muted">{filterLabel}</Badge>} />
+                <PanelTitle icon={BadgeCheck} tone="warning" title={`${periodPrefix} 핵심 성과`} desc="TM · 미팅 · 계약 실적" right={<Badge tone="muted">{filterLabel}</Badge>} />
                 <div className="flex flex-1 flex-col justify-center gap-2 p-4">
-                  {gradeJoinRows.map((row) => {
-                    const c = toneStyle(row.tone);
-                    return (
-                      <div key={row.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                        <Badge tone={row.tone}>{row.label}</Badge>
-                        <div className="flex items-baseline gap-1.5">
-                          <p className="text-[20px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.value.toLocaleString()}<span className="ml-0.5 text-[13px]" style={{ color: "var(--text-subtle)" }}>건</span></p>
-
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {topActivityRows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                      <Badge tone={row.tone}>{row.label}</Badge>
+                      <p className="text-[20px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
+                        {row.value.toLocaleString()}<span className="ml-0.5 text-[13px]" style={{ color: "var(--text-subtle)" }}>건</span>
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </Panel>
             </div>
 
-            {/* ── ② 본문 그리드 ── */}
+            {/* ── ② 본문 그리드 ── */}            {/* ── ② 본문 그리드 ── */}
             <div className="grid gap-4 2xl:grid-cols-[1.25fr_.75fr]">
               {/* 좌측 */}
               <div className="space-y-4">
 
                 {/* 담당자별 파이프라인 현황 */}
                 <Panel>
-                  <PanelTitle icon={Users} tone="purple" title={`${periodPrefix} 담당자별 파이프라인 현황`} desc="DB입력 · 등급DB → 파이프라인 → 계약 · 이탈 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
+                  <PanelTitle icon={Users} tone="purple" title={`${periodPrefix} 담당자별 파이프라인 현황`} desc="총 TM수 · 미팅확보 · VIP고객확보 · 전환율 · 매출" right={<Badge tone="info" icon={Filter}>관리자 뷰</Badge>} />
                   <div className="overflow-x-auto p-2">
-                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px", tableLayout: "fixed" }}>
+                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px", tableLayout: "fixed", minWidth: "880px" }}>
                       <colgroup>
-                        <col style={{ width: "7%" }} />{/* 담당자 */}
-                        <col style={{ width: "5.5%" }} />{/* DB입력 */}
-                        <col style={{ width: "10%" }} />{/* 마스터·챌린저DB */}
-                        <col style={{ width: "6.5%" }} />{/* 브론즈DB */}
-                        <col style={{ width: "11%" }} />{/* 리드 */}
-                        <col style={{ width: "13%" }} />{/* 프로스펙팅 */}
-                        <col style={{ width: "11%" }} />{/* 클로징 */}
-                        <col style={{ width: "11%" }} />{/* 계약 */}
-                        <col style={{ width: "11%" }} />{/* 이탈 */}
-                        <col style={{ width: "14%" }} />{/* 매출 */}
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "13%" }} />
+                        <col style={{ width: "15%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "18%" }} />
                       </colgroup>
                       <thead>
                         <tr>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>담당자</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>DB입력</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>마스터·챌린저DB</th>
-                          <th className="border-r px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)", borderColor: "var(--border)" }}>브론즈DB</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>리드</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>프로스펙팅</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>클로징</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--success-text)" }}>계약</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--danger-text)" }}>이탈</th>
-                          <th className="px-1.5 pb-1 text-center text-[12px] font-normal tracking-[-0.01em]" style={{ color: "var(--cyan-text)" }}>매출</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>담당자</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>총 TM수</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>미팅확보</th>
+                          <th className="border-r px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--purple-text)", borderColor: "var(--border)" }}>VIP고객확보</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>미팅확보율</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>VIP고객전환율</th>
+                          <th className="px-2 pb-1 text-center text-[12px] font-normal" style={{ color: "var(--cyan-text)" }}>매출</th>
                         </tr>
                       </thead>
                       <tbody>
                         {teamRows.map((row) => {
                           const isMine = normalizePersonName(row.owner) === normalizePersonName(activeOwner);
-                          const cellCls = "px-1.5 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.01em]";
+                          const cellCls = "px-2 py-2.5 text-center text-[13px] font-semibold tabular-nums tracking-[-0.01em]";
                           return (
                             <tr key={row.owner} style={{ background: isMine ? "var(--surface-selected)" : "var(--surface-2)" }}>
-                              <td className="rounded-l-[10px] px-1.5 py-2.5 text-center text-[13px] font-semibold tracking-[-0.01em]" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
-                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.db}</td>
-                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.masterChallenger}</td>
-                              <td className={`${cellCls} border-r`} style={{ color: "var(--text)", borderColor: "var(--border)" }}>{row.bronze}</td>
-                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.lead}</td>
-                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.prospect}</td>
-                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.closing}</td>
-                              <td className={cellCls} style={{ color: "var(--success-text)" }}>{row.contracts}</td>
-                              <td className={cellCls} style={{ color: row.churn > 0 ? "var(--danger-text)" : "var(--text-faint)" }}>{row.churn}</td>
+                              <td className="rounded-l-[10px] px-2 py-2.5 text-center text-[13px] font-semibold" style={{ color: isMine ? "var(--accent-text)" : "var(--text-strong)" }}>{row.owner}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.tm}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.meetings}</td>
+                              <td className={`${cellCls} border-r`} style={{ color: "var(--purple-text)", borderColor: "var(--border)" }}>{row.vip}</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.meetingRate}%</td>
+                              <td className={cellCls} style={{ color: "var(--text)" }}>{row.vipRate}%</td>
                               <td className={`${cellCls} rounded-r-[10px]`} style={{ color: "var(--cyan-text)" }}>{money(row.sales)}</td>
                             </tr>
                           );
@@ -1887,60 +1848,50 @@ export default function HomePage() {
                 </Panel>
 
 
-                {/* 유입경로별 성과 + 등급별 계약전환율 */}
+                {/* 유입경로별 전환율 + 직급별 VIP전환율 */}
                 <div className="grid items-stretch gap-4 xl:grid-cols-2">
                   <Panel className="h-full">
-                    <PanelTitle icon={TrendingUp} tone="success" title={`${periodPrefix} 유입경로별 성과`} desc="DB 입력 대비 VIP 전환 현황" />
-                    <div className="p-4">
-                      {intakeRows.length === 0 ? <EmptyBlock title="유입경로 데이터가 없습니다" desc="고객DB에 유입경로가 입력되면 자동 집계됩니다." /> : (
-                        <div className="space-y-2">
-                          {intakeRows.map((row) => (
-                            <div key={row.route} className="rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                              <div className="flex items-center gap-3">
-                                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{row.route}</p>
-                                <p className="shrink-0 text-[13px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
-                                  DB입력 <strong style={{ color: "var(--text-strong)" }}>{row.total}건</strong>
-                                </p>
-                                <ArrowRight size={13} style={{ color: "var(--text-faint)" }} />
-                                <p className="shrink-0 text-[13px] tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>
-                                  VIP전환 <strong style={{ color: "var(--purple-text)" }}>{row.vip}건</strong>
-                                </p>
-                                <Badge tone={row.vipRate >= 60 ? "success" : row.vipRate >= 30 ? "warning" : "muted"}>{row.vipRate}%</Badge>
-                              </div>
-                              <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.vipRate)}%`, background: toneStyle("purple").bar }} />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </Panel>
-
-                  <Panel className="h-full">
-                    <PanelTitle icon={Activity} tone="purple" title={`${periodPrefix} 등급별 계약전환율`} desc="마스터 · 챌린저 · 브론즈 계약건수와 계약 유입경로" />
-                    <div className="space-y-2.5 p-4">
-                      {gradeContractRows.map((row) => (
-                        <div key={row.grade} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                    <PanelTitle icon={TrendingUp} tone="success" title={`${periodPrefix} 유입경로별 전환율`} desc="경로별 DB → 미팅확보 → VIP등록" />
+                    <div className="space-y-2 p-4">
+                      {intakeRows.map((row) => (
+                        <div key={row.route} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
                           <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <Badge tone={row.tone}>{row.grade}</Badge>
-                              <p className="text-[13px] font-semibold tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>
-                                계약 {row.contracts}건 <span className="text-[12px] font-medium" style={{ color: "var(--text-faint)" }}>/ 보유 {row.count}건</span>
-                              </p>
-                            </div>
-                            <p className="shrink-0 text-[18px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.rate}<span className="text-[13px]">%</span></p>
+                            <p className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.route}</p>
+                            <Badge tone="muted">유입 {row.total}건</Badge>
                           </div>
-                          <div className="mt-2.5"><ProgressBar value={row.contracts} total={Math.max(row.count, 1)} tone={row.tone} /></div>
-                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[12px] font-normal" style={{ color: "var(--text-faint)" }}>계약 유입경로</span>
-                            {row.routes.length === 0 ? (
-                              <span className="text-[12px] font-medium" style={{ color: "var(--text-faint)" }}>아직 계약이 없습니다</span>
-                            ) : row.routes.map(([route, count]) => (
-                              <span key={route} className="rounded-[7px] px-1.5 py-0.5 text-[12px] font-normal" style={{ background: "var(--surface-1)", color: "var(--text)", border: "1px solid var(--border-subtle)" }}>
-                                {route} {count}건
-                              </span>
-                            ))}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
+                              <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>미팅확보건</p>
+                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.meetings}건 <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>{row.meetingRate}%</span></p>
+                            </div>
+                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--purple-bg)", borderColor: "var(--purple-border)" }}>
+                              <p className="text-[12px]" style={{ color: "var(--purple-text)" }}>VIP등록건</p>
+                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.vip}건 <span className="text-[12px]" style={{ color: "var(--purple-text)" }}>{row.vipRate}%</span></p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+
+                  <Panel className="h-full">
+                    <PanelTitle icon={Activity} tone="purple" title={`${periodPrefix} 직급별 VIP전환율`} desc="총괄본부장 · 본부장 · 팀장 미팅확보 및 VIP등록" />
+                    <div className="space-y-2.5 p-4">
+                      {titleVipRows.map((row) => (
+                        <div key={row.title} className="rounded-[12px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+                          <div className="flex items-center justify-between gap-3">
+                            <Badge tone={row.tone}>{row.title}</Badge>
+                            <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>대상 {row.total}건</span>
+                          </div>
+                          <div className="mt-2.5 grid grid-cols-2 gap-2">
+                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--surface-3)", borderColor: "var(--border-subtle)" }}>
+                              <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>미팅확보건</p>
+                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.meetings}건 <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>{row.meetingRate}%</span></p>
+                            </div>
+                            <div className="rounded-[10px] border px-2.5 py-2" style={{ background: "var(--purple-bg)", borderColor: "var(--purple-border)" }}>
+                              <p className="text-[12px]" style={{ color: "var(--purple-text)" }}>VIP등록건</p>
+                              <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.vip}건 <span className="text-[12px]" style={{ color: "var(--purple-text)" }}>{row.vipRate}%</span></p>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -1948,55 +1899,47 @@ export default function HomePage() {
                   </Panel>
                 </div>
 
-                {/* KPI 2종 + 매출 구성 3종 (높이 통일) */}
-                <div className="grid items-stretch gap-4 xl:grid-cols-2">
-                  <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={Target} tone="warning" title="당월 KPI 목표 대비 달성률" desc={kpiPanelDesc} right={<a href="/kpi-settings" className="btn-premium btn-secondary">KPI 설정</a>} />
-                    <div className="flex flex-1 flex-col justify-center gap-2.5 p-4">
-                      {kpiRows.map((row) => {
-                        const hasGoal = row.goal > 0;
-                        return (
-                          <div key={row.label} className="rounded-[12px] border p-3.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[13px] font-normal tracking-[-0.01em]" style={{ color: "var(--text-subtle)" }}>{row.label}</p>
-                              <Badge tone={row.tone}>{hasGoal ? `달성 ${percent(row.value, row.goal)}%` : "목표 미설정"}</Badge>
-                            </div>
-                            <div className="mt-2 flex items-baseline justify-between gap-3">
-                              <p className="truncate text-[22px] font-semibold leading-none tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>{row.money ? moneyFull(row.value) : `${row.value.toLocaleString()}${row.unit}`}</p>
-                              <p className="shrink-0 text-[13px] font-medium" style={{ color: "var(--text-muted)" }}>목표 {hasGoal ? (row.money ? moneyFull(row.goal) : `${row.goal.toLocaleString()}${row.unit}`) : "—"}</p>
-                            </div>
-                            <div className="mt-3"><ProgressBar value={row.value} total={hasGoal ? row.goal : Math.max(row.value, 1)} tone={row.tone} /></div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Panel>
-
-                  <Panel className="flex h-full flex-col">
-                    <PanelTitle icon={BarChart3} tone="cyan" title={`${periodPrefix} 매출 구성`} desc={`분양회 월회비 · LMS · 호갱노노 · 하이타겟 합계 ${money(coreSalesTotal)}`} right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
-                    <div className="flex flex-1 flex-col justify-center gap-3 p-4">
-                      <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
-                        {salesBreakdown.filter((item) => item.value > 0).map((item) => (
-                          <div key={item.label} style={{ width: `${percent(item.value, Math.max(coreSalesTotal, 1))}%`, background: toneStyle(item.tone).bar }} />
+                {/* 당월 매출 구성 */}
+                <Panel>
+                  <PanelTitle icon={BarChart3} tone="cyan" title={`${periodPrefix} 매출 구성`} desc="항목별 총매출액 · 인정매출액 · 실매출" right={<a href="/sales" className="btn-premium btn-secondary">매출관리</a>} />
+                  <div className="overflow-x-auto p-3">
+                    <table className="w-full border-separate" style={{ borderSpacing: "0 4px", minWidth: "760px" }}>
+                      <thead>
+                        <tr>
+                          <th className="px-3 pb-1 text-left text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>매출 항목</th>
+                          <th className="px-3 pb-1 text-right text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>총매출액</th>
+                          <th className="px-3 pb-1 text-right text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>인정매출액</th>
+                          <th className="px-3 pb-1 text-right text-[12px] font-normal" style={{ color: "var(--success-text)" }}>실매출</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesBreakdown.map((row) => (
+                          <tr key={row.label} style={{ background: "var(--surface-2)" }}>
+                            <td className="rounded-l-[10px] px-3 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full" style={{ background: toneStyle(row.tone).dot }} />
+                                <span className="text-[13px] font-semibold" style={{ color: "var(--text-strong)" }}>{row.label}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[13px] font-semibold tabular-nums" style={{ color: "var(--text)" }}>{moneyFull(row.gross)}</td>
+                            <td className="px-3 py-2.5 text-right text-[13px] font-semibold tabular-nums" style={{ color: "var(--text)" }}>{moneyFull(row.recognized)}</td>
+                            <td className="rounded-r-[10px] px-3 py-2.5 text-right text-[13px] font-semibold tabular-nums" style={{ color: "var(--success-text)" }}>{moneyFull(row.actual)}</td>
+                          </tr>
                         ))}
-                      </div>
-                      {salesBreakdown.map((item) => (
-                        <div key={item.label} className="flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2.5" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: toneStyle(item.tone).dot }} />
-                            <span className="truncate text-[13px] font-normal tracking-[-0.01em]" style={{ color: "var(--text)" }}>{item.label}</span>
-                          </div>
-                          <div className="flex shrink-0 items-baseline gap-2.5">
-                            <span className="text-[14px] font-semibold tabular-nums tracking-[-0.01em]" style={{ color: "var(--text-strong)" }}>{moneyFull(item.value)}</span>
-                            <span className="w-9 text-right text-[12px] font-semibold tabular-nums" style={{ color: "var(--text-subtle)" }}>{percent(item.value, Math.max(coreSalesTotal, 1))}%</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Panel>
-                </div>
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: "var(--surface-selected)" }}>
+                          <td className="rounded-l-[10px] px-3 py-3 text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>전체 합계</td>
+                          <td className="px-3 py-3 text-right text-[14px] font-bold tabular-nums" style={{ color: "var(--text-strong)" }}>{moneyFull(salesTotals.gross)}</td>
+                          <td className="px-3 py-3 text-right text-[14px] font-bold tabular-nums" style={{ color: "var(--text-strong)" }}>{moneyFull(salesTotals.recognized)}</td>
+                          <td className="rounded-r-[10px] px-3 py-3 text-right text-[14px] font-bold tabular-nums" style={{ color: "var(--success-text)" }}>{moneyFull(salesTotals.actual)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </Panel>
 
-                {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}
+                {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}                {/* 당일 활동목표 달성현황 (KPI + 매출 전체 폭) */}
                 <Panel>
                   <PanelTitle icon={Target} tone="info" title="당일 활동목표 달성현황" desc="일별활동기록 목표 대비 실시간 자동집계 결과" right={<a href="/daily-activity" className="btn-premium btn-secondary">일별활동기록</a>} />
                   {isAdminUser(me) ? (
@@ -2009,8 +1952,9 @@ export default function HomePage() {
                             const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(memberName));
                             const isExpanded = expandedDailyMember === memberName;
                             const isOutsideMeeting = Boolean(memberGoal?.is_outside_meeting);
-                            const totalGoal = memberGoal && !isOutsideMeeting ? (memberGoal.goal_new_tm + memberGoal.goal_consultant_db + memberGoal.goal_second_touch) : 0;
-                            const totalResult = memberGoal && !isOutsideMeeting ? (memberGoal.result_new_tm + memberGoal.result_consultant_db + memberGoal.result_second_touch) : 0;
+                            const memberSpecialItems = (memberGoal?.goal_work_items || []).filter((item: { id: string; text: string; done: boolean }) => item.text.trim().length > 0);
+                            const totalGoal = memberGoal && !isOutsideMeeting ? (memberGoal.goal_new_tm + memberGoal.goal_meeting_confirmed + memberSpecialItems.length) : 0;
+                            const totalResult = memberGoal && !isOutsideMeeting ? (memberGoal.result_new_tm + memberGoal.result_meeting_confirmed + memberSpecialItems.filter((item) => item.done).length) : 0;
                             const totalRate = totalGoal > 0 ? percent(totalResult, totalGoal) : 0;
                             return (
                               <button
@@ -2057,12 +2001,12 @@ export default function HomePage() {
                         </div>
                         {expandedDailyMember && (() => {
                           const memberGoal = allDailyGoals.find((r) => normalizePersonName(r.owner_name) === normalizePersonName(expandedDailyMember));
+                          const memberWorkItems = memberGoal ? (memberGoal.goal_work_items || []).filter((item: { id: string; text: string; done: boolean }) => item.text.trim().length > 0) : [];
                           const fields = memberGoal ? [
                             { label: "당일 TM", goal: memberGoal.goal_new_tm, result: memberGoal.result_new_tm, unit: "건" },
-                            { label: "브론즈 DB 확보", goal: memberGoal.goal_consultant_db, result: memberGoal.result_consultant_db, unit: "개" },
-                            { label: "1% DB 확보", goal: memberGoal.goal_second_touch, result: memberGoal.result_second_touch, unit: "개" },
+                            { label: "미팅확정", goal: memberGoal.goal_meeting_confirmed, result: memberGoal.result_meeting_confirmed, unit: "건" },
+                            { label: "특발성 목표", goal: memberWorkItems.length, result: memberWorkItems.filter((item: { id: string; text: string; done: boolean }) => item.done).length, unit: "건" },
                           ] : [];
-                          const memberWorkItems = memberGoal ? (memberGoal.goal_work_items || []).filter((item: { id: string; text: string; done: boolean }) => item.text.trim().length > 0) : [];
                           return (
                             <div className="rounded-[12px] border p-3" style={{ borderColor: "var(--accent-border)", background: "var(--surface-2)" }}>
                               <p className="text-[13px] font-semibold mb-3" style={{ color: "var(--accent-text)" }}>{expandedDailyMember} 세부내역</p>
@@ -2151,7 +2095,7 @@ export default function HomePage() {
                                   </span>
                                 </div>
                                 <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.02em]" style={{ color: "var(--text-strong)" }}>
-                                  {f.result}{f.unit} <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>/ 목표 {f.goal}{f.unit}</span>
+                                  목표 {f.goal}{f.unit} <span className="text-[12px]" style={{ color: "var(--text-faint)" }}>/ 달성 {f.result}{f.unit}</span>
                                 </p>
                                 <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--surface-3)" }}>
                                   <div className="h-full rounded-full" style={{ width: `${Math.min(100, rate)}%`, background: rate >= 100 ? "var(--success-border)" : "var(--accent-border)" }} />
