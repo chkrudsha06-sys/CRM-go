@@ -43,14 +43,25 @@ const OPS_NAMES = ["최은정", "김재영"];
 const ADMIN_NAMES = ["문시욱", "김정후", "김창완", "최웅"];
 
 const ACTIVITY_FIELDS = [
-  { key: "new_tm", label: "당일 TM", goalLabel: "당일 TM 목표", resultLabel: "당일 TM 달성", unit: "건" },
-  { key: "consultant_db", label: "브론즈 DB 확보", goalLabel: "브론즈 DB 확보 목표", resultLabel: "브론즈 DB 확보 달성", unit: "개" },
-  { key: "second_touch", label: "1% DB 확보", goalLabel: "1% DB 확보 목표", resultLabel: "1% DB 확보 달성", unit: "개" },
+  {
+    key: "new_tm",
+    label: "당일 TM",
+    goalLabel: "당일 TM 목표",
+    resultLabel: "당일 TM 달성",
+    unit: "건",
+  },
+  {
+    key: "meeting_confirmed",
+    label: "미팅확정",
+    goalLabel: "미팅확정 목표",
+    resultLabel: "미팅확정 달성",
+    unit: "건",
+  },
 ] as const;
 
 type ActivityKey = (typeof ACTIVITY_FIELDS)[number]["key"];
 
-type FormValues = Record<ActivityKey | "meeting_confirmed", number>;
+type FormValues = Record<ActivityKey, number>;
 
 type AutoResultMap = Record<string, FormValues>;
 
@@ -117,8 +128,6 @@ type DailyActivityRow = {
 
 const EMPTY_VALUES: FormValues = {
   new_tm: 0,
-  consultant_db: 0,
-  second_touch: 0,
   meeting_confirmed: 0,
 };
 
@@ -167,7 +176,7 @@ async function loadAutoResultCounts(workDate: string, ownerName?: string): Promi
   const end = `${nextDateString(workDate)}T00:00:00`;
   let query = supabase
     .from("contacts")
-    .select("id,created_at,activity_type,customer_grade,crm_db_source,assigned_to")
+    .select("id,created_at,activity_type,assigned_to")
     .gte("created_at", start)
     .lt("created_at", end);
 
@@ -179,22 +188,11 @@ async function loadAutoResultCounts(workDate: string, ownerName?: string): Promi
 
   const rows = (data || []) as Array<{
     activity_type?: string | null;
-    customer_grade?: string | null;
-    crm_db_source?: string | null;
     assigned_to?: string | null;
   }>;
 
   return {
     new_tm: rows.filter((row) => String(row.activity_type || "").trim() === "TM").length,
-    consultant_db: rows.filter(
-      (row) =>
-        String(row.crm_db_source || "").trim() === "vip_activity" &&
-        String(row.customer_grade || "").trim() === "브론즈",
-    ).length,
-    second_touch: rows.filter((row) => {
-      const grade = String(row.customer_grade || "").trim();
-      return String(row.crm_db_source || "").trim() === "vip_activity" && (grade === "마스터" || grade === "챌린저");
-    }).length,
     meeting_confirmed: 0,
   };
 }
@@ -207,15 +205,25 @@ function storedResultFromRow(row: DailyActivityRow | undefined): FormValues {
   if (!row || row.is_outside_meeting) return { ...EMPTY_VALUES };
   return {
     new_tm: row.result_new_tm || 0,
-    consultant_db: row.result_consultant_db || 0,
-    second_touch: row.result_second_touch || 0,
-    meeting_confirmed: 0,
+    meeting_confirmed: row.result_meeting_confirmed || 0,
   };
 }
 
-function getAutoResultForRow(row: DailyActivityRow | undefined, autoResults: AutoResultMap): FormValues {
+function getAutoResultForRow(
+  row: DailyActivityRow | undefined,
+  autoResults: AutoResultMap,
+): FormValues {
   if (!row || row.is_outside_meeting) return { ...EMPTY_VALUES };
-  return autoResults[autoResultKey(row.work_date, row.owner_name)] || storedResultFromRow(row);
+
+  const stored = storedResultFromRow(row);
+  const auto = autoResults[autoResultKey(row.work_date, row.owner_name)];
+
+  return auto
+    ? {
+        ...stored,
+        new_tm: auto.new_tm,
+      }
+    : stored;
 }
 
 async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<AutoResultMap> {
@@ -240,7 +248,7 @@ async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<Au
 
   const { data, error } = await supabase
     .from("contacts")
-    .select("id,created_at,activity_type,customer_grade,crm_db_source,assigned_to")
+    .select("id,created_at,activity_type,assigned_to")
     .gte("created_at", start)
     .lt("created_at", end)
     .in("assigned_to", owners);
@@ -252,8 +260,6 @@ async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<Au
   ((data || []) as Array<{
     created_at?: string | null;
     activity_type?: string | null;
-    customer_grade?: string | null;
-    crm_db_source?: string | null;
     assigned_to?: string | null;
   }>).forEach((row) => {
     const ownerName = String(row.assigned_to || "").trim();
@@ -262,14 +268,7 @@ async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<Au
     if (!resultMap[key]) return;
 
     const activityType = String(row.activity_type || "").trim();
-    const source = String(row.crm_db_source || "").trim();
-    const grade = String(row.customer_grade || "").trim();
-
     if (activityType === "TM") resultMap[key].new_tm += 1;
-    if (source === "vip_activity" && grade === "브론즈") resultMap[key].consultant_db += 1;
-    if (source === "vip_activity" && (grade === "마스터" || grade === "챌린저")) {
-      resultMap[key].second_touch += 1;
-    }
   });
 
   return resultMap;
@@ -277,7 +276,7 @@ async function loadAutoResultCountsForRows(rows: DailyActivityRow[]): Promise<Au
 
 function liveResultValue(
   row: DailyActivityRow | undefined,
-  key: ActivityKey | "meeting_confirmed",
+  key: ActivityKey,
   autoResults: AutoResultMap,
 ) {
   if (!row || row.is_outside_meeting) return 0;
@@ -301,7 +300,7 @@ function percent(result: number, goal: number) {
 
 function goalValue(
   row: DailyActivityRow | undefined,
-  key: ActivityKey | "meeting_confirmed",
+  key: ActivityKey,
 ) {
   if (!row) return 0;
   return n(row[`goal_${key}` as keyof DailyActivityRow] as number);
@@ -309,7 +308,7 @@ function goalValue(
 
 function resultValue(
   row: DailyActivityRow | undefined,
-  key: ActivityKey | "meeting_confirmed",
+  key: ActivityKey,
 ) {
   if (!row) return 0;
   return n(row[`result_${key}` as keyof DailyActivityRow] as number);
@@ -357,7 +356,6 @@ function isGoalEntered(row: DailyActivityRow | undefined) {
   if (row.is_outside_meeting) return true;
   return (
     ACTIVITY_FIELDS.some((field) => goalValue(row, field.key) > 0) ||
-    goalValue(row, "meeting_confirmed") > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).length > 0
   );
 }
@@ -367,7 +365,6 @@ function isResultEntered(row: DailyActivityRow | undefined) {
   if (row.is_outside_meeting) return true;
   return (
     ACTIVITY_FIELDS.some((field) => resultValue(row, field.key) > 0) ||
-    resultValue(row, "meeting_confirmed") > 0 ||
     activeWorkItems(normalizeWorkItems(row.goal_work_items)).some((item) => item.done)
   );
 }
@@ -409,13 +406,14 @@ function buildGoalReport(dateText: string, rows: DailyActivityRow[]) {
     const row = rowForMember(rows, member.name);
     lines.push(`@${member.name}`);
     lines.push(`1. 당일 TM 목표 : ${goalValue(row, "new_tm")}건`);
-    lines.push(`2. 브론즈 DB 확보 목표 : ${goalValue(row, "consultant_db")}개`);
-    lines.push(`3. 1% DB 확보 목표 : ${goalValue(row, "second_touch")}개`);
+    lines.push(
+      `2. 미팅확정 목표 : ${goalValue(row, "meeting_confirmed")}건`,
+    );
     lines.push("");
   });
 
   const totalTm = EXEC_MEMBERS.reduce(
-    (sum, member) => sum + totalTmGoal(rowForMember(rows, member.name)),
+    (sum, member) => sum + goalValue(rowForMember(rows, member.name), "new_tm"),
     0,
   );
   const totalMeeting = EXEC_MEMBERS.reduce(
@@ -426,17 +424,14 @@ function buildGoalReport(dateText: string, rows: DailyActivityRow[]) {
 
   lines.push("──────────");
   lines.push(`▶ 당일 TM 목표 : ${totalTm}건`);
-  lines.push(`▶ 전체 목표 합계 : ${EXEC_MEMBERS.reduce((sum, member) => {
-    const row = rowForMember(rows, member.name);
-    return sum + ACTIVITY_FIELDS.reduce((fieldSum, field) => fieldSum + goalValue(row, field.key), 0);
-  }, 0)}건`);
+  lines.push(`▶ 미팅확정 목표 : ${totalMeeting}건`);
 
   EXEC_MEMBERS.forEach((member) => {
     const row = rowForMember(rows, member.name);
     const tasks = activeWorkItems(normalizeWorkItems(row?.goal_work_items));
     if (tasks.length > 0) {
       lines.push("");
-      lines.push(`@${member.name} 당일활동목표`);
+      lines.push(`@${member.name} 특발성 활동목표`);
       tasks.forEach((task, index) => lines.push(`${index + 1}. ${task.text}`));
     }
   });
@@ -460,23 +455,22 @@ function buildResultReport(dateText: string, rows: DailyActivityRow[]) {
       `1. 당일 TM : ${goalValue(row, "new_tm")}건(목표) / ${resultValue(row, "new_tm")}건(달성) / 달성율 ${percent(resultValue(row, "new_tm"), goalValue(row, "new_tm"))}%`,
     );
     lines.push(
-      `2. 브론즈 DB 확보 : ${goalValue(row, "consultant_db")}개(목표) / ${resultValue(row, "consultant_db")}개(달성) / 달성율 ${percent(resultValue(row, "consultant_db"), goalValue(row, "consultant_db"))}%`,
+      `2. 미팅확정 : ${goalValue(row, "meeting_confirmed")}건(목표) / ${resultValue(row, "meeting_confirmed")}건(달성) / 달성율 ${percent(resultValue(row, "meeting_confirmed"), goalValue(row, "meeting_confirmed"))}%`,
     );
-    lines.push(
-      `3. 1% DB 확보 : ${goalValue(row, "second_touch")}개(목표) / ${resultValue(row, "second_touch")}개(달성) / 달성율 ${percent(resultValue(row, "second_touch"), goalValue(row, "second_touch"))}%`,
-    );
-    lines.push("──────────");
-    lines.push(
-      `▶ 당일 TM : ${goalValue(row, "new_tm")}건(목표) / ${resultValue(row, "new_tm")}건(달성) / 달성율 ${percent(resultValue(row, "new_tm"), goalValue(row, "new_tm"))}%`,
-    );
+
     const tasks = activeWorkItems(normalizeWorkItems(row?.goal_work_items));
     if (tasks.length > 0) {
-      lines.push("▶ 당일활동목표 체크");
+      lines.push("▶ 특발성 활동목표 체크");
       tasks.forEach((task, taskIndex) =>
-        lines.push(`${taskIndex + 1}. ${task.done ? "완료" : "미완료"} - ${task.text}`),
+        lines.push(
+          `${taskIndex + 1}. ${task.done ? "완료" : "미완료"} - ${task.text}`,
+        ),
       );
     }
-    if (index < EXEC_MEMBERS.length - 1) lines.push("");
+
+    if (index < EXEC_MEMBERS.length - 1) {
+      lines.push("──────────");
+    }
   });
 
   return lines.join("\n");
@@ -792,21 +786,59 @@ function PeriodSummary({
   autoResults?: AutoResultMap;
 }) {
   const included = rows.filter((row) => !row.is_outside_meeting);
-  const goals = ACTIVITY_FIELDS.reduce(
-    (sum, field) =>
-      sum + included.reduce((s, row) => s + goalValue(row, field.key), 0),
-    0,
-  );
-  const results = ACTIVITY_FIELDS.reduce(
-    (sum, field) =>
-      sum + included.reduce((s, row) => s + liveResultValue(row, field.key, autoResults), 0),
-    0,
-  );
-  const meetings = included.reduce(
-    (sum, row) => sum + liveResultValue(row, "meeting_confirmed", autoResults),
-    0,
-  );
   const excluded = rows.length - included.length;
+
+  const tmGoal = included.reduce(
+    (sum, row) => sum + goalValue(row, "new_tm"),
+    0,
+  );
+  const tmResult = included.reduce(
+    (sum, row) => sum + liveResultValue(row, "new_tm", autoResults),
+    0,
+  );
+  const meetingGoal = included.reduce(
+    (sum, row) => sum + goalValue(row, "meeting_confirmed"),
+    0,
+  );
+  const meetingResult = included.reduce(
+    (sum, row) =>
+      sum + liveResultValue(row, "meeting_confirmed", autoResults),
+    0,
+  );
+  const specialGoal = included.reduce(
+    (sum, row) =>
+      sum + activeWorkItems(normalizeWorkItems(row.goal_work_items)).length,
+    0,
+  );
+  const specialResult = included.reduce(
+    (sum, row) =>
+      sum +
+      activeWorkItems(normalizeWorkItems(row.goal_work_items)).filter(
+        (item) => item.done,
+      ).length,
+    0,
+  );
+
+  const metrics = [
+    {
+      label: "당일 TM",
+      goal: tmGoal,
+      result: tmResult,
+      unit: "건",
+    },
+    {
+      label: "미팅확정",
+      goal: meetingGoal,
+      result: meetingResult,
+      unit: "건",
+    },
+    {
+      label: "특발성 목표",
+      goal: specialGoal,
+      result: specialResult,
+      unit: "건",
+    },
+  ];
 
   return (
     <div className="premium-card p-4">
@@ -821,22 +853,24 @@ function PeriodSummary({
           </span>
         )}
       </div>
+
       <div className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <p className="crm-tiny">활동목표</p>
-          <p className="crm-row-main mt-1">{goals.toLocaleString()}개</p>
-        </div>
-        <div>
-          <p className="crm-tiny">활동결과</p>
-          <p className="crm-row-main mt-1">{results.toLocaleString()}개</p>
-        </div>
-        <div>
-          <p className="crm-tiny">미팅확정</p>
-          <p className="crm-row-main mt-1">{meetings.toLocaleString()}건</p>
-        </div>
-      </div>
-      <div className="mt-3">
-        <ProgressBar result={results} goal={goals} />
+        {metrics.map((metric) => (
+          <div
+            key={metric.label}
+            className="rounded-[13px] border p-3"
+            style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+          >
+            <p className="crm-tiny">{metric.label}</p>
+            <p className="crm-row-main mt-1">
+              {metric.goal.toLocaleString()} / {metric.result.toLocaleString()}
+              {metric.unit}
+            </p>
+            <div className="mt-3">
+              <ProgressBar result={metric.result} goal={metric.goal} />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -938,8 +972,8 @@ function WorkItemsResultChecklist({
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
-        <p className="crm-section-title">퇴근 전 활동결과</p>
-        <p className="crm-tiny mt-1">완료한 업무를 체크하면 중간선으로 완료 표시됩니다.</p>
+        <p className="crm-section-title">특발성 활동결과</p>
+        <p className="crm-tiny mt-1">퇴근 전 완료한 특발성 목표를 체크합니다.</p>
       </div>
       <div className="flex-1 space-y-2">
         {visibleItems.map((item, index) => {
@@ -1005,32 +1039,64 @@ function GoalInputPanel({
   );
 }
 
-function AutoResultNotice({ goal, result }: { goal: FormValues; result: FormValues }) {
+function ResultInputPanel({
+  goal,
+  result,
+  disabled,
+  onMeetingResultChange,
+}: {
+  goal: FormValues;
+  result: FormValues;
+  disabled?: boolean;
+  onMeetingResultChange: (value: number) => void;
+}) {
   return (
     <div
       className="flex h-full min-h-[240px] flex-col rounded-[16px] border p-4"
       style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
     >
       <div className="mb-3">
-        <p className="crm-section-title">자동 집계 활동결과</p>
+        <p className="crm-section-title">퇴근 전 활동결과</p>
         <p className="crm-tiny mt-1">
-          TM·DB 확보 달성값은 관련 데이터 입력 시 자동으로 집계됩니다.
+          TM 달성은 고객DB 입력값으로 자동 집계되며, 미팅확정 달성은 직접 입력합니다.
         </p>
       </div>
-      <div className="grid flex-1 content-start gap-2 sm:grid-cols-2">
-        {ACTIVITY_FIELDS.map((field) => (
-          <div
-            key={field.key}
-            className="rounded-[13px] border px-3 py-3"
-            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-          >
-            <p className="crm-tiny">{field.label} 달성</p>
-            <p className="crm-row-main mt-1">
-              {goal[field.key].toLocaleString()} / {result[field.key].toLocaleString()} {field.unit}
-            </p>
-            <p className="crm-tiny mt-1">달성율 {percent(result[field.key], goal[field.key])}%</p>
+
+      <div className="grid flex-1 content-start gap-3 sm:grid-cols-2">
+        <div
+          className="rounded-[13px] border px-3 py-3"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="crm-tiny">당일 TM 달성</p>
+              <p className="crm-row-main mt-1">
+                {goal.new_tm.toLocaleString()} / {result.new_tm.toLocaleString()}건
+              </p>
+            </div>
+            <span className="badge-premium badge-info">자동집계</span>
           </div>
-        ))}
+          <ProgressBar result={result.new_tm} goal={goal.new_tm} />
+        </div>
+
+        <div
+          className="rounded-[13px] border px-3 py-3"
+          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+        >
+          <NumberInput
+            label="미팅확정 달성"
+            value={result.meeting_confirmed}
+            unit="건"
+            disabled={disabled}
+            onChange={onMeetingResultChange}
+          />
+          <div className="mt-3">
+            <ProgressBar
+              result={result.meeting_confirmed}
+              goal={goal.meeting_confirmed}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1127,16 +1193,20 @@ export default function DailyActivityPage() {
       setIsOutsideMeeting(row.is_outside_meeting);
       setGoal({
         new_tm: row.goal_new_tm || 0,
-        consultant_db: row.goal_consultant_db || 0,
-        second_touch: row.goal_second_touch || 0,
-        meeting_confirmed: 0,
+        meeting_confirmed: row.goal_meeting_confirmed || 0,
       });
-      setResult(autoResult);
+      setResult({
+        new_tm: autoResult.new_tm,
+        meeting_confirmed: row.result_meeting_confirmed || 0,
+      });
       setWorkItems(normalizeWorkItems(row.goal_work_items));
     } else {
       setIsOutsideMeeting(false);
       setGoal({ ...EMPTY_VALUES });
-      setResult(autoResult);
+      setResult({
+        new_tm: autoResult.new_tm,
+        meeting_confirmed: 0,
+      });
       setWorkItems(createEmptyWorkItems());
     }
 
@@ -1160,7 +1230,12 @@ export default function DailyActivityPage() {
     let alive = true;
     const refreshAutoResult = async () => {
       const next = await loadAutoResultCounts(date, user?.name);
-      if (alive) setResult(next);
+      if (alive) {
+        setResult((previous) => ({
+          ...previous,
+          new_tm: next.new_tm,
+        }));
+      }
     };
     refreshAutoResult();
     const timer = window.setInterval(refreshAutoResult, 60_000);
@@ -1217,21 +1292,25 @@ export default function DailyActivityPage() {
       owner_title: currentMember.title,
       owner_role: "exec",
       is_outside_meeting: isOutsideMeeting,
-      goal_consultant_db: isOutsideMeeting ? 0 : goal.consultant_db,
-      goal_second_touch: isOutsideMeeting ? 0 : goal.second_touch,
+      goal_consultant_db: 0,
+      goal_second_touch: 0,
       goal_new_tm: isOutsideMeeting ? 0 : goal.new_tm,
       goal_manage_tm: 0,
       goal_coldtalk: 0,
       goal_media_mix: 0,
-      goal_meeting_confirmed: 0,
+      goal_meeting_confirmed: isOutsideMeeting
+        ? 0
+        : goal.meeting_confirmed,
       goal_work_items: isOutsideMeeting ? [] : workItems,
-      result_consultant_db: isOutsideMeeting ? 0 : autoResult.consultant_db,
-      result_second_touch: isOutsideMeeting ? 0 : autoResult.second_touch,
+      result_consultant_db: 0,
+      result_second_touch: 0,
       result_new_tm: isOutsideMeeting ? 0 : autoResult.new_tm,
       result_manage_tm: 0,
       result_coldtalk: 0,
       result_media_mix: 0,
-      result_meeting_confirmed: 0,
+      result_meeting_confirmed: isOutsideMeeting
+        ? 0
+        : result.meeting_confirmed,
     };
 
     const { error } = await supabase
@@ -1261,9 +1340,7 @@ export default function DailyActivityPage() {
     setIsOutsideMeeting(row.is_outside_meeting);
     setGoal({
       new_tm: row.goal_new_tm || 0,
-      consultant_db: row.goal_consultant_db || 0,
-      second_touch: row.goal_second_touch || 0,
-      meeting_confirmed: 0,
+      meeting_confirmed: row.goal_meeting_confirmed || 0,
     });
     setResult(getAutoResultForRow(row, periodAutoResults));
     setWorkItems(normalizeWorkItems(row.goal_work_items));
@@ -1394,30 +1471,25 @@ export default function DailyActivityPage() {
   const totalResultTm = isAdminView
     ? dailyMemberRows.reduce((sum, item) => sum + totalTmResult(item.row), 0)
     : personalLiveResult.new_tm;
-  const totalGoalMeeting = cardRows.reduce(
-    (sum, item) => sum + goalValue(item.row, "meeting_confirmed"), 0,
-  );
-  const totalResultMeeting = cardRows.reduce(
-    (sum, item) => sum + resultValue(item.row, "meeting_confirmed"), 0,
-  );
-  const totalGoalBronzeDb = isAdminView
-    ? totalFieldGoal(cardRows, "consultant_db")
-    : personalLiveGoal.consultant_db;
-  const totalResultBronzeDb = isAdminView
-    ? totalFieldResult(cardRows, "consultant_db")
-    : personalLiveResult.consultant_db;
-  const totalGoalOnePercentDb = isAdminView
-    ? totalFieldGoal(cardRows, "second_touch")
-    : personalLiveGoal.second_touch;
-  const totalResultOnePercentDb = isAdminView
-    ? totalFieldResult(cardRows, "second_touch")
-    : personalLiveResult.second_touch;
+  const totalGoalMeeting = isAdminView
+    ? cardRows.reduce(
+        (sum, item) => sum + goalValue(item.row, "meeting_confirmed"),
+        0,
+      )
+    : personalLiveGoal.meeting_confirmed;
+  const totalResultMeeting = isAdminView
+    ? cardRows.reduce(
+        (sum, item) => sum + resultValue(item.row, "meeting_confirmed"),
+        0,
+      )
+    : personalLiveResult.meeting_confirmed;
   const totalGoalSpecial = isAdminView
     ? totalSpecialGoal(dailyMemberRows)
     : personalLiveWorkItems.length;
   const totalResultSpecial = isAdminView
     ? totalSpecialResult(dailyMemberRows)
     : personalLiveWorkItems.filter((item) => item.done).length;
+
 
   return (
     <div className="premium-page h-full overflow-y-auto">
@@ -1471,7 +1543,7 @@ export default function DailyActivityPage() {
           </div>
         </header>
 
-        <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
+        <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
           <StatCard
             icon={Clock3}
             label="당일 TM 목표 달성율"
@@ -1480,22 +1552,15 @@ export default function DailyActivityPage() {
             tone="warning"
           />
           <StatCard
-            icon={Users}
-            label="당일 브론즈DB 확보 달성율"
-            value={`${totalGoalBronzeDb}/${totalResultBronzeDb}`}
-            sub={`목표/달성 · 달성율 ${percent(totalResultBronzeDb, totalGoalBronzeDb)}%`}
+            icon={CalendarDays}
+            label="미팅확정 목표 달성율"
+            value={`${totalGoalMeeting}/${totalResultMeeting}`}
+            sub={`목표/달성 · 달성율 ${percent(totalResultMeeting, totalGoalMeeting)}%`}
             tone="info"
           />
           <StatCard
-            icon={CalendarDays}
-            label="1% DB 확보 달성율"
-            value={`${totalGoalOnePercentDb}/${totalResultOnePercentDb}`}
-            sub={`목표/달성 · 달성율 ${percent(totalResultOnePercentDb, totalGoalOnePercentDb)}%`}
-            tone="purple"
-          />
-          <StatCard
             icon={Flag}
-            label="특발성목표 달성율"
+            label="특발성 목표 달성율"
             value={`${totalGoalSpecial}/${totalResultSpecial}`}
             sub={`목표/달성 · 달성율 ${percent(totalResultSpecial, totalGoalSpecial)}%`}
             tone="danger"
@@ -1576,7 +1641,17 @@ export default function DailyActivityPage() {
                         setGoal((prev) => ({ ...prev, [key]: value }))
                       }
                     />
-                    <AutoResultNotice goal={goal} result={result} />
+                    <ResultInputPanel
+                      goal={goal}
+                      result={result}
+                      disabled={isOutsideMeeting}
+                      onMeetingResultChange={(value) =>
+                        setResult((previous) => ({
+                          ...previous,
+                          meeting_confirmed: value,
+                        }))
+                      }
+                    />
                   </div>
                   <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
                     <WorkItemsEditor
@@ -1738,13 +1813,12 @@ export default function DailyActivityPage() {
               <div className="max-h-[560px] overflow-auto">
                 <table className="crm-table min-w-[1120px] table-fixed text-center [&_td>*]:mx-auto [&_td]:!px-2 [&_td]:!text-center [&_td]:align-middle [&_th]:!px-2 [&_th]:!text-center [&_th]:align-middle">
                   <colgroup>
+                    <col className="w-[11%]" />
+                    <col className="w-[14%]" />
                     <col className="w-[10%]" />
                     <col className="w-[13%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[13%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[18%]" />
                     <col className="w-[10%]" />
                     <col className="w-[10%]" />
                   </colgroup>
@@ -1754,9 +1828,8 @@ export default function DailyActivityPage() {
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>담당자</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>상태</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>TM 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>브론즈DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>1%DB 목표/달성</th>
-                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>특발성활동목표 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>미팅확정 목표/달성</th>
+                      <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>특발성 활동목표/달성</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>수정일</th>
                       <th className="sticky top-0 z-10 text-center align-middle" style={{ textAlign: "center" }}>관리</th>
                     </tr>
@@ -1764,7 +1837,7 @@ export default function DailyActivityPage() {
                   <tbody>
                     {visibleDetailRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="text-center align-middle">
+                        <td colSpan={8} className="text-center align-middle">
                           기록이 없습니다.
                         </td>
                       </tr>
@@ -1806,10 +1879,7 @@ export default function DailyActivityPage() {
                             {goalValue(row, "new_tm").toLocaleString()} / {liveResultValue(row, "new_tm", periodAutoResults).toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "consultant_db").toLocaleString()} / {liveResultValue(row, "consultant_db", periodAutoResults).toLocaleString()}
-                          </td>
-                          <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
-                            {goalValue(row, "second_touch").toLocaleString()} / {liveResultValue(row, "second_touch", periodAutoResults).toLocaleString()}
+                            {goalValue(row, "meeting_confirmed").toLocaleString()} / {liveResultValue(row, "meeting_confirmed", periodAutoResults).toLocaleString()}
                           </td>
                           <td className="text-center align-middle tabular-nums" style={{ textAlign: "center" }}>
                             {activeWorkItems(normalizeWorkItems(row.goal_work_items)).length.toLocaleString()} / {activeWorkItems(normalizeWorkItems(row.goal_work_items)).filter((item) => item.done).length.toLocaleString()}
