@@ -596,7 +596,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
       };
       setMessages((prev) => [...prev, userMsg, agentMsg]);
       setAgentMode("daily_goal");
-      setAgentForm({ tm: "", coldtalk: "", bronze: "", onePercent: "", special1: "", special2: "", special3: "" });
+      setAgentForm({ tm: "", meeting: "", special1: "", special2: "", special3: "" });
       updateTalkState();
       return;
     }
@@ -890,9 +890,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                         <div className="space-y-2.5">
                           {[
                             { key: "tm", label: "당일 TM 목표", unit: "건" },
-                            { key: "coldtalk", label: "콜드톡 목표", unit: "건" },
-                            { key: "bronze", label: "브론즈DB 확보 목표", unit: "개" },
-                            { key: "onePercent", label: "1% DB 확보 목표", unit: "개" },
+                            { key: "meeting", label: "미팅확정 목표", unit: "건" },
                           ].map((field) => (
                             <div key={field.key} className="flex items-center gap-2">
                               <span className="w-[130px] shrink-0 text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>{field.label}</span>
@@ -942,12 +940,12 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                                     owner_title: user.title || "",
                                     owner_role: "exec",
                                     goal_new_tm: Number(agentForm.tm) || 0,
-                                    goal_coldtalk: Number(agentForm.coldtalk) || 0,
-                                    goal_consultant_db: Number(agentForm.bronze) || 0,
-                                    goal_second_touch: Number(agentForm.onePercent) || 0,
+                                    goal_coldtalk: 0,
+                                    goal_consultant_db: 0,
+                                    goal_second_touch: 0,
                                     goal_manage_tm: 0,
                                     goal_media_mix: 0,
-                                    goal_meeting_confirmed: 0,
+                                    goal_meeting_confirmed: Number(agentForm.meeting) || 0,
                                     is_outside_meeting: false,
                                     goal_work_items: [
                                       { id: `task-${Date.now()}-1`, text: agentForm.special1 || "", done: false },
@@ -960,7 +958,7 @@ export default function JarvisAgent({ user }: JarvisAgentProps) {
                                     role: "assistant",
                                     content: `${today} 일별활동 목표가 저장됐습니다.
 
-TM ${agentForm.tm || 0}건 / 콜드톡 ${agentForm.coldtalk || 0}건 / 브론즈DB ${agentForm.bronze || 0}개 / 1%DB ${agentForm.onePercent || 0}개
+TM ${agentForm.tm || 0}건 / 미팅확정 ${agentForm.meeting || 0}건
 
 특발성: ${[agentForm.special1, agentForm.special2, agentForm.special3].filter(Boolean).join(" / ") || "없음"}
 
