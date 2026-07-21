@@ -77,12 +77,15 @@ const WORKSPACE_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
   { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
+  { href: "/site-calendar", label: "현장캘린더", icon: CalendarDays },
   { href: "/member-timeline", label: "회원 타임라인", icon: TimelineIcon },
   { href: "/bunyangline-data", label: "분양라인데이터", icon: Database },
 ];
 
 const SALES_MENUS: MenuItem[] = [
   { href: "/customer-db", label: "고객DB", icon: Database },
+  { href: "/customer-db2", label: "신규DB2", icon: Database },
+  { href: "/managed-customers", label: "관리고객", icon: Users },
   { href: "/contacts", label: "VIP활동DB", icon: Users },
   { href: "/pipeline3", label: "파이프라인", icon: Kanban },
   { href: "/vip-members", label: "분양회 입회자", icon: UserCheck },
@@ -118,7 +121,7 @@ const PREFETCH_MENUS = [
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "관리자",
-  exec: "실행파트",
+  exec: "소싱팀",
   ops: "운영파트",
   ad: "광고사업부",
   shared: "공용",
