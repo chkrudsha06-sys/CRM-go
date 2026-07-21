@@ -15,6 +15,7 @@ type Contact = {
   customer_type: string | null; tm_sensitivity: string | null; prospect_type: string | null;
   meeting_date: string | null; meeting_date_text: string | null; meeting_address: string | null;
   meeting_result: string | null; management_stage: string | null; assigned_to: string | null;
+  sourcing_owner: string | null; closing_owner: string | null;
   consultant: string | null; memo: string | null; intake_route: string | null; created_at: string;
 };
 type ApprovalRequestRow = {
@@ -38,7 +39,7 @@ type CalendarEvent = {
 };
 
 /* ── 상수 ── */
-const TEAM = ["조계현", "이세호", "기여운", "최연전"];
+const TEAM = ["조계현", "이세호", "기여운", "최연전", "김정후", "김창완", "최웅"];
 const CATEGORIES = ["미팅", "외근", "프로젝트", "기타"];
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -326,7 +327,7 @@ export default function CalendarPage() {
 
     let q = supabase
       .from("contacts")
-      .select("id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,consultant,memo,intake_route,created_at")
+      .select("id,name,title,phone,customer_type,tm_sensitivity,prospect_type,meeting_date,meeting_date_text,meeting_address,meeting_result,management_stage,assigned_to,sourcing_owner,closing_owner,consultant,memo,intake_route,created_at")
       .not("meeting_date", "is", null)
       .gte("meeting_date", start)
       .lte("meeting_date", end)
@@ -379,14 +380,15 @@ export default function CalendarPage() {
     // 1. 미팅 이벤트 (파이프라인 연동): "미팅_조계현"
     const meetingEvents: CalendarEvent[] = contacts
       .filter(c => {
-        const matchSearch = !keyword || [c.name,c.title,c.assigned_to,c.meeting_address,c.meeting_date_text].filter(Boolean).join(" ").toLowerCase().includes(keyword);
-        const matchAssigned = !fAssigned || c.assigned_to === fAssigned;
+        const matchSearch = !keyword || [c.name,c.title,c.assigned_to,c.sourcing_owner,c.closing_owner,c.meeting_address,c.meeting_date_text].filter(Boolean).join(" ").toLowerCase().includes(keyword);
+        const meetingOwner = c.closing_owner || c.assigned_to;
+        const matchAssigned = !fAssigned || meetingOwner === fAssigned;
         return matchSearch && matchAssigned;
       })
       .map(c => ({
         id: c.id,
         date: c.meeting_date?.slice(0,10) || TODAY,
-        title: `미팅_${c.assigned_to || c.name}`,
+        title: `미팅_${c.closing_owner || c.assigned_to || c.name}`,
         subtitle: c.meeting_date_text || c.meeting_address || c.name,
         kind: "meeting" as const,
         contact: c,
@@ -513,7 +515,7 @@ export default function CalendarPage() {
     }
 
     if (event.kind === "meeting") {
-      const assignedOwner = String(event.contact?.assigned_to || "");
+      const assignedOwner = String(event.contact?.closing_owner || event.contact?.assigned_to || "");
       const consultantOwner = String(event.contact?.consultant || "");
       return Boolean(event.contact?.id) && (assignedOwner === currentUser || consultantOwner === currentUser);
     }
@@ -531,7 +533,7 @@ export default function CalendarPage() {
       const contact = event.contact;
       if (!contact?.id) return;
 
-      const assignedOwner = String(contact.assigned_to || "");
+      const assignedOwner = String(contact.closing_owner || contact.assigned_to || "");
       const consultantOwner = String(contact.consultant || "");
       const isOwner = assignedOwner === currentUser || consultantOwner === currentUser;
 
