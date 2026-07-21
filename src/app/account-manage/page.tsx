@@ -19,7 +19,7 @@ interface UserRow {
 
 const ROLE_LABEL: Record<string, { label: string; tone: "warning" | "info" | "success" | "purple" | "muted" }> = {
   admin: { label: "관리자", tone: "warning" },
-  exec: { label: "실행파트", tone: "info" },
+  exec: { label: "소싱팀", tone: "info" },
   ops: { label: "운영파트", tone: "success" },
   ad: { label: "광고사업부", tone: "purple" },
   shared: { label: "공용", tone: "muted" },
@@ -204,7 +204,7 @@ export default function AccountManagePage() {
               <select value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
                 className="crm-search h-11 w-full px-3 font-normal">
                 <option value="admin">관리자</option>
-                <option value="exec">실행파트</option>
+                <option value="exec">소싱팀</option>
                 <option value="ops">운영파트</option>
                 <option value="ad">광고사업부</option>
                 <option value="shared">공용</option>
@@ -272,7 +272,7 @@ export default function AccountManagePage() {
                           <select value={editRole} onChange={(e) => setEditRole(e.target.value)}
                             className="crm-search h-9 w-28 px-2 font-normal">
                             <option value="admin">관리자</option>
-                            <option value="exec">실행파트</option>
+                            <option value="exec">소싱팀</option>
                             <option value="ops">운영파트</option>
                             <option value="ad">광고사업부</option>
                             <option value="shared">공용</option>
