@@ -4,7 +4,6 @@ import { logout, type CRMUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
   IconBell as Bell,
-  IconBellRinging as Megaphone,
   IconCalendar as CalendarDays,
   IconCheck as Check,
   IconChevronsLeft as ChevronsLeft,
@@ -17,8 +16,6 @@ import {
   IconCheckbox as MessageCircle,
   IconPencil as Pencil,
   IconMoon as Moon,
-  IconNotes as NotebookText,
-  IconFileInvoice as ReceiptText,
   IconAdjustments as Settings2,
   IconSettings as Shield,
   IconSun as Sun,
@@ -72,19 +69,16 @@ type MenuItem = {
   icon: ElementType;
 };
 
-// Twenty식 5섹션 구성 (경로/라벨은 현재 배포본 유지)
-const WORKSPACE_MENUS: MenuItem[] = [
+// 업무 조직 기준 사이드바 구성
+const SOURCING_MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/daily-activity", label: "일별활동기록", icon: Target },
-  { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
-  { href: "/site-calendar", label: "현장캘린더", icon: CalendarDays },
-  { href: "/member-timeline", label: "회원 타임라인", icon: TimelineIcon },
+  { href: "/customer-db2", label: "신규DB2", icon: Database },
   { href: "/bunyangline-data", label: "분양라인데이터", icon: Database },
+  { href: "/wanpan-truck", label: "완판트럭", icon: Truck },
 ];
 
-const SALES_MENUS: MenuItem[] = [
-  { href: "/customer-db", label: "고객DB", icon: Database },
-  { href: "/customer-db2", label: "신규DB2", icon: Database },
+const CLOSING_MENUS: MenuItem[] = [
   { href: "/managed-customers", label: "관리고객", icon: Users },
   { href: "/contacts", label: "VIP활동DB", icon: Users },
   { href: "/pipeline3", label: "파이프라인", icon: Kanban },
@@ -94,13 +88,9 @@ const SALES_MENUS: MenuItem[] = [
 
 const BIZ_MENUS: MenuItem[] = [
   { href: "/sales", label: "통합매출관리", icon: CircleDollarSign },
-  { href: "/tasks", label: "결제&업무요청", icon: MessageCircle },
-  { href: "/quotes", label: "견적서", icon: ReceiptText },
-];
-
-const CONTENT_MENUS: MenuItem[] = [
-  { href: "/memo", label: "메모장", icon: NotebookText },
-  { href: "/notices", label: "공지사항", icon: Megaphone },
+  { href: "/calendar", label: "운영캘린더", icon: CalendarDays },
+  { href: "/site-calendar", label: "현장캘린더", icon: CalendarDays },
+  { href: "/member-timeline", label: "회원타임라인", icon: TimelineIcon },
 ];
 
 const ADMIN_MENUS: MenuItem[] = [
@@ -112,10 +102,9 @@ const ADMIN_MENUS: MenuItem[] = [
 ];
 
 const PREFETCH_MENUS = [
-  ...WORKSPACE_MENUS,
-  ...SALES_MENUS,
+  ...SOURCING_MENUS,
+  ...CLOSING_MENUS,
   ...BIZ_MENUS,
-  ...CONTENT_MENUS,
   ...ADMIN_MENUS,
 ];
 
@@ -1022,10 +1011,10 @@ export default function Sidebar({
       </div>
 
       <nav className="crm-sidebar-scroll min-h-0 flex-1 overflow-y-auto py-2 pl-3 pr-0">
-        <SectionTitle>워크스페이스</SectionTitle>
+        <SectionTitle>소싱팀</SectionTitle>
         <div className="space-y-0.5">
-          {WORKSPACE_MENUS.map((menu) => (
-            <NavItem key={menu.href} {...menu} />
+          {SOURCING_MENUS.map((menu) => (
+            <NavItem key={`sourcing-${menu.href}`} {...menu} />
           ))}
         </div>
 
@@ -1033,10 +1022,10 @@ export default function Sidebar({
           className="my-3"
           style={{ borderTop: "1px solid var(--border-subtle)" }}
         />
-        <SectionTitle>영업·고객</SectionTitle>
+        <SectionTitle>클로징팀</SectionTitle>
         <div className="space-y-0.5">
-          {SALES_MENUS.map((menu) => (
-            <NavItem key={menu.href} {...menu} />
+          {CLOSING_MENUS.map((menu) => (
+            <NavItem key={`closing-${menu.href}`} {...menu} />
           ))}
         </div>
 
@@ -1047,18 +1036,7 @@ export default function Sidebar({
         <SectionTitle>매출·업무</SectionTitle>
         <div className="space-y-0.5">
           {BIZ_MENUS.map((menu) => (
-            <NavItem key={menu.href} {...menu} />
-          ))}
-        </div>
-
-        <div
-          className="my-3"
-          style={{ borderTop: "1px solid var(--border-subtle)" }}
-        />
-        <SectionTitle>콘텐츠</SectionTitle>
-        <div className="space-y-0.5">
-          {CONTENT_MENUS.map((menu) => (
-            <NavItem key={menu.href} {...menu} />
+            <NavItem key={`business-${menu.href}`} {...menu} />
           ))}
         </div>
 
