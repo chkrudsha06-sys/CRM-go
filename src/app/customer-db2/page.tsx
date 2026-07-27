@@ -194,6 +194,18 @@ function normalizePhone(value?: string | null) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function crmSourceLabel(value?: string | null) {
+  const labels: Record<string, string> = {
+    customer_db2: "신규DB2",
+    vip_activity: "VIP활동DB",
+    managed_customer: "관리고객",
+    pipeline: "파이프라인",
+    pipeline3: "파이프라인",
+    member: "분양회 입회자",
+  };
+  return labels[String(value || "")] || value || "미지정";
+}
+
 function getUser() {
   const user = getCurrentUser();
   return {
@@ -448,11 +460,54 @@ export default function CustomerDb2Page() {
       alert(`중복 확인 실패: ${phoneError.message}`);
       return;
     }
-    const duplicate = (phoneRows || []).find((row: { id: number; name: string; phone: string | null; crm_db_source: string | null }) => normalizePhone(row.phone) === normalizePhone(newCustomer.phone));
-    if (duplicate) {
+
+    const normalizedInputPhone = normalizePhone(newCustomer.phone);
+    const samePhoneRows = (phoneRows || []).filter(
+      (row: { id: number; name: string; phone: string | null; crm_db_source: string | null }) =>
+        normalizePhone(row.phone) === normalizedInputPhone,
+    );
+
+    // 신규DB2 내부의 동일 연락처만 중복 등록을 차단합니다.
+    // VIP활동DB·관리고객·파이프라인 등 다른 CRM 구분의 동일 연락처는
+    // 별도의 신규DB2 레코드로 등록할 수 있습니다.
+    const customerDb2Duplicate = samePhoneRows.find(
+      (row: { crm_db_source: string | null }) => row.crm_db_source === SOURCE,
+    );
+
+    if (customerDb2Duplicate) {
       setSaving(false);
-      alert(`동일 연락처 고객이 이미 존재합니다.\n고객명: ${duplicate.name}\n현재 구분: ${duplicate.crm_db_source || "미지정"}`);
+      alert(
+        `신규DB2에 동일 연락처 고객이 이미 존재합니다.\n` +
+        `고객명: ${customerDb2Duplicate.name}\n` +
+        `연락처: ${formatPhone(newCustomer.phone)}`,
+      );
       return;
+    }
+
+    const otherDbDuplicates = samePhoneRows.filter(
+      (row: { crm_db_source: string | null }) => row.crm_db_source !== SOURCE,
+    );
+
+    if (otherDbDuplicates.length > 0) {
+      const duplicateSummary = otherDbDuplicates
+        .slice(0, 5)
+        .map((row: { name: string; crm_db_source: string | null }) =>
+          `- ${row.name} · ${crmSourceLabel(row.crm_db_source)}`,
+        )
+        .join("\n");
+
+      const additionalCount = Math.max(0, otherDbDuplicates.length - 5);
+      const confirmed = window.confirm(
+        `동일 연락처가 다른 CRM 구분에 등록되어 있습니다.\n\n` +
+        `${duplicateSummary}` +
+        `${additionalCount > 0 ? `\n- 그 외 ${additionalCount}건` : ""}` +
+        `\n\n기존 데이터는 유지하고 신규DB2에 별도 고객으로 등록하시겠습니까?`,
+      );
+
+      if (!confirmed) {
+        setSaving(false);
+        return;
+      }
     }
 
     const now = new Date().toISOString();
@@ -481,7 +536,10 @@ export default function CustomerDb2Page() {
       alert(`신규 고객 등록 실패: ${error?.message || "알 수 없는 오류"}`);
       return;
     }
-    await addHistory(Number(data.id), "신규DB 등록", "crm_db_source", null, SOURCE, `${newCustomer.intakeRoute} 유입`);
+    const duplicateReason = otherDbDuplicates.length > 0
+      ? `${newCustomer.intakeRoute} 유입 · 다른 CRM 구분 동일 연락처 ${otherDbDuplicates.length}건과 별도 신규DB2 등록`
+      : `${newCustomer.intakeRoute} 유입`;
+    await addHistory(Number(data.id), "신규DB 등록", "crm_db_source", null, SOURCE, duplicateReason);
     setNewCustomer(EMPTY_CUSTOMER);
     setShowCreate(false);
     await fetchData(true);
