@@ -237,11 +237,34 @@ function toDateTimeLocal(value?: string | null) {
 
 async function readApiResult(response: Response): Promise<ApiResult> {
   const raw = await response.text();
-  if (!raw) return {};
+  if (!raw) {
+    return {
+      error: `API 응답이 비어 있습니다. HTTP ${response.status}`,
+    };
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const looksLikeHtml =
+    contentType.includes("text/html") ||
+    raw.trimStart().startsWith("<!DOCTYPE html") ||
+    raw.trimStart().startsWith("<html");
+
+  if (looksLikeHtml) {
+    return {
+      error:
+        "신규DB2 삭제 API 경로가 배포되지 않았거나 잘못 생성됐습니다.",
+      hint:
+        "src/app/api/customer-db2/delete/route.ts 경로를 확인하고 Vercel 재배포 후 /api/customer-db2/delete 주소를 직접 열어 점검해주세요.",
+    };
+  }
+
   try {
     return JSON.parse(raw) as ApiResult;
   } catch {
-    return { error: raw.slice(0, 500) };
+    return {
+      error: `서버가 JSON이 아닌 응답을 반환했습니다. HTTP ${response.status}`,
+      hint: raw.slice(0, 300),
+    };
   }
 }
 
@@ -700,6 +723,7 @@ export default function CustomerDb2Page() {
     try {
       const response = await fetch("/api/customer-db2/delete", {
         method: "POST",
+        cache: "no-store",
         headers: apiHeaders(),
         body: JSON.stringify({
           contactId: selected.id,
