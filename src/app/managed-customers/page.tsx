@@ -1,8 +1,10 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { authFetch } from "@/lib/auth-fetch";
 import { supabase } from "@/lib/supabase";
 import {
+  AlertTriangle,
   BadgeCheck,
   CalendarDays,
   ChevronRight,
@@ -12,10 +14,12 @@ import {
   Loader2,
   MapPin,
   MessageSquareText,
+  Pencil,
   Plus,
   RefreshCcw,
   Save,
   Search,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -168,6 +172,20 @@ type SiteMoveForm = {
   memo: string;
 };
 
+type ContactEditForm = {
+  name: string;
+  title: string;
+  phone: string;
+  intakeRoute: string;
+  company: string;
+  currentSite: string;
+  sourcingOwner: string;
+  closingOwner: string;
+  managementStatus: string;
+};
+
+type DeleteMode = "managed_only" | "permanent";
+
 const MANAGEMENT_STATUSES = ["미팅예정", "관리중", "집중관리", "장기관리", "재접촉예정", "보류"];
 const MEETING_STATUSES = ["예정", "완료", "변경", "취소", "불발"];
 const MEETING_TYPES = ["최초미팅", "관리미팅", "광고미팅", "후속미팅", "기타"];
@@ -254,8 +272,32 @@ function profileToForm(profile?: Profile): ProfileForm {
   };
 }
 
+function contactToEditForm(contact?: Contact | null, profile?: Profile): ContactEditForm {
+  return {
+    name: contact?.name || "",
+    title: contact?.title || "",
+    phone: contact?.phone || "",
+    intakeRoute: contact?.intake_route || "",
+    company: contact?.company || "",
+    currentSite: contact?.current_site || "",
+    sourcingOwner: contact?.sourcing_owner || contact?.assigned_to || "",
+    closingOwner: contact?.closing_owner || "",
+    managementStatus: profile?.management_status || contact?.management_status || "미팅예정",
+  };
+}
+
+function toKstInputParts(value?: string | null) {
+  if (!value) return { date: today(), time: "14:00", datetime: "" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { date: today(), time: "14:00", datetime: "" };
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString();
+  return { date: kst.slice(0, 10), time: kst.slice(11, 16), datetime: kst.slice(0, 16) };
+}
+
 export default function ManagedCustomersPage() {
-  const userName = useMemo(() => getUserName(), []);
+  const currentUser = useMemo(() => getCurrentUser(), []);
+  const userName = currentUser?.name || getUserName();
+  const canManageCustomer = currentUser?.role === "admin";
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -273,6 +315,14 @@ export default function ManagedCustomersPage() {
   const [showSiteMove, setShowSiteMove] = useState(false);
   const [showGrade, setShowGrade] = useState(false);
   const [showNote, setShowNote] = useState(false);
+  const [showContactEdit, setShowContactEdit] = useState(false);
+  const [showDeleteCustomer, setShowDeleteCustomer] = useState(false);
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>("managed_only");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingSiteMoveId, setEditingSiteMoveId] = useState<number | null>(null);
+  const [contactEditForm, setContactEditForm] = useState<ContactEditForm>(() => contactToEditForm());
   const [grade, setGrade] = useState("");
   const [gradeReason, setGradeReason] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -346,7 +396,9 @@ export default function ManagedCustomersPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "contacts" }, () => void fetchData(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "managed_customer_profiles" }, () => void fetchData(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "customer_meetings" }, () => void fetchData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_notes" }, () => void fetchData(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "customer_site_moves" }, () => void fetchData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_change_history" }, () => void fetchData(true))
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [fetchData]);
@@ -361,6 +413,7 @@ export default function ManagedCustomersPage() {
 
   useEffect(() => {
     setProfileForm(profileToForm(selectedProfile));
+    setContactEditForm(contactToEditForm(selected, selectedProfile));
     setGrade(selectedProfile?.grade || selected?.managed_customer_grade || "");
     setGradeReason(selectedProfile?.grade_reason || "");
     if (selected) setSiteMoveForm((prev) => ({ ...prev, currentSite: selected.current_site || selected.company || "" }));
@@ -397,6 +450,221 @@ export default function ManagedCustomersPage() {
       changed_by: userName,
     });
     if (error) console.warn(error.message);
+  }
+
+  function openContactEdit() {
+    if (!selected) return;
+    setContactEditForm(contactToEditForm(selected, selectedProfile));
+    setShowContactEdit(true);
+  }
+
+  async function saveContactEdit() {
+    if (!selected || !contactEditForm.name.trim()) {
+      alert("고객명을 입력해주세요.");
+      return;
+    }
+    if (!canManageCustomer) {
+      alert("관리자만 고객 기본정보를 수정할 수 있습니다.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await authFetch(`/api/managed-customers/${selected.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contactEditForm),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "고객정보 수정에 실패했습니다.");
+
+      setShowContactEdit(false);
+      await fetchData(true);
+      alert("고객 기본정보가 수정되었습니다.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "고객정보 수정 중 오류가 발생했습니다.";
+      alert(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDeleteCustomer() {
+    if (!selected) return;
+    if (!canManageCustomer) {
+      alert("관리자만 관리고객을 삭제할 수 있습니다.");
+      return;
+    }
+    setDeleteMode("managed_only");
+    setDeleteConfirmText("");
+    setShowDeleteCustomer(true);
+  }
+
+  async function deleteCustomer() {
+    if (!selected) return;
+    if (!canManageCustomer) {
+      alert("관리자만 관리고객을 삭제할 수 있습니다.");
+      return;
+    }
+    if (deleteConfirmText.trim() !== selected.name) {
+      alert(`확인을 위해 고객명 '${selected.name}'을 정확히 입력해주세요.`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await authFetch(`/api/managed-customers/${selected.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: deleteMode, confirmationName: deleteConfirmText.trim() }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "관리고객 삭제에 실패했습니다.");
+
+      setShowDeleteCustomer(false);
+      setDeleteConfirmText("");
+      setSelectedId(null);
+      await fetchData(true);
+      alert(deleteMode === "permanent" ? "고객과 연결된 CRM 데이터가 완전히 삭제되었습니다." : "관리고객에서 제거하고 신규DB2 재접촉 대상으로 이동했습니다.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "관리고객 삭제 중 오류가 발생했습니다.";
+      alert(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openNewMeeting() {
+    setEditingMeetingId(null);
+    setMeetingForm({
+      meetingDate: today(),
+      meetingTime: "14:00",
+      meetingAddress: "",
+      meetingType: "관리미팅",
+      status: "완료",
+      attendees: "",
+      purpose: "",
+      siteStatus: "",
+      organizationInfo: "",
+      advertisingOperation: "",
+      advertisingBudget: "",
+      advertisingSupport: "",
+      siteMovePlan: "",
+      decisionAuthority: "",
+      customerRequest: "",
+      closingJudgement: "",
+      followUpAction: "",
+      nextMeetingAt: "",
+      resultMemo: "",
+    });
+    setShowMeeting(true);
+  }
+
+  function openMeetingEdit(meeting: Meeting) {
+    const meetingParts = toKstInputParts(meeting.meeting_at);
+    const nextParts = toKstInputParts(meeting.next_meeting_at);
+    setEditingMeetingId(meeting.id);
+    setMeetingForm({
+      meetingDate: meetingParts.date,
+      meetingTime: meetingParts.time,
+      meetingAddress: meeting.meeting_address || "",
+      meetingType: meeting.meeting_type,
+      status: meeting.status,
+      attendees: meeting.attendees || "",
+      purpose: meeting.purpose || "",
+      siteStatus: meeting.site_status || "",
+      organizationInfo: meeting.organization_info || "",
+      advertisingOperation: meeting.advertising_operation || "",
+      advertisingBudget: meeting.advertising_budget || "",
+      advertisingSupport: meeting.advertising_support || "",
+      siteMovePlan: meeting.site_move_plan || "",
+      decisionAuthority: meeting.decision_authority || "",
+      customerRequest: meeting.customer_request || "",
+      closingJudgement: meeting.closing_judgement || "",
+      followUpAction: meeting.follow_up_action || "",
+      nextMeetingAt: meeting.next_meeting_at ? nextParts.datetime : "",
+      resultMemo: meeting.result_memo || "",
+    });
+    setShowMeeting(true);
+  }
+
+  async function deleteMeeting(meeting: Meeting) {
+    if (!selected || !confirm(`${formatDateTime(meeting.meeting_at)} 미팅기록을 삭제하시겠습니까?`)) return;
+    setSaving(true);
+    const { error } = await supabase.from("customer_meetings").delete().eq("id", meeting.id).eq("contact_id", selected.id);
+    setSaving(false);
+    if (error) {
+      alert(`미팅기록 삭제 실패: ${error.message}`);
+      return;
+    }
+    await logHistory(selected.id, "미팅기록 삭제", "meeting_at", meeting.meeting_at, null, meeting.purpose || undefined);
+    await fetchData(true);
+  }
+
+  function openNewNote() {
+    setEditingNoteId(null);
+    setNoteContent("");
+    setShowNote(true);
+  }
+
+  function openNoteEdit(note: Note) {
+    setEditingNoteId(note.id);
+    setNoteContent(note.content.replace(/^\[관리활동\]\s*/, ""));
+    setShowNote(true);
+  }
+
+  async function deleteNote(note: Note) {
+    if (!selected || !confirm("이 활동노트를 삭제하시겠습니까?")) return;
+    setSaving(true);
+    const { error } = await supabase.from("contact_notes").delete().eq("id", note.id).eq("contact_id", selected.id);
+    setSaving(false);
+    if (error) {
+      alert(`활동노트 삭제 실패: ${error.message}`);
+      return;
+    }
+    await logHistory(selected.id, "활동노트 삭제", "contact_notes", note.content, null);
+    await fetchData(true);
+  }
+
+  function openNewSiteMove() {
+    setEditingSiteMoveId(null);
+    setSiteMoveForm({
+      currentSite: selected?.current_site || selected?.company || "",
+      destinationSite: "",
+      destinationRegion: "",
+      plannedMoveDate: today(),
+      moveStatus: "계획",
+      isConfirmed: false,
+      memo: "",
+    });
+    setShowSiteMove(true);
+  }
+
+  function openSiteMoveEdit(move: SiteMove) {
+    setEditingSiteMoveId(move.id);
+    setSiteMoveForm({
+      currentSite: move.current_site || "",
+      destinationSite: move.destination_site,
+      destinationRegion: move.destination_region || "",
+      plannedMoveDate: move.planned_move_date,
+      moveStatus: move.move_status,
+      isConfirmed: move.is_confirmed,
+      memo: move.memo || "",
+    });
+    setShowSiteMove(true);
+  }
+
+  async function deleteSiteMove(move: SiteMove) {
+    if (!selected || !confirm(`${move.destination_site} 현장이동 일정을 삭제하시겠습니까?\n현장캘린더에서도 함께 사라집니다.`)) return;
+    setSaving(true);
+    const { error } = await supabase.from("customer_site_moves").delete().eq("id", move.id).eq("contact_id", selected.id);
+    setSaving(false);
+    if (error) {
+      alert(`현장이동 삭제 실패: ${error.message}`);
+      return;
+    }
+    await logHistory(selected.id, "현장이동 삭제", "destination_site", move.destination_site, null, move.memo || undefined);
+    await fetchData(true);
   }
 
   async function saveProfile() {
@@ -457,8 +725,7 @@ export default function ManagedCustomersPage() {
   async function saveMeeting() {
     if (!selected || !meetingForm.meetingDate || !meetingForm.meetingTime) { alert("미팅 일시를 입력해주세요."); return; }
     const meetingAt = new Date(`${meetingForm.meetingDate}T${meetingForm.meetingTime}:00+09:00`).toISOString();
-    setSaving(true);
-    const { error } = await supabase.from("customer_meetings").insert({
+    const payload = {
       contact_id: selected.id,
       meeting_at: meetingAt,
       meeting_address: meetingForm.meetingAddress || null,
@@ -479,28 +746,54 @@ export default function ManagedCustomersPage() {
       next_meeting_at: meetingForm.nextMeetingAt ? new Date(`${meetingForm.nextMeetingAt}:00+09:00`).toISOString() : null,
       result_memo: meetingForm.resultMemo || null,
       created_by: userName,
-    });
+    };
+    setSaving(true);
+    const query = editingMeetingId
+      ? supabase.from("customer_meetings").update(payload).eq("id", editingMeetingId).eq("contact_id", selected.id)
+      : supabase.from("customer_meetings").insert(payload);
+    const { error } = await query;
     setSaving(false);
     if (error) { alert(`미팅기록 저장 실패: ${error.message}`); return; }
-    await logHistory(selected.id, "미팅기록 추가", "meeting_at", null, meetingAt, meetingForm.purpose);
+    await logHistory(
+      selected.id,
+      editingMeetingId ? "미팅기록 수정" : "미팅기록 추가",
+      "meeting_at",
+      editingMeetingId ? selectedMeetings.find((row) => row.id === editingMeetingId)?.meeting_at || null : null,
+      meetingAt,
+      meetingForm.purpose,
+    );
+    setEditingMeetingId(null);
     setShowMeeting(false);
     await fetchData(true);
   }
 
   async function saveNote() {
     if (!selected || !noteContent.trim()) { alert("활동노트를 입력해주세요."); return; }
+    const content = `[관리활동] ${noteContent.trim()}`;
     setSaving(true);
-    const { error } = await supabase.from("contact_notes").insert({ contact_id: selected.id, note_date: today(), content: `[관리활동] ${noteContent.trim()}`, author: userName });
+    const query = editingNoteId
+      ? supabase.from("contact_notes").update({ content, author: userName }).eq("id", editingNoteId).eq("contact_id", selected.id)
+      : supabase.from("contact_notes").insert({ contact_id: selected.id, note_date: today(), content, author: userName });
+    const { error } = await query;
     setSaving(false);
     if (error) { alert(`활동노트 저장 실패: ${error.message}`); return; }
-    await logHistory(selected.id, "활동노트 추가", "contact_notes", null, "관리활동", noteContent.trim());
-    setNoteContent(""); setShowNote(false); await fetchData(true);
+    await logHistory(
+      selected.id,
+      editingNoteId ? "활동노트 수정" : "활동노트 추가",
+      "contact_notes",
+      editingNoteId ? selectedNotes.find((row) => row.id === editingNoteId)?.content || null : null,
+      content,
+      noteContent.trim(),
+    );
+    setEditingNoteId(null);
+    setNoteContent("");
+    setShowNote(false);
+    await fetchData(true);
   }
 
   async function saveSiteMove() {
     if (!selected || !siteMoveForm.destinationSite.trim() || !siteMoveForm.plannedMoveDate) { alert("이동예정 현장과 이동예정일을 입력해주세요."); return; }
-    setSaving(true);
-    const { error } = await supabase.from("customer_site_moves").insert({
+    const payload = {
       contact_id: selected.id,
       current_site: siteMoveForm.currentSite || null,
       destination_site: siteMoveForm.destinationSite.trim(),
@@ -510,11 +803,26 @@ export default function ManagedCustomersPage() {
       is_confirmed: siteMoveForm.isConfirmed,
       memo: siteMoveForm.memo || null,
       created_by: userName,
-    });
+    };
+    setSaving(true);
+    const query = editingSiteMoveId
+      ? supabase.from("customer_site_moves").update(payload).eq("id", editingSiteMoveId).eq("contact_id", selected.id)
+      : supabase.from("customer_site_moves").insert(payload);
+    const { error } = await query;
     setSaving(false);
     if (error) { alert(`현장이동 저장 실패: ${error.message}`); return; }
-    await logHistory(selected.id, "현장이동 등록", "destination_site", selected.current_site || selected.company || null, siteMoveForm.destinationSite, siteMoveForm.memo);
-    setShowSiteMove(false); await fetchData(true);
+    const previousMove = editingSiteMoveId ? selectedMoves.find((row) => row.id === editingSiteMoveId) : undefined;
+    await logHistory(
+      selected.id,
+      editingSiteMoveId ? "현장이동 수정" : "현장이동 등록",
+      "destination_site",
+      previousMove?.destination_site || selected.current_site || selected.company || null,
+      siteMoveForm.destinationSite,
+      siteMoveForm.memo,
+    );
+    setEditingSiteMoveId(null);
+    setShowSiteMove(false);
+    await fetchData(true);
   }
 
   return (
@@ -545,32 +853,59 @@ export default function ManagedCustomersPage() {
         return <tr key={contact.id} onClick={() => { setSelectedId(contact.id); setActiveTab("고객개요"); }} className="cursor-pointer transition hover:brightness-110" style={{ borderBottom: "1px solid var(--border-subtle)" }}><td className="px-3 py-3"><GradePill grade={profile?.grade || contact.managed_customer_grade} /></td><td className="px-3 py-3 text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{contact.name}</td><td className="px-3 py-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>{contact.title || "-"}</td><td className="max-w-[170px] truncate px-3 py-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>{contact.current_site || contact.company || "-"}</td><td className="px-3 py-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>{contact.closing_owner || "-"}</td><td className="px-3 py-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>{contact.sourcing_owner || contact.assigned_to || "-"}</td><td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{formatDateTime(latestMeeting?.meeting_at || contact.meeting_date)}</td><td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{formatDateTime(customerNotes[0]?.created_at)}</td><td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{upcomingMove ? `${upcomingMove.destination_site} · ${upcomingMove.planned_move_date}` : "-"}</td><td className="px-3 py-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>{formatDateTime(profile?.next_management_at)}</td><td className="px-3 py-3"><Pill tone="purple">{profile?.management_status || contact.management_status || "미팅예정"}</Pill></td><td className="px-3 py-3"><ChevronRight size={16} className="mx-auto" /></td></tr>;
       })}</tbody></table></div></Card>
 
-      {selected && <div className="fixed inset-0 z-[80] bg-black/35" onClick={() => setSelectedId(null)}><aside className="absolute right-0 top-0 h-full w-full max-w-[920px] overflow-y-auto border-l p-5 shadow-2xl" style={{ background: "var(--bg)", borderColor: "var(--border)" }} onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-[24px] font-[820]" style={{ color: "var(--text-strong)" }}>{selected.name}</h2><Pill tone="purple">{selected.title || "직급 미지정"}</Pill><GradePill grade={selectedProfile?.grade || selected.managed_customer_grade} /></div><p className="crm-subtitle mt-1">{selected.phone || "연락처 없음"} · {selected.current_site || selected.company || "현장 미입력"}</p></div><button onClick={() => setSelectedId(null)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div>
-        <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => setShowMeeting(true)} className="btn-premium btn-primary h-10"><Plus size={15} /> 미팅기록</button><button onClick={() => setShowNote(true)} className="btn-premium btn-secondary h-10"><MessageSquareText size={15} /> 활동노트</button><button onClick={() => setShowSiteMove(true)} className="btn-premium btn-secondary h-10"><MapPin size={15} /> 현장이동</button><button onClick={() => setShowGrade(true)} className="btn-premium btn-secondary h-10"><BadgeCheck size={15} /> 등급설정</button></div>
+      {selected && <div className="fixed inset-0 z-[80] bg-black/35" onClick={() => setSelectedId(null)}><aside className="absolute right-0 top-0 h-full w-full max-w-[920px] overflow-y-auto border-l p-5 shadow-2xl" style={{ background: "var(--bg)", borderColor: "var(--border)" }} onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-[24px] font-[820]" style={{ color: "var(--text-strong)" }}>{selected.name}</h2><Pill tone="purple">{selected.title || "직급 미지정"}</Pill><GradePill grade={selectedProfile?.grade || selected.managed_customer_grade} /></div><p className="crm-subtitle mt-1">{selected.phone || "연락처 없음"} · {selected.current_site || selected.company || "현장 미입력"}</p></div><div className="flex items-center gap-2">{canManageCustomer && <><button onClick={openContactEdit} className="btn-premium btn-secondary h-9 px-3"><Pencil size={14} /> 고객정보 수정</button><button onClick={openDeleteCustomer} className="btn-premium btn-danger h-9 px-3"><Trash2 size={14} /> 삭제</button></>}<button onClick={() => setSelectedId(null)} className="btn-premium btn-secondary h-9 w-9 p-0"><X size={16} /></button></div></div>
+        <div className="mt-4 flex flex-wrap gap-2"><button onClick={openNewMeeting} className="btn-premium btn-primary h-10"><Plus size={15} /> 미팅기록</button><button onClick={openNewNote} className="btn-premium btn-secondary h-10"><MessageSquareText size={15} /> 활동노트</button><button onClick={openNewSiteMove} className="btn-premium btn-secondary h-10"><MapPin size={15} /> 현장이동</button><button onClick={() => setShowGrade(true)} className="btn-premium btn-secondary h-10"><BadgeCheck size={15} /> 등급설정</button></div>
         <div className="mt-5 flex overflow-x-auto border-b" style={{ borderColor: "var(--border-subtle)" }}>{TABS.map((tab) => <button key={tab} onClick={() => setActiveTab(tab)} className="shrink-0 border-b-2 px-4 py-3 text-[12px] font-bold" style={{ borderColor: activeTab === tab ? "var(--accent)" : "transparent", color: activeTab === tab ? "var(--accent-text)" : "var(--text-muted)" }}>{tab}</button>)}</div>
 
         <div className="mt-5">
           {activeTab === "고객개요" && <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[["유입경로", selected.intake_route || "-"], ["소싱 담당자", selected.sourcing_owner || selected.assigned_to || "-"], ["클로징 담당자", selected.closing_owner || "-"], ["관리상태", selectedProfile?.management_status || selected.management_status || "미팅예정"], ["이관일", formatDateTime(selected.handoff_at)], ["다음 관리", formatDateTime(selectedProfile?.next_management_at)]].map(([label, value]) => <Card key={label} className="p-3"><p className="crm-tiny">{label}</p><p className="mt-1 text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{value}</p></Card>)}</div><Card className="p-4"><h3 className="text-[14px] font-bold" style={{ color: "var(--text-strong)" }}>핵심 관리정보</h3><div className="mt-3 grid gap-3 md:grid-cols-2">{[["현장상태", selectedProfile?.site_status], ["조직정보", selectedProfile?.organization_info], ["광고운영", selectedProfile?.advertising_operation], ["광고비 규모", selectedProfile?.advertising_budget], ["광고비 지원", selectedProfile?.advertising_support], ["의사결정권", selectedProfile?.decision_authority], ["현장이동 계획", selectedProfile?.site_move_plan], ["고객 니즈", selectedProfile?.customer_needs]].map(([label, value]) => <div key={label} className="rounded-[10px] border p-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}><p className="crm-tiny">{label}</p><p className="mt-1 whitespace-pre-wrap text-[12px]" style={{ color: "var(--text-subtle)" }}>{value || "미입력"}</p></div>)}</div></Card></div>}
 
-          {activeTab === "미팅기록" && <div className="space-y-3">{selectedMeetings.length === 0 ? <Card className="p-10 text-center text-[12px]" >미팅기록이 없습니다.</Card> : selectedMeetings.map((meeting) => <Card key={meeting.id} className="p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><Pill tone={meeting.status === "완료" ? "green" : meeting.status === "예정" ? "blue" : "amber"}>{meeting.status}</Pill><Pill>{meeting.meeting_type}</Pill><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{formatDateTime(meeting.meeting_at)}</p></div><span className="text-[10px]" style={{ color: "var(--text-faint)" }}>작성자 {meeting.created_by || "-"}</span></div><p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>{meeting.meeting_address || "장소 미입력"} · {meeting.purpose || "목적 미입력"}</p><div className="mt-3 grid gap-2 md:grid-cols-2">{[["현장상태", meeting.site_status], ["조직정보", meeting.organization_info], ["광고운영", meeting.advertising_operation], ["광고비 규모", meeting.advertising_budget], ["광고비 지원", meeting.advertising_support], ["의사결정권", meeting.decision_authority], ["고객 요청", meeting.customer_request], ["후속조치", meeting.follow_up_action]].map(([label, value]) => value ? <div key={label} className="rounded-[10px] border p-3" style={{ borderColor: "var(--border-subtle)" }}><p className="crm-tiny">{label}</p><p className="mt-1 whitespace-pre-wrap text-[12px]" style={{ color: "var(--text-subtle)" }}>{value}</p></div> : null)}</div></Card>)}</div>}
+          {activeTab === "미팅기록" && <div className="space-y-3">{selectedMeetings.length === 0 ? <Card className="p-10 text-center text-[12px]" >미팅기록이 없습니다.</Card> : selectedMeetings.map((meeting) => <Card key={meeting.id} className="p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><Pill tone={meeting.status === "완료" ? "green" : meeting.status === "예정" ? "blue" : "amber"}>{meeting.status}</Pill><Pill>{meeting.meeting_type}</Pill><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{formatDateTime(meeting.meeting_at)}</p></div><div className="flex items-center gap-2"><span className="text-[10px]" style={{ color: "var(--text-faint)" }}>작성자 {meeting.created_by || "-"}</span>{canManageCustomer && <><button type="button" onClick={() => openMeetingEdit(meeting)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]"><Pencil size={12} /> 수정</button><button type="button" onClick={() => void deleteMeeting(meeting)} className="btn-premium btn-danger h-8 px-2.5 text-[11px]"><Trash2 size={12} /> 삭제</button></>}</div></div><p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>{meeting.meeting_address || "장소 미입력"} · {meeting.purpose || "목적 미입력"}</p><div className="mt-3 grid gap-2 md:grid-cols-2">{[["현장상태", meeting.site_status], ["조직정보", meeting.organization_info], ["광고운영", meeting.advertising_operation], ["광고비 규모", meeting.advertising_budget], ["광고비 지원", meeting.advertising_support], ["의사결정권", meeting.decision_authority], ["고객 요청", meeting.customer_request], ["후속조치", meeting.follow_up_action]].map(([label, value]) => value ? <div key={label} className="rounded-[10px] border p-3" style={{ borderColor: "var(--border-subtle)" }}><p className="crm-tiny">{label}</p><p className="mt-1 whitespace-pre-wrap text-[12px]" style={{ color: "var(--text-subtle)" }}>{value}</p></div> : null)}</div></Card>)}</div>}
 
           {activeTab === "상세정보" && <Card className="p-4"><div className="grid gap-4 md:grid-cols-2"><Field label="관리상태"><select value={profileForm.managementStatus} onChange={(e) => setProfileForm((p) => ({ ...p, managementStatus: e.target.value }))} className={inputClass} style={inputStyle}>{MANAGEMENT_STATUSES.map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="다음 관리일"><input type="datetime-local" value={profileForm.nextManagementAt} onChange={(e) => setProfileForm((p) => ({ ...p, nextManagementAt: e.target.value }))} className={inputClass} style={inputStyle} /></Field>{[["현장상태", "siteStatus"], ["조직정보", "organizationInfo"], ["광고운영", "advertisingOperation"], ["광고비 규모", "advertisingBudget"], ["광고비 지원여부", "advertisingSupport"], ["현장이동 계획", "siteMovePlan"], ["의사결정권 유무", "decisionAuthority"], ["고객 니즈", "customerNeeds"]].map(([label, key]) => <Field key={key} label={label}><textarea rows={3} value={profileForm[key as keyof ProfileForm]} onChange={(e) => setProfileForm((p) => ({ ...p, [key]: e.target.value }))} className={textareaClass} style={inputStyle} /></Field>)}</div><div className="mt-5 flex justify-end"><button onClick={() => void saveProfile()} disabled={saving} className="btn-premium btn-primary h-10"><Save size={15} /> {saving ? "저장 중..." : "상세정보 저장"}</button></div></Card>}
 
-          {activeTab === "활동노트" && <div className="space-y-2">{selectedNotes.length === 0 ? <Card className="p-10 text-center text-[12px]">활동노트가 없습니다.</Card> : selectedNotes.map((note) => <Card key={note.id} className="p-4"><div className="flex justify-between"><Pill tone={note.content.startsWith("[관리활동]") ? "purple" : "blue"}>{note.content.match(/^\[([^\]]+)\]/)?.[1] || "활동"}</Pill><span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{formatDateTime(note.created_at)}</span></div><p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content}</p><p className="mt-2 text-[10px]" style={{ color: "var(--text-faint)" }}>작성자 {note.author || "-"}</p></Card>)}</div>}
+          {activeTab === "활동노트" && <div className="space-y-2">{selectedNotes.length === 0 ? <Card className="p-10 text-center text-[12px]">활동노트가 없습니다.</Card> : selectedNotes.map((note) => <Card key={note.id} className="p-4"><div className="flex items-start justify-between gap-2"><Pill tone={note.content.startsWith("[관리활동]") ? "purple" : "blue"}>{note.content.match(/^\[([^\]]+)\]/)?.[1] || "활동"}</Pill><div className="flex items-center gap-2"><span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{formatDateTime(note.created_at)}</span>{canManageCustomer && <><button type="button" onClick={() => openNoteEdit(note)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]"><Pencil size={12} /> 수정</button><button type="button" onClick={() => void deleteNote(note)} className="btn-premium btn-danger h-8 px-2.5 text-[11px]"><Trash2 size={12} /> 삭제</button></>}</div></div><p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>{note.content}</p><p className="mt-2 text-[10px]" style={{ color: "var(--text-faint)" }}>작성자 {note.author || "-"}</p></Card>)}</div>}
 
-          {activeTab === "현장이동" && <div className="space-y-3">{selectedMoves.length === 0 ? <Card className="p-10 text-center text-[12px]">현장이동 기록이 없습니다.</Card> : selectedMoves.map((move) => <Card key={move.id} className="p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><Pill tone={move.is_confirmed ? "green" : "amber"}>{move.move_status}</Pill><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{move.current_site || "현재현장 미입력"} → {move.destination_site}</p></div><p className="text-[12px] font-bold" style={{ color: "var(--accent-text)" }}>{move.planned_move_date}</p></div><p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>{move.destination_region || "지역 미입력"} · {move.memo || "비고 없음"}</p></Card>)}</div>}
+          {activeTab === "현장이동" && <div className="space-y-3">{selectedMoves.length === 0 ? <Card className="p-10 text-center text-[12px]">현장이동 기록이 없습니다.</Card> : selectedMoves.map((move) => <Card key={move.id} className="p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><Pill tone={move.is_confirmed ? "green" : "amber"}>{move.move_status}</Pill><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{move.current_site || "현재현장 미입력"} → {move.destination_site}</p></div><div className="flex items-center gap-2"><p className="text-[12px] font-bold" style={{ color: "var(--accent-text)" }}>{move.planned_move_date}</p>{canManageCustomer && <><button type="button" onClick={() => openSiteMoveEdit(move)} className="btn-premium btn-secondary h-8 px-2.5 text-[11px]"><Pencil size={12} /> 수정</button><button type="button" onClick={() => void deleteSiteMove(move)} className="btn-premium btn-danger h-8 px-2.5 text-[11px]"><Trash2 size={12} /> 삭제</button></>}</div></div><p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>{move.destination_region || "지역 미입력"} · {move.memo || "비고 없음"}</p></Card>)}</div>}
 
           {activeTab === "변경히스토리" && <div className="space-y-2">{selectedHistories.length === 0 ? <Card className="p-10 text-center text-[12px]">변경히스토리가 없습니다.</Card> : selectedHistories.map((row) => <Card key={row.id} className="p-4"><div className="flex gap-3"><FileClock size={16} className="mt-0.5 shrink-0" style={{ color: "var(--accent-text)" }} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>{row.event_type}</p><span className="text-[10px]" style={{ color: "var(--text-faint)" }}>{formatDateTime(row.created_at)}</span></div><p className="mt-1 text-[12px]" style={{ color: "var(--text-subtle)" }}>{[row.old_value, row.new_value].filter(Boolean).join(" → ") || row.change_reason || "변경 기록"}</p><p className="mt-2 text-[10px]" style={{ color: "var(--text-faint)" }}>{row.source_screen || "CRM"} · {row.changed_by || "시스템"}</p></div></div></Card>)}</div>}
         </div>
       </aside></div>}
 
+      {selected && showContactEdit && <Modal title="관리고객 기본정보 수정" subtitle="고객카드 상단과 목록에 표시되는 기본정보를 수정합니다." onClose={() => setShowContactEdit(false)} maxWidth="760px">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="고객명 *"><input value={contactEditForm.name} onChange={(e) => setContactEditForm((p) => ({ ...p, name: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <Field label="직급"><input value={contactEditForm.title} onChange={(e) => setContactEditForm((p) => ({ ...p, title: e.target.value }))} className={inputClass} style={inputStyle} placeholder="대표, 총괄본부장, 본부장, 팀장" /></Field>
+          <Field label="연락처"><input value={contactEditForm.phone} onChange={(e) => setContactEditForm((p) => ({ ...p, phone: e.target.value }))} className={inputClass} style={inputStyle} placeholder="010-0000-0000" /></Field>
+          <Field label="유입경로"><input value={contactEditForm.intakeRoute} onChange={(e) => setContactEditForm((p) => ({ ...p, intakeRoute: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <Field label="회사·현장"><input value={contactEditForm.company} onChange={(e) => setContactEditForm((p) => ({ ...p, company: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <Field label="현재 현장"><input value={contactEditForm.currentSite} onChange={(e) => setContactEditForm((p) => ({ ...p, currentSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <Field label="소싱 담당자"><input value={contactEditForm.sourcingOwner} onChange={(e) => setContactEditForm((p) => ({ ...p, sourcingOwner: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <Field label="클로징 담당자"><input value={contactEditForm.closingOwner} onChange={(e) => setContactEditForm((p) => ({ ...p, closingOwner: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+          <div className="md:col-span-2"><Field label="관리상태"><select value={contactEditForm.managementStatus} onChange={(e) => setContactEditForm((p) => ({ ...p, managementStatus: e.target.value }))} className={inputClass} style={inputStyle}>{MANAGEMENT_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></Field></div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setShowContactEdit(false)} className="btn-premium btn-secondary h-10">취소</button><button type="button" onClick={() => void saveContactEdit()} disabled={saving} className="btn-premium btn-primary h-10"><Save size={15} /> {saving ? "저장 중..." : "고객정보 저장"}</button></div>
+      </Modal>}
+
+      {selected && showDeleteCustomer && <Modal title="관리고객 삭제" subtitle="삭제 범위를 선택한 뒤 고객명을 직접 입력해야 실행됩니다." onClose={() => setShowDeleteCustomer(false)} maxWidth="680px">
+        <div className="rounded-[12px] border p-4" style={{ borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>
+          <div className="flex gap-3"><AlertTriangle size={20} className="mt-0.5 shrink-0" style={{ color: "var(--danger-text)" }} /><div><p className="text-[13px] font-bold" style={{ color: "var(--danger-text)" }}>삭제 전 반드시 범위를 확인해주세요.</p><p className="mt-1 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>완전삭제는 되돌릴 수 없습니다. 일반적인 잘못 이관은 ‘관리고객에서만 제거’를 권장합니다.</p></div></div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <button type="button" onClick={() => setDeleteMode("managed_only")} className="rounded-[12px] border p-4 text-left" style={{ borderColor: deleteMode === "managed_only" ? "var(--accent)" : "var(--border-subtle)", background: deleteMode === "managed_only" ? "var(--accent-subtle)" : "var(--surface-2)" }}><p className="text-[13px] font-bold" style={{ color: "var(--text-strong)" }}>관리고객에서만 제거</p><p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>관리고객 전용 상세정보·미팅·현장이동을 제거하고 신규DB2의 재접촉예정 고객으로 되돌립니다. 활동노트와 기본 고객정보는 유지됩니다.</p></button>
+          <button type="button" onClick={() => setDeleteMode("permanent")} className="rounded-[12px] border p-4 text-left" style={{ borderColor: deleteMode === "permanent" ? "var(--danger-border)" : "var(--border-subtle)", background: deleteMode === "permanent" ? "var(--danger-bg)" : "var(--surface-2)" }}><p className="text-[13px] font-bold" style={{ color: deleteMode === "permanent" ? "var(--danger-text)" : "var(--text-strong)" }}>CRM에서 완전삭제</p><p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>고객 기본정보와 활동노트·미팅·현장이동·리워드 등 연결 데이터를 함께 삭제합니다. 복구할 수 없습니다.</p></button>
+        </div>
+        <div className="mt-5"><Field label={`확인을 위해 '${selected.name}' 입력 *`}><input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className={inputClass} style={inputStyle} placeholder={selected.name} /></Field></div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setShowDeleteCustomer(false)} className="btn-premium btn-secondary h-10">취소</button><button type="button" onClick={() => void deleteCustomer()} disabled={saving || deleteConfirmText.trim() !== selected.name} className="btn-premium btn-danger h-10"><Trash2 size={15} /> {saving ? "삭제 중..." : deleteMode === "permanent" ? "완전삭제" : "관리고객에서 제거"}</button></div>
+      </Modal>}
+
       {selected && showGrade && <Modal title="고객등급 설정" subtitle="등급 변경 시 이전 등급과 사유가 히스토리에 남습니다." onClose={() => setShowGrade(false)} maxWidth="560px"><div className="grid grid-cols-3 gap-2">{["A", "B", "C"].map((value) => <button key={value} onClick={() => setGrade(value)} className="rounded-[12px] border py-5 text-[24px] font-[850]" style={{ borderColor: grade === value ? "var(--accent)" : "var(--border-subtle)", background: grade === value ? "var(--accent-subtle)" : "var(--surface-2)", color: grade === value ? "var(--accent-text)" : "var(--text-muted)" }}>{value}</button>)}</div><div className="mt-4"><Field label="등급 사유 *"><textarea rows={5} value={gradeReason} onChange={(e) => setGradeReason(e.target.value)} className={textareaClass} style={inputStyle} placeholder="의사결정권, 광고비 규모, 현장이동 계획 등 판단 근거" /></Field></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => setShowGrade(false)} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveGrade()} disabled={saving} className="btn-premium btn-primary h-10">등급 저장</button></div></Modal>}
 
-      {selected && showNote && <Modal title="관리 활동노트 추가" subtitle="기존 소싱 활동노트와 함께 고객의 전체 타임라인에 누적됩니다." onClose={() => setShowNote(false)} maxWidth="620px"><Field label="활동내용 *"><textarea rows={7} value={noteContent} onChange={(e) => setNoteContent(e.target.value)} className={textareaClass} style={inputStyle} /></Field><div className="mt-5 flex justify-end gap-2"><button onClick={() => setShowNote(false)} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveNote()} disabled={saving} className="btn-premium btn-primary h-10">활동 저장</button></div></Modal>}
+      {selected && showNote && <Modal title={editingNoteId ? "관리 활동노트 수정" : "관리 활동노트 추가"} subtitle="기존 소싱 활동노트와 함께 고객의 전체 타임라인에 누적됩니다." onClose={() => { setShowNote(false); setEditingNoteId(null); }} maxWidth="620px"><Field label="활동내용 *"><textarea rows={7} value={noteContent} onChange={(e) => setNoteContent(e.target.value)} className={textareaClass} style={inputStyle} /></Field><div className="mt-5 flex justify-end gap-2"><button onClick={() => { setShowNote(false); setEditingNoteId(null); }} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveNote()} disabled={saving} className="btn-premium btn-primary h-10">{editingNoteId ? "활동 수정" : "활동 저장"}</button></div></Modal>}
 
-      {selected && showSiteMove && <Modal title="현장이동 일정 등록" subtitle="등록한 일정은 현장캘린더에 자동 표시됩니다." onClose={() => setShowSiteMove(false)} maxWidth="680px"><div className="grid gap-4 md:grid-cols-2"><Field label="현재 현장"><input value={siteMoveForm.currentSite} onChange={(e) => setSiteMoveForm((p) => ({ ...p, currentSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동예정 현장 *"><input value={siteMoveForm.destinationSite} onChange={(e) => setSiteMoveForm((p) => ({ ...p, destinationSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동지역"><input value={siteMoveForm.destinationRegion} onChange={(e) => setSiteMoveForm((p) => ({ ...p, destinationRegion: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동예정일 *"><input type="date" value={siteMoveForm.plannedMoveDate} onChange={(e) => setSiteMoveForm((p) => ({ ...p, plannedMoveDate: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동상태"><select value={siteMoveForm.moveStatus} onChange={(e) => setSiteMoveForm((p) => ({ ...p, moveStatus: e.target.value }))} className={inputClass} style={inputStyle}>{MOVE_STATUSES.map((v) => <option key={v}>{v}</option>)}</select></Field><label className="flex items-center gap-2 rounded-[10px] border px-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}><input type="checkbox" checked={siteMoveForm.isConfirmed} onChange={(e) => setSiteMoveForm((p) => ({ ...p, isConfirmed: e.target.checked }))} /><span className="text-[12px] font-bold" style={{ color: "var(--text-subtle)" }}>이동 확정</span></label><div className="md:col-span-2"><Field label="비고"><textarea rows={4} value={siteMoveForm.memo} onChange={(e) => setSiteMoveForm((p) => ({ ...p, memo: e.target.value }))} className={textareaClass} style={inputStyle} /></Field></div></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => setShowSiteMove(false)} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveSiteMove()} disabled={saving} className="btn-premium btn-primary h-10">일정 저장</button></div></Modal>}
+      {selected && showSiteMove && <Modal title={editingSiteMoveId ? "현장이동 일정 수정" : "현장이동 일정 등록"} subtitle="등록한 일정은 현장캘린더에 자동 표시됩니다." onClose={() => { setShowSiteMove(false); setEditingSiteMoveId(null); }} maxWidth="680px"><div className="grid gap-4 md:grid-cols-2"><Field label="현재 현장"><input value={siteMoveForm.currentSite} onChange={(e) => setSiteMoveForm((p) => ({ ...p, currentSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동예정 현장 *"><input value={siteMoveForm.destinationSite} onChange={(e) => setSiteMoveForm((p) => ({ ...p, destinationSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동지역"><input value={siteMoveForm.destinationRegion} onChange={(e) => setSiteMoveForm((p) => ({ ...p, destinationRegion: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동예정일 *"><input type="date" value={siteMoveForm.plannedMoveDate} onChange={(e) => setSiteMoveForm((p) => ({ ...p, plannedMoveDate: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="이동상태"><select value={siteMoveForm.moveStatus} onChange={(e) => setSiteMoveForm((p) => ({ ...p, moveStatus: e.target.value }))} className={inputClass} style={inputStyle}>{MOVE_STATUSES.map((v) => <option key={v}>{v}</option>)}</select></Field><label className="flex items-center gap-2 rounded-[10px] border px-3" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}><input type="checkbox" checked={siteMoveForm.isConfirmed} onChange={(e) => setSiteMoveForm((p) => ({ ...p, isConfirmed: e.target.checked }))} /><span className="text-[12px] font-bold" style={{ color: "var(--text-subtle)" }}>이동 확정</span></label><div className="md:col-span-2"><Field label="비고"><textarea rows={4} value={siteMoveForm.memo} onChange={(e) => setSiteMoveForm((p) => ({ ...p, memo: e.target.value }))} className={textareaClass} style={inputStyle} /></Field></div></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => { setShowSiteMove(false); setEditingSiteMoveId(null); }} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveSiteMove()} disabled={saving} className="btn-premium btn-primary h-10">{editingSiteMoveId ? "일정 수정" : "일정 저장"}</button></div></Modal>}
 
-      {selected && showMeeting && <Modal title="미팅기록 추가" subtitle="미팅마다 상세정보를 별도 기록으로 남깁니다." onClose={() => setShowMeeting(false)}><div className="grid gap-4 md:grid-cols-2"><Field label="미팅일 *"><input type="date" value={meetingForm.meetingDate} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingDate: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="미팅시간 *"><input type="time" value={meetingForm.meetingTime} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingTime: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="미팅유형"><select value={meetingForm.meetingType} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingType: e.target.value }))} className={inputClass} style={inputStyle}>{MEETING_TYPES.map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="미팅상태"><select value={meetingForm.status} onChange={(e) => setMeetingForm((p) => ({ ...p, status: e.target.value }))} className={inputClass} style={inputStyle}>{MEETING_STATUSES.map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="미팅장소"><input value={meetingForm.meetingAddress} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingAddress: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="참석자"><input value={meetingForm.attendees} onChange={(e) => setMeetingForm((p) => ({ ...p, attendees: e.target.value }))} className={inputClass} style={inputStyle} /></Field>{[["미팅목적", "purpose"], ["현장상태", "siteStatus"], ["조직정보", "organizationInfo"], ["광고운영", "advertisingOperation"], ["광고비 규모", "advertisingBudget"], ["광고비 지원여부", "advertisingSupport"], ["현장이동 계획", "siteMovePlan"], ["의사결정권 유무", "decisionAuthority"], ["고객 요청사항", "customerRequest"], ["클로징팀 판단", "closingJudgement"], ["후속조치", "followUpAction"], ["종합 메모", "resultMemo"]].map(([label, key]) => <Field key={key} label={label}><textarea rows={3} value={meetingForm[key as keyof MeetingForm] as string} onChange={(e) => setMeetingForm((p) => ({ ...p, [key]: e.target.value }))} className={textareaClass} style={inputStyle} /></Field>)}<div className="md:col-span-2"><Field label="다음 미팅예정"><input type="datetime-local" value={meetingForm.nextMeetingAt} onChange={(e) => setMeetingForm((p) => ({ ...p, nextMeetingAt: e.target.value }))} className={inputClass} style={inputStyle} /></Field></div></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => setShowMeeting(false)} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveMeeting()} disabled={saving} className="btn-premium btn-primary h-10">미팅기록 저장</button></div></Modal>}
+      {selected && showMeeting && <Modal title={editingMeetingId ? "미팅기록 수정" : "미팅기록 추가"} subtitle="미팅마다 상세정보를 별도 기록으로 남깁니다." onClose={() => { setShowMeeting(false); setEditingMeetingId(null); }}><div className="grid gap-4 md:grid-cols-2"><Field label="미팅일 *"><input type="date" value={meetingForm.meetingDate} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingDate: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="미팅시간 *"><input type="time" value={meetingForm.meetingTime} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingTime: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="미팅유형"><select value={meetingForm.meetingType} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingType: e.target.value }))} className={inputClass} style={inputStyle}>{MEETING_TYPES.map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="미팅상태"><select value={meetingForm.status} onChange={(e) => setMeetingForm((p) => ({ ...p, status: e.target.value }))} className={inputClass} style={inputStyle}>{MEETING_STATUSES.map((v) => <option key={v}>{v}</option>)}</select></Field><Field label="미팅장소"><input value={meetingForm.meetingAddress} onChange={(e) => setMeetingForm((p) => ({ ...p, meetingAddress: e.target.value }))} className={inputClass} style={inputStyle} /></Field><Field label="참석자"><input value={meetingForm.attendees} onChange={(e) => setMeetingForm((p) => ({ ...p, attendees: e.target.value }))} className={inputClass} style={inputStyle} /></Field>{[["미팅목적", "purpose"], ["현장상태", "siteStatus"], ["조직정보", "organizationInfo"], ["광고운영", "advertisingOperation"], ["광고비 규모", "advertisingBudget"], ["광고비 지원여부", "advertisingSupport"], ["현장이동 계획", "siteMovePlan"], ["의사결정권 유무", "decisionAuthority"], ["고객 요청사항", "customerRequest"], ["클로징팀 판단", "closingJudgement"], ["후속조치", "followUpAction"], ["종합 메모", "resultMemo"]].map(([label, key]) => <Field key={key} label={label}><textarea rows={3} value={meetingForm[key as keyof MeetingForm] as string} onChange={(e) => setMeetingForm((p) => ({ ...p, [key]: e.target.value }))} className={textareaClass} style={inputStyle} /></Field>)}<div className="md:col-span-2"><Field label="다음 미팅예정"><input type="datetime-local" value={meetingForm.nextMeetingAt} onChange={(e) => setMeetingForm((p) => ({ ...p, nextMeetingAt: e.target.value }))} className={inputClass} style={inputStyle} /></Field></div></div><div className="mt-5 flex justify-end gap-2"><button onClick={() => { setShowMeeting(false); setEditingMeetingId(null); }} className="btn-premium btn-secondary h-10">취소</button><button onClick={() => void saveMeeting()} disabled={saving} className="btn-premium btn-primary h-10">{editingMeetingId ? "미팅기록 수정" : "미팅기록 저장"}</button></div></Modal>}
     </main>
   );
 }
