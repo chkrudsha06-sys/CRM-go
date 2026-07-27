@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
@@ -12,11 +13,13 @@ import {
   History,
   Loader2,
   MessageSquareText,
+  Pencil,
   Phone,
   Plus,
   RefreshCcw,
   Search,
   Send,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -88,6 +91,24 @@ type NewCustomerForm = {
   currentSite: string;
 };
 
+type EditCustomerForm = {
+  name: string;
+  title: string;
+  phone: string;
+  intakeRoute: string;
+  currentSite: string;
+  sourcingOwner: string;
+  sourcingStatus: string;
+  nextContactAt: string;
+};
+
+type ApiResult = {
+  success?: boolean;
+  error?: string;
+  warnings?: string[];
+  hint?: string;
+};
+
 type ActivityForm = {
   activityType: string;
   noteDate: string;
@@ -134,6 +155,17 @@ const EMPTY_CUSTOMER: NewCustomerForm = {
   currentSite: "",
 };
 
+const EMPTY_EDIT_CUSTOMER: EditCustomerForm = {
+  name: "",
+  title: "",
+  phone: "",
+  intakeRoute: "",
+  currentSite: "",
+  sourcingOwner: "",
+  sourcingStatus: "신규DB",
+  nextContactAt: "",
+};
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -165,10 +197,40 @@ function normalizePhone(value?: string | null) {
 function getUser() {
   const user = getCurrentUser();
   return {
+    id: user?.id || "",
     name: user?.name || "현재 사용자",
     role: user?.role || "shared",
+    sessionToken: user?.sessionToken || "",
+    isAdmin: user?.role === "admin",
     isSourcing: user?.role === "exec",
   };
+}
+
+function toDateTimeLocal(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+}
+
+async function readApiResult(response: Response): Promise<ApiResult> {
+  const raw = await response.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as ApiResult;
+  } catch {
+    return { error: raw.slice(0, 500) };
+  }
 }
 
 function buildActivityContent(form: ActivityForm) {
@@ -247,7 +309,11 @@ export default function CustomerDb2Page() {
   const [showCreate, setShowCreate] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [showHandoff, setShowHandoff] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [newCustomer, setNewCustomer] = useState<NewCustomerForm>(EMPTY_CUSTOMER);
+  const [editCustomer, setEditCustomer] = useState<EditCustomerForm>(EMPTY_EDIT_CUSTOMER);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [activity, setActivity] = useState<ActivityForm>({
     activityType: "TM",
     noteDate: today(),
@@ -463,6 +529,148 @@ export default function CustomerDb2Page() {
     await fetchData(true);
   }
 
+  function apiHeaders() {
+    return {
+      "Content-Type": "application/json",
+      "x-user-id": currentUser.id,
+      "x-session-token": currentUser.sessionToken,
+    };
+  }
+
+  function canModifyContact(contact: Contact | null) {
+    if (!contact || contact.crm_db_source !== SOURCE) return false;
+    if (currentUser.isAdmin) return true;
+    if (!currentUser.isSourcing) return false;
+    return [contact.sourcing_owner, contact.assigned_to]
+      .filter(Boolean)
+      .includes(currentUser.name);
+  }
+
+  function openEditCustomer(contact: Contact) {
+    if (!canModifyContact(contact)) {
+      alert("본인 담당 신규DB 또는 관리자만 수정할 수 있습니다.");
+      return;
+    }
+    setEditCustomer({
+      name: contact.name || "",
+      title: contact.title || "",
+      phone: contact.phone || "",
+      intakeRoute: contact.intake_route || "",
+      currentSite: contact.current_site || contact.company || "",
+      sourcingOwner: contact.sourcing_owner || contact.assigned_to || currentUser.name,
+      sourcingStatus: contact.sourcing_status || "신규DB",
+      nextContactAt: toDateTimeLocal(contact.next_contact_at),
+    });
+    setShowEdit(true);
+  }
+
+  async function handleUpdateCustomer() {
+    if (!selected || !canModifyContact(selected)) {
+      alert("수정할 수 없는 고객입니다.");
+      return;
+    }
+    if (!editCustomer.name.trim() || !editCustomer.title || !normalizePhone(editCustomer.phone) || !editCustomer.intakeRoute || !editCustomer.currentSite.trim()) {
+      alert("고객명, 직급, 연락처, 유입경로, 현재 현장을 모두 입력해주세요.");
+      return;
+    }
+    if (!currentUser.id || !currentUser.sessionToken) {
+      alert("로그인 세션 정보가 없습니다. 로그아웃 후 다시 로그인해주세요.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/customer-db2/update", {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          contactId: selected.id,
+          name: editCustomer.name.trim(),
+          title: editCustomer.title,
+          phone: editCustomer.phone,
+          intakeRoute: editCustomer.intakeRoute,
+          currentSite: editCustomer.currentSite.trim(),
+          sourcingOwner: editCustomer.sourcingOwner.trim(),
+          sourcingStatus: editCustomer.sourcingStatus,
+          nextContactAt: editCustomer.nextContactAt,
+        }),
+      });
+      const result = await readApiResult(response);
+      if (!response.ok || !result.success) {
+        const detail = [result.error || `HTTP ${response.status}`, result.hint].filter(Boolean).join("\n");
+        alert(`신규DB 수정에 실패했습니다.\n${detail}`);
+        return;
+      }
+      setShowEdit(false);
+      await fetchData(true);
+      if (result.warnings?.length) {
+        alert(`수정은 완료됐지만 일부 변경이력 저장에 실패했습니다.\n${result.warnings.join("\n")}`);
+      } else {
+        alert("신규DB 고객정보를 수정했습니다.");
+      }
+    } catch (error) {
+      alert(`신규DB 수정 요청 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openDeleteCustomer(contact: Contact) {
+    if (!canModifyContact(contact)) {
+      alert("본인 담당 신규DB 또는 관리자만 삭제할 수 있습니다.");
+      return;
+    }
+    setDeleteConfirmText("");
+    setShowDelete(true);
+  }
+
+  async function handleDeleteCustomer() {
+    if (!selected || !canModifyContact(selected)) {
+      alert("삭제할 수 없는 고객입니다.");
+      return;
+    }
+    if (deleteConfirmText.trim() !== selected.name) {
+      alert(`확인을 위해 고객명 '${selected.name}'을 정확히 입력해주세요.`);
+      return;
+    }
+    if (!currentUser.id || !currentUser.sessionToken) {
+      alert("로그인 세션 정보가 없습니다. 로그아웃 후 다시 로그인해주세요.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch("/api/customer-db2/delete", {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          contactId: selected.id,
+          confirmationName: deleteConfirmText.trim(),
+        }),
+      });
+      const result = await readApiResult(response);
+      if (!response.ok || !result.success) {
+        const detail = [result.error || `HTTP ${response.status}`, result.hint, ...(result.warnings || [])]
+          .filter(Boolean)
+          .join("\n");
+        alert(`신규DB 삭제에 실패했습니다.\n${detail}`);
+        return;
+      }
+      setShowDelete(false);
+      setSelectedId(null);
+      await fetchData(true);
+      if (result.warnings?.length) {
+        alert(`고객은 삭제됐지만 일부 선택 테이블 정리에 경고가 있습니다.\n${result.warnings.join("\n")}`);
+      } else {
+        alert("신규DB 고객을 삭제했습니다.");
+      }
+    } catch (error) {
+      alert(`신규DB 삭제 요청 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleHandoff() {
     if (!selected || !handoffForm.closingOwner.trim() || !handoffForm.meetingDate || !handoffForm.meetingTime) {
       alert("클로징 담당자와 미팅 일시를 입력해주세요.");
@@ -631,6 +839,12 @@ export default function CustomerDb2Page() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={() => setShowActivity(true)} className="btn-premium btn-secondary h-10"><MessageSquareText size={15} /> 활동노트 추가</button>
+              {selected.crm_db_source === SOURCE && canModifyContact(selected) && (
+                <>
+                  <button type="button" onClick={() => openEditCustomer(selected)} className="btn-premium btn-secondary h-10"><Pencil size={15} /> 고객정보 수정</button>
+                  <button type="button" onClick={() => openDeleteCustomer(selected)} className="btn-premium btn-danger h-10"><Trash2 size={15} /> 신규DB 삭제</button>
+                </>
+              )}
               {selected.crm_db_source === SOURCE && <button type="button" onClick={() => setShowHandoff(true)} className="btn-premium btn-primary h-10"><Send size={15} /> 미팅확정·관리고객 이관</button>}
               {selected.crm_db_source === MANAGED_SOURCE && <a href={`/managed-customers?contact=${selected.id}`} className="btn-premium btn-primary h-10"><ArrowRight size={15} /> 관리고객 열기</a>}
             </div>
@@ -661,6 +875,72 @@ export default function CustomerDb2Page() {
             </div>
           </aside>
         </div>
+      )}
+
+      {selected && showEdit && (
+        <Modal
+          title="신규DB 고객정보 수정"
+          subtitle="신규DB2 기본정보와 진행상태를 수정합니다. 변경사항은 변경히스토리에 기록됩니다."
+          onClose={() => setShowEdit(false)}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="고객명 *"><input value={editCustomer.name} onChange={(e) => setEditCustomer((prev) => ({ ...prev, name: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+            <Field label="직급 *"><select value={editCustomer.title} onChange={(e) => setEditCustomer((prev) => ({ ...prev, title: e.target.value }))} className={inputClass} style={inputStyle}><option value="">선택</option>{TITLE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></Field>
+            <Field label="연락처 *"><input value={editCustomer.phone} onChange={(e) => setEditCustomer((prev) => ({ ...prev, phone: formatPhone(e.target.value) }))} className={inputClass} style={inputStyle} placeholder="010-0000-0000" /></Field>
+            <Field label="유입경로 *"><select value={editCustomer.intakeRoute} onChange={(e) => setEditCustomer((prev) => ({ ...prev, intakeRoute: e.target.value }))} className={inputClass} style={inputStyle}><option value="">선택</option>{INTAKE_ROUTES.map((option) => <option key={option}>{option}</option>)}</select></Field>
+            <div className="md:col-span-2"><Field label="현재 현장명 *"><input value={editCustomer.currentSite} onChange={(e) => setEditCustomer((prev) => ({ ...prev, currentSite: e.target.value }))} className={inputClass} style={inputStyle} /></Field></div>
+            <Field label="진행상태"><select value={editCustomer.sourcingStatus} onChange={(e) => setEditCustomer((prev) => ({ ...prev, sourcingStatus: e.target.value }))} className={inputClass} style={inputStyle}>{ACTIVE_STATUS_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></Field>
+            <Field label="다음 연락예정"><input type="datetime-local" value={editCustomer.nextContactAt} onChange={(e) => setEditCustomer((prev) => ({ ...prev, nextContactAt: e.target.value }))} className={inputClass} style={inputStyle} /></Field>
+            <div className="md:col-span-2">
+              <Field label="소싱 담당자">
+                <input
+                  value={editCustomer.sourcingOwner}
+                  onChange={(e) => setEditCustomer((prev) => ({ ...prev, sourcingOwner: e.target.value }))}
+                  disabled={!currentUser.isAdmin}
+                  className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                  style={inputStyle}
+                />
+              </Field>
+              {!currentUser.isAdmin && <p className="mt-1 text-[10px]" style={{ color: "var(--text-faint)" }}>소싱 담당자 변경은 관리자만 가능합니다.</p>}
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <button type="button" onClick={() => setShowEdit(false)} className="btn-premium btn-secondary h-10">취소</button>
+            <button type="button" onClick={() => void handleUpdateCustomer()} disabled={saving} className="btn-premium btn-primary h-10">{saving ? "수정 중..." : "수정 저장"}</button>
+          </div>
+        </Modal>
+      )}
+
+      {selected && showDelete && (
+        <Modal
+          title="신규DB 고객 삭제"
+          subtitle="삭제한 고객과 연결된 신규DB 활동기록은 복구할 수 없습니다."
+          onClose={() => setShowDelete(false)}
+          maxWidth="640px"
+        >
+          <div className="rounded-[14px] border p-4" style={{ background: "var(--danger-bg)", borderColor: "var(--danger-border)" }}>
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={20} className="mt-0.5 shrink-0" style={{ color: "var(--danger-text)" }} />
+              <div>
+                <p className="text-[14px] font-bold" style={{ color: "var(--danger-text)" }}>신규DB에서 완전히 삭제됩니다.</p>
+                <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--danger-text)" }}>고객 기본정보, 활동노트, 변경히스토리와 연결된 신규DB 데이터가 함께 삭제됩니다. 이미 관리고객으로 이관된 고객은 이 화면에서 삭제할 수 없습니다.</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 rounded-[12px] border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--surface-2)" }}>
+            <p className="text-[12px] font-bold" style={{ color: "var(--text-strong)" }}>{selected.name} · {selected.title || "직급 미지정"}</p>
+            <p className="mt-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>{selected.phone || "연락처 없음"} · {selected.current_site || selected.company || "현장 미입력"}</p>
+          </div>
+          <div className="mt-5">
+            <Field label={`확인을 위해 '${selected.name}' 입력 *`}>
+              <input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className={inputClass} style={inputStyle} autoComplete="off" />
+            </Field>
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <button type="button" onClick={() => setShowDelete(false)} className="btn-premium btn-secondary h-10">취소</button>
+            <button type="button" onClick={() => void handleDeleteCustomer()} disabled={saving || deleteConfirmText.trim() !== selected.name} className="btn-premium btn-danger h-10"><Trash2 size={15} /> {saving ? "삭제 중..." : "신규DB 완전삭제"}</button>
+          </div>
+        </Modal>
       )}
 
       {selected && showActivity && (
