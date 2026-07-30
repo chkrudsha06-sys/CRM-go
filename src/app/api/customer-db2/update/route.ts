@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { verifyApiSession } from "@/lib/api-auth";
+import { hasCrmFullAccess } from "@/lib/crm-permissions";
 
 type SessionUser = {
   id: string;
@@ -107,7 +108,7 @@ async function readUser(req: Request, client: SupabaseClient): Promise<SessionUs
 }
 
 function canModify(user: SessionUser, contact: ContactRow): boolean {
-  if (user.role === "admin") return true;
+  if (hasCrmFullAccess(user)) return true;
   if (user.role !== "exec") return false;
   return [contact.sourcing_owner, contact.assigned_to]
     .filter(Boolean)
@@ -190,7 +191,7 @@ export async function POST(req: Request) {
   }
   if (!canModify(user, current)) {
     return NextResponse.json(
-      { error: "이 고객을 수정할 권한이 없습니다. 본인 담당 고객 또는 관리자만 수정할 수 있습니다." },
+      { error: "이 고객을 수정할 권한이 없습니다. 본인 담당 고객 또는 전체권한 사용자만 수정할 수 있습니다." },
       { status: 403 },
     );
   }
@@ -246,7 +247,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const sourcingOwner = user.role === "admin"
+  const sourcingOwner = hasCrmFullAccess(user)
     ? requestedOwner || current.sourcing_owner || current.assigned_to || user.name
     : current.sourcing_owner || current.assigned_to || user.name;
 
