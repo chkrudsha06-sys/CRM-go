@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth";
 import { authFetch } from "@/lib/auth-fetch";
+import { hasCrmFullAccess } from "@/lib/crm-permissions";
 import { supabase } from "@/lib/supabase";
 import {
   AlertTriangle,
@@ -297,7 +298,7 @@ function toKstInputParts(value?: string | null) {
 export default function ManagedCustomersPage() {
   const currentUser = useMemo(() => getCurrentUser(), []);
   const userName = currentUser?.name || getUserName();
-  const canManageCustomer = currentUser?.role === "admin";
+  const canManageCustomer = hasCrmFullAccess(currentUser);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -464,7 +465,7 @@ export default function ManagedCustomersPage() {
       return;
     }
     if (!canManageCustomer) {
-      alert("관리자만 고객 기본정보를 수정할 수 있습니다.");
+      alert("관리자·최연전·이세호·기여운만 고객 기본정보를 수정할 수 있습니다.");
       return;
     }
 
@@ -492,7 +493,7 @@ export default function ManagedCustomersPage() {
   function openDeleteCustomer() {
     if (!selected) return;
     if (!canManageCustomer) {
-      alert("관리자만 관리고객을 삭제할 수 있습니다.");
+      alert("관리자·최연전·이세호·기여운만 관리고객을 삭제할 수 있습니다.");
       return;
     }
     setDeleteMode("managed_only");
@@ -503,7 +504,7 @@ export default function ManagedCustomersPage() {
   async function deleteCustomer() {
     if (!selected) return;
     if (!canManageCustomer) {
-      alert("관리자만 관리고객을 삭제할 수 있습니다.");
+      alert("관리자·최연전·이세호·기여운만 관리고객을 삭제할 수 있습니다.");
       return;
     }
     if (deleteConfirmText.trim() !== selected.name) {
@@ -513,21 +514,60 @@ export default function ManagedCustomersPage() {
 
     setSaving(true);
     try {
-      const response = await authFetch(`/api/managed-customers/${selected.id}`, {
-        method: "DELETE",
+      const response = await authFetch("/api/managed-customers/delete", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: deleteMode, confirmationName: deleteConfirmText.trim() }),
+        body: JSON.stringify({
+          contactId: selected.id,
+          mode: deleteMode,
+          confirmationName: deleteConfirmText.trim(),
+        }),
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "관리고객 삭제에 실패했습니다.");
+
+      const rawBody = await response.text();
+      let result: {
+        success?: boolean;
+        error?: string;
+        message?: string;
+        warnings?: string[];
+      } = {};
+
+      if (rawBody) {
+        try {
+          result = JSON.parse(rawBody) as typeof result;
+        } catch {
+          result = {};
+        }
+      }
+
+      if (!response.ok) {
+        const serverDetail = rawBody && !result.error
+          ? `\n\n서버 응답: ${rawBody.slice(0, 500)}`
+          : "";
+        throw new Error(
+          result.error ||
+          `삭제 API 오류 (${response.status} ${response.statusText})${serverDetail}`,
+        );
+      }
 
       setShowDeleteCustomer(false);
       setDeleteConfirmText("");
       setSelectedId(null);
       await fetchData(true);
-      alert(deleteMode === "permanent" ? "고객과 연결된 CRM 데이터가 완전히 삭제되었습니다." : "관리고객에서 제거하고 신규DB2 재접촉 대상으로 이동했습니다.");
+
+      const warningText = result.warnings && result.warnings.length > 0
+        ? `\n\n경고:\n- ${result.warnings.join("\n- ")}`
+        : "";
+
+      alert(
+        `${result.message || (deleteMode === "permanent"
+          ? "고객과 연결된 CRM 데이터가 완전히 삭제되었습니다."
+          : "관리고객에서 제거하고 신규DB2 재접촉 대상으로 이동했습니다.")}${warningText}`,
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "관리고객 삭제 중 오류가 발생했습니다.";
+      const message = error instanceof Error
+        ? error.message
+        : "관리고객 삭제 중 오류가 발생했습니다.";
       alert(message);
     } finally {
       setSaving(false);
