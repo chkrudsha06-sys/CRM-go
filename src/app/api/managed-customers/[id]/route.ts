@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { verifyApiSession } from "@/lib/api-auth";
+import { hasCrmFullAccess } from "@/lib/crm-permissions";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,7 +9,7 @@ const supabase = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 
-type AdminUser = {
+type AccessUser = {
   id: string;
   name: string;
   role: string;
@@ -112,7 +113,7 @@ function formatPhone(value: string): string | null {
   return value.trim();
 }
 
-async function verifyAdmin(req: Request): Promise<AdminUser | null> {
+async function verifyFullAccess(req: Request): Promise<AccessUser | null> {
   const auth = await verifyApiSession(req);
   if (!auth.valid || !auth.userId) return null;
 
@@ -122,8 +123,8 @@ async function verifyAdmin(req: Request): Promise<AdminUser | null> {
     .eq("id", auth.userId)
     .maybeSingle();
 
-  if (error || !data || data.role !== "admin") return null;
-  return data as AdminUser;
+  if (error || !data || !hasCrmFullAccess(data)) return null;
+  return data as AccessUser;
 }
 
 async function readManagedCustomer(id: number): Promise<ContactRow | null> {
@@ -187,9 +188,9 @@ async function deleteContactChildren(contactId: number) {
 }
 
 export async function PUT(req: Request, context: { params: { id: string } }) {
-  const admin = await verifyAdmin(req);
-  if (!admin) {
-    return NextResponse.json({ error: "관리자 권한이 필요합니다. 로그아웃 후 다시 로그인해주세요." }, { status: 403 });
+  const accessUser = await verifyFullAccess(req);
+  if (!accessUser) {
+    return NextResponse.json({ error: "관리자 또는 지정 전체권한 담당자 권한이 필요합니다. 로그아웃 후 다시 로그인해주세요." }, { status: 403 });
   }
 
   const id = Number(context.params.id);
@@ -264,7 +265,7 @@ export async function PUT(req: Request, context: { params: { id: string } }) {
       {
         contact_id: id,
         management_status: updates.management_status,
-        updated_by: admin.name,
+        updated_by: accessUser.name,
       },
       { onConflict: "contact_id" },
     );
@@ -302,7 +303,7 @@ export async function PUT(req: Request, context: { params: { id: string } }) {
       await insertHistory(
         supabase,
         id,
-        admin.name,
+        accessUser.name,
         "고객정보 수정",
         field,
         oldValues[field],
@@ -316,9 +317,9 @@ export async function PUT(req: Request, context: { params: { id: string } }) {
 }
 
 export async function DELETE(req: Request, context: { params: { id: string } }) {
-  const admin = await verifyAdmin(req);
-  if (!admin) {
-    return NextResponse.json({ error: "관리자 권한이 필요합니다. 로그아웃 후 다시 로그인해주세요." }, { status: 403 });
+  const accessUser = await verifyFullAccess(req);
+  if (!accessUser) {
+    return NextResponse.json({ error: "관리자 또는 지정 전체권한 담당자 권한이 필요합니다. 로그아웃 후 다시 로그인해주세요." }, { status: 403 });
   }
 
   const id = Number(context.params.id);
@@ -361,7 +362,7 @@ export async function DELETE(req: Request, context: { params: { id: string } }) 
     await insertHistory(
       supabase,
       id,
-      admin.name,
+      accessUser.name,
       "관리고객 제거",
       "crm_db_source",
       "managed_customer",
