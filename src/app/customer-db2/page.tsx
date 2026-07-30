@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { hasCrmFullAccess } from "@/lib/crm-permissions";
 import { supabase } from "@/lib/supabase";
 import {
   AlertTriangle,
@@ -215,6 +216,7 @@ function getUser() {
     sessionToken: user?.sessionToken || "",
     isAdmin: user?.role === "admin",
     isSourcing: user?.role === "exec",
+    isFullAccess: hasCrmFullAccess(user),
   };
 }
 
@@ -237,34 +239,11 @@ function toDateTimeLocal(value?: string | null) {
 
 async function readApiResult(response: Response): Promise<ApiResult> {
   const raw = await response.text();
-  if (!raw) {
-    return {
-      error: `API 응답이 비어 있습니다. HTTP ${response.status}`,
-    };
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  const looksLikeHtml =
-    contentType.includes("text/html") ||
-    raw.trimStart().startsWith("<!DOCTYPE html") ||
-    raw.trimStart().startsWith("<html");
-
-  if (looksLikeHtml) {
-    return {
-      error:
-        "신규DB2 삭제 API 경로가 배포되지 않았거나 잘못 생성됐습니다.",
-      hint:
-        "src/app/api/customer-db2/delete/route.ts 경로를 확인하고 Vercel 재배포 후 /api/customer-db2/delete 주소를 직접 열어 점검해주세요.",
-    };
-  }
-
+  if (!raw) return {};
   try {
     return JSON.parse(raw) as ApiResult;
   } catch {
-    return {
-      error: `서버가 JSON이 아닌 응답을 반환했습니다. HTTP ${response.status}`,
-      hint: raw.slice(0, 300),
-    };
+    return { error: raw.slice(0, 500) };
   }
 }
 
@@ -376,7 +355,7 @@ export default function CustomerDb2Page() {
       .order("created_at", { ascending: false })
       .limit(5000);
 
-    if (currentUser.isSourcing) {
+    if (currentUser.isSourcing && !currentUser.isFullAccess) {
       query = query.or(`sourcing_owner.eq.${currentUser.name},assigned_to.eq.${currentUser.name}`) as typeof query;
     }
 
@@ -409,7 +388,7 @@ export default function CustomerDb2Page() {
     setHandoffs((handoffRes.data || []) as Handoff[]);
     setHistories((historyRes.data || []) as HistoryRow[]);
     setLoading(false);
-  }, [currentUser.isSourcing, currentUser.name]);
+  }, [currentUser.isFullAccess, currentUser.isSourcing, currentUser.name]);
 
   useEffect(() => {
     void fetchData();
@@ -620,7 +599,7 @@ export default function CustomerDb2Page() {
 
   function canModifyContact(contact: Contact | null) {
     if (!contact || contact.crm_db_source !== SOURCE) return false;
-    if (currentUser.isAdmin) return true;
+    if (currentUser.isFullAccess) return true;
     if (!currentUser.isSourcing) return false;
     return [contact.sourcing_owner, contact.assigned_to]
       .filter(Boolean)
@@ -629,7 +608,7 @@ export default function CustomerDb2Page() {
 
   function openEditCustomer(contact: Contact) {
     if (!canModifyContact(contact)) {
-      alert("본인 담당 신규DB 또는 관리자만 수정할 수 있습니다.");
+      alert("본인 담당 신규DB 또는 전체권한 사용자만 수정할 수 있습니다.");
       return;
     }
     setEditCustomer({
@@ -698,7 +677,7 @@ export default function CustomerDb2Page() {
 
   function openDeleteCustomer(contact: Contact) {
     if (!canModifyContact(contact)) {
-      alert("본인 담당 신규DB 또는 관리자만 삭제할 수 있습니다.");
+      alert("본인 담당 신규DB 또는 전체권한 사용자만 삭제할 수 있습니다.");
       return;
     }
     setDeleteConfirmText("");
@@ -723,7 +702,6 @@ export default function CustomerDb2Page() {
     try {
       const response = await fetch("/api/customer-db2/delete", {
         method: "POST",
-        cache: "no-store",
         headers: apiHeaders(),
         body: JSON.stringify({
           contactId: selected.id,
@@ -978,12 +956,12 @@ export default function CustomerDb2Page() {
                 <input
                   value={editCustomer.sourcingOwner}
                   onChange={(e) => setEditCustomer((prev) => ({ ...prev, sourcingOwner: e.target.value }))}
-                  disabled={!currentUser.isAdmin}
+                  disabled={!currentUser.isFullAccess}
                   className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-60`}
                   style={inputStyle}
                 />
               </Field>
-              {!currentUser.isAdmin && <p className="mt-1 text-[10px]" style={{ color: "var(--text-faint)" }}>소싱 담당자 변경은 관리자만 가능합니다.</p>}
+              {!currentUser.isFullAccess && <p className="mt-1 text-[10px]" style={{ color: "var(--text-faint)" }}>소싱 담당자 변경은 관리자·최연전·이세호·기여운만 가능합니다.</p>}
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-2">
